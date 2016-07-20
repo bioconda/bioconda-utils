@@ -256,8 +256,8 @@ def build(recipe,
         typically you'd want to bump the build number rather than force
         a build.
     """
-    print("Building/testing", recipe, "for environment:")
-    print(*('\t{}={}'.format(*i) for i in sorted(env)), sep="\n")
+    print("Building/testing", recipe, "for environment:", end=' ')
+    print(*('{}={};'.format(*i) for i in sorted(env)))
     build_args = []
     if testonly:
         build_args.append("--test")
@@ -303,6 +303,7 @@ def build(recipe,
                    check=True,
                    universal_newlines=True,
                    env=merged_env(env))
+            sp.run(['conda', 'index'] + index_dirs, check=True, stdout=out)
             return True
         except sp.CalledProcessError as e:
             if e.stdout is not None:
@@ -385,7 +386,7 @@ def test_recipes(recipe_folder,
           len(recipes), "recipes).")
 
     if docker is not None:
-        print('Pulling docker image...')
+        print('Pulling docker image...', end='')
         docker.pull('continuumio/conda_builder_linux:latest')
         print('Done.')
 
@@ -403,7 +404,6 @@ def test_recipes(recipe_folder,
                              testonly,
                              force,
                              docker=docker)
-            conda_index(config)
 
     if not testonly:
         # upload builds
@@ -437,13 +437,6 @@ def test_recipes(recipe_folder,
                             else:
                                 raise e
     return success
-
-
-def conda_index(config):
-    if config['index_dirs']:
-        sp.run(['conda', 'index'] + config['index_dirs'],
-               check=True,
-               stdout=sp.PIPE)
 
 
 def get_blacklist(blacklists):
