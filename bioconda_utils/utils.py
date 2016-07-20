@@ -265,35 +265,54 @@ def build(recipe,
         build_args += ["--no-anaconda-upload"]
     if not force:
         build_args += ["--skip-existing"]
+
+    conda_build_folder = os.path.join(os.path.dirname(os.path.dirname(shutil.which("conda"))), "conda-bld")
+    index_dirs = [
+        os.path.join(conda_build_folder, 'linux-64'),
+        os.path.join(conda_build_folder, 'osx-64')
+    ]
+    for index_dir in index_dirs:
+        if not os.path.exists(index_dir):
+            os.makedirs(index_dir)
+
     if docker is not None:
-        conda_build_folder = os.path.join(os.path.dirname(os.path.dirname(shutil.which("conda"))), "conda-bld")
         recipe = os.path.relpath(recipe, recipe_folder)
+
         env = dict(env)
         env["ABI"] = 4
-        container = docker.create_container(
-            image="continuumio/conda_builder_linux:latest",
-            volumes=["/home/dev/recipes", "/opt/miniconda"],
-            environment=env,
-            command="bash /opt/share/internal_startup.sh "
-                "conda build -c r -c bioconda --quiet recipes/{}".format(recipe),
-            host_config=docker.create_host_config(binds={
-                os.path.abspath(recipe_folder): {
-                    "bind": "/home/dev/recipes",
-                    "mode": "ro"
+
+        def create_container(command):
+            container = docker.create_container(
+                image="continuumio/conda_builder_linux:latest",
+                volumes=["/home/dev/recipes", "/opt/miniconda"],
+                environment=env,
+                command="bash /opt/share/internal_startup.sh " + command,
+                host_config=docker.create_host_config(binds={
+                    os.path.abspath(recipe_folder): {
+                        "bind": "/home/dev/recipes",
+                        "mode": "ro"
+                    },
+                    conda_build_folder: {
+                        "bind": "/opt/miniconda/conda-bld",
+                        "mode": "rw"
+                    }
                 },
-                conda_build_folder: {
-                    "bind": "/opt/miniconda/conda-bld",
-                    "mode": "rw"
-                }
-            },
-            network_mode="host"))
-        cid = container["Id"]
-        docker.start(container=cid)
-        status = docker.wait(container=cid)
-        if status != 0:
-            print(docker.logs(container=cid, stdout=True, stderr=True).decode())
-            return False
-        return True
+                    network_mode="host"))
+            return container
+
+        def run_container(command):
+            container = create_container(command)
+            cid = container["Id"]
+            docker.start(container=cid)
+            status = docker.wait(container=cid)
+            if status != 0:
+                print(docker.logs(container=cid, stdout=True, stderr=True).decode())
+            return status
+
+        status_build = run_container('conda build --quiet -c r -c bioconda recipes/{}'.format(recipe))
+        status_index = run_container('conda index /opt/miniconda/conda-bld/linux-64 /opt/miniconda/conda-bld/osx-64')
+        return status_build & status_index
+
     else:
         try:
             out = None if verbose else sp.PIPE
