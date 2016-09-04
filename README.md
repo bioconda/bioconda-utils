@@ -6,6 +6,8 @@ Utilities for building and managing
 
 Installation:
 
+Note that `bioconda-utils` requires python 3.  To install, first install `conda-build` using `conda install conda-build==1.2`, then
+
 ```
 pip install git+https://github.com/bioconda/bioconda-utils.git
 ```
