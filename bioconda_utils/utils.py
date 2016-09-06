@@ -459,10 +459,12 @@ def test_recipes(recipe_folder,
                 for package in packages:
                     if os.path.exists(package):
                         try:
+                            labels = config['labels']
+                            labels = ['-l'] + labels if labels else []
                             sp.run(
                                 ["anaconda", "-t",
-                                 os.environ.get("ANACONDA_TOKEN"), "upload",
-                                 package],
+                                 os.environ.get("ANACONDA_TOKEN"), "upload"] +
+                                 labels + [package],
                                 stdout=sp.PIPE,
                                 stderr=sp.STDOUT,
                                 check=True)
@@ -505,4 +507,5 @@ def load_config(path):
     config['blacklists'] = [relpath(p) for p in get_list('blacklists')]
     config['index_dirs'] = [relpath(p) for p in get_list('index_dirs')]
     config['channels'] = get_list('channels')
+    config['labels'] = get_list('labels')
     return config
