@@ -97,6 +97,8 @@ mkdir -p {self.container_staging}/linux-64
 conda config --add channels file://{self.container_staging}
 
 # The actual building....
+echo "Using conda version $(conda --version)"
+echo "Using conda-build version $(conda build --version)"
 conda build {self.conda_build_args} {self.container_recipe}
 
 # Identify the output package
@@ -204,8 +206,8 @@ class RecipeBuilder(object):
         build_script_template=BUILD_SCRIPT_TEMPLATE,
         dockerfile_template=DOCKERFILE_TEMPLATE,
         use_host_conda_bld=False,
-        conda_build_version=DEFAULT_CONDA_BUILD_VERSION,
-        conda_version=DEFAULT_CONDA_VERSION,
+        conda_build_version=None,
+        conda_version=None,
         pkg_dir=None,
     ):
         """
@@ -256,6 +258,15 @@ class RecipeBuilder(object):
             Otherwise, use `pkg_dir` as a common host directory used across
             multiple runs of this RecipeBuilder object.
 
+        conda_build_version, conda_version: str or None
+            These arguments control the versions of conda and conda-build that
+            will be installed just prior to building. If None, looks for
+            environment vars BIOCONDA_CONDA_BUILD_VERSION and BIOCONDA_CONDA_VERSION
+            respectively. If these don't exist, the uses
+            `docker_utils.DEFAULT_CONDA_BUILD_VERSION` and
+            `docker_utils.DEFAULT_CONDA_VERSION`. This argument overrides the
+            environment vars.
+
         pkg_dir : str or None
             Specify where packages should appear on the host.
 
@@ -282,7 +293,15 @@ class RecipeBuilder(object):
         self.conda_build_args = ""
         self.build_script_template = build_script_template
         self.dockerfile_template = dockerfile_template
+
+        if conda_build_version is None:
+            conda_build_version = os.environ.get(
+                'BIOCONDA_CONDA_BUILD_VERSION', DEFAULT_CONDA_BUILD_VERSION)
         self.conda_build_version = conda_build_version
+
+        if conda_version is None:
+            conda_version = os.environ.get(
+                'BIOCONDA_CONDA_VERSION', DEFAULT_CONDA_VERSION)
         self.conda_version = conda_version
 
         uid = os.getuid()

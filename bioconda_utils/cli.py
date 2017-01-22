@@ -50,7 +50,13 @@ logger = logging.getLogger(__name__)
      ignored.''')
 @arg('--conda-build-version',
      help='''Version of conda-build to use if building
-     in a docker container. Has no effect otherwise.''')
+     in a docker container. Has no effect otherwise. Default is to use env var
+     BIOCONDA_CONDA_BUILD_VERSION; if that does not exist then use %s'''
+     % docker_utils.DEFAULT_CONDA_BUILD_VERSION)
+@arg('--conda-version',
+     help='''Version of conda to use if building in a docker container. Has no
+     effect otherwise. Default is to use env var BIOCONDA_CONDA_VERSION; if that does
+     not exist then use %s''' % docker_utils.DEFAULT_CONDA_VERSION)
 @arg('--quick', help='''To speed up filtering, do not consider any recipes that
      are > 2 days older than the latest commit to master branch.''')
 @arg('--disable-travis-env-vars', action='store_true', help='''By default, any
@@ -66,7 +72,8 @@ def build(recipe_folder,
           mulled_test=False,
           build_script_template=None,
           pkg_dir=None,
-          conda_build_version=docker_utils.DEFAULT_CONDA_BUILD_VERSION,
+          conda_build_version=None,
+          conda_version=None,
           quick=False,
           disable_travis_env_vars=False,
           ):
@@ -94,6 +101,7 @@ def build(recipe_folder,
             pkg_dir=pkg_dir,
             use_host_conda_bld=use_host_conda_bld,
             conda_build_version=conda_build_version,
+            conda_version=conda_version,
         )
     else:
         docker_builder = None
