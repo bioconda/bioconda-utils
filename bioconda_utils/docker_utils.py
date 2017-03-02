@@ -183,7 +183,7 @@ def get_host_conda_bld(purge=True):
     res = os.path.dirname(
         os.path.dirname(
             sp.check_output(
-                ['conda', 'build', recipe, '--output'],
+                ['conda', 'build', '--output', recipe],
                 universal_newlines=True
             ).splitlines()[0]
         )
