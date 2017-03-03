@@ -236,8 +236,7 @@ def test_conda_purge_cleans_up():
     def tmp_dir_exists(d):
         contents = os.listdir(d)
         for i in contents:
-            print("tmp_dir_exist: " + i)
-            if i.startswith('tmp') and '_' in i:
+            if i.startswith('repodata'):
                 return True
 
     bld = docker_utils.get_host_conda_bld(purge=False)
