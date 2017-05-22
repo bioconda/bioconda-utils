@@ -62,11 +62,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-# If conda_build_version is not provided, this is what is used by default.
-DEFAULT_CONDA_BUILD_VERSION = '2.0.7'
-DEFAULT_CONDA_VERSION = '4.2.15'
-
-
 # ----------------------------------------------------------------------------
 # BUILD_SCRIPT_TEMPLATE
 # ----------------------------------------------------------------------------
@@ -207,8 +202,6 @@ class RecipeBuilder(object):
         build_script_template=BUILD_SCRIPT_TEMPLATE,
         dockerfile_template=DOCKERFILE_TEMPLATE,
         use_host_conda_bld=False,
-        conda_build_version=DEFAULT_CONDA_BUILD_VERSION,
-        conda_version=DEFAULT_CONDA_VERSION,
         pkg_dir=None,
     ):
         """
@@ -285,8 +278,6 @@ class RecipeBuilder(object):
         self.conda_build_args = ""
         self.build_script_template = build_script_template
         self.dockerfile_template = dockerfile_template
-        self.conda_build_version = conda_build_version
-        self.conda_version = conda_version
 
         uid = os.getuid()
         usr = pwd.getpwuid(uid)
