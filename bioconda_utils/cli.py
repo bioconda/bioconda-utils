@@ -212,6 +212,9 @@ def lint(recipe_folder, config, packages="*", cache=None, list_funcs=False,
      are > 2 days older than the latest commit to master branch.''')
 @arg('--anaconda-upload', action='store_true', help='''After building recipes, upload
      them to Anaconda. This requires $ANACONDA_TOKEN to be set.''')
+@arg('--keep-docker-containers', help='''Default is to delete docker images upon
+     exit (using the `--rm` argument to `docker run`). Use this to retain them
+     for debugging. Has no effect if --docker is not also specified.''')
 def build(recipe_folder,
           config,
           packages="*",
@@ -223,10 +226,10 @@ def build(recipe_folder,
           mulled_test=False,
           build_script_template=None,
           pkg_dir=None,
-          conda_build_version=docker_utils.DEFAULT_CONDA_BUILD_VERSION,
           quick=False,
           anaconda_upload=False,
           mulled_upload_target=None,
+          keep_docker_containers=False,
     ):
     setup_logger(loglevel)
 
@@ -250,7 +253,7 @@ def build(recipe_folder,
             build_script_template=build_script_template,
             pkg_dir=pkg_dir,
             use_host_conda_bld=use_host_conda_bld,
-            conda_build_version=conda_build_version,
+            keep_docker_containers=keep_docker_containers,
         )
     else:
         docker_builder = None

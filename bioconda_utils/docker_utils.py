@@ -203,6 +203,7 @@ class RecipeBuilder(object):
         dockerfile_template=DOCKERFILE_TEMPLATE,
         use_host_conda_bld=False,
         pkg_dir=None,
+        keep_docker_containers=False,
     ):
         """
         Class to handle building a custom docker container that can be used for
@@ -278,6 +279,7 @@ class RecipeBuilder(object):
         self.conda_build_args = ""
         self.build_script_template = build_script_template
         self.dockerfile_template = dockerfile_template
+        self.keep_docker_containers = keep_docker_containers
 
         uid = os.getuid()
         usr = pwd.getpwuid(uid)
@@ -401,10 +403,13 @@ class RecipeBuilder(object):
             env_list.append('-e')
             env_list.append('{0}={1}'.format(k, v))
 
+        rm = '--rm'
+        if self.keep_docker_images:
+            rm = ''
         cmd = [
             'docker', 'run',
             '--net', 'host',
-            '--rm',
+            rm,
             '-v', '{0}:/opt/build_script.bash'.format(build_script),
             '-v', '{0}:{1}'.format(self.pkg_dir, self.container_staging),
             '-v', '{0}:{1}'.format(recipe_dir, self.container_recipe),
