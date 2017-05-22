@@ -56,6 +56,7 @@ from textwrap import dedent
 import pkg_resources
 
 from . import utils
+from .conda_build_3_compatibility import CONDA3
 
 import logging
 logger = logging.getLogger(__name__)
@@ -99,8 +100,10 @@ conda config --add channels file://{self.container_staging}
 # The actual building....
 conda build {self.conda_build_args} {self.container_recipe}
 
-# Identify the output package
-OUTPUT=$(conda build {self.container_recipe} --output)
+# Identify the output package.
+# Note that conda-build 3 will have "Fetching package metadata ..." as the
+# first line, hence the `tail`.
+OUTPUT=$(conda build {self.container_recipe} --output | tail -n1)
 
 # Some args to conda-build make it run and exit 0 without creating a package
 # (e.g., -h or --skip-existing), so check to see if there's anything to copy
@@ -180,17 +183,17 @@ def get_host_conda_bld(purge=True):
     Assumes that conda-build is installed.
     """
     recipe = dummy_recipe()
-    res = os.path.dirname(
-        os.path.dirname(
-            sp.check_output(
-                ['conda', 'build', recipe, '--output'],
-                universal_newlines=True
-            ).splitlines()[0]
-        )
-    )
+    res = sp.check_output(
+        ['conda', 'build', recipe, '--output'],
+        universal_newlines=True
+    ).splitlines()
+
+    # conda-build-3 has "Fetching package metadata" as first line, conda-build
+    # 2 does not.
+    path = os.path.dirname(os.path.dirname(res[-1]))
     if purge:
         sp.check_call(['conda', 'build', 'purge'])
-    return res
+    return path
 
 
 class RecipeBuilder(object):

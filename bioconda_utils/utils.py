@@ -27,6 +27,8 @@ from conda_build.metadata import MetaData
 import yaml
 from jinja2 import Environment, PackageLoader, select_autoescape
 
+from . conda_build_3_compatibility import get_output_file_paths
+
 logger = logging.getLogger(__name__)
 
 
@@ -421,7 +423,7 @@ def built_package_path(recipe, env=None):
         config = api.Config(
             no_download_source=True,
             set_build_id=False)
-        path = api.get_output_file_path(recipe, config=config)
+        path = get_output_file_paths(recipe, config=config)
 
     return path
 
