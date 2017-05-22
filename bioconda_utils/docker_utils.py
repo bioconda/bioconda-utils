@@ -406,7 +406,7 @@ class RecipeBuilder(object):
             env_list.append('{0}={1}'.format(k, v))
 
         rm = '--rm'
-        if self.keep_docker_images:
+        if self.keep_docker_containers:
             rm = ''
         cmd = [
             'docker', 'run',
