@@ -80,7 +80,9 @@ BUILD_SCRIPT_TEMPLATE = \
 #!/bin/bash
 set -e
 
-conda install conda-build={self.conda_build_version} conda={self.conda_version}
+
+pip install git+https://github.com/conda/conda-build.git@b40b5ad4f3db083576c440064a785be902737c1e
+
 
 # Add the host's mounted conda-bld dir so that we can use its contents as
 # dependencies for building this recipe.
