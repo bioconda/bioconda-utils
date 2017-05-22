@@ -420,7 +420,7 @@ class RecipeBuilder(object):
             '/bin/bash', '/opt/build_script.bash',
         ]
 
-        logger.debug('DOCKER: cmd: %s', cmd)
+        logger.debug('DOCKER: cmd: %s', ' '.join(cmd))
         with utils.Progress():
             p = utils.run(cmd)
         return p
