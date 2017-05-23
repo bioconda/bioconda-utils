@@ -70,10 +70,8 @@ def recipes_fixture():
     """
     r = Recipes('test_case.yaml')
     r.write_recipes()
-    r.pkgs = {}
     yield r
-    for v in r.pkgs.values():
-        ensure_missing(v)
+    # TODO: work out cleanup here
 
 
 @pytest.fixture(scope='module', params=PARAMS, ids=IDS)
@@ -191,7 +189,7 @@ def test_single_build_with_post_test(single_build):
 
 
 def test_multi_build(multi_build):
-    for v in multi_build.values():
+    for v in multi_build:
         assert os.path.exists(v)
 
 
