@@ -14,6 +14,8 @@ from bioconda_utils import docker_utils
 from bioconda_utils import cli
 from bioconda_utils import build
 from bioconda_utils import upload
+from bioconda_utils import conda_build_3_compatibility
+from bioconda_utils.conda_build_3_compatibility import CONDA3
 from helpers import ensure_missing, Recipes, tmp_env_matrix
 from conda_build import api
 from conda_build.metadata import MetaData
@@ -69,8 +71,6 @@ def recipes_fixture():
     r = Recipes('test_case.yaml')
     r.write_recipes()
     r.pkgs = {}
-    for k, v in r.recipe_dirs.items():
-        r.pkgs[k] = utils.built_package_path(v)
     yield r
     for v in r.pkgs.values():
         ensure_missing(v)
@@ -92,10 +92,9 @@ def single_build(request, recipes_fixture):
         docker_builder=docker_builder,
         env=env_matrix,
     )
-    built_package = recipes_fixture.pkgs['one']
+    built_package = utils.built_package_path(recipes_fixture.recipe_dirs['one'])
     yield built_package
     ensure_missing(built_package)
-
 
 
 # TODO: need to have a variant of this where TRAVIS_BRANCH_NAME="master" in
@@ -114,9 +113,11 @@ def multi_build(request, recipes_fixture):
         docker_builder=docker_builder,
         config={},
     )
-    built_packages = recipes_fixture.pkgs
+    built_packages = [
+        utils.built_package_path(i) for i in recipes_fixture.recipe_dirs.values()
+    ]
     yield built_packages
-    for v in built_packages.values():
+    for v in built_packages:
         ensure_missing(v)
 
 
