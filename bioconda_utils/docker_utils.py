@@ -405,13 +405,13 @@ class RecipeBuilder(object):
             env_list.append('-e')
             env_list.append('{0}={1}'.format(k, v))
 
-        rm = '--rm'
+        rm = ['--rm']
         if self.keep_docker_containers:
-            rm = ''
+            rm = []
         cmd = [
             'docker', 'run',
             '--net', 'host',
-            rm,
+        ] + rm + [
             '-v', '{0}:/opt/build_script.bash'.format(build_script),
             '-v', '{0}:{1}'.format(self.pkg_dir, self.container_staging),
             '-v', '{0}:{1}'.format(recipe_dir, self.container_recipe),
