@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 BuildResult = namedtuple("BuildResult", ["success", "mulled_image"])
 
 
-def purge(mulled_image, mulled_upload_target):
+def purge():
     utils.run(["conda", "build", "purge"])
 
     free = utils.get_free_space()
