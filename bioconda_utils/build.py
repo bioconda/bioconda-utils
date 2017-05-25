@@ -15,8 +15,18 @@ logger = logging.getLogger(__name__)
 BuildResult = namedtuple("BuildResult", ["success", "mulled_image"])
 
 
-def purge():
+def purge(mulled_image):
     utils.run(["conda", "build", "purge"])
+    if mulled_image:
+        utils.run(["docker", "rmi", mulled_image])
+
+    free = utils.get_free_space()
+    if free < 10:
+        logger.info("CLEANING UP PACKAGE CACHE (free space: %iMB).", free)
+        utils.run(["conda", "build", "purge-all"])
+        utils.run(["conda", "clean" "--all"])
+        logger.info("CLEANED UP PACKAGE CACHE (free space: %iMB).",
+                    utils.get_free_space())
 
 
 def build(recipe,
@@ -352,7 +362,7 @@ def build_recipes(
                     upload.mulled_upload(res.mulled_image, mulled_upload_target)
 
             # remove traces of the build
-            purge()
+            purge(res.mulled_image)
 
         if recipe_success:
             built_recipes.append(recipe)
