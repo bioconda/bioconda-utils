@@ -15,10 +15,8 @@ logger = logging.getLogger(__name__)
 BuildResult = namedtuple("BuildResult", ["success", "mulled_image"])
 
 
-def purge(mulled_image):
+def purge(mulled_image, mulled_upload_target):
     utils.run(["conda", "build", "purge"])
-    if mulled_image:
-        utils.run(["docker", "rmi", mulled_image])
 
     free = utils.get_free_space()
     if free < 10:
@@ -362,7 +360,7 @@ def build_recipes(
                     upload.mulled_upload(res.mulled_image, mulled_upload_target)
 
             # remove traces of the build
-            purge(res.mulled_image)
+            purge()
 
         if recipe_success:
             built_recipes.append(recipe)
