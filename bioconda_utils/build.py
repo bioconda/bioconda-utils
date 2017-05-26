@@ -21,7 +21,6 @@ def purge():
     free = utils.get_free_space()
     if free < 10:
         logger.info("CLEANING UP PACKAGE CACHE (free space: %iMB).", free)
-        utils.run(["conda", "build", "purge-all"])
         utils.run(["conda", "clean" "--all"])
         logger.info("CLEANED UP PACKAGE CACHE (free space: %iMB).",
                     utils.get_free_space())
