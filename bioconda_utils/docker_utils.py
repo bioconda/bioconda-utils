@@ -97,7 +97,7 @@ mkdir -p {self.container_staging}/linux-64
 conda config --add channels file://{self.container_staging}  > /dev/null 2>&1
 
 # The actual building....
-conda build {self.conda_build_args} {self.container_recipe}
+conda build {self.conda_build_args} {self.container_recipe} 2>&1
 
 # Identify the output package
 OUTPUT=$(conda build {self.container_recipe} --output 2> /dev/null)
