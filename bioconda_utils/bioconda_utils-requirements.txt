@@ -1,7 +1,7 @@
 anaconda-client=1.5.2=py35_0
 argh=0.26.2=py35_0
 beautifulsoup4=4.4.1=py35_0
-conda=4.2.9=py35_0
+conda=4.3.21=py35_0
 conda-build=2.0.7=py35_0
 galaxy-lib=17.5.9=py35_0
 jinja2=2.9.6=py35_0
