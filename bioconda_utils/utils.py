@@ -92,6 +92,24 @@ def sandboxed_env(env):
         os.environ.update(orig)
 
 
+def load_meta(recipe, config):
+    """
+    For each environment, yield the rendered meta.yaml
+    """
+    cfg = load_config(config)
+    env_matrix = EnvMatrix(cfg['env_matrix'])
+    for env in env_matrix:
+        with temp_env(env):
+            # Disabling set_build_id prevents the creation of uniquely-named work
+            # directories just for checking the output file.
+            # It needs to be done within the context manager so that it sees the
+            # os.environ.
+            config_obj = api.Config(
+                no_download_source=True,
+                set_build_id=False)
+            yield api.render(recipe, config_obj)[0].meta
+
+
 @contextlib.contextmanager
 def temp_os(platform):
     """
@@ -201,7 +219,7 @@ class EnvMatrix:
             yield env
 
 
-def get_deps(recipe, build=True):
+def get_deps(recipe, config, build=True):
     """
     Generator of dependencies for a single recipe
 
@@ -217,15 +235,26 @@ def get_deps(recipe, build=True):
         If True yield build dependencies, if False yield run dependencies.
     """
     if isinstance(recipe, str):
-        metadata = MetaData(recipe)
+        metadata = load_meta(recipe, config)
+
+        # TODO: This function is currently used only for creating DAGs, but it's
+        # unclear how to manage different dependencies depending on the
+        # particular environment. For now, just use the first environment.
+        metadata = list(metadata)
+        metadata = metadata[0]
     else:
         metadata = recipe
-    for dep in metadata.get_value(
-            "requirements/{}".format("build" if build else "run"), []):
+
+    reqs = metadata.get('requirements', {})
+    if build:
+        deps = reqs.get('build', [])
+    else:
+        deps = reqs.get('run', [])
+    for dep in deps:
         yield dep.split()[0]
 
 
-def get_dag(recipes, blacklist=None, restrict=True):
+def get_dag(recipes, config, blacklist=None, restrict=True):
     """
     Returns the DAG of recipe paths and a dictionary that maps package names to
     lists of recipe paths to all defined versions of the package.  defined
@@ -255,16 +284,33 @@ def get_dag(recipes, blacklist=None, restrict=True):
         values are lists and contain paths to all defined versions.
     """
     recipes = list(recipes)
-    metadata = [MetaData(recipe) for recipe in recipes]
+    metadata = []
+    for recipe in sorted(recipes):
+        print(recipe)
+        for r in list(load_meta(recipe, config)):
+            metadata.append((r, recipe))
     if blacklist is None:
         blacklist = set()
 
-    # meta.yaml's package:name mapped to the recipe path
-    name2recipe = defaultdict(list)
-    for meta, recipe in zip(metadata, recipes):
-        name = meta.get_value('package/name')
+    # name2recipe is meta.yaml's package:name mapped to the recipe path.
+    #
+    # A name should map to exactly one recipe. It is possible for multiple
+    # names to map to the same recipe, if the package name somehow depends on
+    # the environment.
+    #
+    # Note that this may change once we support conda-build 3.
+    name2recipe = defaultdict(set)
+    for meta, recipe in metadata:
+        name = meta['package']['name']
         if name not in blacklist:
-            name2recipe[name].append(recipe)
+            name2recipe[name].update([recipe])
+
+    for k, v in name2recipe.items():
+        if len(v) != 1:
+            raise ValueError(
+                "Multiple recipes identified for the same package:\n"
+                "package={0}, recipes={0}"
+                .format(k, v))
 
     def get_inner_deps(dependencies):
         for dep in dependencies:
@@ -273,13 +319,13 @@ def get_dag(recipes, blacklist=None, restrict=True):
                 yield name
 
     dag = nx.DiGraph()
-    dag.add_nodes_from(meta.get_value("package/name") for meta in metadata)
-    for meta in metadata:
-        name = meta.get_value("package/name")
+    dag.add_nodes_from(meta['package']['name'] for meta, recipe in metadata)
+    for meta, recipe in metadata:
+        name = meta['package']['name']
         dag.add_edges_from((dep, name)
                            for dep in set(get_inner_deps(chain(
-                               get_deps(meta),
-                               get_deps(meta,
+                               get_deps(meta, config=config),
+                               get_deps(meta, config=config,
                                         build=False)))))
 
     return dag, name2recipe
@@ -423,6 +469,7 @@ def built_package_path(recipe, env=None):
         config = api.Config(
             no_download_source=True,
             set_build_id=False)
+
         path = get_output_file_paths(recipe, config=config)
 
     return path
@@ -693,6 +740,15 @@ def validate_config(config):
 
 
 def load_config(path):
+    """
+    Parses config file, building paths to relevant blacklists and loading any
+    specified env_matrix files.
+
+    Parameters
+    ----------
+    path : str
+        Path to YAML config file
+    """
     validate_config(path)
 
     if isinstance(path, dict):
@@ -729,9 +785,11 @@ def load_config(path):
     return default_config
 
 
-def modified_recipes(git_range, recipe_folder, config_file, full=False):
+def modified_recipes(git_range, recipe_folder, config_file):
     """
-    Returns recipes modified within the git range.
+    Returns files under the recipes dir that have been modified within the git
+    range. Includes meta.yaml files for recipes that have been unblacklisted in
+    the git range. Filenames are returned with the `recipe_folder` included.
 
     git_range : list or tuple of length 1 or 2
         For example, ['00232ffe', '10fab113'], or commonly ['master', 'HEAD']
@@ -741,9 +799,6 @@ def modified_recipes(git_range, recipe_folder, config_file, full=False):
 
     recipe_folder : str
         Top-level recipes dir in which to search for meta.yaml files.
-
-    full : bool
-        If True, include the recipe_folder in the path
     """
     orig_git_range = git_range[:]
     if len(git_range) == 2:
@@ -764,10 +819,10 @@ def modified_recipes(git_range, recipe_folder, config_file, full=False):
             os.path.join(recipe_folder, '*', '*')
         ]
     )
-    shell = False
 
-    # git expands globs only in versions >2, so if it's older than that we need
-    # to run the command using shell=True so that globs are expanded.
+    # In versions >2 git expands globs. But if it's older than that we need to
+    # run the command using shell=True to get the shell to expand globs.
+    shell = False
     p = run(['git', '--version'])
     matches = re.match(r'^git version (?P<version>[\d\.]*)(?:.*)$',p.stdout)
     git_version = matches.group("version")
@@ -796,9 +851,7 @@ def modified_recipes(git_range, recipe_folder, config_file, full=False):
     unblacklisted = [os.path.join(recipe_folder, i, 'meta.yaml') for i in unblacklisted]
     existing += unblacklisted
 
-    if full:
-        return existing
-    return [os.path.relpath(recipe_folder, m) for m in existing]
+    return existing
 
 
 class Progress:
