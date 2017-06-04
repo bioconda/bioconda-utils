@@ -81,7 +81,6 @@ BUILD_SCRIPT_TEMPLATE = \
 set -e
 
 
-pip install git+https://github.com/conda/conda-build.git@b40b5ad4f3db083576c440064a785be902737c1e
 
 
 # Add the host's mounted conda-bld dir so that we can use its contents as
@@ -140,6 +139,7 @@ RUN /opt/conda/bin/conda config --add channels defaults
 RUN /opt/conda/bin/conda config --add channels r
 RUN /opt/conda/bin/conda config --add channels bioconda
 RUN /opt/conda/bin/conda install --file /tmp/requirements.txt
+RUN pip install git+https://github.com/conda/conda-build.git@b40b5ad4f3db083576c440064a785be902737c1e
 """
 
 
