@@ -455,7 +455,7 @@ class RecipeBuilder(object):
         rm = ['--rm']
         if self.keep_docker_containers:
             rm = []
-        cmd = [
+        base_cmds = [
             'docker', 'run',
             '--net', 'host',
         ] + rm + [
@@ -463,7 +463,11 @@ class RecipeBuilder(object):
             '-v', '{0}:{1}'.format(self.pkg_dir, self.container_staging),
             '-v', '{0}:{1}'.format(recipe_dir, self.container_recipe),
         ] + env_list + [
-            self.tag,
+            self.tag
+        ]
+
+
+        cmd = base_cmds + [
             '/bin/bash', '/opt/build_script.bash',
         ]
 
