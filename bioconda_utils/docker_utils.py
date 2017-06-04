@@ -311,6 +311,51 @@ class RecipeBuilder(object):
     def __del__(self):
         self.cleanup()
 
+    def _host_conda_build_version(self):
+        try:
+            p = utils.run(['conda', 'build', '--version'])
+            version = p.stdout.splitlines()[-1].strip()
+        except CalledProcessError:
+            version = '<no conda-build found on host>'
+        return version
+
+    def _docker_conda_build_version(self):
+        return utils.run([
+            'docker', 'run', '--net', 'host', '--rm', self.tag, 'conda',
+            'build', '--version']
+        ).stdout.splitlines()[-1].strip()
+
+    def _host_conda_version(self):
+        try:
+            p = utils.run(['conda', '--version'])
+            version = p.stdout.splitlines()[-1].strip()
+        except CalledProcessError:
+            version = '<no conda found on host>'
+        return version
+
+    def _docker_conda_version(self):
+        return utils.run([
+            'docker', 'run', '--net', 'host', '--rm', self.tag, 'conda',
+            '--version']
+        ).stdout.splitlines()[-1].strip()
+
+    def _compare_versions(self):
+        host = self._host_conda_build_version()
+        cont = self._docker_conda_build_version()
+        if host != cont:
+            logger.warning(
+                'Host conda-build version ({0}) does not match docker '
+                'conda-build version ({1})'
+                .format(host, cont))
+
+        host = self._host_conda_version()
+        cont = self._docker_conda_version()
+        if host != cont:
+            logger.warning(
+                'Host conda version ({0}) does not match docker '
+                'conda version ({1})'
+                .format(host, cont))
+
     def _pull_image(self):
         """
         Separate out the pull step to provide additional logging info
@@ -360,6 +405,8 @@ class RecipeBuilder(object):
 
         logger.info('DOCKER: Built docker image tag=%s', self.tag)
         shutil.rmtree(build_dir)
+
+        self._compare_versions()
         return p
 
     def build_recipe(self, recipe_dir, build_args, env):
