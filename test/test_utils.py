@@ -201,7 +201,9 @@ def test_docker_builder_build(recipes_fixture):
     docker_builder = docker_utils.RecipeBuilder(use_host_conda_bld=True)
     docker_builder.build_recipe(
         recipes_fixture.recipe_dirs['one'], build_args='', env={})
-    assert os.path.exists(recipes_fixture.pkgs['one'])
+
+    pkg = utils.built_package_path(recipes_fixture.recipe_dirs['one'])
+    assert os.path.exists(pkg)
 
 
 @pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
