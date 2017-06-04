@@ -478,4 +478,6 @@ class RecipeBuilder(object):
 
     def cleanup(self):
         cmd = ['docker', 'rmi', self.tag]
-        utils.run(cmd)
+        disable = os.environ.get('DISABLE_BIOCONDA_CLEANUP', 'false')
+        if disable.lower() not in ['true', 't', 'y', 'yes', '1']:
+            utils.run(cmd)
