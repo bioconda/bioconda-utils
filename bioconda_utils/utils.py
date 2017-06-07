@@ -490,8 +490,10 @@ def built_package_path(recipe, env=None):
         # os.environ.
         config = api.Config(
             no_download_source=True,
-            set_build_id=False)
-        path = api.get_output_file_path(recipe, config=config)
+            set_build_id=True, verbose=True)
+        meta = MetaData(recipe)
+        meta.parse_again()
+        path = api.get_output_file_path(meta, config=config)
     return path
 
 
@@ -707,6 +709,7 @@ def filter_recipes(recipes, env_matrix, channels=None, force=False):
             targets = set()
             for env in env_matrix:
                 pkg = built_package_path(recipe, env)
+                print(pkg, env)
                 if tobuild(recipe, env):
                     targets.update([Target(pkg, env)])
             if targets:
