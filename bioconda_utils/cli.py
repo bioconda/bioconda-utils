@@ -102,12 +102,14 @@ def select_recipes(packages, git_range, recipe_folder, config_filename, config, 
 @arg('--strict-build', action='store_true', help='Require version and build to strictly match.')
 @arg('--remove', action='store_true', help='Remove packages from anaconda.')
 @arg('--dryrun', '-n', action='store_true', help='Only print removal plan.')
+@arg('--url', action='store_true', help='Print anaconda urls.')
 def duplicates(
     config,
     strict_version=False,
     strict_build=False,
     dryrun=False,
-    remove=False):
+    remove=False,
+    url=False):
     """
     Detect packages in bioconda that have duplicates in the other defined
     channels.
@@ -116,18 +118,19 @@ def duplicates(
     config = utils.load_config(config)
 
     channels = config['channels']
+    target_channel = channels[0]
 
     if strict_version:
         get_spec = lambda pkg: (pkg['name'], pkg['version'])
-        if not remove:
+        if not remove and not url:
             print('name', 'version', 'channels', sep='\t')
     elif strict_build:
         get_spec = lambda pkg: (pkg['name'], pkg['version'], pkg['build'])
-        if not remove:
+        if not remove and not url:
             print('name', 'version', 'build', 'channels', sep='\t')
     else:
         get_spec = lambda pkg: pkg['name']
-        if not remove:
+        if not remove and not url:
             print('name', 'channels', sep='\t')
 
     def remove_package(spec):
@@ -136,17 +139,18 @@ def duplicates(
                              '--strict-build.')
         fn = '{}-{}-{}.tar.bz2'.format(*spec)
         name, version = spec[:2]
-        cmd = ['anaconda', 'remove', '-f',
+        subcmd = ['remove', '-f',
                '{channel}/{name}/{version}/{fn}'.format(
-               name=name, version=version, fn=fn, channel=channels[0])]
+               name=name, version=version, fn=fn, channel=target_channel)]
         if dryrun:
-            print(*cmd)
+            print('anaconda', *subcmd)
         else:
-            raise ValueError('FIXME:'
-            'Automatic removal is currently not supported due '
-            'to a bug in anaconda-client: It does not provide the right URL to '
-            'the server.')
-            print(utils.run(cmd).stdout)
+            token = os.environ.get('ANACONDA_TOKEN')
+            if token is None:
+                token = []
+            else:
+                token = ['-t', token]
+            print(utils.run(['anaconda'] + token + subcmd).stdout)
 
     def get_packages(channel):
         return {get_spec(pkg)
@@ -154,7 +158,7 @@ def duplicates(
                 for pkg in repodata['packages'].values()}
 
     # packages in our channel
-    packages = get_packages(channels[0])
+    packages = get_packages(target_channel)
 
     # packages in channels we depend on
     common = defaultdict(list)
@@ -167,7 +171,14 @@ def duplicates(
         if remove:
             remove_package(pkg)
         else:
-            print(*pkg, *_channels, sep='\t')
+            if url:
+                if not strict_version and not strict_build:
+                    print('https://anaconda.org/{}/{}'.format(
+                          target_channel, pkg[0]))
+                print('https://anaconda.org/{}/{}/files?version={}'.format(
+                    target_channel, *pkg))
+            else:
+                print(*pkg, *_channels, sep='\t')
 
 
 @arg('recipe_folder', help='Path to top-level dir of recipes.')
