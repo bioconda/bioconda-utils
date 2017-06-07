@@ -494,11 +494,10 @@ def built_package_path(recipe, env=None):
         meta = MetaData(recipe, config=config)
         meta.parse_again()
         path = api.get_output_file_path(meta, config=config)
-        
-        buildnum = meta.get_value('build/number', default=None)
-        if buildnum is not None:
-            assert path.endswith("_{}.tar.bz2".format()), \
-                'Bug: build number is not included in build string.'
+
+        buildnum = meta.get_value('build/number', default=0)
+        assert path.endswith("{}.tar.bz2".format(buildnum)), \
+            'Bug: build number is not included in build string.'
     return path
 
 
