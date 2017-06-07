@@ -456,7 +456,7 @@ def test_filter_recipes_extra_in_build_string():
               name: one
               version: "0.1"
             build:
-              number: 0
+              number: 5
               string: {{CONDA_EXTRA}}_{{PKG_BUILDNUM}}
         """, from_string=True)
     r.write_recipes()
@@ -467,7 +467,7 @@ def test_filter_recipes_extra_in_build_string():
     }
     pkg = os.path.basename(utils.built_package_path(recipe, env))
 
-    assert os.path.basename(pkg) == 'one-0.1-asdf_0.tar.bz2'
+    assert os.path.basename(pkg) == 'one-0.1-asdf_5.tar.bz2'
 
 
 def test_filter_recipes_existing_package():
