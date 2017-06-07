@@ -646,11 +646,6 @@ def filter_recipes(recipes, env_matrix, channels=None, force=False):
         channel_packages[channel].update(get_channel_packages(channel=channel))
 
     def tobuild(recipe, env):
-        # if force:
-        #     logger.debug(
-        #         'FILTER: building %s because force=True', recipe)
-        #     return True
-
         pkg = os.path.basename(built_package_path(recipe, env))
 
         in_channels = [
@@ -677,13 +672,20 @@ def filter_recipes(recipes, env_matrix, channels=None, force=False):
                 platform = 'darwin'
 
             with temp_os(platform):
-                skip = MetaData(recipe).skip()
+                meta = MetaData(recipe)
+                if meta.skip():
+                    logger.debug(
+                        'FILTER: not building %s because '
+                        'it defines skip for this env', pkg)
+                    return False
 
-        if skip:
-            logger.debug(
-                'FILTER: not building %s because '
-                'it defines skip for this env', pkg)
-            return False
+                # If on travis, handle noarch.
+                if os.environ.get('TRAVIS', None) == 'true':
+                    if meta.get_value('build/noarch') is not None:
+                        if platform != 'linux':
+                            logger.debug('FILTER: only building %s on '
+                                         'linux because it defines noarch.')
+                            return False
 
         assert not pkg.endswith("_.tar.bz2"), ("rendered path {} does not "
             "contain a build number and recipe does not "
