@@ -681,10 +681,11 @@ def filter_recipes(recipes, env_matrix, channels=None, force=False):
 
                 # If on travis, handle noarch.
                 if os.environ.get('TRAVIS', None) == 'true':
-                    if meta.get_value('build/noarch') is not None:
+                    if meta.get_value('build/noarch'):
                         if platform != 'linux':
                             logger.debug('FILTER: only building %s on '
-                                         'linux because it defines noarch.')
+                                         'linux because it defines noarch.',
+                                         pkg)
                             return False
 
         assert not pkg.endswith("_.tar.bz2"), ("rendered path {} does not "
