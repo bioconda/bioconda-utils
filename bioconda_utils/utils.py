@@ -491,7 +491,12 @@ def built_package_path(recipe, env=None):
         config = api.Config(
             no_download_source=True,
             set_build_id=False)
-        path = api.get_output_file_path(recipe, config=config)
+        meta = MetaData(recipe, config=config)
+        meta.parse_again()
+        path = api.get_output_file_path(meta, config=config)
+        assert path.endswith(
+            "_{}.tar.bz2".format(meta.meta['build']['number'])), \
+            'Bug: build number is not included in build string.'
     return path
 
 
