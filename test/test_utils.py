@@ -242,6 +242,7 @@ def test_docker_build_image_fails():
 def test_conda_purge_cleans_up():
     def tmp_dir_exists(d):
         contents = os.listdir(d)
+        print(contents)
         for i in contents:
             if i.startswith('tmp') and '_' in i:
                 return True
