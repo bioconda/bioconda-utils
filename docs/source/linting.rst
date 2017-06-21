@@ -134,6 +134,18 @@ For other generic packages (like a data package), add ``noarch: generic`` to the
 See `here <https://www.continuum.io/blog/developer-blog/condas-new-noarch-packages>`_ for
 more details.
 
+`should_not_be_noarch`
+~~~~~~~~~~~~~~~~~~~~~~
+Reason for failing: The package should **not** be labelled as ``noarch``.
+
+Rationale: The package defines gcc as a dependency, or it contains a build/skip
+section. In both cases, this means that there should be platform specific
+versions of this package. This also holds for skipping Python versions, because
+``noarch: python`` also implies that the resulting package will work with **all**
+Python versions. This is typically not the case if you skip a Python version.
+
+How to resolve: Remove the ``noarch`` statement.
+
 `uses_git_url`
 ~~~~~~~~~~~~~~
 Reason for failing: The source section uses a git URL.

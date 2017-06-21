@@ -222,6 +222,20 @@ def should_be_noarch(recipe, meta, df):
         }
 
 
+def should_not_be_noarch(recipe, meta, df):
+    deps = _get_deps(meta)
+    if (
+        ('gcc' in deps) or
+        meta.get('build', {}).get('skip', False)
+    ) and (
+        'noarch' in meta.get('build', {})
+    ):
+        return {
+            'should_not_be_noarch': True,
+            'fix': 'remove "build: noarch" section',
+        }
+
+
 registry = (
     in_other_channels,
 
@@ -238,4 +252,5 @@ registry = (
     uses_setuptools,
     has_windows_bat_file,
     # should_be_noarch,
+    should_not_be_noarch
 )
