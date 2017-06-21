@@ -103,7 +103,7 @@ conda config --add channels file://{self.container_staging}  > /dev/null 2>&1
 conda build {self.conda_build_args} {self.container_recipe}/meta.yaml 2>&1
 
 # Identify the output package
-OUTPUT=$(conda build {self.container_recipe} --output 2> /dev/null)
+OUTPUT=$(conda build {self.container_recipe}/meta.yaml --output 2> /dev/null)
 
 # Some args to conda-build make it run and exit 0 without creating a package
 # (e.g., -h or --skip-existing), so check to see if there's anything to copy
