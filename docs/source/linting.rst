@@ -124,10 +124,12 @@ Reason for failing: The package should be labelled as ``noarch``.
 
 Rationale: A ``noarch`` package should be created for pure Python packages, data packages, or
 packages that do not require compilation. With this a single ``noarch`` package can be
-used across multiple platforms, which saves on build time and saves on storage
-space on the bioconda channel.
+used across multiple platforms and (in case of Python) Python versions, which saves
+on build time and saves on storage space on the bioconda channel.
 
 How to resolve: For pure Python packages, add ``noarch: python`` to the ``build`` section.
+**Don't do this if your Python package has a command line interface**, as these are not
+independent of the Python version!
 For other generic packages (like a data package), add ``noarch: generic`` to the ``build`` section.
 See `here <https://www.continuum.io/blog/developer-blog/condas-new-noarch-packages>`_ for
 more details.

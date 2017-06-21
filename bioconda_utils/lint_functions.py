@@ -209,6 +209,9 @@ def should_be_noarch(recipe, meta, df):
     if (
         ('gcc' not in deps) and
         ('python' in deps) and
+        # This will also exclude recipes with skip sections
+        # which is a good thing, because noarch also implies independence of
+        # the python version.
         not _has_preprocessing_selector(recipe)
     ) and (
         'noarch' not in meta.get('build', {})
