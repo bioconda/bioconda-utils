@@ -113,7 +113,7 @@ def build(recipe,
                 build_args=' '.join(channel_args + build_args),
                 pkg=os.path.basename(pkg_path),
                 env=_env,
-                noarch=bool(meta.get_value('build/noarch'))
+                noarch=bool(utils.get_meta_value(meta, 'build', 'noarch'))
             )
 
             if not os.path.exists(pkg_path):
