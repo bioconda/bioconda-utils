@@ -18,6 +18,13 @@ BuildResult = namedtuple("BuildResult", ["success", "mulled_image"])
 def purge():
     utils.run(["conda", "build", "purge"])
 
+    free = utils.get_free_space()
+    if free < 10:
+        logger.info("CLEANING UP PACKAGE CACHE (free space: %iMB).", free)
+        utils.run(["conda", "clean" "--all"])
+        logger.info("CLEANED UP PACKAGE CACHE (free space: %iMB).",
+                    utils.get_free_space())
+
 
 def build(recipe,
           recipe_folder,
@@ -93,6 +100,9 @@ def build(recipe,
 
     CONDA_BUILD_CMD = ['conda', 'build']
 
+    pkg_path = utils.built_package_path(recipe, _env)
+    meta = utils.load_meta(recipe, _env)
+
     try:
         # Note we're not sending the contents of os.environ here. But we do
         # want to add TRAVIS* vars if that behavior is not disabled.
@@ -101,22 +111,26 @@ def build(recipe,
             response = docker_builder.build_recipe(
                 recipe_dir=os.path.abspath(recipe),
                 build_args=' '.join(channel_args + build_args),
-                env=_env
+                pkg=os.path.basename(pkg_path),
+                env=_env,
+                noarch=bool(utils.get_meta_value(meta, 'build', 'noarch'))
             )
 
-            pkg = utils.built_package_path(recipe, _env)
-            if not os.path.exists(pkg):
+            if not os.path.exists(pkg_path):
                 logger.error(
                     "BUILD FAILED: the built package %s "
-                    "cannot be found", pkg)
+                    "cannot be found", pkg_path)
                 return BuildResult(False, None)
             build_success = True
         else:
 
             # Temporarily reset os.environ to avoid leaking env vars to
             # conda-build, and explicitly provide `env` to `run()`
+            # we explicitly point to the meta.yaml, in order to keep
+            # conda-build from building all subdirectories
             with utils.sandboxed_env(_env):
-                cmd = CONDA_BUILD_CMD + build_args + channel_args + [recipe]
+                cmd = CONDA_BUILD_CMD + build_args + channel_args + \
+                      [os.path.join(recipe, 'meta.yaml')]
                 logger.debug('command: %s', cmd)
                 with utils.Progress():
                     p = utils.run(cmd, env=os.environ)
@@ -136,13 +150,14 @@ def build(recipe,
     if not mulled_test:
         return BuildResult(True, None)
 
-    pkg_path = utils.built_package_path(recipe, _env)
-
     logger.info(
         'TEST START via mulled-build %s, %s',
         recipe, utils.envstr(_env))
 
-    base_image = utils.load_meta(recipe, env).get('extra/container/base', None)
+    use_base_image = utils.get_meta_value(
+        meta,
+        'extra', 'container', 'extended-base')
+    base_image = 'bioconda/extended-base-image' if use_base_image else None
 
     try:
         res = pkg_test.test_package(pkg_path, base_image=base_image)

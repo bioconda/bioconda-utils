@@ -44,12 +44,34 @@ ENV_VAR_WHITELIST = [
     'PATH',
     'LC_*',
     'LANG',
+    'MACOSX_DEPLOYMENT_TARGET'
 ]
+
+
+def get_free_space():
+    """Return free space in MB on disk"""
+    s = os.statvfs(os.getcwd())
+    return s.f_frsize * s.f_bavail / (1024 ** 2)
+
 
 def allowed_env_var(s):
     for pattern in ENV_VAR_WHITELIST:
         if fnmatch.fnmatch(s, pattern):
             return True
+
+
+def get_meta_value(meta, *keys, default=None):
+    """
+    Return value from metadata.
+    Given keys can define a path in the document tree.
+    """
+    try:
+        for key in keys:
+            meta = meta[key]
+        return meta
+    except KeyError:
+        return default
+
 
 @contextlib.contextmanager
 def temp_env(env):
@@ -113,10 +135,12 @@ def load_meta(recipe, env):
         # directories just for checking the output file.
         # It needs to be done within the context manager so that it sees the
         # os.environ.
-        config_obj = api.Config(
+        config = api.Config(
             no_download_source=True,
             set_build_id=False)
-        return api.render(recipe, config_obj)[0].meta
+        meta = MetaData(recipe, config=config)
+        meta.parse_again()
+        return meta.meta
 
 
 @contextlib.contextmanager
@@ -503,7 +527,9 @@ def built_package_path(recipe, env=None):
         config = api.Config(
             no_download_source=True,
             set_build_id=False)
-        path = api.get_output_file_path(recipe, config=config)
+        meta = MetaData(recipe, config=config)
+        meta.parse_again()
+        path = api.get_output_file_path(meta, config=config)
     return path
 
 
@@ -658,23 +684,17 @@ def filter_recipes(recipes, env_matrix, channels=None, force=False):
         channel_packages[channel].update(get_channel_packages(channel=channel))
 
     def tobuild(recipe, env):
-        # TODO: get the modification time of recipe/meta.yaml. Only continue
-        # the slow steps below if it's newer than the last commit to master.
-        if force:
-            logger.debug(
-                'FILTER: building %s because force=True', recipe)
-            return True
-
         pkg = os.path.basename(built_package_path(recipe, env))
 
         in_channels = [
             channel for channel, pkgs in channel_packages.items()
             if pkg in pkgs
         ]
-        if in_channels:
+        if in_channels and not force:
             logger.debug(
                 'FILTER: not building %s because '
-                'it is in channel(s): %s', pkg, in_channels)
+                'it is in channel(s) and it is not forced: %s', pkg,
+                in_channels)
             return False
 
         # with temp_env, MetaData will see everything in env added to
@@ -690,13 +710,21 @@ def filter_recipes(recipes, env_matrix, channels=None, force=False):
                 platform = 'darwin'
 
             with temp_os(platform):
-                skip = MetaData(recipe).skip()
+                meta = MetaData(recipe)
+                if meta.skip():
+                    logger.debug(
+                        'FILTER: not building %s because '
+                        'it defines skip for this env', pkg)
+                    return False
 
-        if skip:
-            logger.debug(
-                'FILTER: not building %s because '
-                'it defines skip for this env', pkg)
-            return False
+                # If on travis, handle noarch.
+                if os.environ.get('TRAVIS', None) == 'true':
+                    if meta.get_value('build/noarch'):
+                        if platform != 'linux':
+                            logger.debug('FILTER: only building %s on '
+                                         'linux because it defines noarch.',
+                                         pkg)
+                            return False
 
         assert not pkg.endswith("_.tar.bz2"), ("rendered path {} does not "
             "contain a build number and recipe does not "
@@ -704,8 +732,8 @@ def filter_recipes(recipes, env_matrix, channels=None, force=False):
             "This is a conda bug.".format(pkg))
 
         logger.debug(
-            'FILTER: building %s because it is not in channels '
-            'does not define skip, and force is not specified', pkg)
+            'FILTER: building %s because it is not in channels and '
+            'does not define skip', pkg)
         return True
 
     logger.debug('recipes: %s', recipes)
