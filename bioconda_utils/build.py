@@ -182,6 +182,7 @@ def build_recipes(
     anaconda_upload=False,
     mulled_upload_target=None,
     check_channels=None,
+    latest_only=False,
 ):
     """
     Build one or many bioconda packages.
@@ -244,11 +245,15 @@ def build_recipes(
 
     logger.info('blacklist: %s', ', '.join(sorted(blacklist)))
 
+    get_recipes = utils.get_recipes
+    if latest_only:
+        get_recipes = utils.get_latest_recipes
+
     if packages == "*":
         packages = ["*"]
     recipes = []
     for package in packages:
-        for recipe in utils.get_recipes(recipe_folder, package):
+        for recipe in get_recipes(recipe_folder, package):
             if os.path.relpath(recipe, recipe_folder) in blacklist:
                 logger.debug('blacklisted: %s', recipe)
                 continue

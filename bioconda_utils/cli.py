@@ -331,6 +331,8 @@ def lint(recipe_folder, config, packages="*", cache=None, list_funcs=False,
      in a docker container. Has no effect otherwise.''')
 @arg('--anaconda-upload', action='store_true', help='''After building recipes, upload
      them to Anaconda. This requires $ANACONDA_TOKEN to be set.''')
+@arg('--latest-only', action='store_true', help='''Build only latest version
+     of each recipe.''')
 def build(recipe_folder,
           config,
           packages="*",
@@ -345,6 +347,7 @@ def build(recipe_folder,
           conda_build_version=docker_utils.DEFAULT_CONDA_BUILD_VERSION,
           anaconda_upload=False,
           mulled_upload_target=None,
+          latest_only=False,
     ):
     setup_logger(loglevel)
 
@@ -402,6 +405,7 @@ def build(recipe_folder,
         docker_builder=docker_builder,
         anaconda_upload=anaconda_upload,
         mulled_upload_target=mulled_upload_target,
+        latest_only=latest_only,
     )
     exit(0 if success else 1)
 

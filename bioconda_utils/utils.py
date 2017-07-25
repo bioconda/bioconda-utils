@@ -17,13 +17,14 @@ import requests
 from jsonschema import validate
 import datetime
 import tempfile
-from distutils.version import LooseVersion
+from distutils.version import LooseVersion, StrictVersion
 import time
 import threading
 
 from conda_build.exceptions import UnableToParse
 from conda_build import api
 from conda_build.metadata import MetaData
+from conda.version import VersionOrder
 import yaml
 from jinja2 import Environment, PackageLoader, select_autoescape
 
@@ -388,6 +389,38 @@ def get_recipes(recipe_folder, package="*"):
                        glob.glob(os.path.join(path, "meta.yaml")))
         yield from map(os.path.dirname,
                        glob.glob(os.path.join(path, "*", "meta.yaml")))
+
+
+def get_latest_recipes(recipe_folder, package="*"):
+    """
+    Generator of recipes.
+
+    Finds (possibly nested) directories containing a `meta.yaml` file and returns
+    the latest version of each recipe.
+
+    Parameters
+    ----------
+    recipe_folder : str
+        Top-level dir of the recipes
+
+    package : str or iterable
+        Pattern or patterns to restrict the results.
+    """
+    if isinstance(package, str):
+        package = [package]
+    for p in package:
+        path = os.path.join(recipe_folder, p)
+        main_recipe = os.path.join(path, "meta.yaml")
+        if os.path.exists(main_recipe):
+            yield os.path.dirname(main_recipe)
+        else:
+            get_version = lambda p: VersionOrder(os.path.basename(p))
+            sorted_versions = sorted(
+                map(os.path.dirname,
+                    glob.glob(os.path.join(path, "*", "meta.yaml"))),
+                key=get_version)
+            if sorted_versions:
+                yield sorted_versions[-1]
 
 
 def get_channel_repodata(channel='bioconda', platform=None):
