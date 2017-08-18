@@ -134,7 +134,7 @@ def build(
                       [os.path.join(recipe, 'meta.yaml')]
                 logger.debug('command: %s', cmd)
                 with utils.Progress():
-                    p = utils.run(cmd, env=os.environ)
+                    utils.logging_run(cmd, logger, env=os.environ)
 
             build_success = True
 
@@ -161,7 +161,7 @@ def build(
     base_image = 'bioconda/extended-base-image' if use_base_image else None
 
     try:
-        res = pkg_test.test_package(pkg_path, base_image=base_image)
+        pkg_test.test_package(pkg_path, base_image=base_image)
 
         logger.info("TEST SUCCESS %s, %s", recipe, utils.envstr(_env))
         mulled_image = pkg_test.get_image_name(pkg_path)

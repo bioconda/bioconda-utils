@@ -12,6 +12,7 @@ from collections import defaultdict, Iterable
 from itertools import product, chain
 import logging
 import pkg_resources
+import queue
 import networkx as nx
 import requests
 from jsonschema import validate
@@ -174,6 +175,51 @@ def temp_os(platform):
         yield
     finally:
         sys.platform = original
+
+
+def logging_run(cmds, logger=None, lvl=logging.INFO, **kwargs):
+    """
+    Like subprocess.run() with real-time STDOUT/ERR redirection to logging.
+
+    logger: Optionally pass a logger object (default: `utils` logger)
+    lvl:    Optionally set log level (default: INFO)
+
+    One log message is generated for each line received from STDERR or STDOUT.
+    Messages are prefixed with `STDERR:` or `STDOUT:` to indicate the pipe used
+    by the run process. Byte data is decoded explicitly to avoid
+    UnicodeDecodeErrors.
+
+    Raises subprocess.CalledProcessError if the exit code is non-zero.
+
+    Returns the subprocess.CompletedProcess object.
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    p = sp.Popen(cmds, stdout=sp.PIPE, stderr=sp.PIPE,
+                 bufsize=1, close_fds=True, **kwargs)
+    q = queue.Queue()
+
+    def pushqueue(q, prefix, pipe):
+        for line in iter(pipe.readline, b''):
+            q.put(prefix+line)
+        q.put(None)  # End-of-data-token
+
+    t1 = threading.Thread(target=pushqueue, args=(q, b"STDOUT: ", p.stdout))
+    t2 = threading.Thread(target=pushqueue, args=(q, b"STDERR: ", p.stderr))
+    t1.daemon = True  # Do not ever wait for these threads to terminate
+    t2.daemon = True
+    t1.start()
+    t2.start()
+
+    for _ in range(2):  # Run until we've got both `None` tokens
+        for line in iter(q.get, None):
+            logger.log(lvl, line.decode(errors='replace').rstrip())
+    p.wait()  # process may still run after closing both STDOUT and STDERR
+
+    if p.returncode != 0:
+        raise sp.CalledProcessError(p.returncode, cmds)
+    return p
 
 
 def run(cmds, env=None, **kwargs):

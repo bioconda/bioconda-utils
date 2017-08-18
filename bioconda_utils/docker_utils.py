@@ -371,8 +371,8 @@ class RecipeBuilder(object):
         Separate out the pull step to provide additional logging info
         """
         logger.info('DOCKER: Pulling docker image %s', self.image)
-        p = utils.run(['docker', 'pull', self.image])
-        logger.debug('DOCKER: stdout+stderr:\n%s', p.stdout)
+        utils.logging_run(['docker', 'pull', self.image],
+                          logger, logging.DEBUG)
         logger.info('DOCKER: Done pulling image')
 
     def _build_image(self):
@@ -426,7 +426,7 @@ class RecipeBuilder(object):
 
         try:
             with utils.Progress():
-                p = utils.run(cmd)
+                p = utils.logging_run(cmd, logger, logging.DEBUG)
         except sp.CalledProcessError as e:
             logger.error(
                 'DOCKER FAILED: Error building docker container %s. ',
@@ -499,7 +499,7 @@ class RecipeBuilder(object):
 
         logger.debug('DOCKER: cmd: %s', cmd)
         with utils.Progress():
-            p = utils.run(cmd)
+            p = utils.logging_run(cmd, logger)
         return p
 
     def cleanup(self):
