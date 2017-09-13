@@ -215,7 +215,7 @@ def test_missing_tests():
 
 def test_single_quote_in_tests():
     run_lint(
-        func_name='bad_tests',
+        func_name='malformed_tests',
         should_pass=['''
         bad_tests:
           meta.yaml: |
