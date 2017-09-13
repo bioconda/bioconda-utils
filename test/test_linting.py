@@ -213,6 +213,28 @@ def test_missing_tests():
         ''')
 
 
+def test_single_quote_in_tests():
+    run_lint(
+        func_name='bad_tests',
+        should_pass=['''
+        bad_tests:
+          meta.yaml: |
+            package:
+              name: missing_tests
+              version: "0.1"
+            test:
+              commands: "ls"
+        '''],
+        should_fail='''
+        missing_tests:
+          meta.yaml: |
+            package:
+              name: missing_tests
+              version: "0.1"
+          test: "ls | grep '[]'"
+        ''')
+
+
 def test_missing_hash():
     run_lint(
         func_name='missing_hash',

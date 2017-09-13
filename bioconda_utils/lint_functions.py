@@ -143,6 +143,16 @@ def missing_tests(recipe, meta, df):
             }
 
 
+def malformed_tests(recipe, meta, df):
+    if 'test' in meta:
+        # will cause mulled to fail
+        if any("'" in line for line in meta['test']):
+            return {
+                'single_quote_in_tests': True,
+                'fix': 'use double quotes or move to separate test file'
+            }
+
+
 def missing_hash(recipe, meta, df):
     # could be a meta-package if no source section or if None
     try:
@@ -278,6 +288,7 @@ registry = (
 
     # disabling for now until we get better per-OS version detection
     # already_in_bioconda,
+    malformed_tests,
     missing_tests,
     missing_home,
     missing_license,
