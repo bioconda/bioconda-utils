@@ -217,7 +217,7 @@ def test_single_quote_in_tests():
     run_lint(
         func_name='malformed_tests',
         should_pass=['''
-        bad_tests:
+        good_tests:
           meta.yaml: |
             package:
               name: missing_tests
@@ -226,12 +226,12 @@ def test_single_quote_in_tests():
               commands: "ls"
         '''],
         should_fail='''
-        missing_tests:
+        bad_tests:
           meta.yaml: |
             package:
               name: missing_tests
               version: "0.1"
-          test: "ls | grep '[]'"
+            test: "ls | grep '[]'"
         ''')
 
 
