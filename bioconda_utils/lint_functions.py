@@ -279,6 +279,7 @@ def _pin(env_var, dep_name):
     Generates a linting function that checks to make sure `dep_name` is pinned
     to `env_var` using jinja templating.
     """
+    pin_pattern = re.compile(r"\{{\{{\s*{}\s*\}}\}}\*".format(env_var))
     def pin(recipe, meta, df):
         # Note that we can't parse the meta.yaml using a normal YAML parser if it
         # has jinja templating
@@ -290,11 +291,12 @@ def _pin(env_var, dep_name):
                 in_requirements = False
             line = line.strip()
             if in_requirementes and line.startswith('- {}'.format(dep_name)):
-                if env_var not in line: # and '{{' not in line and '}}' not in line:
+                if pin_pattern.search(line):
                     err = {
                         '{}_not_pinned'.format(dep_name): True,
                         'fix': (
-                            'pin {0} using jinja templating: {{{{ {1} }}}}'.format(dep_name, env_var))
+                            'pin {0} using jinja templating: '
+                            '{{{{ {1} }}}}*'.format(dep_name, env_var))
                     }
                     return err
 
@@ -329,7 +331,5 @@ registry = (
     _pin('CONDA_HDF5', 'hdf5'),
     _pin('CONDA_NCURSES', 'ncurses'),
     _pin('CONDA_HTSLIB', 'htslib'),
-
-    # Pinning in env_matrix.yml is not consistent for bzip2.
-    # _pin('CONDA_BZIP2', 'bzip2'),
+    _pin('CONDA_BZIP2', 'bzip2'),
 )
