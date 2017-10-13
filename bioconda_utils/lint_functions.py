@@ -290,7 +290,7 @@ def _pin(env_var, dep_name):
             elif not line.startswith(" "):
                 in_requirements = False
             line = line.strip()
-            if in_requirementes and line.startswith('- {}'.format(dep_name)):
+            if in_requirements and line.startswith('- {}'.format(dep_name)):
                 if pin_pattern.search(line):
                     err = {
                         '{}_not_pinned'.format(dep_name): True,
