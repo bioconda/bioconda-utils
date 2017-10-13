@@ -282,9 +282,14 @@ def _pin(env_var, dep_name):
     def pin(recipe, meta, df):
         # Note that we can't parse the meta.yaml using a normal YAML parser if it
         # has jinja templating
+        in_requirements = False
         for line in open(os.path.join(recipe, 'meta.yaml')):
+            if line.startswith("requirements:"):
+                in_requirements = True
+            elif not line.startswith(" "):
+                in_requirements = False
             line = line.strip()
-            if line.startswith('- {}'.format(dep_name)):
+            if in_requirementes and line.startswith('- {}'.format(dep_name)):
                 if env_var not in line: # and '{{' not in line and '}}' not in line:
                     err = {
                         '{}_not_pinned'.format(dep_name): True,
