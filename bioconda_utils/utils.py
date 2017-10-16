@@ -557,7 +557,7 @@ def built_package_path(recipe, env=None):
             set_build_id=False)
         meta = MetaData(recipe, config=config)
         meta.parse_again()
-        path = api.get_output_file_path(meta, config=config)
+        path = api.get_output_file_paths(meta, config=config)[0]
     return path
 
 
