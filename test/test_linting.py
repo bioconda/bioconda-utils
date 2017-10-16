@@ -1,4 +1,4 @@
-func=funcimport pandas
+import pandas
 import yaml
 from helpers import Recipes
 from bioconda_utils import lint_functions
