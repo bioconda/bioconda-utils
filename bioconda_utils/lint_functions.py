@@ -293,7 +293,7 @@ def _pin(env_var, dep_name):
         # has jinja templating
         for line in open(os.path.join(recipe, 'meta.yaml')):
             line = line.strip()
-            if line.startswith('- {}'.format(dep_name)):
+            if line == '- {}'.format(dep_name):
                 if env_var not in line: # and '{{' not in line and '}}' not in line:
                     err = {
                         '{}_not_pinned'.format(dep_name): True,
