@@ -580,7 +580,7 @@ def test_lint_pin():
               patches:
                 - zlib_1.patch
         b:
-          meta.yaml |
+          meta.yaml: |
             package:
               name: b
               version: '0.1'

@@ -301,7 +301,7 @@ def _pin(env_var, dep_name):
                 in_run = True
             elif in_requirements and line.strip().startswith("build:"):
                 in_run = False
-            elif not line.startswith(" "):
+            elif not line.startswith(" ") and not line.startswith("#"):
                 in_requirements = False
                 in_run = False
             line = line.strip()
