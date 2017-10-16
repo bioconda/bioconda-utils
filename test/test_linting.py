@@ -579,20 +579,24 @@ def test_lint_pin():
             source:
               patches:
                 - zlib_1.patch
-        b:
+        ''',
+        '''
+        a:
           meta.yaml: |
             package:
-              name: b
+              name: a
               version: '0.1'
             requirements:
               build:
                 - zlib {{CONDA_ZLIB}}*
               run:
                 - zlib {{CONDA_ZLIB}}*
-        c:
+        ''',
+        '''
+        a:
           meta.yaml: |
             package:
-              name: c
+              name: a
               version: '0.1'
             requirements:
               build:
@@ -613,10 +617,12 @@ def test_lint_pin():
                 - zlib
               run:
                 - zlib {{CONDA_ZLIB}}*
-        b:
+        ''',
+        '''
+        a:
           meta.yaml: |
             package:
-              name: b
+              name: a
               version: '0.1'
             requirements:
               build:
