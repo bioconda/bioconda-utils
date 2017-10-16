@@ -293,13 +293,19 @@ def _pin(env_var, dep_name):
         # Note that we can't parse the meta.yaml using a normal YAML parser if it
         # has jinja templating
         in_requirements = False
+        in_run = False
         for line in open(os.path.join(recipe, 'meta.yaml')):
             if line.startswith("requirements:"):
                 in_requirements = True
+            elif in_requirements and line.strip().startswith("run:"):
+                in_run = True
+            elif in_requirements and line.strip().startswith("build:"):
+                in_run = False
             elif not line.startswith(" "):
                 in_requirements = False
+                in_run = False
             line = line.strip()
-            if in_requirements and line.startswith('- {}'.format(dep_name)):
+            if in_run and line.startswith('- {}'.format(dep_name)):
                 if pin_pattern.search(line):
                     err = {
                         '{}_not_pinned'.format(dep_name): True,

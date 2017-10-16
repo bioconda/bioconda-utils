@@ -589,6 +589,16 @@ def test_lint_pin():
                 - zlib {{CONDA_ZLIB}}*
               run:
                 - zlib {{CONDA_ZLIB}}*
+        c:
+          meta.yaml: |
+            package:
+              name: c
+              version: '0.1'
+            requirements:
+              build:
+                - zlib  # build-only requirements are obviously statically linked, hence no pinning needed
+              run:
+                - libgcc
         '''],
         should_fail=[
         '''
