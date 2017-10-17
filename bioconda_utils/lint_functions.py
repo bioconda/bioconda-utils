@@ -293,27 +293,38 @@ def _pin(env_var, dep_name):
         # Note that we can't parse the meta.yaml using a normal YAML parser if it
         # has jinja templating
         in_requirements = False
-        in_run = False
+        section = None
+        not_pinned = set()
+        pinned = set()
         for line in open(os.path.join(recipe, 'meta.yaml')):
             if line.startswith("requirements:"):
                 in_requirements = True
             elif in_requirements and line.strip().startswith("run:"):
-                in_run = True
+                section = "run"
             elif in_requirements and line.strip().startswith("build:"):
-                in_run = False
+                section = "build"
             elif not line.startswith(" ") and not line.startswith("#"):
                 in_requirements = False
-                in_run = False
+                section = None
             line = line.strip()
-            if in_run and line.startswith('- {}'.format(dep_name)):
+            if in_requirements and line.startswith('- {}'.format(dep_name)):
                 if pin_pattern.search(line) is None:
-                    err = {
-                        '{}_not_pinned'.format(dep_name): True,
-                        'fix': (
-                            'pin {0} using jinja templating: '
-                            '{{{{ {1} }}}}*'.format(dep_name, env_var))
-                    }
-                    return err
+                    not_pinned.add(section)
+                else:
+                    pinned.add(section)
+
+        # two error cases: 1) run is not pinned
+        #                  2) build is not pinned and run is pinned
+        # Everything else is ok. E.g., if dependency is not in run, we don't
+        # need to pin build, because it is statically linked.
+        if "run" in not_pinned or ("run" in pinned and "build" in not_pinned):
+            err = {
+                '{}_not_pinned'.format(dep_name): True,
+                'fix': (
+                    'pin {0} using jinja templating: '
+                    '{{{{ {1} }}}}*'.format(dep_name, env_var))
+            }
+            return err
 
     pin.__name__ = "{}_not_pinned".format(dep_name)
     return pin
