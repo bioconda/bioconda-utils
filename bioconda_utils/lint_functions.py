@@ -288,7 +288,7 @@ def _pin(env_var, dep_name):
     Generates a linting function that checks to make sure `dep_name` is pinned
     to `env_var` using jinja templating.
     """
-    pin_pattern = re.compile(r"\{\{\s*{}\s*\}\}\*".format(env_var))
+    pin_pattern = re.compile(r"\{{\{{\s*{}\s*\}}\}}\*".format(env_var))
     def pin(recipe, meta, df):
         # Note that we can't parse the meta.yaml using a normal YAML parser if it
         # has jinja templating
@@ -306,7 +306,7 @@ def _pin(env_var, dep_name):
                 in_run = False
             line = line.strip()
             if in_run and line.startswith('- {}'.format(dep_name)):
-                if pin_pattern.search(line):
+                if pin_pattern.search(line) is None:
                     err = {
                         '{}_not_pinned'.format(dep_name): True,
                         'fix': (
