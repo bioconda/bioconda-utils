@@ -14,6 +14,7 @@ from collections import OrderedDict
 import logging
 import requests
 from colorlog import ColoredFormatter
+from . import utils
 
 logging.getLogger("requests").setLevel(logging.WARNING)
 
@@ -108,7 +109,7 @@ def bioconductor_tarball_url(package, pkg_version, bioc_version):
     )
 
 
-def bioconductor_data_url(package, pkg_version, bioc_version):
+def bioconductor_annotation_data_url(package, pkg_version, bioc_version):
     """
     Constructs a url for an annotation package tarball
 
@@ -126,6 +127,27 @@ def bioconductor_data_url(package, pkg_version, bioc_version):
     return (
         'http://bioconductor.org/packages/{bioc_version}'
         '/data/annotation/src/contrib/{package}_{pkg_version}.tar.gz'.format(**locals())
+    )
+
+
+def bioconductor_experiment_data_url(package, pkg_version, bioc_version):
+    """
+    Constructs a url for an experiment data package tarball
+
+    Parameters
+    ----------
+    package : str
+        Case-sensitive Bioconductor package name
+
+    pkg_version : str
+        Bioconductor package version
+
+    bioc_version : str
+        Bioconductor release version
+    """
+    return (
+        'http://bioconductor.org/packages/{bioc_version}'
+        '/data/experiment/src/contrib/{package}_{pkg_version}.tar.gz'.format(**locals())
     )
 
 
@@ -147,7 +169,7 @@ def find_best_bioc_version(package, version):
     for bioc_version in bioconductor_versions():
         for kind, func in zip(
             ('package', 'data'),
-            (bioconductor_tarball_url, bioconductor_data_url)
+            (bioconductor_tarball_url, bioconductor_annotation_data_url, bioconductor_experiment_data_url)
         ):
             url = func(package, version, bioc_version)
             if requests.head(url).status_code == 200:
@@ -200,6 +222,10 @@ class BioCProjectPage(object):
         if not self.request:
             self.request = requests.get(
                 os.path.join(base_url, self.bioc_version, 'data', 'annotation', 'html', package + '.html')
+            )
+        if not self.request:
+            self.request = requests.get(
+                os.path.join(base_url, self.bioc_version, 'data', 'experiment', 'html', package + '.html')
             )
 
         if not self.request:
@@ -291,11 +317,22 @@ class BioCProjectPage(object):
             return url
 
     @property
-    def bioconductor_data_url(self):
+    def bioconductor_annotation_data_url(self):
         """
         Return the url to the tarball from the bioconductor site.
         """
-        url = bioconductor_data_url(self.package, self.version, self.bioc_version)
+        url = bioconductor_annotation_data_url(self.package, self.version, self.bioc_version)
+        response = requests.head(url)
+        if response and response.status_code == 200:
+            self.is_data_package = True
+            return url
+
+    @property
+    def bioconductor_experiment_data_url(self):
+        """
+        Return the url to the tarball from the bioconductor site.
+        """
+        url = bioconductor_experiment_data_url(self.package, self.version, self.bioc_version)
         response = requests.head(url)
         if response and response.status_code == 200:
             self.is_data_package = True
@@ -304,7 +341,10 @@ class BioCProjectPage(object):
     @property
     def tarball_url(self):
         if not self._tarball_url:
-            urls = [self.bioconductor_tarball_url, self.bioconductor_data_url, self.bioaRchive_url, self.cargoport_url]
+            urls = [self.bioconductor_tarball_url,
+                    self.bioconductor_annotation_data_url,
+                    self.bioconductor_experiment_data_url, self.bioaRchive_url,
+                    self.cargoport_url]
             for url in urls:
                 if url is not None:
                     response = requests.head(url)
@@ -451,7 +491,7 @@ class BioCProjectPage(object):
                 self._parse_dependencies(self.depends)
             )
         )
-
+        specific_r_version = False
         versions = {}
         for name, version in version_specs:
             if name in versions:
@@ -482,6 +522,10 @@ class BioCProjectPage(object):
             if version:
                 version = " " + version
 
+            # Some packages define a minimum version of R. In that case, we add
+            # the dependency `r-base` for that version. Otherwise, R is
+            # implied, and we make sure that r-base is added as a dependency at
+            # the end.
             if name.lower() == 'r':
 
                 # Had some issues with CONDA_R finding the right version if "r"
@@ -490,13 +534,8 @@ class BioCProjectPage(object):
                 #
 
                 # # "r >=2.5" rather than "r-r >=2.5"
-                # specific_r_version = True
-                # results.append(name.lower() + version)
-                # results.append('r')
-
-                # UPDATE: we're using `r-base` as the base R dependency, which
-                # is added below for all R packages, so pass for now.
-                pass
+                specific_r_version = True
+                results.append(name.lower() + '-base' + version)
 
             else:
                 results.append(prefix + name.lower() + version)
@@ -505,7 +544,13 @@ class BioCProjectPage(object):
                 self.depends_on_gcc = True
 
         # Add R itself
-        results.append('r-base')
+        if not specific_r_version:
+            results.append('r-base')
+
+        # Sometimes empty dependencies make it into the list from a trailing
+        # comma in DESCRIPTION; remove them here.
+        results = list(filter(lambda x: x != 'r-', results))
+
         self._dependencies = results
         return self._dependencies
 
@@ -552,10 +597,27 @@ class BioCProjectPage(object):
         templating or the `$R` in the test commands, and replace the text once
         the yaml is written.
         """
+
+        version_placeholder = '{{ version }}'
+        package_placeholder = '{{ name }}'
+        bioc_placeholder = '{{ bioc }}'
+
+        def sub_placeholders(x):
+            return (
+                x
+                .replace(self.version, version_placeholder)
+                .replace(self.package, package_placeholder)
+                .replace(self.bioc_version, bioc_placeholder)
+            )
+
         url = [
-            u for u in
-            [self.bioconductor_tarball_url, self.bioconductor_data_url,
-             self.bioaRchive_url, self.cargoport_url]
+            sub_placeholders(u) for u in
+            [
+                self.bioconductor_tarball_url,
+                self.bioconductor_annotation_data_url,
+                self.bioconductor_experiment_data_url,
+                self.bioaRchive_url, self.cargoport_url
+            ]
             if u is not None
         ]
 
@@ -568,13 +630,13 @@ class BioCProjectPage(object):
         d = OrderedDict((
             (
                 'package', OrderedDict((
-                    ('name', 'bioconductor-' + self.package.lower()),
-                    ('version', self.version),
+                    ('name', 'bioconductor-{{ name|lower}}'),
+                    ('version', '{{ version }}'),
                 )),
             ),
             (
                 'source', OrderedDict((
-                    ('fn', self.tarball_basename),
+                    ('fn', '{{ name }}_{{ version }}.tar.gz'),
                     ('url', url),
                     ('sha256', self.sha256),
                 )),
@@ -597,14 +659,14 @@ class BioCProjectPage(object):
             ),
             (
                 'test', OrderedDict((
-                    ('commands',
-                     ['''$R -e "library('{package}')"'''.format(
-                         package=self.package)]),
+                    (
+                        'commands', ['''$R -e "library('{{ name }}')"''']
+                    ),
                 )),
             ),
             (
                 'about', OrderedDict((
-                    ('home', self.url),
+                    ('home', sub_placeholders(self.url)),
                     ('license', self.license),
                     ('summary', self.description['description']),
                 )),
@@ -614,17 +676,28 @@ class BioCProjectPage(object):
             d['requirements']['build'].append('GCC_PLACEHOLDER')
             d['requirements']['build'].append('LLVM_PLACEHOLDER')
 
-        rendered = pyaml.dumps(d).decode('utf-8')
+        rendered = pyaml.dumps(d, width=1e6).decode('utf-8')
         rendered = rendered.replace('GCC_PLACEHOLDER', 'gcc  # [linux]')
         rendered = rendered.replace('LLVM_PLACEHOLDER', 'llvm  # [osx]')
-        return rendered
+        rendered = (
+            '{% set version="' + self.version + '" %}\n' +
+            '{% set name="' + self.package + '" %}\n' +
+            '{% set bioc="' + self.bioc_version + '" %}\n\n' +
+            rendered
+        )
+        tmp = tempfile.NamedTemporaryFile(delete=False).name
+        with open(tmp, 'w') as fout:
+            fout.write(rendered)
+        return fout.name
 
 
-def write_recipe(package, recipe_dir, force=False, bioc_version=None,
+def write_recipe(package, recipe_dir, config, force=False, bioc_version=None,
                  pkg_version=None, versioned=False):
     """
     Write the meta.yaml and build.sh files.
     """
+    config = utils.load_config(config)
+    env = list(utils.EnvMatrix(config['env_matrix']))[0]
     proj = BioCProjectPage(package, bioc_version, pkg_version)
     logger.debug('%s==%s, BioC==%s', proj.package, proj.version, proj.bioc_version)
     logger.info('Using tarball from %s', proj.tarball_url)
@@ -643,15 +716,15 @@ def write_recipe(package, recipe_dir, force=False, bioc_version=None,
     # *has* changed, then bump the version number.
     meta_file = os.path.join(recipe_dir, 'meta.yaml')
     if os.path.exists(meta_file):
-        updated_meta = pyaml.yaml.load(proj.meta_yaml)
-        current_meta = pyaml.yaml.load(open(meta_file))
+        updated_meta = utils.load_meta(proj.meta_yaml, env)
+        current_meta = utils.load_meta(meta_file, env)
 
         # pop off the version and build numbers so we can compare the rest of
         # the dicts
-        updated_version = updated_meta['package'].pop('version')
-        current_version = current_meta['package'].pop('version')
+        updated_version = updated_meta['package']['version']
+        current_version = current_meta['package']['version']
         # updated_build_number = updated_meta['build'].pop('number')
-        current_build_number = current_meta['build'].pop('number')
+        current_build_number = current_meta['build'].pop('number', 0)
 
         if (
             (updated_version == current_version) and
@@ -660,7 +733,7 @@ def write_recipe(package, recipe_dir, force=False, bioc_version=None,
             proj.build_number = int(current_build_number) + 1
 
     with open(os.path.join(recipe_dir, 'meta.yaml'), 'w') as fout:
-        fout.write(proj.meta_yaml)
+        fout.write(open(proj.meta_yaml).read())
 
     if not proj.is_data_package:
         with open(os.path.join(recipe_dir, 'build.sh'), 'w') as fout:
@@ -677,7 +750,8 @@ def write_recipe(package, recipe_dir, force=False, bioc_version=None,
         urls = [
             '"{0}"'.format(u) for u in [
                 proj.bioconductor_tarball_url,
-                proj.bioconductor_data_url,
+                proj.bioconductor_annotation_data_url,
+                proj.bioconductor_experiment_data_url,
                 proj.bioaRchive_url,
                 proj.cargoport_url
             ]

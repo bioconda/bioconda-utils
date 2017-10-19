@@ -5,7 +5,7 @@ from bioconda_utils import lint_functions
 from bioconda_utils import linting
 
 def run_lint(
-    func_name,
+    func,
     should_pass,
     should_fail,
     should_pass_df=None,
@@ -20,8 +20,8 @@ def run_lint(
 
     Parameters
     ----------
-    func_name : str
-        Function name to test in `bioconda_utils.lint_functions`
+    func : function
+        Function to test in `bioconda_utils.lint_functions`
 
     should_pass, should_fail : str or list
         Recipe definitions that will be provided to `helpers.Recipes`. Each can
@@ -35,8 +35,6 @@ def run_lint(
         should_pass = [should_pass]
     if isinstance(should_fail, str):
         should_fail = [should_fail]
-
-    func = getattr(lint_functions, func_name)
 
     def _run(contents, expect_pass=True):
         """
@@ -58,6 +56,24 @@ def run_lint(
 
     for contents in should_fail:
         _run(contents, expect_pass=False)
+
+
+def test_empty_build_section():
+    r = Recipes(
+        '''
+        empty_build_section:
+          meta.yaml: |
+            package:
+              name: empty_build_section
+              version: "0.1"
+            build:
+        ''', from_string=True)
+    r.write_recipes()
+    # access to contents of possibly empty build section can happen in
+    # `should_be_noarch` and `should_not_be_noarch`
+    registry = [lint_functions.should_be_noarch, lint_functions.should_not_be_noarch]
+    res = linting.lint(r.recipe_dirs.values(), config={}, df=None, registry=registry)
+    assert res is None
 
 
 def test_lint_skip_in_recipe():
@@ -113,7 +129,7 @@ def test_lint_skip_in_recipe():
 
 def test_missing_home():
     run_lint(
-        func_name='missing_home',
+        func=lint_functions.missing_home,
         should_pass='''
         missing_home:
           meta.yaml: |
@@ -134,7 +150,7 @@ def test_missing_home():
 
 def test_missing_summary():
     run_lint(
-        func_name='missing_summary',
+        func=lint_functions.missing_summary,
         should_pass='''
         missing_summary:
           meta.yaml: |
@@ -155,7 +171,7 @@ def test_missing_summary():
 
 def test_missing_license():
     run_lint(
-        func_name='missing_license',
+        func=lint_functions.missing_license,
         should_pass='''
         missing_license:
           meta.yaml: |
@@ -176,7 +192,7 @@ def test_missing_license():
 
 def test_missing_tests():
     run_lint(
-        func_name='missing_tests',
+        func=lint_functions.missing_tests,
         should_pass=['''
         missing_tests:
           meta.yaml: |
@@ -237,7 +253,7 @@ def test_single_quote_in_tests():
 
 def test_missing_hash():
     run_lint(
-        func_name='missing_hash',
+        func=lint_functions.missing_hash,
         should_pass=['''
         missing_hash:
           meta.yaml: |
@@ -266,7 +282,7 @@ def test_missing_hash():
 
 def test_uses_git_url():
     run_lint(
-        func_name='uses_git_url',
+        func=lint_functions.uses_git_url,
         should_pass=['''
         uses_git_url:
           meta.yaml: |
@@ -294,7 +310,7 @@ def test_uses_git_url():
 
 def test_uses_perl_threaded():
     run_lint(
-        func_name='uses_perl_threaded',
+        func=lint_functions.uses_perl_threaded,
         should_pass=['''
         uses_perl_threaded:
           meta.yaml: |
@@ -370,7 +386,7 @@ def test_uses_perl_threaded():
 
 def test_uses_javajdk():
     run_lint(
-        func_name='uses_javajdk',
+        func=lint_functions.uses_javajdk,
         should_pass=['''
         uses_javajdk:
           meta.yaml: |
@@ -447,7 +463,7 @@ def test_uses_javajdk():
 
 def test_uses_setuptools():
     run_lint(
-        func_name='uses_setuptools',
+        func=lint_functions.uses_setuptools,
         should_pass=[
         '''
         uses_setuptools:
@@ -481,7 +497,7 @@ def test_uses_setuptools():
 
 def test_has_windows_bat_file():
     run_lint(
-        func_name='has_windows_bat_file',
+        func=lint_functions.has_windows_bat_file,
         should_pass='''
         has_windows_bat_file:
           meta.yaml: |
@@ -511,7 +527,7 @@ def test_has_windows_bat_file():
 
 def test_should_not_be_noarch():
     run_lint(
-        func_name='should_not_be_noarch',
+        func=lint_functions.should_not_be_noarch,
         should_pass=[
         '''
         should_not_be_noarch:
@@ -572,11 +588,76 @@ def test_should_not_be_noarch():
         ]
     )
 
+def test_lint_pin():
+    run_lint(
+        func=lint_functions._pin('CONDA_ZLIB', 'zlib'),
+        should_pass=[
+        '''
+        a:
+          meta.yaml: |
+            package:
+              name: a
+              version: '0.1'
+            source:
+              patches:
+                - zlib_1.patch
+        ''',
+        '''
+        a:
+          meta.yaml: |
+            package:
+              name: a
+              version: '0.1'
+            requirements:
+              build:
+                - zlib {{CONDA_ZLIB}}*
+              run:
+                - zlib {{CONDA_ZLIB}}*
+        ''',
+        '''
+        a:
+          meta.yaml: |
+            package:
+              name: a
+              version: '0.1'
+            requirements:
+              build:
+                - zlib  # build-only requirements are obviously statically linked, hence no pinning needed
+              run:
+                - libgcc
+        '''],
+        should_fail=[
+        '''
+        a:
+          meta.yaml: |
+            package:
+              name: a
+              version: '0.1'
+
+            requirements:
+              build:
+                - zlib
+              run:
+                - zlib {{CONDA_ZLIB}}*
+        ''',
+        '''
+        a:
+          meta.yaml: |
+            package:
+              name: a
+              version: '0.1'
+            requirements:
+              build:
+                - zlib {{CONDA_ZLIB}}*
+              run:
+                - zlib
+        '''],
+    )
 
 
 def test_setup_py_install_args():
     run_lint(
-        func_name='setup_py_install_args',
+        func=lint_functions.setup_py_install_args,
         should_pass=[
         '''
         setup_py_install_args:

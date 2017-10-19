@@ -5,6 +5,18 @@ import pandas
 import numpy as np
 
 
+def _get_not_none(meta, key, none_subst=dict):
+    """
+    Return meta[key] if key is in meta and its value is not None, otherwise
+    return none_subst().
+
+    Some recipes have an empty build section, so it'll be None and we can't
+    do a chained get.
+    """
+    ret = meta.get(key)
+    return ret if (ret is not None) else none_subst()
+
+
 def _subset_df(recipe, meta, df):
     """
     Helper function to get the subset of `df` for this recipe.
@@ -19,12 +31,9 @@ def _subset_df(recipe, meta, df):
     name = meta['package']['name']
     version = meta['package']['version']
 
-    # Some recipes have an empty build section, so it'll be None and we can't
-    # do a chained get.
     build_number = 0
-    build_section = meta.get('build')
-    if build_section:
-        build_number = int(build_section.get('number', 0))
+    build_section = _get_not_none(meta, 'build')
+    build_number = int(build_section.get('number', 0))
     return df[
         (df.name == name) &
         (df.version == version) &
@@ -233,7 +242,7 @@ def should_be_noarch(recipe, meta, df):
         # the python version.
         not _has_preprocessing_selector(recipe)
     ) and (
-        'noarch' not in meta.get('build', {})
+        'noarch' not in _get_not_none(meta, 'build')
     ):
         return {
             'should_be_noarch': True,
@@ -245,9 +254,9 @@ def should_not_be_noarch(recipe, meta, df):
     deps = _get_deps(meta)
     if (
         ('gcc' in deps) or
-        meta.get('build', {}).get('skip', False)
+        _get_not_none(meta, 'build').get('skip', False)
     ) and (
-        'noarch' in meta.get('build', {})
+        'noarch' in _get_not_none(meta, 'build')
     ):
         return {
             'should_not_be_noarch': True,
@@ -265,7 +274,7 @@ def setup_py_install_args(recipe, meta, df):
                 'to setup.py command'),
     }
 
-    script_line = meta.get('build', {}).get('script', '')
+    script_line = _get_not_none(meta, 'build').get('script', '')
     if (
         'setup.py install' in script_line and
         '--single-version-externally-managed' not in script_line
@@ -283,6 +292,54 @@ def setup_py_install_args(recipe, meta, df):
     ):
         return err
 
+
+def _pin(env_var, dep_name):
+    """
+    Generates a linting function that checks to make sure `dep_name` is pinned
+    to `env_var` using jinja templating.
+    """
+    pin_pattern = re.compile(r"\{{\{{\s*{}\s*\}}\}}\*".format(env_var))
+    def pin(recipe, meta, df):
+        # Note that we can't parse the meta.yaml using a normal YAML parser if it
+        # has jinja templating
+        in_requirements = False
+        section = None
+        not_pinned = set()
+        pinned = set()
+        for line in open(os.path.join(recipe, 'meta.yaml')):
+            if line.startswith("requirements:"):
+                in_requirements = True
+            elif in_requirements and line.strip().startswith("run:"):
+                section = "run"
+            elif in_requirements and line.strip().startswith("build:"):
+                section = "build"
+            elif not line.startswith(" ") and not line.startswith("#"):
+                in_requirements = False
+                section = None
+            line = line.strip()
+            if in_requirements and line.startswith('- {}'.format(dep_name)):
+                if pin_pattern.search(line) is None:
+                    not_pinned.add(section)
+                else:
+                    pinned.add(section)
+
+        # two error cases: 1) run is not pinned
+        #                  2) build is not pinned and run is pinned
+        # Everything else is ok. E.g., if dependency is not in run, we don't
+        # need to pin build, because it is statically linked.
+        if "run" in not_pinned or ("run" in pinned and "build" in not_pinned):
+            err = {
+                '{}_not_pinned'.format(dep_name): True,
+                'fix': (
+                    'pin {0} using jinja templating: '
+                    '{{{{ {1} }}}}*'.format(dep_name, env_var))
+            }
+            return err
+
+    pin.__name__ = "{}_not_pinned".format(dep_name)
+    return pin
+
+
 registry = (
     in_other_channels,
 
@@ -299,7 +356,17 @@ registry = (
     uses_perl_threaded,
     uses_setuptools,
     has_windows_bat_file,
+
     # should_be_noarch,
+    #
     should_not_be_noarch,
     setup_py_install_args,
+    _pin('CONDA_ZLIB', 'zlib'),
+    _pin('CONDA_GMP', 'gmp'),
+    _pin('CONDA_BOOST', 'boost'),
+    _pin('CONDA_GSL', 'gsl'),
+    _pin('CONDA_HDF5', 'hdf5'),
+    _pin('CONDA_NCURSES', 'ncurses'),
+    _pin('CONDA_HTSLIB', 'htslib'),
+    _pin('CONDA_BZIP2', 'bzip2'),
 )
