@@ -876,6 +876,7 @@ def test_zero_packages():
     assert list(utils.filter_recipes([], {'CONDA_PY': [27, 35]})) == []
 
 
+@pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
 def test_build_empty_extra_container():
     r = Recipes(
         """
