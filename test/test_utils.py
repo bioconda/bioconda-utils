@@ -874,3 +874,29 @@ def test_zero_packages():
     provided.
     """
     assert list(utils.filter_recipes([], {'CONDA_PY': [27, 35]})) == []
+
+
+def test_build_empty_extra_container():
+    r = Recipes(
+        """
+        one:
+          meta.yaml: |
+            package:
+              name: one
+              version: 0.1
+            extra:
+              container:
+                # empty
+        """, from_string=True)
+    r.write_recipes()
+
+    build_result = build.build(
+        recipe=r.recipe_dirs['one'],
+        recipe_folder='.',
+        env={},
+        mulled_test=True,
+    )
+    assert build_result.success
+    pkg = utils.built_package_path(r.recipe_dirs['one'])
+    assert os.path.exists(pkg)
+    ensure_missing(pkg)
