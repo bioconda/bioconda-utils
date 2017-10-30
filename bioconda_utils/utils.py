@@ -249,9 +249,15 @@ class EnvMatrix:
         else:
             self.env = env
         for key, val in self.env.items():
-            if key != "CONDA_PY" and not isinstance(val, str):
-                raise ValueError(
-                    "All versions except CONDA_PY must be strings.")
+            if not isinstance(val, list):
+                val = [val]
+            for v in val:
+                if key != "CONDA_PY" and not isinstance(v, str):
+                    raise ValueError(
+                        "All specified versions except CONDA_PY must be "
+                        "strings; For {0} found a value of {1}"
+                        .format(key, v)
+                    )
 
     def __iter__(self):
         """
