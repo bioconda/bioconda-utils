@@ -333,6 +333,10 @@ def lint(recipe_folder, config, packages="*", cache=None, list_funcs=False,
 @arg('--keep-image', action='store_true', help='''After building recipes, the
      created Docker image is removed by default to save disk space. Use this
      argument to disable this behavior.''')
+@arg('--label', help='''Add this label to packages when uploading to the
+     channel. Default is "main". See
+     https://docs.anaconda.com/anaconda-cloud/glossary#cloud-glossary-label for
+     more info.''')
 def build(
     recipe_folder,
     config,
@@ -348,6 +352,7 @@ def build(
     anaconda_upload=False,
     mulled_upload_target=None,
     keep_image=False,
+    label=None,
 ):
     setup_logger(loglevel)
 
@@ -407,6 +412,7 @@ def build(
         docker_builder=docker_builder,
         anaconda_upload=anaconda_upload,
         mulled_upload_target=mulled_upload_target,
+        label=label,
     )
     exit(0 if success else 1)
 
