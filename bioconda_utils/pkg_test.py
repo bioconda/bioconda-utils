@@ -127,8 +127,8 @@ def test_package(
     logger.debug('Tests to run: %s', tests)
 
     target = 'biocontainers'
-    if os.environ.get('QUAY_TARGET') is not None:
-        target = os.environ.get('QUAY_TARGET')
+    if os.environ.get('CONTAINER_NAMESPACE') is not None:
+        target = os.environ.get('CONTAINER_NAMESPACE')
 
     cmd = [
         'mulled-build',
