@@ -126,11 +126,15 @@ def test_package(
     tests = get_tests(path)
     logger.debug('Tests to run: %s', tests)
 
+    target = 'biocontainers'
+    if os.environ.get('QUAY_TARGET') is not None:
+        target = os.environ.get('QUAY_TARGET')
+
     cmd = [
         'mulled-build',
         'build-and-test',
         spec,
-        '-n', 'biocontainers',
+        '-n', target,
         '--test', tests
     ]
     if name_override:
