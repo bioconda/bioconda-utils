@@ -130,6 +130,8 @@ def test_package(
     if os.environ.get('CONTAINER_NAMESPACE') is not None:
         target = os.environ.get('CONTAINER_NAMESPACE')
 
+    print('Target is {}'.format(target))
+    
     cmd = [
         'mulled-build',
         'build-and-test',
