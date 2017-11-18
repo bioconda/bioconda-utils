@@ -131,7 +131,15 @@ def test_package(
         target = os.environ.get('CONTAINER_NAMESPACE')
 
     print('Target is {}'.format(target))
-    
+
+    ##Debugging read in ~/.involucro
+    print('Reading ~/.involucro')
+    home = os.path.expanduser("~")
+    involucro_file = os.path.join(home, '.involucro')
+    with open(involucro_file, 'r') as content_file:
+        content = content_file.read()
+        print(content)
+
     cmd = [
         'mulled-build',
         'build-and-test',
