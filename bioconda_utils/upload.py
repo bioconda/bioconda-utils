@@ -67,4 +67,7 @@ def mulled_upload(image, quay_target):
     cmd = ['mulled-build', 'push', image, '-n', quay_target]
     if os.environ.get('QUAY_OAUTH_TOKEN', False):
         cmd.extend(['--oauth-token', os.environ['QUAY_OAUTH_TOKEN']])
+        logger.error('There is a quay oauth token!')
+
+    logger.error(' '.join(cmd))
     return utils.run(cmd)
