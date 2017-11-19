@@ -34,6 +34,7 @@ def build(
     force=False,
     channels=None,
     docker_builder=None,
+    mulled_upload_target=None,
 ):
     """
     Build a single recipe for a single env
@@ -66,6 +67,10 @@ def build(
     docker_builder : docker_utils.RecipeBuilder object
         Use this docker builder to build the recipe, copying over the built
         recipe to the host's conda-bld directory.
+
+    mulled_upload_target: None
+        Namespace for docker container
+
     """
 
     # Clean provided env and exisiting os.environ to only allow whitelisted env
@@ -161,7 +166,7 @@ def build(
     base_image = 'bioconda/extended-base-image' if use_base_image else None
 
     try:
-        res = pkg_test.test_package(pkg_path, base_image=base_image)
+        res = pkg_test.test_package(pkg_path, base_image=base_image, mulled_upload_target=mulled_upload_target)
 
         logger.info("TEST SUCCESS %s, %s", recipe, utils.envstr(_env))
         mulled_image = pkg_test.get_image_name(pkg_path)
@@ -350,6 +355,7 @@ def build_recipes(
                 force=force,
                 channels=config['channels'],
                 docker_builder=docker_builder,
+                mulled_upload_target=mulled_upload_target,
             )
 
             all_success &= res.success

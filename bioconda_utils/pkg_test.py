@@ -79,7 +79,8 @@ def test_package(
     name_override=None,
     channels=["conda-forge", "defaults"],
     mulled_args="",
-    base_image=None
+    base_image=None,
+    mulled_upload_target='biocontainers'
 ):
     """
     Tests a built package in a minimal docker container.
@@ -103,6 +104,9 @@ def test_package(
 
     base_image : None | str
         Specify custom base image. Busybox is used in the default case.
+
+    mulled_upload_target : biocontainers | str
+        Namespace for docker container
 
     """
 
@@ -134,7 +138,7 @@ def test_package(
         'mulled-build',
         'build-and-test',
         spec,
-        '-n', target,
+        '-n', mulled_upload_target,
         '--test', tests
     ]
     if name_override:
