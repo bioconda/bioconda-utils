@@ -130,10 +130,6 @@ def test_package(
     tests = get_tests(path)
     logger.debug('Tests to run: %s', tests)
 
-    target = 'biocontainers'
-    if os.environ.get('CONTAINER_NAMESPACE') is not None:
-        target = os.environ.get('CONTAINER_NAMESPACE')
-
     cmd = [
         'mulled-build',
         'build-and-test',
@@ -141,7 +137,7 @@ def test_package(
         '-n', mulled_upload_target,
         '--test', tests
     ]
-    logger.info('Cmd to run: %s', ' '.join(cmd))
+    logger.debug('Cmd to run: %s', ' '.join(cmd))
     if name_override:
         cmd += ['--name-override', name_override]
     cmd += channel_args
