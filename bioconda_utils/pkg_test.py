@@ -137,7 +137,7 @@ def test_package(
         '-n', mulled_upload_target,
         '--test', tests
     ]
-    logger.debug('Cmd to run: %s', ' '.join(cmd))
+    logger.debug('Cmd to run: %s' % ' '.join(cmd))
     if name_override:
         cmd += ['--name-override', name_override]
     cmd += channel_args
