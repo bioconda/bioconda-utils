@@ -165,8 +165,12 @@ def build(
         'extra', 'container', 'extended-base')
     base_image = 'bioconda/extended-base-image' if use_base_image else None
 
+        logger.info("CHANNELS: %s", ', '.join(channels) )
     try:
-        res = pkg_test.test_package(pkg_path, base_image=base_image, mulled_upload_target=mulled_upload_target, channels=channels)
+        if channels:
+            res = pkg_test.test_package(pkg_path, base_image=base_image, mulled_upload_target=mulled_upload_target, channels=channels)
+        else:
+            res = pkg_test.test_package(pkg_path, base_image=base_image, mulled_upload_target=mulled_upload_target)
 
         logger.info("TEST SUCCESS %s, %s", recipe, utils.envstr(_env))
         mulled_image = pkg_test.get_image_name(pkg_path)
