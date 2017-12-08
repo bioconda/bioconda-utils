@@ -328,6 +328,7 @@ class RecipeBuilder(object):
 
         self.container_recipe = container_recipe
         self.container_staging = container_staging
+        self.container_package_cache = container_package_cache
         self.host_conda_bld = get_host_conda_bld()
 
         if use_host_conda_bld:
