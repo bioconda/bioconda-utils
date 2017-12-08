@@ -90,7 +90,7 @@ mkdir -p {self.container_staging}/linux-64
 mkdir -p {self.container_staging}/noarch
 mkdir -p {self.container_staging}/pkg-cache
 conda config --add channels file://{self.container_staging}  > /dev/null 2>&1
-export CONDA_PKGS_DIRS={self.container_staging}/pkg-cache
+export CONDA_PKGS_DIRS={self.container_package_cache}
 
 # The actual building...
 # we explicitly point to the meta.yaml, in order to keep
@@ -194,6 +194,7 @@ class RecipeBuilder(object):
         tag='tmp-bioconda-builder',
         container_recipe='/opt/recipe',
         container_staging="/opt/host-conda-bld",
+        container_package_cache="/opt/anaconda-pkg-cache",
         requirements=None,
         build_script_template=BUILD_SCRIPT_TEMPLATE,
         dockerfile_template=DOCKERFILE_TEMPLATE,
@@ -220,6 +221,9 @@ class RecipeBuilder(object):
             the container can use previously-built packages as depdendencies.
             Upon successful building container-built packages will be copied
             over. Mounted as read-write.
+
+        container_package_cache: str
+            If you are using package caches put them here
 
         requirements : None or str
             Path to a "requirements.txt" file which will be installed with
@@ -459,6 +463,7 @@ class RecipeBuilder(object):
             '-v', '{0}:/opt/build_script.bash'.format(build_script),
             '-v', '{0}:{1}'.format(self.pkg_dir, self.container_staging),
             '-v', '{0}:{1}'.format(recipe_dir, self.container_recipe),
+            '-v', '{0}:{1}'.format(self.container_package_cache, self.container_package_cache),
         ] + env_list + [
             self.tag,
             '/bin/bash', '/opt/build_script.bash',
