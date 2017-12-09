@@ -463,8 +463,9 @@ class RecipeBuilder(object):
             '-v', '{0}:{1}'.format(self.pkg_dir, self.container_staging),
             '-v', '{0}:{1}'.format(recipe_dir, self.container_recipe),
         ]
+
         if os.environ.get('CONDA_PKGS_DIRS'):
-            volume_mounts.append('-v', '{0}:{1}'.format(os.environ.get('CONDA_PKGS_DIRS'), self.container_package_cache))
+            volume_mounts = volume_mounts + ['-v', '{0}:{1}'.format(os.environ.get('CONDA_PKGS_DIRS'), self.container_package_cache)]
 
         cmd = [
             'docker', 'run',
