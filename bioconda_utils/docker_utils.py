@@ -328,6 +328,7 @@ class RecipeBuilder(object):
 
         self.container_recipe = container_recipe
         self.container_staging = container_staging
+        ##TODO Clean this up - should get it from the environmental variable
         self.container_package_cache = container_package_cache
         self.host_conda_bld = get_host_conda_bld()
 
@@ -457,15 +458,19 @@ class RecipeBuilder(object):
             env_list.append('-e')
             env_list.append('{0}={1}'.format(k, v))
 
+        volume_mounts = [
+            '-v', '{0}:/opt/build_script.bash'.format(build_script),
+            '-v', '{0}:{1}'.format(self.pkg_dir, self.container_staging),
+            '-v', '{0}:{1}'.format(recipe_dir, self.container_recipe),
+        ]
+        if os.environ.get('CONDA_PKGS_DIRS'):
+            volume_mounts.append('-v', '{0}:{1}'.format(os.environ.get('CONDA_PKGS_DIRS'), self.container_package_cache))
+
         cmd = [
             'docker', 'run',
             '--net', 'host',
             '--rm',
-            '-v', '{0}:/opt/build_script.bash'.format(build_script),
-            '-v', '{0}:{1}'.format(self.pkg_dir, self.container_staging),
-            '-v', '{0}:{1}'.format(recipe_dir, self.container_recipe),
-            '-v', '{0}:{1}'.format(self.container_package_cache, self.container_package_cache),
-        ] + env_list + [
+        ] + volume_mounts + env_list + [
             self.tag,
             '/bin/bash', '/opt/build_script.bash',
         ]
