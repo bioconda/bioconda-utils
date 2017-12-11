@@ -34,7 +34,7 @@ def build(
     force=False,
     channels=None,
     docker_builder=None,
-    mulled_upload_target=None,
+    mulled_upload_target='',
 ):
     """
     Build a single recipe for a single env
