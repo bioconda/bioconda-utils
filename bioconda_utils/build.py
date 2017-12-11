@@ -68,7 +68,7 @@ def build(
         Use this docker builder to build the recipe, copying over the built
         recipe to the host's conda-bld directory.
 
-    mulled_upload_target: None
+    mulled_upload_target: biocontainers 
         Namespace for docker container
 
     """
@@ -230,7 +230,7 @@ def build_recipes(
     anaconda_upload :  bool
         If True, upload the package to anaconda.org.
 
-    mulled_upload_target : None
+    mulled_upload_target : biocontainers
         If not None, upload the mulled docker image to the given target on quay.io.
 
     check_channels : list
