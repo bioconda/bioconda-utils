@@ -346,7 +346,7 @@ def build(
     build_script_template=None,
     pkg_dir=None,
     anaconda_upload=False,
-    mulled_upload_target=None,
+    mulled_upload_target='biocontainers',
     keep_image=False,
 ):
     setup_logger(loglevel)
