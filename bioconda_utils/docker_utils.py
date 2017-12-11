@@ -88,7 +88,7 @@ set -e
 # exists before adding the channel.
 mkdir -p {self.container_staging}/linux-64
 mkdir -p {self.container_staging}/noarch
-mkdir -p {self.container_staging}/pkg-cache
+mkdir -p {self.container_package_cache}
 conda config --add channels file://{self.container_staging}  > /dev/null 2>&1
 export CONDA_PKGS_DIRS={self.container_package_cache}
 
