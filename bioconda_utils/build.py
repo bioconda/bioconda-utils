@@ -34,7 +34,7 @@ def build(
     force=False,
     channels=None,
     docker_builder=None,
-    mulled_upload_target='',
+    mulled_upload_target='biocontainers',
 ):
     """
     Build a single recipe for a single env
@@ -189,7 +189,7 @@ def build_recipes(
     docker_builder=None,
     label=None,
     anaconda_upload=False,
-    mulled_upload_target=None,
+    mulled_upload_target='biocontainers',
     check_channels=None,
 ):
     """
