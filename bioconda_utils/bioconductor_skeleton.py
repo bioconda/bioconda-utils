@@ -15,6 +15,7 @@ import logging
 import requests
 from colorlog import ColoredFormatter
 from . import utils
+from . import cran_skeleton
 
 logging.getLogger("requests").setLevel(logging.WARNING)
 
@@ -211,6 +212,8 @@ class BioCProjectPage(object):
         self._tarball_url = None
         self._bioconductor_tarball_url = None
         self.is_data_package = False
+        self.package_lower = package.lower()
+        self.raw_dependency_names = []
 
         # If no version specified, assume the latest
         if not self.bioc_version:
@@ -282,6 +285,7 @@ class BioCProjectPage(object):
             response = requests.head(url)
             if response.status_code == 200:
                 return url
+
 
     @property
     def cargoport_url(self):
@@ -537,12 +541,12 @@ class BioCProjectPage(object):
 
                 # # "r >=2.5" rather than "r-r >=2.5"
                 specific_r_version = True
-
-                # results.append(name.lower() + '-base' + version)
-                results.append('r-base')
+                self.raw_dependency_names.append("r-base")
+                results.append(name.lower() + '-base' + version)
 
             else:
                 results.append(prefix + name.lower() + version)
+                self.raw_dependency_names.append(name)
 
             if prefix + name.lower() in GCC_PACKAGES:
                 self.depends_on_gcc = True
@@ -550,10 +554,12 @@ class BioCProjectPage(object):
         # Add R itself
         if not specific_r_version:
             results.append('r-base')
+            self.raw_dependency_names.append('r-base')
 
         # Sometimes empty dependencies make it into the list from a trailing
         # comma in DESCRIPTION; remove them here.
         results = list(filter(lambda x: x != 'r-', results))
+        self.raw_dependency_names = list(filter(lambda x: x != '', self.raw_dependency_names))
 
         self._dependencies = results
         return self._dependencies
@@ -697,14 +703,41 @@ class BioCProjectPage(object):
         return fout.name
 
 
+def write_recipe_recursive(proj, seen_dependencies, recipe_dir, config, force, bioc_version,
+                           pkg_version, versioned, recursive):
+    logger.debug('list of dependencies: {}'.format(proj.raw_dependency_names))
+    for dependency, name in zip(proj.dependencies, proj.raw_dependency_names):
+        dependency_without_version = re.sub(r' >=.*$', '', dependency)
+        if dependency_without_version in seen_dependencies:
+            logger.debug("seen {} before".format(dependency_without_version))
+            continue
+
+        seen_dependencies.append(dependency_without_version)
+        if dependency_without_version[:2] == 'r-':
+            cran_skeleton.write_recipe(name, recipe_dir=recipe_dir, config=config,
+                                       force=force, bioc_version=bioc_version,
+                                       pkg_version=pkg_version, versioned=versioned,
+                                       recursive=recursive,
+                                       seen_dependencies=seen_dependencies)
+        else:
+            write_recipe(name, recipe_dir=recipe_dir, config=config, force=force, bioc_version=bioc_version,
+                         pkg_version=pkg_version, versioned=versioned, recursive=recursive,
+                         seen_dependencies=seen_dependencies)
+
+
 def write_recipe(package, recipe_dir, config, force=False, bioc_version=None,
-                 pkg_version=None, versioned=False):
+                 pkg_version=None, versioned=False, recursive=False, seen_dependencies=[]):
     """
     Write the meta.yaml and build.sh files.
     """
     config = utils.load_config(config)
     env = list(utils.EnvMatrix(config['env_matrix']))[0]
     proj = BioCProjectPage(package, bioc_version, pkg_version)
+    logger.info('Making recipe for: {}'.format(package))
+    if recursive:
+        write_recipe_recursive(proj, seen_dependencies, recipe_dir, config, force, bioc_version,
+                               pkg_version, versioned, recursive)
+
     logger.debug('%s==%s, BioC==%s', proj.package, proj.version, proj.bioc_version)
     logger.info('Using tarball from %s', proj.tarball_url)
     if versioned:
@@ -729,7 +762,6 @@ def write_recipe(package, recipe_dir, config, force=False, bioc_version=None,
         # the dicts
         updated_version = updated_meta['package']['version']
         current_version = current_meta['package']['version']
-
 
         # updated_build_number = updated_meta['build'].pop('number')
         current_build_number = current_meta['build'].pop('number', 0)
