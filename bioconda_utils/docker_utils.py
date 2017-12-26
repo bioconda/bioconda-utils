@@ -88,7 +88,9 @@ set -e
 # exists before adding the channel.
 mkdir -p {self.container_staging}/linux-64
 mkdir -p {self.container_staging}/noarch
+mkdir -p {self.container_package_cache}
 conda config --add channels file://{self.container_staging}  > /dev/null 2>&1
+export CONDA_PKGS_DIRS={self.container_package_cache}
 
 # The actual building...
 # we explicitly point to the meta.yaml, in order to keep
@@ -192,6 +194,7 @@ class RecipeBuilder(object):
         tag='tmp-bioconda-builder',
         container_recipe='/opt/recipe',
         container_staging="/opt/host-conda-bld",
+        container_package_cache="/opt/anaconda-pkg-cache",
         requirements=None,
         build_script_template=BUILD_SCRIPT_TEMPLATE,
         dockerfile_template=DOCKERFILE_TEMPLATE,
@@ -218,6 +221,9 @@ class RecipeBuilder(object):
             the container can use previously-built packages as depdendencies.
             Upon successful building container-built packages will be copied
             over. Mounted as read-write.
+
+        container_package_cache: str
+            If you are using package caches put them here
 
         requirements : None or str
             Path to a "requirements.txt" file which will be installed with
@@ -322,6 +328,8 @@ class RecipeBuilder(object):
 
         self.container_recipe = container_recipe
         self.container_staging = container_staging
+        ##TODO Clean this up - should get it from the environmental variable
+        self.container_package_cache = container_package_cache
         self.host_conda_bld = get_host_conda_bld()
 
         if use_host_conda_bld:
@@ -450,14 +458,20 @@ class RecipeBuilder(object):
             env_list.append('-e')
             env_list.append('{0}={1}'.format(k, v))
 
+        volume_mounts = [
+            '-v', '{0}:/opt/build_script.bash'.format(build_script),
+            '-v', '{0}:{1}'.format(self.pkg_dir, self.container_staging),
+            '-v', '{0}:{1}'.format(recipe_dir, self.container_recipe),
+        ]
+
+        if os.environ.get('CONDA_PKGS_DIRS'):
+            volume_mounts = volume_mounts + ['-v', '{0}:{1}'.format(os.environ.get('CONDA_PKGS_DIRS'), self.container_package_cache)]
+
         cmd = [
             'docker', 'run',
             '--net', 'host',
             '--rm',
-            '-v', '{0}:/opt/build_script.bash'.format(build_script),
-            '-v', '{0}:{1}'.format(self.pkg_dir, self.container_staging),
-            '-v', '{0}:{1}'.format(recipe_dir, self.container_recipe),
-        ] + env_list + [
+        ] + volume_mounts + env_list + [
             self.tag,
             '/bin/bash', '/opt/build_script.bash',
         ]
