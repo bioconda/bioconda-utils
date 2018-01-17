@@ -1,8 +1,8 @@
 anaconda-client=1.6.*
 argh=0.26.*
 beautifulsoup4=4.6.*
-conda=4.3.*
-conda-build=2.1.*
+conda=4.3.32
+conda-build=2.1.18
 galaxy-lib=17.9.*
 jinja2=2.10
 jsonschema=2.6.*
