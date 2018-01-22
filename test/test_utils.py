@@ -615,7 +615,7 @@ def test_built_package_path():
 
     assert os.path.basename(
         utils.built_package_path(r.recipe_dirs['one'])
-    ) == 'one-0.1-py{major}{minor}_0.tar.bz2'.format(**sys.version_info)
+    ) == 'one-0.1-py{ver.major}{ver.minor}_0.tar.bz2'.format(ver=sys.version_info)
 
     # resetting with a different CONDA_PY passed as env dict
     assert os.path.basename(
@@ -692,7 +692,7 @@ def test_pkgname_with_numpy_x_x():
     os.environ['CONDA_NPY'] = '1.9'
     assert os.path.basename(
         utils.built_package_path(r.recipe_dirs['one'], env=os.environ)
-    ) == 'one-0.1-np19py{major}{minor}_0.tar.bz2'.format(**sys.version_info)
+    ) == 'one-0.1-np19py{ver.major}{ver.minor}_0.tar.bz2'.format(ver=sys.version_info)
 
 
 def test_string_or_float_to_integer_python():
