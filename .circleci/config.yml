@@ -37,13 +37,21 @@ jobs:
       - checkout
       - *setup
       - *save_cache
-      - *run
+      - run:
+          name: Testing
+          command: |
+            python setup.py install
+            py.test test/ -v -s
   test-macos:
     <<: *macos
     steps:
       - checkout
       - *setup
-      - *run
+      - run:
+          name: Testing
+          command: |
+            python setup.py install
+            py.test test/ -v -k "not docker" -s
   build-docs:
     <<: *linux
     steps:
