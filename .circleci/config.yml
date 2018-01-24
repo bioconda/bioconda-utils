@@ -1,0 +1,82 @@
+version: 2
+
+variables:
+  restore_cache: &restore_cache
+    restore_cache:
+      keys:
+        - bioconda-utils-{{ .Environment.MINICONDA_VER }}-{{ .Environment.BIOCONDA_UTILS_TAG }}-{{ arch }}
+  save_cache: &save_cache
+    save_cache:
+      key: bioconda-utils-{{ .Environment.MINICONDA_VER }}-{{ .Environment.BIOCONDA_UTILS_TAG }}-{{ arch }}
+      paths:
+        - /tmp/workspace/miniconda
+  setup: &setup
+    run:
+      name: Setup dependencies
+      command: .circleci/setup.sh
+  run: &run
+    run:
+      name: Run tests
+      command: .circleci/run.sh
+  macos: &macos
+    macos:
+      xcode: "8.3.3"
+  linux: &linux
+    docker:
+      - image: circleci/python:3
+  setup_docker: &setup_docker
+    setup_remote_docker:
+      docker_layer_caching: true
+
+jobs:
+  test-linux:
+    <<: *linux
+    steps:
+      - *setup_docker
+      - *restore_cache
+      - checkout
+      - *setup
+      - *save_cache
+      - *run
+  test-macos:
+    <<: *macos
+    steps:
+      - checkout
+      - *setup
+      - *run
+  build-docs:
+    <<: *linux
+    steps:
+      - *setup_docker
+      - *restore_cache
+      - checkout
+      - *setup
+      - *save_cache
+      - run:
+          name: Build and upload docs
+          command: .circleci/build-docs.sh
+
+
+
+workflows:
+  version: 2
+  # workflow for testing pushes and PRs
+  bioconda-utils-test:
+    jobs:
+      - test-linux:
+          context: org-global
+      - test-macos:
+          context: org-global
+      - build-docs:
+          context: org-global
+  bioconda-utils-nightly-docs:
+     triggers:
+       - schedule:
+           cron: "0 0 * * *"
+           filters:
+             branches:
+               only:
+                 - master
+     jobs:
+       - build-docs:
+           context: org-global
