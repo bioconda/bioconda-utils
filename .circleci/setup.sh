@@ -41,4 +41,5 @@ if [[ ! -d $WORKSPACE/miniconda ]]; then
     pip install -r pip-requirements.txt
 fi
 
+source $BASH_ENV
 conda config --get
