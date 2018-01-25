@@ -26,7 +26,7 @@ from conda_build.metadata import MetaData
 # Label that will be used for uploading test packages to anaconda/binstar
 TEST_LABEL = 'bioconda-utils-test'
 
-SKIP_DOCKER_TESTS = os.environ.get('OSTYPE', '').startswith('darwin')
+SKIP_DOCKER_TESTS = sys.platform.startswith('darwin')
 
 if SKIP_DOCKER_TESTS:
     PARAMS = [False]
