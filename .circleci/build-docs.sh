@@ -24,7 +24,7 @@ GITHUB_USERNAME="bioconda"
 DOCSOURCE=`pwd`/docs
 
 # DOCHTML is where sphinx is configured to save the output HTML
-DOCHTML=`pwd`/docs/build/html
+DOCHTML=$DOCSOURCE/build/html
 
 # tmpdir to which built docs will be copied
 STAGING=/tmp/${GITHUB_USERNAME}-docs
