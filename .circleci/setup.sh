@@ -44,3 +44,6 @@ fi
 
 source $BASH_ENV
 conda config --get
+
+ls $WORKSPACE/miniconda/conda-bld
+ls $WORKSPACE/miniconda/conda-bld/noarch

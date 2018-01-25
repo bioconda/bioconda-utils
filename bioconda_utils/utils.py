@@ -769,8 +769,8 @@ def filter_recipes(recipes, env_matrix, channels=None, force=False):
                         'it defines skip for this env', pkg)
                     return False
 
-                # If on travis, handle noarch.
-                if os.environ.get('TRAVIS', None) == 'true':
+                # If on CI, handle noarch.
+                if os.environ.get('CI', None) == 'true':
                     if meta.get_value('build/noarch'):
                         if platform != 'linux':
                             logger.debug('FILTER: only building %s on '

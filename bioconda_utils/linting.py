@@ -170,7 +170,7 @@ def lint(recipes, config, df, exclude=None, registry=None):
 
     exclude : list
         List of function names in `registry` to skip globally. When running on
-        travis, this will be merged with anything else detected from the commit
+        CI, this will be merged with anything else detected from the commit
         message or LINT_SKIP environment variable using the special string
         "[skip lint <function name> for <recipe name>]". While those other
         mechanisms define skipping on a recipe-specific basis, this argument
