@@ -41,7 +41,7 @@ jobs:
           command: python setup.py install
       - run:
           name: Testing
-          command: py.test test/ -v -s
+          command: py.test test/ -v
   test-macos:
     <<: *macos
     steps:
@@ -52,7 +52,7 @@ jobs:
           command: python setup.py install
       - run:
           name: Testing
-          command: py.test test/ -v -k "not docker" -s
+          command: py.test test/ -v -k "not docker"
   build-docs:
     <<: *linux
     steps:
