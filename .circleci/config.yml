@@ -22,15 +22,12 @@ variables:
     macos:
       xcode: "8.3.3"
   linux: &linux
-    docker:
-      - image: circleci/python:3
-  setup_docker: &setup_docker
-    setup_remote_docker:
-      docker_layer_caching: true
+    machine: true
 
+    
 jobs:
   test-linux:
-    machine: true
+    <<: *linux
     steps:
       - checkout
       - *restore_cache
@@ -58,7 +55,9 @@ jobs:
   build-docs:
     <<: *linux
     steps:
-      - *setup_docker
+      - add_ssh_keys:
+          fingerprints:
+            - f8:26:86:86:f8:d3:a5:66:ea:7d:f6:42:2e:5c:7a:82
       - checkout
       - *restore_cache
       - *setup
