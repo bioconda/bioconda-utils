@@ -49,7 +49,7 @@ BUILD_DOCS_FROM_BRANCH="master"
 #
 # ----------------------------------------------------------------------------
 
-if [[ $CIRCLE_USERNAME != bioconda ]]; then
+if [[ $CIRCLE_PROJECT_USERNAME != bioconda ]]; then
     # exit if not in bioconda repo
     exit 0
 fi
