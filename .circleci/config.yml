@@ -30,9 +30,8 @@ variables:
 
 jobs:
   test-linux:
-    <<: *linux
+    machine: true
     steps:
-      - *setup_docker
       - checkout
       - *restore_cache
       - *setup
