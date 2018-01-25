@@ -21,23 +21,13 @@ GITHUB_USERNAME="bioconda"
 
 # DOCSOURCE is directory containing the Makefile, relative to the directory
 # containing this bash script.
-DOCSOURCE=docs
+DOCSOURCE=`pwd`/docs
 
 # DOCHTML is where sphinx is configured to save the output HTML
-DOCHTML=docs/build/html
+DOCHTML=`pwd`/docs/build/html
 
 # tmpdir to which built docs will be copied
 STAGING=/tmp/${GITHUB_USERNAME}-docs
-
-# The public key should have been added to the repo's settings in github; the
-# private key should have been encrypted using `travis encrypt-file` and the
-# encrypted version committed to the repo under $ENCRYPTED_FILE.
-#
-# ENCRYPTION_LABEL is from .travis.yml, and should have been edited to match
-# the hash value reported by `travis encrypt-file`.
-#
-# See https://gist.github.com/domenic/ec8b0fc8ab45f39403dd for details
-ENCRYPTED_FILE=docs/key.enc
 
 # Build docs only if travis-ci is testing this branch:
 BUILD_DOCS_FROM_BRANCH="master"
