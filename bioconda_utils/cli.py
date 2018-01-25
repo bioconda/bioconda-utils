@@ -130,7 +130,7 @@ def duplicates(
                 token = []
             else:
                 token = ['-t', token]
-            print(utils.run([utils.bin_for('anaconda')] + token + subcmd).stdout)
+            print(utils.run([utils.bin_for('anaconda')] + token + subcmd, mask=[token]).stdout)
 
     def get_packages(channel):
         return {get_spec(pkg)

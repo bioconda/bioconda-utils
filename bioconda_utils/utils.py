@@ -202,7 +202,7 @@ def temp_os(platform):
         sys.platform = original
 
 
-def run(cmds, env=None, **kwargs):
+def run(cmds, env=None, mask=None, **kwargs):
     """
     Wrapper around subprocess.run()
 
@@ -221,8 +221,21 @@ def run(cmds, env=None, **kwargs):
         p.stdout = p.stdout.decode(errors='replace')
     except sp.CalledProcessError as e:
         e.stdout = e.stdout.decode(errors='replace')
+        # mask command arguments
+        def do_mask(arg):
+            if mask is None:
+                # caller has not considered masking, hide the entire command
+                # for security reasons
+                return '<hidden>'
+            elif mask == False:
+                # masking has been deactivated
+                return arg
+            for m in mask:
+                arg = arg.replace(m, '<hidden>')
+            return arg
+        e.cmd = [do_mask(c) for c in e.cmd]
         logger.error('COMMAND FAILED: %s', ' '.join(e.cmd))
-        logger.error('STDOUT+STDERR:\n%s', e.stdout)
+        logger.error('STDOUT+STDERR:\n%s', do_mask(e.stdout))
         raise e
     return p
 
