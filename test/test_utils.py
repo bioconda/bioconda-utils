@@ -156,11 +156,7 @@ def single_upload():
 
     pkg = utils.built_package_path(r.recipe_dirs[name])
 
-    with utils.temp_env(dict(
-        TRAVIS_BRANCH='master',
-        TRAVIS_PULL_REQUEST='false')
-    ):
-        upload.anaconda_upload(pkg, label=TEST_LABEL)
+    upload.anaconda_upload(pkg, label=TEST_LABEL)
 
     yield (name, pkg, r.recipe_dirs[name])
 

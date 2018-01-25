@@ -755,12 +755,11 @@ def filter_recipes(recipes, env_matrix, channels=None, force=False):
         with temp_env(env):
 
             # with temp_os, we can fool the MetaData if needed.
-            platform = os.environ.get('TRAVIS_OS_NAME', sys.platform)
-
-            # TRAVIS_OS_NAME uses 'osx', but sys.platform uses 'darwin', and
-            # that's what conda will be looking for.
-            if platform == 'osx':
+            platform = os.environ.get('OSTYPE', sys.platform)
+            if platform.startswith("darwin"):
                 platform = 'darwin'
+            elif platform == "linux-gnu":
+                platform = "linux"
 
             with temp_os(platform):
                 meta = MetaData(recipe)
