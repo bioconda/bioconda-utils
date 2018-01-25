@@ -1,4 +1,5 @@
 FROM condaforge/linux-anvil
+ENV PATH="/opt/conda/bin:${PATH}"
 RUN sudo -n yum install -y openssh-clients
 ADD . /tmp/repo
 RUN conda config --add channels defaults; \
