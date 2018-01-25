@@ -15,7 +15,7 @@ from bioconda_utils import build
 #
 
 
-SKIP_OSX = os.environ.get('OSTYPE').startswith("darwin")
+SKIP_OSX = os.environ.get('OSTYPE', '').startswith('darwin')
 
 
 RECIPE_ONE = dedent("""

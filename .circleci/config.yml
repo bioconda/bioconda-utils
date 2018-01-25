@@ -38,20 +38,22 @@ jobs:
       - *setup
       - *save_cache
       - run:
+          name: Install bioconda-utils
+          command: python setup.py install
+      - run:
           name: Testing
-          command: |
-            python setup.py install
-            py.test test/ -v -s
+          command: py.test test/ -v -s
   test-macos:
     <<: *macos
     steps:
       - checkout
       - *setup
       - run:
+          name: Install bioconda-utils
+          command: python setup.py install
+      - run:
           name: Testing
-          command: |
-            python setup.py install
-            py.test test/ -v -k "not docker" -s
+          command: py.test test/ -v -k "not docker" -s
   build-docs:
     <<: *linux
     steps:
