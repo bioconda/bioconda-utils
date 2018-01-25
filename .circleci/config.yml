@@ -23,6 +23,10 @@ variables:
       xcode: "8.3.3"
   linux: &linux
     machine: true
+  install_bioconda_utils: &install_bioconda_utils
+    run:
+      name: Install bioconda-utils
+      command: python setup.py install
 
     
 jobs:
@@ -33,9 +37,7 @@ jobs:
       - *restore_cache
       - *setup
       - *save_cache
-      - run:
-          name: Install bioconda-utils
-          command: python setup.py install
+      - *install_bioconda_utils
       - run:
           name: Testing
           command: py.test test/ -v
@@ -45,9 +47,7 @@ jobs:
     steps:
       - checkout
       - *setup
-      - run:
-          name: Install bioconda-utils
-          command: python setup.py install
+      - *install_bioconda_utils
       - run:
           name: Testing
           command: py.test test/ -v -k "not docker"
@@ -62,6 +62,7 @@ jobs:
       - *restore_cache
       - *setup
       - *save_cache
+      - *install_bioconda_utils
       - run:
           name: Build and upload docs
           command: .circleci/build-docs.sh
