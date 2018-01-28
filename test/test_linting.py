@@ -688,7 +688,7 @@ def test_lint_pin():
               build:
                 - zlib
    
-              run:
+              run:  # ^-- DO NOT remove the preceding line; it's part of the test case!
                 - zlib 
         ''',
         '''
