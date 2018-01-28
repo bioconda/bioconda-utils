@@ -683,6 +683,20 @@ def test_lint_pin():
             package:
               name: a
               version: '0.1'
+
+            requirements:
+              build:
+                - zlib
+   
+              run:
+                - zlib 
+        ''',
+        '''
+        a:
+          meta.yaml: |
+            package:
+              name: a
+              version: '0.1'
             requirements:
               build:
                 - zlib {{CONDA_ZLIB}}*

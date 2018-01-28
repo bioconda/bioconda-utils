@@ -301,10 +301,11 @@ def _pin(env_var, dep_name):
                 section = "run"
             elif in_requirements and line.strip().startswith("build:"):
                 section = "build"
-            elif not line.startswith(" ") and not line.startswith("#"):
+            elif not line.startswith(" ") and not line.startswith("#") and line.strip():
                 in_requirements = False
                 section = None
             line = line.strip()
+
             if in_requirements and line.startswith('- {}'.format(dep_name)):
                 if pin_pattern.search(line) is None:
                     not_pinned.add(section)
