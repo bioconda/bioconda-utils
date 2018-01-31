@@ -10,5 +10,4 @@ RUN export PATH="/opt/conda/bin:${PATH}" && \
     conda clean -y --all
 RUN export PATH="/opt/conda/bin:${PATH}" && \
     pip install /tmp/repo
-COPY docker-entrypoint /opt/docker/bin/bioconda-utils-entrypoint
-ENTRYPOINT [ "/opt/conda/bin/tini", "--", "/opt/docker/bin/bioconda-utils-entrypoint" ]
+ENTRYPOINT [ "/opt/conda/bin/tini", "--", "/tmp/repo/docker-entrypoint" ]
