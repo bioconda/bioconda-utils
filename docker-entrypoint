@@ -1,15 +1,7 @@
 #!/bin/bash -il
-# copied from condaforge/linux-anvil
 
-# Enable the compiler toolset.
-#
-# Must do this before activating conda or
-# the system Python interpreter is not used.
-# This is a problem for many reasons. One being
-# that the Python scripts used to activate the
-# toolset are not Python 3 compatible.
-. scl_source enable devtoolset-2
-
+# Source everything that needs to be.
+. /opt/docker/bin/entrypoint_source
 
 # Run whatever the user wants.
 exec "$@"
