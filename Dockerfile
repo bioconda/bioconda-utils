@@ -8,4 +8,5 @@ RUN conda config --add channels defaults; \
 RUN conda install --file /tmp/repo/bioconda_utils/bioconda_utils-requirements.txt; \
     conda clean -y --all
 RUN pip install /tmp/repo
-ENTRYPOINT []
+COPY docker-entrypoint /opt/docker/bin/bioconda-utils-entrypoint
+ENTRYPOINT [ "/opt/conda/bin/tini", "--", "/opt/docker/bin/bioconda-utils-entrypoint" ]
