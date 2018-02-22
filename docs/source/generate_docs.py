@@ -72,6 +72,8 @@ License  {license}
 Recipe   {recipe}
 ======== ===========
 
+{description}
+
 Installation
 ------------
 
@@ -173,19 +175,23 @@ def setup(*args):
         versions_in_channel = sorted(repodata[name].keys())
 
         # Format the README
-        notes = metadata.get_section('extra').get('notes', '')
+        about = metadata.get_section('about')
+        extra = metadata.get_section('extra')
+        
+        notes = extra.get('notes', '')
         if notes:
             if isinstance(notes,list): notes = "\n".join(notes)
             notes = 'Notes\n-----\n\n' + notes
-        summary = metadata.get_section('about').get('summary', '')
+        summary = about.get('summary', '')
         summaries.append(summary)
         template_options = {
-            'title': metadata.name(),
-            'title_underline': '=' * len(metadata.name()),
+            'title': name,
+            'title_underline': '=' * len(name),
             'summary': summary,
-            'home': metadata.get_section('about').get('home', ''),
+            'description': about.get('description', ''),
+            'home': about.get('home', ''),
             'versions': ', '.join(versions_in_channel),
-            'license': metadata.get_section('about').get('license', ''),
+            'license': about.get('license', ''),
             'recipe': ('https://github.com/bioconda/bioconda-recipes/tree/master/recipes/' +
                 op.dirname(op.relpath(metadata.meta_path, RECIPE_DIR))),
             'notes': notes
