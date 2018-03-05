@@ -311,6 +311,32 @@ def test_conda_as_dep():
     assert build_result
 
 
+def test_rust():
+    r = Recipes(
+        """
+        one:
+          meta.yaml: |
+            package:
+              name: one
+              version: 0.1
+            build:
+              script: cargo install --root $PREFIX xsv
+            requirements:
+              build:
+                - rust
+        """, from_string=True)
+    r.write_recipes()
+    build_result = build.build_recipes(
+        r.basedir,
+        config={},
+        packages="*",
+        testonly=False,
+        force=False,
+        mulled_test=True,
+    )
+    assert build_result
+
+
 def test_env_matrix():
     contents = {
         'CONDA_PY': [27, 35],
