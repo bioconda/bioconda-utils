@@ -79,6 +79,9 @@ BUILD_SCRIPT_TEMPLATE = \
 #!/bin/bash
 set -e
 
+# Set SSL certificates
+export SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.crt
+
 # Add the host's mounted conda-bld dir so that we can use its contents as
 # dependencies for building this recipe.
 #
