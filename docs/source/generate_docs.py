@@ -80,9 +80,13 @@ def as_extlink_filter(text):
     >>> as_extlink_filter(["biotools:abyss", "doi:123")
     "biotools: :biotool:`abyss`, doi: :doi:`123`"
     """
+    fmt = lambda text: "{0}: :{0}:`{1}`".format(*text.split(":"))
     if isinstance(text, list):
-        return [as_extlink_filter(text_item) for text_item in text]
-    return "{0}: :{0}:`{1}`".format(*text.split(":"))
+        return [fmt(text_item) for text_item in text if isinstance(text_item, str)]
+    elif isinstance(text, str):
+        return fmt(text)
+    else:
+        return []
 
 
 def underline_filter(text):
