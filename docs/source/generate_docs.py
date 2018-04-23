@@ -77,12 +77,16 @@ def as_extlink_filter(text):
     >>> as_extlink_filter("biotools:abyss")
     "biotools: :biotool:`abyss`"
 
-    >>> as_extlink_filter(["biotools:abyss", "doi:123")
+    >>> as_extlink_filter(["biotools:abyss", "doi:123"])
     "biotools: :biotool:`abyss`, doi: :doi:`123`"
     """
     is_valid = lambda text: isinstance(text, str) and len(text.split(":")) == 2
     fmt = lambda text: "{0}: :{0}:`{1}`".format(*text.split(":"))
 
+    # TODO: this silently ignores invalid identifier declarations. I propose to add a lint
+    # for the identifier section instead. Otherwise, doc building will fail whenever we have
+    # one recipe with a broken identifier section, which is not desirable as docs are only
+    # build nightly.
     if isinstance(text, list):
         return list(map(fmt, filter(is_valid, text)))
     elif is_valid(text):
