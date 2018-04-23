@@ -20,6 +20,7 @@ except AttributeError:  # not running within sphinx
 
 try:
     from conda_build.metadata import MetaData
+    from conda_build.exceptions import UnableToParse
 except Exception:
     logging.exception("Failed to import MetaData")
     raise
@@ -198,18 +199,23 @@ def generate_readme(folder, repodata, renderer):
         versions.append(sf)
 
     # Read the meta.yaml file(s)
-    recipe = op.join(RECIPE_DIR, folder, "meta.yaml")
-    if op.exists(recipe):
-        metadata = MetaData(recipe)
-        if metadata.version() not in versions:
-            versions.insert(0, metadata.version())
-    else:
-        if versions:
-            recipe = op.join(RECIPE_DIR, folder, versions[0], "meta.yaml")
+    try:
+        recipe = op.join(RECIPE_DIR, folder, "meta.yaml")
+        if op.exists(recipe):
             metadata = MetaData(recipe)
+            if metadata.version() not in versions:
+                versions.insert(0, metadata.version())
         else:
-            # ignore non-recipe folders
-            return
+            if versions:
+                recipe = op.join(RECIPE_DIR, folder, versions[0], "meta.yaml")
+                metadata = MetaData(recipe)
+            else:
+                # ignore non-recipe folders
+                return
+    except UnableToParse as e:
+        logger.error("Failed to parse recipe {}".format(recipe))
+        raise e
+
 
     name = metadata.name()
     versions_in_channel = repodata.get_versions(name)
