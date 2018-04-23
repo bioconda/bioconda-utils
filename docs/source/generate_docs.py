@@ -80,15 +80,16 @@ def as_extlink_filter(text):
     >>> as_extlink_filter(["biotools:abyss", "doi:123")
     "biotools: :biotool:`abyss`, doi: :doi:`123`"
     """
-    is_valid = lambda text: isinstance(text, str) and len(text.split(":")) == 2
-    fmt = lambda text: "{0}: :{0}:`{1}`".format(*text.split(":"))
+    def fmt(text):
+        assert isinstance(text, str), "identifier has to be a string"
+        text = text.split(":", 1)
+        assert len(text) == 2, "identifier needs at least one colon"
+        return "{0}: :{0}:`{1}`".format(*text)
 
-    if isinstance(text, list):
-        return list(map(fmt, filter(is_valid, text)))
-    elif is_valid(text):
-        return fmt(text)
-    else:
-        return []
+    assert isinstance(text, list), "identifiers have to be given as list"
+
+    return list(map(fmt, text))
+
 
 
 def underline_filter(text):
