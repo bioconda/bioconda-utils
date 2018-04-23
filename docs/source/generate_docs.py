@@ -80,10 +80,12 @@ def as_extlink_filter(text):
     >>> as_extlink_filter(["biotools:abyss", "doi:123")
     "biotools: :biotool:`abyss`, doi: :doi:`123`"
     """
+    is_valid = lambda text: isinstance(text, str) and len(text.split(":")) == 2
     fmt = lambda text: "{0}: :{0}:`{1}`".format(*text.split(":"))
+
     if isinstance(text, list):
-        return [fmt(text_item) for text_item in text if isinstance(text_item, str)]
-    elif isinstance(text, str):
+        return list(map(fmt, filter(is_valid, text)))
+    elif is_valid(text):
         return fmt(text)
     else:
         return []
