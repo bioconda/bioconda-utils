@@ -77,7 +77,7 @@ def as_extlink_filter(text):
     >>> as_extlink_filter("biotools:abyss")
     "biotools: :biotool:`abyss`"
 
-    >>> as_extlink_filter(["biotools:abyss", "doi:123")
+    >>> as_extlink_filter(["biotools:abyss", "doi:123"])
     "biotools: :biotool:`abyss`, doi: :doi:`123`"
     """
     def fmt(text):
@@ -89,7 +89,6 @@ def as_extlink_filter(text):
     assert isinstance(text, list), "identifiers have to be given as list"
 
     return list(map(fmt, text))
-
 
 
 def underline_filter(text):
