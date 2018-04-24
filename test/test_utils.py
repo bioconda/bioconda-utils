@@ -597,6 +597,8 @@ def test_built_package_path():
               name: one
               version: "0.1"
             requirements:
+              build:
+                - python
               run:
                 - python
 

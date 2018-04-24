@@ -852,3 +852,33 @@ def test_invalid_identifiers():
                   doi:10.1093/bioinformatics/btr010
         ''']
     )
+
+
+def test_deprecated_numpy_spec():
+    run_lint(
+        func=lint_functions.deprecated_numpy_spec,
+        should_pass=['''
+        a:
+            meta.yaml: |
+              package:
+                name: a
+                version: 0.1
+              requirements:
+                build:
+                  - numpy
+                run:
+                  - numpy
+        '''],
+        should_fail=['''
+        a:
+            meta.yaml: |
+              package:
+                name: a
+                version: 0.1
+              requirements:
+                build:
+                  - numpy x.x
+                run:
+                  - numpy x.x
+        ''']
+    )

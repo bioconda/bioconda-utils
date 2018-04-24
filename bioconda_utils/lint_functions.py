@@ -299,6 +299,19 @@ def invalid_identifiers(recipe, meta, df):
         return
 
 
+def deprecated_numpy_spec(recipe, meta, df):
+    reqs = meta.get('requirements')
+    if reqs is None:
+        return
+    for deps in reqs.get(section, []):
+        for d in deps:
+            if d.startswith("numpy") and d.contains("x.x"):
+                return { 'deprecated_numpy_spec': True,
+                         'fix': 'omit x.x as pinning of numpy is now '
+                                'handled automatically'}
+    return
+
+
 def _pin(env_var, dep_name):
     """
     Generates a linting function that checks to make sure `dep_name` is pinned
