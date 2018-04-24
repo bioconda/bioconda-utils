@@ -385,6 +385,7 @@ registry = (
     should_not_be_noarch,
     setup_py_install_args,
     invalid_identifiers,
+    deprecated_numpy_spec,
     _pin('CONDA_ZLIB', 'zlib'),
     _pin('CONDA_GMP', 'gmp'),
     _pin('CONDA_BOOST', 'boost'),
