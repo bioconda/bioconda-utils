@@ -1,6 +1,6 @@
 import os
 import requests
-from conda.version import VersionOrder
+from conda.models.version import VersionOrder
 from . import utils
 from . import linting
 

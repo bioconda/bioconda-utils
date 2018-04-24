@@ -22,7 +22,7 @@ import threading
 
 from conda_build import api
 from conda_build.metadata import MetaData
-from conda.version import VersionOrder
+from conda.models.version import VersionOrder
 import yaml
 from jinja2 import Environment, PackageLoader
 from colorlog import ColoredFormatter
@@ -595,7 +595,12 @@ def built_package_path(recipe, env=None):
             set_build_id=False)
         meta = MetaData(recipe, config=config)
         meta.parse_again()
-        path = api.get_output_file_path(meta, config=config)
+        paths = api.get_output_file_paths(meta, config=config)
+        assert len(paths) == 1, ('Bug: conda build returns multiple output '
+                                 'file paths. This is unexpected since we '
+                                 'configure it with one combination of '
+                                 'pinned versions.')
+        path = paths[0]
     return path
 
 
