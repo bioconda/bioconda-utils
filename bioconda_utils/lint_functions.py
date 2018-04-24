@@ -303,9 +303,9 @@ def deprecated_numpy_spec(recipe, meta, df):
     reqs = meta.get('requirements')
     if reqs is None:
         return
-    for deps in reqs.get(section, []):
-        for d in deps:
-            if d.startswith("numpy") and d.contains("x.x"):
+    for section in ['build', 'run']:
+        for dep in reqs.get(section, []):
+            if dep.startswith('numpy') and 'x.x' in dep:
                 return { 'deprecated_numpy_spec': True,
                          'fix': 'omit x.x as pinning of numpy is now '
                                 'handled automatically'}

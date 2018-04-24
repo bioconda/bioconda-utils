@@ -866,6 +866,7 @@ def test_deprecated_numpy_spec():
               requirements:
                 build:
                   - numpy
+                  - python
                 run:
                   - numpy
         '''],
