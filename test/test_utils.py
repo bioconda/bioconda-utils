@@ -616,8 +616,8 @@ def test_built_package_path():
     r.write_recipes()
 
     assert os.path.basename(
-        utils.built_package_path(r.recipe_dirs['one'])
-    ) == 'one-0.1-py{ver.major}{ver.minor}_0.tar.bz2'.format(ver=sys.version_info)
+        utils.built_package_path(r.recipe_dirs['one'], env=dict(CONDA_PY=36))
+    ) == 'one-0.1-py36_0.tar.bz2'
 
     # resetting with a different CONDA_PY passed as env dict
     assert os.path.basename(
@@ -670,31 +670,6 @@ def test_built_package_path2():
         utils.built_package_path(
             r.recipe_dirs['two'], env=dict(CONDA_NCURSES='9.0'))
     ) == 'two-0.1-ncurses9.0_0.tar.bz2'
-
-
-def test_pkgname_with_numpy_x_x():
-    r = Recipes(
-        """
-        one:
-          meta.yaml: |
-            package:
-              name: one
-              version: "0.1"
-            requirements:
-              run:
-                - python
-                - numpy x.x
-              build:
-                - python
-                - numpy x.x
-
-        """, from_string=True)
-    r.write_recipes()
-
-    os.environ['CONDA_NPY'] = '1.9'
-    assert os.path.basename(
-        utils.built_package_path(r.recipe_dirs['one'], env=os.environ)
-    ) == 'one-0.1-np19py{ver.major}{ver.minor}_0.tar.bz2'.format(ver=sys.version_info)
 
 
 def test_string_or_float_to_integer_python():
