@@ -22,7 +22,7 @@ import threading
 
 from conda_build import api
 from conda_build.metadata import MetaData
-from conda.version import VersionOrder
+from conda.models.version import VersionOrder
 import yaml
 from jinja2 import Environment, PackageLoader
 from colorlog import ColoredFormatter
