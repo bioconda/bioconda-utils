@@ -508,6 +508,8 @@ def test_filter_recipes_existing_package():
               name: gffutils
               version: "0.8.7.1"
             requirements:
+              build:
+                - python
               run:
                 - python
         """, from_string=True)
