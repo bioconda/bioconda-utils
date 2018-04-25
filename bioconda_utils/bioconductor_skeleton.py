@@ -856,7 +856,6 @@ def write_recipe(package, recipe_dir, config, force=False, bioc_version=None,
         `seen_dependencies`. Only has an effect if `recursive=True`.
     """
     config = utils.load_config(config)
-    env = list(utils.EnvMatrix(config['env_matrix']))[0]
     proj = BioCProjectPage(package, bioc_version, pkg_version)
     logger.info('Making recipe for: {}'.format(package))
 
@@ -895,8 +894,8 @@ def write_recipe(package, recipe_dir, config, force=False, bioc_version=None,
     # *has* changed, then bump the version number.
     meta_file = os.path.join(recipe_dir, 'meta.yaml')
     if os.path.exists(meta_file):
-        updated_meta = utils.load_meta(proj.meta_yaml, env)
-        current_meta = utils.load_meta(meta_file, env)
+        updated_meta = utils.load_meta(proj.meta_yaml)
+        current_meta = utils.load_meta(meta_file)
 
         # pop off the version and build numbers so we can compare the rest of
         # the dicts

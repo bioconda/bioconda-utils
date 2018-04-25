@@ -19,6 +19,7 @@ import datetime
 from distutils.version import LooseVersion
 import time
 import threading
+from pathlib import PurePath
 
 from conda_build import api
 from conda_build.metadata import MetaData
@@ -166,27 +167,33 @@ def load_all_meta(recipe, config):
     """
     For each environment, yield the rendered meta.yaml.
     """
-    cfg = load_config(config)
-    env_matrix = EnvMatrix(cfg['env_matrix'])
-    for env in env_matrix:
-        yield load_meta(recipe, env)
+    return api.render(recipe)
 
 
-def load_meta(recipe, env):
+def load_conda_config():
+    """
+    Load conda config while considering global pinnings from conda-forge.
+    """
+    config = api.Config(
+        no_download_source=True,
+        set_build_id=False)
+
+    # get environment root
+    env_root = PurePath(shutil.which("bioconda-utils")).parents[1]
+    # set path to pinnings from conda forge package
+    config.exclusive_config_file = os.path.join(env_root,
+                                                "conda_build_config.yaml")
+    return config
+
+
+def load_metadata(recipe):
     """
     Load metadata for a specific environment.
     """
-    with temp_env(env):
-        # Disabling set_build_id prevents the creation of uniquely-named work
-        # directories just for checking the output file.
-        # It needs to be done within the context manager so that it sees the
-        # os.environ.
-        config = api.Config(
-            no_download_source=True,
-            set_build_id=False)
-        meta = MetaData(recipe, config=config)
-        meta.parse_again()
-        return meta.meta
+    config = load_conda_config()
+    meta = MetaData(recipe, config=config)
+    meta.parse_again()
+    return meta
 
 
 @contextlib.contextmanager
@@ -464,7 +471,6 @@ def get_latest_recipes(recipe_folder, config, package="*"):
             recipe_folder, '').strip(os.path.sep).split(os.path.sep)[0]
 
     config = load_config(config)
-    env = list(EnvMatrix(config['env_matrix']))[0]
     recipes = sorted(get_recipes(recipe_folder, package), key=toplevel)
 
     for package, group in groupby(recipes, key=toplevel):
@@ -474,7 +480,7 @@ def get_latest_recipes(recipe_folder, config, package="*"):
         else:
             def get_version(p):
                 return VersionOrder(
-                    load_meta(os.path.join(p, 'meta.yaml'), env)['package']['version']
+                    load_meta(os.path.join(p, 'meta.yaml'))['package']['version']
                 )
             sorted_versions = sorted(group, key=get_version)
             if sorted_versions:
@@ -568,62 +574,18 @@ def _string_or_float_to_integer_python(s):
     return s
 
 
-def built_package_path(recipe, env=None):
+def built_package_paths(recipe):
     """
     Returns the path to which a recipe would be built.
 
     Does not necessarily exist; equivalent to `conda build --output recipename`
     but without the subprocess.
     """
-    if env is None:
-        env = {}
-    env = dict(env)
-
-    # Ensure CONDA_PY is an integer (needed by conda-build 2.0.4)
-    py = env.get('CONDA_PY', None)
-    env = dict(env)
-    if py is not None:
-        env['CONDA_PY'] = _string_or_float_to_integer_python(py)
-
-    with temp_env(env):
-        # Disabling set_build_id prevents the creation of uniquely-named work
-        # directories just for checking the output file.
-        # It needs to be done within the context manager so that it sees the
-        # os.environ.
-        config = api.Config(
-            no_download_source=True,
-            set_build_id=False)
-        meta = MetaData(recipe, config=config)
-        meta.parse_again()
-        paths = api.get_output_file_paths(meta, config=config)
-        assert len(paths) == 1, ('Bug: conda build returns multiple output '
-                                 'file paths. This is unexpected since we '
-                                 'configure it with one combination of '
-                                 'pinned versions.')
-        path = paths[0]
-    return path
-
-
-class Target:
-    def __init__(self, pkg, env):
-        """
-        Class to represent a package built with a particular environment
-        (e.g. from EnvMatirix).
-        """
-        self.pkg = pkg
-        self.env = env
-
-    def __hash__(self):
-        return self.pkg.__hash__()
-
-    def __eq__(self, other):
-        return self.pkg == other.pkg
-
-    def __str__(self):
-        return os.path.basename(self.pkg)
-
-    def envstring(self):
-        return ';'.join(['='.join([i, str(j)]) for i, j in self.env])
+    config = load_conda_config()
+    meta = load_metadata(recipe)
+    paths = api.get_output_file_paths(meta, config=config)
+    assert paths, "bug: empty list of paths returned"
+    return paths
 
 
 def last_commit_to_master():
@@ -726,17 +688,14 @@ def changed_since_master(recipe_folder):
     ]
 
 
-def filter_recipes(recipes, env_matrix, channels=None, force=False):
+def filter_recipes(recipes, channels=None, force=False):
     """
-    Generator yielding only those recipes that should be built.
+    Generator yielding only those (recipe, pkgs) that should be built.
 
     Parameters
     ----------
     recipes : iterable
         Iterable of candidate recipes
-
-    env_matrix : str, dict, or EnvMatrix
-        If str or dict, create an EnvMatrix; if EnvMatrix already use it as-is.
 
     channels : None or list
         Optional list of channels to check for existing recipes
@@ -744,68 +703,55 @@ def filter_recipes(recipes, env_matrix, channels=None, force=False):
     force : bool
         Build the package even if it is already available in supplied channels.
     """
-    if not isinstance(env_matrix, EnvMatrix):
-        env_matrix = EnvMatrix(env_matrix)
-
     if channels is None:
         channels = []
 
-    channel_packages = defaultdict(set)
+    channel_packages = set()
     for channel in channels:
-        channel_packages[channel].update(get_channel_packages(channel=channel))
+        channel_packages.update(get_channel_packages(channel=channel))
 
-    def tobuild(recipe, env):
-        pkg = os.path.basename(built_package_path(recipe, env))
+    def tobuild(recipe):
+        # with temp_os, we can fool the MetaData if needed.
+        platform = os.environ.get('OSTYPE', sys.platform)
+        if platform.startswith("darwin"):
+            platform = 'darwin'
+        elif platform == "linux-gnu":
+            platform = "linux"
 
-        in_channels = [
-            channel for channel, pkgs in channel_packages.items()
-            if pkg in pkgs
-        ]
-        if in_channels and not force:
+        with temp_os(platform):
+            meta = load_metadata(recipe)
+            if meta.skip():
+                logger.debug(
+                    'FILTER: not building %s because '
+                    'it defines skip', pkg)
+                return []
+
+            # If on CI, handle noarch.
+            if os.environ.get('CI', None) == 'true':
+                if meta.get_value('build/noarch'):
+                    if platform != 'linux':
+                        logger.debug('FILTER: only building %s on '
+                                     'linux because it defines noarch.',
+                                     pkg)
+                        return []
+
+        # get all packages that would be built
+        pkgs = list(map(os.path.basename, built_package_paths(recipe)))
+        # check which ones exist already
+        existing = channel_packages & pkgs
+
+        for pkg in existing:
             logger.debug(
                 'FILTER: not building %s because '
-                'it is in channel(s) and it is not forced: %s', pkg,
-                in_channels)
-            return False
-
-        # with temp_env, MetaData will see everything in env added to
-        # os.environ.
-        with temp_env(env):
-
-            # with temp_os, we can fool the MetaData if needed.
-            platform = os.environ.get('OSTYPE', sys.platform)
-            if platform.startswith("darwin"):
-                platform = 'darwin'
-            elif platform == "linux-gnu":
-                platform = "linux"
-
-            with temp_os(platform):
-                meta = MetaData(recipe)
-                if meta.skip():
-                    logger.debug(
-                        'FILTER: not building %s because '
-                        'it defines skip for this env', pkg)
-                    return False
-
-                # If on CI, handle noarch.
-                if os.environ.get('CI', None) == 'true':
-                    if meta.get_value('build/noarch'):
-                        if platform != 'linux':
-                            logger.debug('FILTER: only building %s on '
-                                         'linux because it defines noarch.',
-                                         pkg)
-                            return False
-
-        assert not pkg.endswith("_.tar.bz2"), (
-            "rendered path {} does not "
-            "contain a build number and recipe does not "
-            "define skip for this environment. "
-            "This is a conda bug.".format(pkg))
-
-        logger.debug(
-            'FILTER: building %s because it is not in channels and '
-            'does not define skip', pkg)
-        return True
+                'it is in channel(s) and it is not forced.', pkg)
+        for pkg in pkgs:
+            assert not pkg.endswith("_.tar.bz2"), (
+                "rendered path {} does not "
+                "contain a build number and recipe does not "
+                "define skip for this environment. "
+                "This is a conda bug.".format(pkg))
+        # yield all pkgs that do not yet exist
+        return pkgs - existing
 
     logger.debug('recipes: %s', recipes)
     recipes = list(recipes)
@@ -821,13 +767,9 @@ def filter_recipes(recipes, env_matrix, channels=None, force=False):
         for i, recipe in enumerate(sorted(recipes)):
             perc = (i + 1) / nrecipes * 100
             print(template.format(i + 1, nrecipes, perc, recipe), end='')
-            targets = set()
-            for env in env_matrix:
-                pkg = built_package_path(recipe, env)
-                if tobuild(recipe, env):
-                    targets.update([Target(pkg, env)])
-            if targets:
-                yield recipe, targets
+            pkgs = tobuild(recipe)
+            if pkgs:
+                yield recipe, pkgs
             print(end='\r')
     except sp.CalledProcessError as e:
         logger.debug(e.stdout)
@@ -872,8 +814,7 @@ def validate_config(config):
 
 def load_config(path):
     """
-    Parses config file, building paths to relevant blacklists and loading any
-    specified env_matrix files.
+    Parses config file, building paths to relevant blacklists
 
     Parameters
     ----------
@@ -897,15 +838,11 @@ def load_config(path):
         return value
 
     default_config = {
-        'env_matrix': {'CONDA_PY': 35},
         'blacklists': [],
         'channels': [],
         'requirements': None,
         'upload_channel': 'bioconda'
     }
-    if 'env_matrix' in config:
-        if isinstance(config['env_matrix'], str):
-            config['env_matrix'] = relpath(config['env_matrix'])
     if 'blacklists' in config:
         config['blacklists'] = [relpath(p) for p in get_list('blacklists')]
     if 'channels' in config:

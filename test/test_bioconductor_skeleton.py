@@ -8,9 +8,8 @@ from bioconda_utils import utils
 
 import helpers
 
-env_matrix = helpers.tmp_env_matrix()
+
 config = {
-    'env_matrix': env_matrix,
     'channels': ['bioconda', 'conda-forge', 'defaults']
 }
 
@@ -62,9 +61,7 @@ def test_bioc_write_recipe_no_skipping(tmpdir):
 
 
 def test_meta_contents(tmpdir):
-    env_matrix = helpers.tmp_env_matrix()
     config = {
-        'env_matrix': env_matrix,
         'channels': ['bioconda', 'conda-forge', 'defaults']
     }
     bioconductor_skeleton.write_recipe(

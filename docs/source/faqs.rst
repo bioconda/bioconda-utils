@@ -71,38 +71,16 @@ a local test passes while the online test fails.
 Nevertheless, the local test should capture most problems, such that it is highly
 encouraged to first run a local test in order to save quota on Circle CI.
 
-How are environmental variables defined and used?
+How are dependencies pinned to particular versions?
 -------------------------------------------------
 
-In some cases a recipe may need to pin the version of a dependency.  Jinja2
-templating is used within recipes to use a uniform set of versions for core
-packages used by bioconda packages. For example, see this `meta.yaml
-<https://github.com/bioconda/bioconda-recipes/blob/f5eb63e30a76fd13c28663786d219c9f7750267c/recipes/gfold/meta.yaml>`_
-that uses a variable to hold the current GSL (GNU Scientific Library) version
-supported by bioconda.
-
-The currently defined dependencies are defined in `scripts/env_matrix.yml` and
-are sent to `conda-build` by setting them as environment variables. More
-specifically:
-
-- `config.yml` indicates an `env_matrix` file in which CONDA_GSL is defined
-    - `config.yaml` example
-  <https://github.com/bioconda/bioconda-recipes/blob/0be2881ef95be68feb09fae7814e0217aca57285/config.yml#L1>`_ pointing to file
-
-    - `env_matrix.yml` example
-      <https://github.com/bioconda/bioconda-recipes/blob/0be2881ef95be68feb09fae7814e0217aca57285/scripts/env_matrix.yml>` defining CONDA_GSL.
-
-- When figuring out which recipes need to be built, the filtering step attaches
-  each unique env to a Target object. For example, one env might be
-  `CONDA_GSL=1.6; CONDA_PY=27, CONDA_R=3.3.1;` while a different env would be
-  `CONDA_GSL=1.6; CONDA_PY=35, CONDA_R=3.3.1;`.
-
-- That env is provided to the build function which is either sent directly to
-  docker as environment variables, or used to temporarily update os.environ so
-  that conda-build sees it.
-
-- These environment variables are then seen by conda-build and used to fill in
-  the templated variables via jinja2.
+In some cases a recipe may need to pin the version of a dependency.
+A global set of default versions to pin against is shared with conda-forge and
+can be found `here <https://github.com/conda-forge/conda-forge-pinning-feedstock/blob/master/recipe/conda_build_config.yaml>`_.
+For new dependencies that are contained in conda-forge and not yet in this list,
+please update the list via a pull request.
+Local pinnings can be achieved by adding a file ``conda_build_config.yaml`` next
+to your ``meta.yaml``.
 
 To find out against which version you can pin a package, e.g. x.y.* or x.* please use [ABI-Laboratory](https://abi-laboratory.pro/tracker/).
 

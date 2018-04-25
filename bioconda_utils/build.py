@@ -11,7 +11,7 @@ from . import upload
 logger = logging.getLogger(__name__)
 
 
-BuildResult = namedtuple("BuildResult", ["success", "mulled_image"])
+BuildResult = namedtuple("BuildResult", ["success", "mulled_images"])
 
 
 def purge():
@@ -28,7 +28,7 @@ def purge():
 def build(
     recipe,
     recipe_folder,
-    env,
+    pkg_paths=None,
     testonly=False,
     mulled_test=True,
     force=False,
@@ -44,9 +44,8 @@ def build(
     recipe : str
         Path to recipe
 
-    env : dict
-        Environment (typically a single yielded dictionary from EnvMatrix
-        instance)
+    pkgs : list
+        List of packages to build
 
     testonly : bool
         If True, skip building and instead run the test described in the
@@ -78,20 +77,20 @@ def build(
     _docker = docker_builder is not None
 
     whitelisted_env = {}
-    whitelisted_env.update({k: str(v) for k, v in os.environ.items() if utils.allowed_env_var(k, _docker)})
-    whitelisted_env.update({k: str(v) for k, v in dict(env).items() if utils.allowed_env_var(k, _docker)})
+    whitelisted_env.update({k: str(v)
+                            for k, v in os.environ.items()
+                            if utils.allowed_env_var(k, _docker)})
 
-    logger.info(
-        "BUILD START %s, env: %s",
-        recipe, ';'.join(['='.join(map(str, i)) for i in sorted(whitelisted_env.items())])
-    )
+    logger.info("BUILD START %s", recipe)
 
     # --no-build-id is needed for some very long package names that triggers the 89 character limits
     # this option can be removed as soon as all packages are rebuild with the 255 character limit
     # Moreover, --no-build-id will block us from using parallel builds in conda-build 2.x
     # build_args = ["--no-build-id"]
 
-    build_args = []
+    # use global variant config file (contains pinnings)
+    build_args = ["-e", utils.load_conda_config().exclusive_config_file,
+                  "--skip-existing"]
     if testonly:
         build_args.append("--test")
     else:
@@ -107,8 +106,7 @@ def build(
 
     CONDA_BUILD_CMD = [utils.bin_for('conda'), 'build']
 
-    pkg_path = utils.built_package_path(recipe, whitelisted_env)
-    meta = utils.load_meta(recipe, whitelisted_env)
+    meta = utils.load_metadata(recipe)
 
     try:
         # Note we're not sending the contents of os.environ here. But we do
@@ -118,16 +116,17 @@ def build(
             response = docker_builder.build_recipe(
                 recipe_dir=os.path.abspath(recipe),
                 build_args=' '.join(channel_args + build_args),
-                pkg=os.path.basename(pkg_path),
+                pkgs=list(map(os.path.basename, pkg_paths)),
                 env=whitelisted_env,
-                noarch=bool(utils.get_meta_value(meta, 'build', 'noarch'))
+                noarch=bool(meta.get_value('build/noarch', default=False))
             )
 
-            if not os.path.exists(pkg_path):
-                logger.error(
-                    "BUILD FAILED: the built package %s "
-                    "cannot be found", pkg_path)
-                return BuildResult(False, None)
+            for pkg_path in pkg_paths:
+                if not os.path.exists(pkg_path):
+                    logger.error(
+                        "BUILD FAILED: the built package %s "
+                        "cannot be found", pkg_path)
+                    return BuildResult(False, None)
             build_success = True
         else:
 
@@ -144,14 +143,11 @@ def build(
 
             build_success = True
 
-        logger.info(
-            'BUILD SUCCESS %s, %s',
-            utils.built_package_path(recipe, whitelisted_env), utils.envstr(whitelisted_env)
-        )
+        logger.info('BUILD SUCCESS %s',
+                    ' '.join(os.path.basename(p) for p in pkg_paths))
 
     except (docker_utils.DockerCalledProcessError, sp.CalledProcessError) as e:
-            logger.error(
-                'BUILD FAILED %s, %s', recipe, utils.envstr(whitelisted_env))
+            logger.error('BUILD FAILED %s', recipe)
             if _raise_error:
                 raise e
             return BuildResult(False, None)
@@ -159,24 +155,24 @@ def build(
     if not mulled_test:
         return BuildResult(True, None)
 
-    logger.info(
-        'TEST START via mulled-build %s, %s',
-        recipe, utils.envstr(whitelisted_env))
+    logger.info('TEST START via mulled-build %s', recipe)
 
     use_base_image = utils.get_meta_value(
         meta,
         'extra', 'container', 'extended-base')
     base_image = 'bioconda/extended-base-image' if use_base_image else None
 
-    try:
-        res = pkg_test.test_package(pkg_path, base_image=base_image)
+    mulled_images = []
+    for pkg_path in pkg_paths:
+        try:
+            res = pkg_test.test_package(pkg_path, base_image=base_image)
 
-        logger.info("TEST SUCCESS %s, %s", recipe, utils.envstr(whitelisted_env))
-        mulled_image = pkg_test.get_image_name(pkg_path)
-        return BuildResult(True, mulled_image)
-    except sp.CalledProcessError as e:
-        logger.error('TEST FAILED: %s, %s', recipe, utils.envstr(whitelisted_env))
-        return BuildResult(False, None)
+            logger.info("TEST SUCCESS %s", recipe)
+            mulled_image = pkg_test.get_image_name(pkg_path)
+        except sp.CalledProcessError as e:
+            logger.error('TEST FAILED: %s', recipe)
+            return BuildResult(False, None)
+    return BuildResult(True, mulled_images)
 
 
 def build_recipes(
@@ -242,7 +238,6 @@ def build_recipes(
     """
     orig_config = config
     config = utils.load_config(config)
-    env_matrix = utils.EnvMatrix(config['env_matrix'])
     blacklist = utils.get_blacklist(config['blacklists'], recipe_folder)
 
     if check_channels is None:
@@ -272,9 +267,9 @@ def build_recipes(
     logger.info('Filtering recipes')
     recipe_targets = dict(
         utils.filter_recipes(
-            recipes, env_matrix, check_channels, force=force)
+            recipes, check_channels, force=force)
     )
-    recipes = set(list(recipe_targets.keys()))
+    recipes = set(recipe_targets.keys())
 
     dag, name2recipes = utils.get_dag(recipes, config=orig_config, blacklist=blacklist)
     recipe2name = {}
@@ -347,7 +342,7 @@ def build_recipes(
             skipped_recipes.append(recipe)
             continue
 
-        for target in recipe_targets[recipe]:
+        for pkg_paths in recipe_targets[recipe]:
 
             # If a recipe depends on conda, it means it must be installed in
             # the root env, which is not compatible with mulled-build tests. In
@@ -368,7 +363,7 @@ def build_recipes(
             res = build(
                 recipe=recipe,
                 recipe_folder=recipe_folder,
-                env=target.env,
+                pkg_paths=pkg_paths,
                 testonly=testonly,
                 mulled_test=mulled_test and keep_mulled_test,
                 force=force,
@@ -380,16 +375,17 @@ def build_recipes(
             recipe_success &= res.success
 
             if not res.success:
-                failed.append((recipe, target))
+                failed.append(recipe)
                 for n in nx.algorithms.descendants(subdag, name):
                     skip_dependent[n].append(recipe)
             elif not testonly:
-                # upload build
-                if anaconda_upload:
-                    if not upload.anaconda_upload(target.pkg, label):
-                        failed_uploads.append(target.pkg)
+                for pkg in pkg_paths:
+                    # upload build
+                    if anaconda_upload:
+                        if not upload.anaconda_upload(pkg, label):
+                            failed_uploads.append(pkg)
                 if mulled_upload_target and keep_mulled_test:
-                    upload.mulled_upload(res.mulled_image, mulled_upload_target)
+                    upload.mulled_upload(res.mulled_images, mulled_upload_target)
 
             # remove traces of the build
             purge()
@@ -398,12 +394,11 @@ def build_recipes(
             built_recipes.append(recipe)
 
     if failed or failed_uploads:
-        failed_recipes = set(i[0] for i in failed)
         logger.error(
             'BUILD SUMMARY: of %s recipes, '
             '%s failed and %s were skipped. '
             'Details of recipes and environments follow.',
-            len(recipes), len(failed_recipes), len(skipped_recipes))
+            len(recipes), len(failed), len(skipped_recipes))
 
         if len(built_recipes) > 0:
             logger.error(
@@ -411,10 +406,9 @@ def build_recipes(
                 'the following recipes were built successfully:\n%s',
                 '\n'.join(built_recipes))
 
-        for recipe, target in failed:
+        for recipe in failed:
             logger.error(
-                'BUILD SUMMARY: FAILED recipe %s, environment %s',
-                str(target), target.envstring())
+                'BUILD SUMMARY: FAILED recipe %s', recipe)
 
         for name, dep in skip_dependent.items():
             logger.error(
