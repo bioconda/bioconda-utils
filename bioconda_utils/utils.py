@@ -309,6 +309,9 @@ def get_deps(recipe=None, meta=None, build=True):
 
     Only names (not versions) of dependencies are yielded.
 
+    If the variant/version matrix yields multiple instances of the metadata,
+    the union of these dependencies is returned.
+
     Parameters
     ----------
     recipe : str or MetaData
@@ -328,7 +331,7 @@ def get_deps(recipe=None, meta=None, build=True):
 
     all_deps = set()
     for meta in metadata:
-        reqs = metadata.get('requirements', {})
+        reqs = meta.get('requirements', {})
         if build:
             deps = reqs.get('build', [])
         else:
@@ -719,9 +722,9 @@ def filter_recipes(recipes, channels=None, force=False):
                         return []
 
         # get all packages that would be built
-        pkgs = list(map(os.path.basename, built_package_paths(recipe)))
+        pkgs = set(map(os.path.basename, built_package_paths(recipe)))
         # check which ones exist already
-        existing = channel_packages.intersection(pkgs)
+        existing = channel_packages & pkgs
 
         for pkg in existing:
             logger.debug(

@@ -78,32 +78,6 @@ Perform various checks on recipes.
 """
 
 
-def get_meta(recipe, config):
-    """
-    Given a package name, find the current meta.yaml file, parse it, and return
-    the dict.
-
-    Parameters
-    ----------
-    recipe : str
-        Path to recipe (directory containing the meta.yaml file)
-
-    config : str or dict
-        Config YAML or dict
-    """
-    cfg = utils.load_config(config)
-
-    # TODO: Currently just uses the first env. Should turn this into
-    # a generator.
-
-    pth = os.path.join(recipe, 'meta.yaml')
-    jinja_env = jinja2.Environment()
-    content = jinja_env.from_string(
-        open(pth, 'r', encoding='utf-8').read()).render()
-    meta = yaml.round_trip_load(content, preserve_quotes=True)
-    return meta
-
-
 def channel_dataframe(cache=None, channels=['bioconda', 'conda-forge',
                                             'defaults']):
     """
@@ -149,7 +123,7 @@ def channel_dataframe(cache=None, channels=['bioconda', 'conda-forge',
     return df
 
 
-def lint(recipes, config, df, exclude=None, registry=None):
+def lint(recipes, df, exclude=None, registry=None):
     """
     Parameters
     ----------
@@ -219,7 +193,7 @@ def lint(recipes, config, df, exclude=None, registry=None):
         # functions? I can't think of a reason we'd want to keep an unparseable
         # YAML.
         try:
-            meta = get_meta(recipe, config)
+            meta = utils.load_metadata(recipe)
         except (
             yaml.scanner.ScannerError, yaml.constructor.ConstructorError
         ) as e:
