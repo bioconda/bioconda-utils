@@ -93,7 +93,7 @@ conda config --add channels file://{self.container_staging}  > /dev/null 2>&1
 # The actual building...
 # we explicitly point to the meta.yaml, in order to keep
 # conda-build from building all subdirectories
-conda build {self.conda_build_args} {self.container_recipe}/meta.yaml 2>&1
+conda build -e {self.container_staging}/conda_build_config.yaml {self.conda_build_args} {self.container_recipe}/meta.yaml 2>&1
 
 cp `conda build {self.container_recipe}/meta.yaml --output` {self.container_staging}/{arch}
 # Ensure permissions are correct on the host.
@@ -198,7 +198,7 @@ class RecipeBuilder(object):
 
         container_staging : str
             Directory to which the host's conda-bld dir will be mounted so that
-            the container can use previously-built packages as depdendencies.
+            the container can use previously-built packages as dependencies.
             Upon successful building container-built packages will be copied
             over. Mounted as read-write.
 
@@ -309,6 +309,13 @@ class RecipeBuilder(object):
 
         self.container_recipe = container_recipe
         self.container_staging = container_staging
+
+        # Copy the conda build config to the staging directory that is
+        # visible in the container
+        shutil.copyfile(utils.load_conda_config().exclusive_config_file,
+                        os.path.join(self.container_staging,
+                                     "conda_build_config.yaml"))
+
         self.host_conda_bld = get_host_conda_bld()
 
         if use_host_conda_bld:

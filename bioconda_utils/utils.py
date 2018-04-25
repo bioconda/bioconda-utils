@@ -152,7 +152,7 @@ def load_all_meta(recipe):
     """
     For each environment, yield the rendered meta.yaml.
     """
-    return api.render(recipe)
+    return [meta for (meta, _, _) in api.render(recipe, config=load_conda_config())]
 
 
 def load_conda_config():
@@ -168,6 +168,9 @@ def load_conda_config():
     # set path to pinnings from conda forge package
     config.exclusive_config_file = os.path.join(env_root,
                                                 "conda_build_config.yaml")
+    assert os.path.exists(config.exclusive_config_file), ("error: "
+                          "conda_build_config.yaml not found in
+                          "environment root")
     return config
 
 
@@ -372,7 +375,7 @@ def get_dag(recipes, config, blacklist=None, restrict=True):
     recipes = list(recipes)
     metadata = []
     for recipe in sorted(recipes):
-        for r in list(load_all_meta(recipe)):
+        for r in load_all_meta(recipe):
             metadata.append((r, recipe))
     if blacklist is None:
         blacklist = set()
@@ -697,6 +700,7 @@ def filter_recipes(recipes, channels=None, force=False):
         channel_packages.update(get_channel_packages(channel=channel))
 
     def tobuild(recipe):
+        # check if package is noarch, if so, build only on linux
         # with temp_os, we can fool the MetaData if needed.
         platform = os.environ.get('OSTYPE', sys.platform)
         if platform.startswith("darwin"):
@@ -706,12 +710,6 @@ def filter_recipes(recipes, channels=None, force=False):
 
         with temp_os(platform):
             meta = load_metadata(recipe)
-            if meta.skip():
-                logger.debug(
-                    'FILTER: not building %s because '
-                    'it defines skip', recipe)
-                return []
-
             # If on CI, handle noarch.
             if os.environ.get('CI', None) == 'true':
                 if meta.get_value('build/noarch'):

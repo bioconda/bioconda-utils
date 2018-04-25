@@ -89,8 +89,7 @@ def build(
     # build_args = ["--no-build-id"]
 
     # use global variant config file (contains pinnings)
-    build_args = ["-e", utils.load_conda_config().exclusive_config_file,
-                  "--skip-existing"]
+    build_args = ["--skip-existing"]
     if testonly:
         build_args.append("--test")
     else:
@@ -135,6 +134,7 @@ def build(
             # conda-build from building all subdirectories
             with utils.sandboxed_env(whitelisted_env):
                 cmd = CONDA_BUILD_CMD + build_args + channel_args + \
+                      ["-e", utils.load_conda_config().exclusive_config_file] + \
                       [os.path.join(recipe, 'meta.yaml')]
                 logger.debug('command: %s', cmd)
                 with utils.Progress():

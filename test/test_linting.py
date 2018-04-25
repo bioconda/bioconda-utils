@@ -45,7 +45,7 @@ def run_lint(
         assert len(r.recipe_dirs) == 1
         name = list(r.recipe_dirs.keys())[0]
         recipe, meta, df = r.recipe_dirs[name], r.recipes[name]['meta.yaml'], should_pass_df
-        meta = yaml.load(meta)
+        meta = utils.load_metadata(r.recipe_dirs[name])
         if expect_pass:
             assert func(recipe, meta, df) is None, "lint did not pass"
         else:
@@ -72,7 +72,7 @@ def test_empty_build_section():
     # access to contents of possibly empty build section can happen in
     # `should_be_noarch` and `should_not_be_noarch`
     registry = [lint_functions.should_be_noarch, lint_functions.should_not_be_noarch]
-    res = linting.lint(r.recipe_dirs.values(), config={}, df=None, registry=registry)
+    res = linting.lint(r.recipe_dirs.values(), df=None, registry=registry)
     assert res is None
 
 
@@ -88,7 +88,7 @@ def test_lint_skip_in_recipe():
               version: "0.1"
         ''', from_string=True)
     r.write_recipes()
-    res = linting.lint(r.recipe_dirs.values(), config={}, df=None, registry=[lint_functions.missing_home])
+    res = linting.lint(r.recipe_dirs.values(), df=None, registry=[lint_functions.missing_home])
     assert res is not None
 
 
@@ -105,7 +105,7 @@ def test_lint_skip_in_recipe():
                 - missing_home
         ''', from_string=True)
     r.write_recipes()
-    res = linting.lint(r.recipe_dirs.values(), config={}, df=None, registry=[lint_functions.missing_home])
+    res = linting.lint(r.recipe_dirs.values(), df=None, registry=[lint_functions.missing_home])
     assert res is None
 
     # should pass; minimal recipe needs to skip these lints
@@ -123,7 +123,7 @@ def test_lint_skip_in_recipe():
                 - no_tests
         ''', from_string=True)
     r.write_recipes()
-    res = linting.lint(r.recipe_dirs.values(), config={}, df=None)
+    res = linting.lint(r.recipe_dirs.values(), df=None)
     assert res is not None
 
 

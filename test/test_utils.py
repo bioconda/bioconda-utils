@@ -147,7 +147,7 @@ def single_upload():
               version: "0.1"
         '''.format(name), from_string=True)
     r.write_recipes()
-    r.pkgs[name] = utils.built_package_paths(r.recipes[name])
+    r.pkgs[name] = utils.built_package_paths(r.recipe_dirs[name])
 
     build.build(
         recipe=r.recipe_dirs[name],
@@ -209,7 +209,7 @@ def test_docker_builder_build(recipes_fixture):
     Tests just the build_recipe method of a RecipeBuilder object.
     """
     docker_builder = docker_utils.RecipeBuilder(use_host_conda_bld=True)
-    pkgs = list(map(os.path.basename, recipes_fixture.pkgs['one']))
+    pkgs = recipes_fixture.pkgs['one']
     docker_builder.build_recipe(
         recipes_fixture.recipe_dirs['one'], build_args='', env={})
     for pkg in pkgs:
