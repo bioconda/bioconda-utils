@@ -105,21 +105,6 @@ def bin_for(name='conda'):
     return name
 
 
-def get_meta_value(meta, *keys, default=None):
-    """
-    Return value from metadata.
-    Given keys can define a path in the document tree.
-    """
-    try:
-        for key in keys:
-            if not meta:
-                raise KeyError(key)
-            meta = meta[key]
-        return meta
-    except KeyError:
-        return default
-
-
 @contextlib.contextmanager
 def temp_env(env):
     """
@@ -163,7 +148,7 @@ def sandboxed_env(env):
         os.environ.update(orig)
 
 
-def load_all_meta(recipe, config):
+def load_all_meta(recipe):
     """
     For each environment, yield the rendered meta.yaml.
     """
@@ -318,7 +303,7 @@ class EnvMatrix:
             yield env
 
 
-def get_deps(recipe, config, build=True):
+def get_deps(recipe=None, meta=None, build=True):
     """
     Generator of dependencies for a single recipe
 
@@ -333,24 +318,23 @@ def get_deps(recipe, config, build=True):
     build : bool
         If True yield build dependencies, if False yield run dependencies.
     """
-    if isinstance(recipe, str):
-        metadata = load_all_meta(recipe, config)
-
-        # TODO: This function is currently used only for creating DAGs, but it's
-        # unclear how to manage different dependencies depending on the
-        # particular environment. For now, just use the first environment.
-        metadata = list(metadata)
-        metadata = metadata[0]
+    if recipe is not None:
+        assert isinstance(recipe, str)
+        metadata = load_all_meta(recipe)
+    elif meta is not None:
+        metadata = [meta]
     else:
-        metadata = recipe
+        raise ValueError("Either meta or recipe has to be specified.")
 
-    reqs = metadata.get('requirements', {})
-    if build:
-        deps = reqs.get('build', [])
-    else:
-        deps = reqs.get('run', [])
-    for dep in deps:
-        yield dep.split()[0]
+    all_deps = set()
+    for meta in metadata:
+        reqs = metadata.get('requirements', {})
+        if build:
+            deps = reqs.get('build', [])
+        else:
+            deps = reqs.get('run', [])
+        all_deps.update(dep.split()[0] for dep in deps)
+    return all_deps
 
 
 def get_dag(recipes, config, blacklist=None, restrict=True):
@@ -385,7 +369,7 @@ def get_dag(recipes, config, blacklist=None, restrict=True):
     recipes = list(recipes)
     metadata = []
     for recipe in sorted(recipes):
-        for r in list(load_all_meta(recipe, config)):
+        for r in list(load_all_meta(recipe)):
             metadata.append((r, recipe))
     if blacklist is None:
         blacklist = set()
@@ -399,24 +383,23 @@ def get_dag(recipes, config, blacklist=None, restrict=True):
     # Note that this may change once we support conda-build 3.
     name2recipe = defaultdict(set)
     for meta, recipe in metadata:
-        name = meta['package']['name']
+        name = meta.get_value('package/name')
         if name not in blacklist:
             name2recipe[name].update([recipe])
 
     def get_inner_deps(dependencies):
         for dep in dependencies:
-            name = dep.split()[0]
             if name in name2recipe or not restrict:
                 yield name
 
     dag = nx.DiGraph()
     dag.add_nodes_from(meta['package']['name'] for meta, recipe in metadata)
     for meta, recipe in metadata:
-        name = meta['package']['name']
+        name = meta.get_value('package/name')
         dag.add_edges_from((dep, name)
                            for dep in set(get_inner_deps(chain(
-                               get_deps(meta, config=config),
-                               get_deps(meta, config=config,
+                               get_deps(meta=meta),
+                               get_deps(meta=meta,
                                         build=False)))))
 
     return dag, name2recipe
@@ -480,7 +463,7 @@ def get_latest_recipes(recipe_folder, config, package="*"):
         else:
             def get_version(p):
                 return VersionOrder(
-                    load_meta(os.path.join(p, 'meta.yaml'))['package']['version']
+                    load_metadata(os.path.join(p, 'meta.yaml')).get_value('package/version')
                 )
             sorted_versions = sorted(group, key=get_version)
             if sorted_versions:
@@ -723,7 +706,7 @@ def filter_recipes(recipes, channels=None, force=False):
             if meta.skip():
                 logger.debug(
                     'FILTER: not building %s because '
-                    'it defines skip', pkg)
+                    'it defines skip', recipe)
                 return []
 
             # If on CI, handle noarch.
@@ -732,13 +715,13 @@ def filter_recipes(recipes, channels=None, force=False):
                     if platform != 'linux':
                         logger.debug('FILTER: only building %s on '
                                      'linux because it defines noarch.',
-                                     pkg)
+                                     recipe)
                         return []
 
         # get all packages that would be built
         pkgs = list(map(os.path.basename, built_package_paths(recipe)))
         # check which ones exist already
-        existing = channel_packages & pkgs
+        existing = channel_packages.intersection(pkgs)
 
         for pkg in existing:
             logger.debug(

@@ -116,7 +116,6 @@ def build(
             response = docker_builder.build_recipe(
                 recipe_dir=os.path.abspath(recipe),
                 build_args=' '.join(channel_args + build_args),
-                pkgs=list(map(os.path.basename, pkg_paths)),
                 env=whitelisted_env,
                 noarch=bool(meta.get_value('build/noarch', default=False))
             )
@@ -157,9 +156,7 @@ def build(
 
     logger.info('TEST START via mulled-build %s', recipe)
 
-    use_base_image = utils.get_meta_value(
-        meta,
-        'extra', 'container', 'extended-base')
+    use_base_image = meta.get_value('extra/container/extended-base')
     base_image = 'bioconda/extended-base-image' if use_base_image else None
 
     mulled_images = []

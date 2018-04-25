@@ -147,6 +147,7 @@ def single_upload():
               version: "0.1"
         '''.format(name), from_string=True)
     r.write_recipes()
+    r.pkgs[name] = utils.build_package_paths(r.recipes[name])
 
     build.build(
         recipe=r.recipe_dirs[name],
@@ -186,17 +187,20 @@ def test_upload(single_upload):
 
 
 def test_single_build_only(single_build):
-    assert os.path.exists(single_build)
+    for pkg in single_build:
+        assert os.path.exists(pkg)
 
 
 @pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
 def test_single_build_with_post_test(single_build):
-    pkg_test.test_package(single_build)
+    for pkg in single_build:
+        pkg_test.test_package(pkg)
 
 
 def test_multi_build(multi_build):
     for v in multi_build.values():
-        assert os.path.exists(v)
+        for pkg in v:
+            assert os.path.exists(pkg)
 
 
 @pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
@@ -282,9 +286,9 @@ def test_get_deps():
                 - two
     """, from_string=True)
     r.write_recipes()
-    assert list(utils.get_deps(r.recipe_dirs['two'], config={})) == ['one']
-    assert list(utils.get_deps(r.recipe_dirs['three'], config={}, build=True)) == ['one']
-    assert list(utils.get_deps(r.recipe_dirs['three'], config={}, build=False)) == ['two']
+    assert list(utils.get_deps(r.recipe_dirs['two'])) == ['one']
+    assert list(utils.get_deps(r.recipe_dirs['three'], build=True)) == ['one']
+    assert list(utils.get_deps(r.recipe_dirs['three'], build=False)) == ['two']
 
 
 def test_conda_as_dep():
@@ -402,8 +406,6 @@ def test_filter_recipes_existing_package():
         """, from_string=True)
     r.write_recipes()
     recipes = list(r.recipe_dirs.values())
-    pkgs = utils.get_channel_packages('bioconda')
-    pth = utils.built_package_path(recipes[0])
     filtered = list(
         utils.filter_recipes(recipes, channels=['bioconda']))
     assert len(filtered) == 0
@@ -427,8 +429,6 @@ def test_filter_recipes_force_existing_package():
         """, from_string=True)
     r.write_recipes()
     recipes = list(r.recipe_dirs.values())
-    pkgs = utils.get_channel_packages('bioconda')
-    pth = utils.built_package_path(recipes[0])
     filtered = list(
         utils.filter_recipes(
             recipes, channels=['bioconda'], force=True))
@@ -441,7 +441,7 @@ def test_get_channel_packages():
     utils.get_channel_packages('bioconda')
 
 
-def test_built_package_path():
+def test_built_package_paths():
     r = Recipes(
         """
         one:
@@ -489,7 +489,7 @@ def test_rendering_sandboxing():
     """, from_string=True)
 
     r.write_recipes()
-    pkg_paths = utils.built_package_path(r.recipe_dirs['one'])
+    pkg_paths = utils.built_package_paths(r.recipe_dirs['one'])
     env = {
         # First one is allowed, others are not
         'CONDA_ARBITRARY_VAR': 'conda-val-here',
@@ -541,7 +541,7 @@ def test_rendering_sandboxing():
 
     """, from_string=True)
     r.write_recipes()
-    pkg_paths = utils.built_package_path(r.recipe_dirs['two'])
+    pkg_paths = utils.built_package_paths(r.recipe_dirs['two'])
     for pkg in pkg_paths:
         ensure_missing(pkg)
 
@@ -645,7 +645,7 @@ def test_skip_dependencies():
 
     for pkgs in pkgs.values():
         for pkg in pkgs:
-            ensure_missing(p)
+            ensure_missing(pkg)
 
     build.build_recipes(
         r.basedir,

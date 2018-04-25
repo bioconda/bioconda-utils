@@ -81,7 +81,7 @@ def test_pkg_test_mulled_build_error():
     built_packages = _build_pkg(RECIPE_ONE)
     with pytest.raises(sp.CalledProcessError):
         for pkg in built_packages:
-            pkg_test.test_packages(pkg, mulled_args='--wrong-arg')
+            pkg_test.test_package(pkg, mulled_args='--wrong-arg')
 
 
 @pytest.mark.skipif(SKIP_OSX, reason='skipping on osx')

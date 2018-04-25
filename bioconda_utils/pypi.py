@@ -16,7 +16,7 @@ def compare_recipe_to_pypi(recipe):
     "python-wget") then a tuple is returned but with a value of None for the
     latest version on PyPI and None for needs_update.
     """
-    meta = utils.load_meta(os.path.join(recipe, 'meta.yaml'))
+    meta = utils.load_meta(os.path.join(recipe, 'meta.yaml')).meta
     current = meta['package']['version']
     name = meta['package']['name']
 

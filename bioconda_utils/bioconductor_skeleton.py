@@ -894,8 +894,8 @@ def write_recipe(package, recipe_dir, config, force=False, bioc_version=None,
     # *has* changed, then bump the version number.
     meta_file = os.path.join(recipe_dir, 'meta.yaml')
     if os.path.exists(meta_file):
-        updated_meta = utils.load_meta(proj.meta_yaml)
-        current_meta = utils.load_meta(meta_file)
+        updated_meta = utils.load_metadata(proj.meta_yaml).meta
+        current_meta = utils.load_metadata(meta_file).meta
 
         # pop off the version and build numbers so we can compare the rest of
         # the dicts
