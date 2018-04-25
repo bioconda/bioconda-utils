@@ -664,7 +664,7 @@ def test_skip_dependencies():
 
     # clean up
     for pkgs in pkgs.values():
-        for pkg im pkgs:
+        for pkg in pkgs:
             ensure_missing(pkg)
 
 
