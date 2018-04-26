@@ -58,9 +58,6 @@ TODO:
   - if version changed, ensure build number is 0
   - if version unchanged, ensure build number incremented
 
-- currently we only check a single environment (see the `get_meta` function).
-  This should probably be converted to a generator function.
-
 - currently we don't pay attention to py27/py3. It would be nice to handle
   that.
 
@@ -192,8 +189,12 @@ def lint(recipes, df, exclude=None, registry=None):
         # TODO: do we need a way to skip this the same way we can skip lint
         # functions? I can't think of a reason we'd want to keep an unparseable
         # YAML.
+        metas = []
         try:
-            meta = utils.load_metadata(recipe)
+            for platform in ["linux", "osx"]:
+                config = utils.load_conda_config(platform=platform,
+                                                 trim_skip=False)
+                metas.extend(utils.load_all_meta(recipe, config=config))
         except (
             yaml.scanner.ScannerError, yaml.constructor.ConstructorError
         ) as e:
@@ -226,7 +227,7 @@ def lint(recipes, df, exclude=None, registry=None):
                         '%s defines skip lint test %s for recipe %s'
                         % (source, func.__name__, recipe))
                 continue
-            result = func(recipe, meta, df)
+            result = func(recipe, metas, df)
             if result:
                 hits.append(
                     {'recipe': recipe,

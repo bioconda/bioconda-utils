@@ -46,11 +46,16 @@ def run_lint(
         assert len(r.recipe_dirs) == 1
         name = list(r.recipe_dirs.keys())[0]
         recipe, meta, df = r.recipe_dirs[name], r.recipes[name]['meta.yaml'], should_pass_df
-        meta = utils.load_metadata(r.recipe_dirs[name])
+        metas = []
+        for platform in ["linux", "osx"]:
+            config = utils.load_conda_config(platform=platform,
+                                             trim_skip=False)
+            metas.extend(utils.load_all_meta(r.recipe_dirs[name],
+                                             config=config))
         if expect_pass:
-            assert func(recipe, meta, df) is None, "lint did not pass"
+            assert func(recipe, metas, df) is None, "lint did not pass"
         else:
-            assert func(recipe, meta, df) is not None, "lint did not fail"
+            assert func(recipe, metas, df) is not None, "lint did not fail"
 
     for contents in should_pass:
         _run(contents, expect_pass=True)
@@ -283,7 +288,7 @@ def test_missing_hash():
         missing_hash:
           meta.yaml: |
             package:
-              name: missing_hash
+              name: md5hash
               version: "0.1"
             source:
               md5: 11111111111111111111111111111111
@@ -292,8 +297,9 @@ def test_missing_hash():
         '''
         missing_hash:
           meta.yaml: |
-            name: missing_hash
-            version: "0.1"
+            package:
+              name: metapackage
+              version: "0.1"
         ''',
         ],
         should_fail=[
@@ -310,9 +316,10 @@ def test_missing_hash():
         missing_hash:
           meta.yaml: |
             package:
-              name: missing_hash
+              name: empty_hash
               version: "0.1"
             source:
+              fn: "a.txt"
               sha256: ""
         ''',
         ])
@@ -570,31 +577,31 @@ def test_should_not_be_noarch():
         func=lint_functions.should_not_be_noarch,
         should_pass=[
         '''
-        should_not_be_noarch:
+        should_be_noarch1:
           meta.yaml: |
             package:
-              name: should_not_be_noarch
+              name: should_be_noarch1
               version: "0.1"
             build:
               noarch: python
         ''',
         '''
-        should_not_be_noarch:
+        should_be_noarch2:
           meta.yaml: |
             package:
-              name: should_not_be_noarch
+              name: should_be_noarch2
               version: "0.1"
             build:
               noarch: python
-              skip: False
+              skip: false
         ''',
         ],
         should_fail=[
         '''
-        should_not_be_noarch:
+        should_not_be_noarch1:
           meta.yaml: |
             package:
-              name: should_not_be_noarch
+              name: should_not_be_noarch1
               version: "0.1"
             build:
               noarch: python
@@ -603,20 +610,20 @@ def test_should_not_be_noarch():
                 - gcc
         ''',
         '''
-        should_not_be_noarch:
+        should_not_be_noarch2:
           meta.yaml: |
             package:
-              name: should_not_be_noarch
+              name: should_not_be_noarch2
               version: "0.1"
             build:
               noarch: python
               skip: True  # [osx]
         ''',
         '''
-        should_not_be_noarch:
+        should_not_be_noarch3:
           meta.yaml: |
             package:
-              name: should_not_be_noarch
+              name: should_not_be_noarch3
               version: "0.1"
             build:
               noarch: python

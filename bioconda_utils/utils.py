@@ -148,14 +148,17 @@ def sandboxed_env(env):
         os.environ.update(orig)
 
 
-def load_all_meta(recipe):
+def load_all_meta(recipe, config=None):
     """
     For each environment, yield the rendered meta.yaml.
     """
-    return [meta for (meta, _, _) in api.render(recipe, config=load_conda_config())]
+    if config is None:
+        config = load_conda_config(platform=platform)
+    return [meta for (meta, _, _) in api.render(recipe,
+                                                config=config)]
 
 
-def load_conda_config():
+def load_conda_config(platform=None, trim_skip=True):
     """
     Load conda config while considering global pinnings from conda-forge.
     """
@@ -171,14 +174,18 @@ def load_conda_config():
     assert os.path.exists(config.exclusive_config_file), ("error: "
                           "conda_build_config.yaml not found in "
                           "environment root")
+    if platform:
+        config.platform = platform
+    config.trim_skip = trim_skip
     return config
 
 
-def load_metadata(recipe):
+def load_metadata(recipe, config=None):
     """
     Load metadata for a specific environment.
     """
-    config = load_conda_config()
+    if config is None:
+        config = load_conda_config()
     meta = MetaData(recipe, config=config)
     meta.parse_again()
     return meta
@@ -705,20 +712,21 @@ def filter_recipes(recipes, channels=None, force=False):
         # with temp_os, we can fool the MetaData if needed.
         platform = os.environ.get('OSTYPE', sys.platform)
         if platform.startswith("darwin"):
-            platform = 'darwin'
+            platform = 'osx'
         elif platform == "linux-gnu":
             platform = "linux"
 
-        with temp_os(platform):
-            meta = load_metadata(recipe)
-            # If on CI, handle noarch.
-            if os.environ.get('CI', None) == 'true':
-                if meta.get_value('build/noarch'):
-                    if platform != 'linux':
-                        logger.debug('FILTER: only building %s on '
-                                     'linux because it defines noarch.',
-                                     recipe)
-                        return []
+
+        meta = load_metadata(recipe,
+                             config=load_conda_config(platform=platform))
+        # If on CI, handle noarch.
+        if os.environ.get('CI', None) == 'true':
+            if meta.get_value('build/noarch'):
+                if platform != 'linux':
+                    logger.debug('FILTER: only building %s on '
+                                 'linux because it defines noarch.',
+                                 recipe)
+                    return []
 
         # get all packages that would be built
         pkgs = set(map(os.path.basename, built_package_paths(recipe)))

@@ -310,12 +310,6 @@ class RecipeBuilder(object):
         self.container_recipe = container_recipe
         self.container_staging = container_staging
 
-        # Copy the conda build config to the staging directory that is
-        # visible in the container
-        shutil.copyfile(utils.load_conda_config().exclusive_config_file,
-                        os.path.join(self.container_staging,
-                                     "conda_build_config.yaml"))
-
         self.host_conda_bld = get_host_conda_bld()
 
         if use_host_conda_bld:
@@ -327,6 +321,12 @@ class RecipeBuilder(object):
                 if not os.path.exists(pkg_dir):
                     os.makedirs(pkg_dir)
                 self.pkg_dir = pkg_dir
+
+        # Copy the conda build config to the staging directory that is
+        # visible in the container
+        shutil.copyfile(utils.load_conda_config().exclusive_config_file,
+                        os.path.join(self.pkg_dir,
+                                     "conda_build_config.yaml"))
 
         self._build_image(image_build_dir)
 

@@ -147,6 +147,7 @@ def single_upload():
               version: "0.1"
         '''.format(name), from_string=True)
     r.write_recipes()
+    r.pkgs = {}
     r.pkgs[name] = utils.built_package_paths(r.recipe_dirs[name])
 
     build.build(
@@ -706,12 +707,12 @@ def test_build_empty_extra_container():
                 # empty
         """, from_string=True)
     r.write_recipes()
-    pkg_paths = utils.built_package_paths(r.recipe_dirs['one'])
+    pkgs = utils.built_package_paths(r.recipe_dirs['one'])
 
     build_result = build.build(
         recipe=r.recipe_dirs['one'],
         recipe_folder='.',
-        pkg_paths=pkg_paths,
+        pkg_paths=pkgs,
         mulled_test=True,
     )
     assert build_result.success

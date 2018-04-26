@@ -18,8 +18,8 @@ def _subset_df(recipe, meta, df):
             np.nan, index=[],
             columns=['channel', 'name', 'version', 'build_number'])
 
-    name = meta['package']['name']
-    version = meta['package']['version']
+    name = meta.get_value('package/name')
+    version = meta.get_value('package/version')
 
     return df[
         (df.name == name) &
@@ -71,123 +71,134 @@ def _has_preprocessing_selector(recipe):
             return True
 
 
-def in_other_channels(recipe, meta, df):
+def in_other_channels(recipe, metas, df):
     """
     Does the package exist in any other non-bioconda channels?
     """
-    results = _subset_df(recipe, meta, df)
-    channels = set(results.channel).difference(['bioconda'])
-    if len(channels):
-        return {
-            'exists_in_channels': channels,
-            'fix': 'consider deprecating',
-        }
-
-
-def already_in_bioconda(recipe, meta, df):
-    """
-    Does the package exist in bioconda?
-    """
-    results = _subset_df(recipe, meta, df)
-    build_section = meta.get_section('build')
-    build_number = int(build_section.get('number', 0))
-    build_results = results[results.build_number == build_number]
-    channels = set(build_results.channel)
-    if 'bioconda' in channels:
-        return {
-            'already_in_bioconda': True,
-            'fix': 'bump version or build number'
-        }
-
-
-def missing_home(recipe, meta, df):
-    if not meta.get_value('about/home'):
-        return {
-            'missing_home': True,
-            'fix': 'add about:home',
-        }
-
-
-def missing_summary(recipe, meta, df):
-    if not  meta.get_value('about/summary'):
-        return {
-            'missing_summary': True,
-            'fix': 'add about:summary',
-        }
-
-
-def missing_license(recipe, meta, df):
-    if not  meta.get_value('about/license'):
-        return {
-            'missing_license': True,
-            'fix': 'add about:license'
-        }
-
-
-def missing_tests(recipe, meta, df):
-    test_files = ['run_test.py', 'run_test.sh', 'run_test.pl']
-    if not meta.get_section('test'):
-        if not any([os.path.exists(os.path.join(recipe, f)) for f in
-                    test_files]):
+    for meta in metas:
+        results = _subset_df(recipe, meta, df)
+        channels = set(results.channel).difference(['bioconda'])
+        if len(channels):
             return {
-                'no_tests': True,
-                'fix': 'add basic tests',
+                'exists_in_channels': channels,
+                'fix': 'consider deprecating',
             }
 
 
-def missing_hash(recipe, meta, df):
-    # could be a meta-package if no source section or if None
-    src = meta.get_section('source')
-    if not src:
-        return
-
-    if not any(meta.get_value('{}/{}'.format(src, checksum))
-               for checksum in ('md5', 'sha1', 'sha256')):
-        return {
-            'missing_hash': True,
-            'fix': 'add md5, sha1, or sha256 hash to "source" section',
-        }
-
-
-def uses_git_url(recipe, meta, df):
-    src = meta.get_section('source')
-    if not src:
-        # metapackage?
-        return
-
-    if 'git_url' in src:
-        return {
-            'uses_git_url': True,
-            'fix': 'use tarballs whenever possible',
-        }
+def already_in_bioconda(recipe, metas, df):
+    """
+    Does the package exist in bioconda?
+    """
+    for meta in metas:
+        results = _subset_df(recipe, meta, df)
+        build_section = meta.get_section('build')
+        build_number = int(build_section.get('number', 0))
+        build_results = results[results.build_number == build_number]
+        channels = set(build_results.channel)
+        if 'bioconda' in channels:
+            return {
+                'already_in_bioconda': True,
+                'fix': 'bump version or build number'
+            }
 
 
-def uses_perl_threaded(recipe, meta, df):
-    if 'perl-threaded' in _get_deps(meta):
-        return {
-            'depends_on_perl_threaded': True,
-            'fix': 'use "perl" instead of "perl-threaded"',
-        }
+def missing_home(recipe, metas, df):
+    for meta in metas:
+        if not meta.get_value('about/home'):
+            return {
+                'missing_home': True,
+                'fix': 'add about:home',
+            }
 
 
-def uses_javajdk(recipe, meta, df):
-    if 'java-jdk' in _get_deps(meta):
-        return {
-            'depends_on_java-jdk': True,
-            'fix': 'use "openjdk" instead of "java-jdk"',
-        }
+def missing_summary(recipe, metas, df):
+    for meta in metas:
+        if not  meta.get_value('about/summary'):
+            return {
+                'missing_summary': True,
+                'fix': 'add about:summary',
+            }
 
 
-def uses_setuptools(recipe, meta, df):
-    if 'setuptools' in _get_deps(meta, 'run'):
-        return {
-            'depends_on_setuptools': True,
-            'fix': ('setuptools might not be a run requirement (unless it uses '
-                    'pkg_resources or setuptools console scripts)'),
-        }
+def missing_license(recipe, metas, df):
+    for meta in metas:
+        if not  meta.get_value('about/license'):
+            return {
+                'missing_license': True,
+                'fix': 'add about:license'
+            }
 
 
-def has_windows_bat_file(recipe, meta, df):
+def missing_tests(recipe, metas, df):
+    for meta in metas:
+        test_files = ['run_test.py', 'run_test.sh', 'run_test.pl']
+        if not meta.get_section('test'):
+            if not any([os.path.exists(os.path.join(recipe, f)) for f in
+                        test_files]):
+                return {
+                    'no_tests': True,
+                    'fix': 'add basic tests',
+                }
+
+
+def missing_hash(recipe, metas, df):
+    for meta in metas:
+        # could be a meta-package if no source section or if None
+        src = meta.get_section('source')
+        if not src:
+            continue
+
+        if not any(src.get(checksum)
+                   for checksum in ('md5', 'sha1', 'sha256')):
+            return {
+                'missing_hash': True,
+                'fix': 'add md5, sha1, or sha256 hash to "source" section',
+            }
+
+
+def uses_git_url(recipe, metas, df):
+    for meta in metas:
+        src = meta.get_section('source')
+        if not src:
+            # metapackage?
+            continue
+
+        if 'git_url' in src:
+            return {
+                'uses_git_url': True,
+                'fix': 'use tarballs whenever possible',
+            }
+
+
+def uses_perl_threaded(recipe, metas, df):
+    for meta in metas:
+        if 'perl-threaded' in _get_deps(meta):
+            return {
+                'depends_on_perl_threaded': True,
+                'fix': 'use "perl" instead of "perl-threaded"',
+            }
+
+
+def uses_javajdk(recipe, metas, df):
+    for meta in metas:
+        if 'java-jdk' in _get_deps(meta):
+            return {
+                'depends_on_java-jdk': True,
+                'fix': 'use "openjdk" instead of "java-jdk"',
+            }
+
+
+def uses_setuptools(recipe, metas, df):
+    for meta in metas:
+        if 'setuptools' in _get_deps(meta, 'run'):
+            return {
+                'depends_on_setuptools': True,
+                'fix': ('setuptools might not be a run requirement (unless it uses '
+                        'pkg_resources or setuptools console scripts)'),
+            }
+
+
+def has_windows_bat_file(recipe, metas, df):
     if len(glob.glob(os.path.join(recipe, '*.bat'))) > 0:
         return {
             'bat_file': True,
@@ -195,146 +206,102 @@ def has_windows_bat_file(recipe, meta, df):
         }
 
 
-def should_be_noarch(recipe, meta, df):
-    deps = _get_deps(meta)
-    if (
-        ('gcc' not in deps) and
-        ('python' in deps) and
-        # This will also exclude recipes with skip sections
-        # which is a good thing, because noarch also implies independence of
-        # the python version.
-        not _has_preprocessing_selector(recipe)
-    ) and (
-        'noarch' not in meta.get_section('build')
-    ):
-        return {
-            'should_be_noarch': True,
-            'fix': 'add "build: noarch" section',
-        }
-
-
-def should_not_be_noarch(recipe, meta, df):
-    deps = _get_deps(meta)
-    if (
-        ('gcc' in deps) or
-        meta.get_section('build').get('skip', False)
-    ) and (
-        'noarch' in meta.get_section('build')
-    ):
-        return {
-            'should_not_be_noarch': True,
-            'fix': 'remove "build: noarch" section',
-        }
-
-
-def setup_py_install_args(recipe, meta, df):
-    if 'setuptools' not in _get_deps(meta, 'build'):
-        return
-
-    err = {
-        'needs_setuptools_args': True,
-        'fix': ('add "--single-version-externally-managed --record=record.txt" '
-                'to setup.py command'),
-    }
-
-    script_line = meta.get_section('build').get('script', '')
-    if (
-        'setup.py install' in script_line and
-        '--single-version-externally-managed' not in script_line
-    ):
-        return err
-
-    build_sh = os.path.join(recipe, 'build.sh')
-    if not os.path.exists(build_sh):
-        return
-
-    contents = open(build_sh).read()
-    if (
-        'setup.py install' in contents and
-        '--single-version-externally-managed' not in contents
-    ):
-        return err
-
-
-def invalid_identifiers(recipe, meta, df):
-    try:
-        identifiers = meta.get_section('extra').get('identifiers', [])
-        if not isinstance(identifiers, list):
-            return { 'invalid_identifiers': True,
-                     'fix': 'extra:identifiers must hold a list of identifiers' }
-        if not all(isinstance(i, str) for i in identifiers):
-            return { 'invalid_identifiers': True,
-                     'fix': 'each identifier must be a string' }
-        if not all((':' in i) for i in identifiers):
-            return { 'invalid_identifiers': True,
-                     'fix': 'each identifier must be of the form '
-                            'type:identifier (e.g., doi:123)' }
-    except KeyError:
-        # no identifier section
-        return
-
-
-def deprecated_numpy_spec(recipe, meta, df):
-    reqs = meta.get_section('requirements')
-    if not reqs:
-        return
-    for section in ['build', 'run']:
-        for dep in reqs.get(section, []):
-            if dep.startswith('numpy') and 'x.x' in dep:
-                return { 'deprecated_numpy_spec': True,
-                         'fix': 'omit x.x as pinning of numpy is now '
-                                'handled automatically'}
-    return
-
-
-def _pin(env_var, dep_name):
-    """
-    Generates a linting function that checks to make sure `dep_name` is pinned
-    to `env_var` using jinja templating.
-    """
-    pin_pattern = re.compile(r"\{{\{{\s*{}\s*\}}\}}\*".format(env_var))
-    def pin(recipe, meta, df):
-        # Note that we can't parse the meta.yaml using a normal YAML parser if it
-        # has jinja templating
-        in_requirements = False
-        section = None
-        not_pinned = set()
-        pinned = set()
-        for line in open(os.path.join(recipe, 'meta.yaml')):
-            line = line.rstrip("\n")
-            if line.startswith("requirements:"):
-                in_requirements = True
-            elif line and not line.startswith(" ") and not line.startswith("#"):
-                in_requirements = False
-                section = None
-            if in_requirements:
-                dedented_line = line.lstrip(' ')
-                if dedented_line.startswith("run:"):
-                    section = "run"
-                elif dedented_line.startswith("build:"):
-                    section = "build"
-                elif dedented_line.startswith('- {}'.format(dep_name)):
-                    if pin_pattern.search(dedented_line) is None:
-                        not_pinned.add(section)
-                    else:
-                        pinned.add(section)
-
-        # two error cases: 1) run is not pinned but in build
-        #                  2) build is not pinned and run is pinned
-        # Everything else is ok. E.g., if dependency is not in run, we don't
-        # need to pin build, because it is statically linked.
-        if (("run" in not_pinned and "build" in pinned.union(not_pinned)) or
-           ("run" in pinned and "build" in not_pinned)):
-            err = {
-                '{}_not_pinned'.format(dep_name): True,
-                'fix': (
-                    'pin {0} using jinja templating: '
-                    '{{{{ {1} }}}}*'.format(dep_name, env_var))
+def should_be_noarch(recipe, metas, df):
+    for meta in metas:
+        print(meta.get_value("package/name"))
+        deps = _get_deps(meta)
+        if (
+            ('gcc' not in deps) and
+            ('python' in deps) and
+            # This will also exclude recipes with skip sections
+            # which is a good thing, because noarch also implies independence of
+            # the python version.
+            not _has_preprocessing_selector(recipe)
+        ) and (
+            'noarch' not in meta.get_section('build')
+        ):
+            return {
+                'should_be_noarch': True,
+                'fix': 'add "build: noarch" section',
             }
+
+
+def should_not_be_noarch(recipe, metas, df):
+    for meta in metas:
+        deps = _get_deps(meta)
+        if (
+            ('gcc' in deps) or
+            meta.get_section('build').get('skip', False) in ["true", "True"]
+        ) and (
+            'noarch' in meta.get_section('build')
+        ):
+            print("error")
+            return {
+                'should_not_be_noarch': True,
+                'fix': 'remove "build: noarch" section',
+            }
+
+
+def setup_py_install_args(recipe, metas, df):
+    for meta in metas:
+        if 'setuptools' not in _get_deps(meta, 'build'):
+            continue
+
+        err = {
+            'needs_setuptools_args': True,
+            'fix': ('add "--single-version-externally-managed --record=record.txt" '
+                    'to setup.py command'),
+        }
+
+        script_line = meta.get_section('build').get('script', '')
+        if (
+            'setup.py install' in script_line and
+            '--single-version-externally-managed' not in script_line
+        ):
             return err
 
-    pin.__name__ = "{}_not_pinned".format(dep_name)
-    return pin
+        build_sh = os.path.join(recipe, 'build.sh')
+        if not os.path.exists(build_sh):
+            continue
+
+        contents = open(build_sh).read()
+        if (
+            'setup.py install' in contents and
+            '--single-version-externally-managed' not in contents
+        ):
+            return err
+
+
+def invalid_identifiers(recipe, metas, df):
+    for meta in metas:
+        try:
+            identifiers = meta.get_section('extra').get('identifiers', [])
+            if not isinstance(identifiers, list):
+                return { 'invalid_identifiers': True,
+                         'fix': 'extra:identifiers must hold a list of identifiers' }
+            if not all(isinstance(i, str) for i in identifiers):
+                return { 'invalid_identifiers': True,
+                         'fix': 'each identifier must be a string' }
+            if not all((':' in i) for i in identifiers):
+                return { 'invalid_identifiers': True,
+                         'fix': 'each identifier must be of the form '
+                                'type:identifier (e.g., doi:123)' }
+        except KeyError:
+            # no identifier section
+            continue
+
+
+def deprecated_numpy_spec(recipe, metas, df):
+    for meta in metas:
+        reqs = meta.get_section('requirements')
+        if not reqs:
+            continue
+        for section in ['build', 'run']:
+            for dep in reqs.get(section, []):
+                if dep.startswith('numpy') and 'x.x' in dep:
+                    return { 'deprecated_numpy_spec': True,
+                             'fix': 'omit x.x as pinning of numpy is now '
+                                    'handled automatically'}
 
 
 registry = (
@@ -360,13 +327,5 @@ registry = (
     should_not_be_noarch,
     setup_py_install_args,
     invalid_identifiers,
-    deprecated_numpy_spec,
-    _pin('CONDA_ZLIB', 'zlib'),
-    _pin('CONDA_GMP', 'gmp'),
-    _pin('CONDA_BOOST', 'boost'),
-    _pin('CONDA_GSL', 'gsl'),
-    _pin('CONDA_HDF5', 'hdf5'),
-    _pin('CONDA_NCURSES', 'ncurses'),
-    _pin('CONDA_HTSLIB', 'htslib'),
-    _pin('CONDA_BZIP2', 'bzip2'),
+    deprecated_numpy_spec
 )
