@@ -265,8 +265,7 @@ def build_recipes(
     logger.info('Filtering recipes')
     recipe_targets = dict(
         utils.filter_recipes(
-            recipes, check_channels, force=force)
-    )
+            recipes, check_channels, force=force))
     recipes = set(recipe_targets.keys())
 
     dag, name2recipes = utils.get_dag(recipes, config=orig_config, blacklist=blacklist)
@@ -340,53 +339,53 @@ def build_recipes(
             skipped_recipes.append(recipe)
             continue
 
-        for pkg_paths in recipe_targets[recipe]:
+        pkg_paths = recipe_targets[recipe]
 
-            # If a recipe depends on conda, it means it must be installed in
-            # the root env, which is not compatible with mulled-build tests. In
-            # that case, we temporarily disable the mulled-build tests for the
-            # recipe.
-            deps = []
-            deps += utils.get_deps(recipe, orig_config, build=True)
-            deps += utils.get_deps(recipe, orig_config, build=False)
-            keep_mulled_test = True
-            if 'conda' in deps or 'conda-build' in deps:
-                keep_mulled_test = False
-                if mulled_test:
-                    logger.info(
-                        'TEST SKIP: '
-                        'skipping mulled-build test for %s because it '
-                        'depends on conda or conda-build', recipe)
+        # If a recipe depends on conda, it means it must be installed in
+        # the root env, which is not compatible with mulled-build tests. In
+        # that case, we temporarily disable the mulled-build tests for the
+        # recipe.
+        deps = []
+        deps += utils.get_deps(recipe, orig_config, build=True)
+        deps += utils.get_deps(recipe, orig_config, build=False)
+        keep_mulled_test = True
+        if 'conda' in deps or 'conda-build' in deps:
+            keep_mulled_test = False
+            if mulled_test:
+                logger.info(
+                    'TEST SKIP: '
+                    'skipping mulled-build test for %s because it '
+                    'depends on conda or conda-build', recipe)
+        
+        res = build(
+            recipe=recipe,
+            recipe_folder=recipe_folder,
+            pkg_paths=pkg_paths,
+            testonly=testonly,
+            mulled_test=mulled_test and keep_mulled_test,
+            force=force,
+            channels=config['channels'],
+            docker_builder=docker_builder,
+        )
 
-            res = build(
-                recipe=recipe,
-                recipe_folder=recipe_folder,
-                pkg_paths=pkg_paths,
-                testonly=testonly,
-                mulled_test=mulled_test and keep_mulled_test,
-                force=force,
-                channels=config['channels'],
-                docker_builder=docker_builder,
-            )
+        all_success &= res.success
+        recipe_success &= res.success
 
-            all_success &= res.success
-            recipe_success &= res.success
+        if not res.success:
+            failed.append(recipe)
+            for n in nx.algorithms.descendants(subdag, name):
+                skip_dependent[n].append(recipe)
+        elif not testonly:
+            for pkg in pkg_paths:
+                # upload build
+                if anaconda_upload:
+                    if not upload.anaconda_upload(pkg, label):
+                        failed_uploads.append(pkg)
+            if mulled_upload_target and keep_mulled_test:
+                upload.mulled_upload(res.mulled_images, mulled_upload_target)
 
-            if not res.success:
-                failed.append(recipe)
-                for n in nx.algorithms.descendants(subdag, name):
-                    skip_dependent[n].append(recipe)
-            elif not testonly:
-                for pkg in pkg_paths:
-                    # upload build
-                    if anaconda_upload:
-                        if not upload.anaconda_upload(pkg, label):
-                            failed_uploads.append(pkg)
-                if mulled_upload_target and keep_mulled_test:
-                    upload.mulled_upload(res.mulled_images, mulled_upload_target)
-
-            # remove traces of the build
-            purge()
+        # remove traces of the build
+        purge()
 
         if recipe_success:
             built_recipes.append(recipe)

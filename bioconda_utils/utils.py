@@ -729,9 +729,10 @@ def filter_recipes(recipes, channels=None, force=False):
                     return []
 
         # get all packages that would be built
-        pkgs = set(map(os.path.basename, built_package_paths(recipe)))
+        pkg_paths = built_package_paths(recipe)
+        pkgs = {os.path.basename(p): p for p in pkg_paths}
         # check which ones exist already
-        existing = channel_packages & pkgs
+        existing = [pkg for pkg in pkgs if pkg in channel_packages]
 
         for pkg in existing:
             logger.debug(
@@ -744,7 +745,8 @@ def filter_recipes(recipes, channels=None, force=False):
                 "define skip for this environment. "
                 "This is a conda bug.".format(pkg))
         # yield all pkgs that do not yet exist
-        return pkgs - existing
+        return [pkg_path
+                for pkg, pkg_path in pkgs.items() if pkg not in existing]
 
     logger.debug('recipes: %s', recipes)
     recipes = list(recipes)
