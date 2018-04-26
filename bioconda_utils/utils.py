@@ -169,7 +169,7 @@ def load_conda_config():
     config.exclusive_config_file = os.path.join(env_root,
                                                 "conda_build_config.yaml")
     assert os.path.exists(config.exclusive_config_file), ("error: "
-                          "conda_build_config.yaml not found in
+                          "conda_build_config.yaml not found in "
                           "environment root")
     return config
 
