@@ -333,8 +333,10 @@ def test_uses_git_url():
         '''
         uses_git_url:
           meta.yaml: |
-            name: uses_git_url
-            version: "0.1"'''],
+            package:
+              name: uses_git_url
+              version: "0.1"
+        '''],
         should_fail='''
         uses_git_url:
           meta.yaml: |

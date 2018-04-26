@@ -7,18 +7,6 @@ import pandas
 import numpy as np
 
 
-def _get_not_none(meta, key, none_subst=dict):
-    """
-    Return meta[key] if key is in meta and its value is not None, otherwise
-    return none_subst().
-
-    Some recipes have an empty build section, so it'll be None and we can't
-    do a chained get.
-    """
-    ret = meta.get(key)
-    return ret if (ret is not None) else none_subst()
-
-
 def _subset_df(recipe, meta, df):
     """
     Helper function to get the subset of `df` for this recipe.
@@ -101,7 +89,7 @@ def already_in_bioconda(recipe, meta, df):
     Does the package exist in bioconda?
     """
     results = _subset_df(recipe, meta, df)
-    build_section = _get_not_none(meta, 'build')
+    build_section = meta.get_section('build')
     build_number = int(build_section.get('number', 0))
     build_results = results[results.build_number == build_number]
     channels = set(build_results.channel)
@@ -149,7 +137,8 @@ def missing_tests(recipe, meta, df):
 
 def missing_hash(recipe, meta, df):
     # could be a meta-package if no source section or if None
-    if not meta.get_section('source'):
+    src = meta.get_section('source')
+    if not src:
         return
 
     if not any(meta.get_value('{}/{}'.format(src, checksum))
@@ -216,7 +205,7 @@ def should_be_noarch(recipe, meta, df):
         # the python version.
         not _has_preprocessing_selector(recipe)
     ) and (
-        'noarch' not in _get_not_none(meta, 'build')
+        'noarch' not in meta.get_section('build')
     ):
         return {
             'should_be_noarch': True,
@@ -228,9 +217,9 @@ def should_not_be_noarch(recipe, meta, df):
     deps = _get_deps(meta)
     if (
         ('gcc' in deps) or
-        _get_not_none(meta, 'build').get('skip', False)
+        meta.get_section('build').get('skip', False)
     ) and (
-        'noarch' in _get_not_none(meta, 'build')
+        'noarch' in meta.get_section('build')
     ):
         return {
             'should_not_be_noarch': True,
@@ -248,7 +237,7 @@ def setup_py_install_args(recipe, meta, df):
                 'to setup.py command'),
     }
 
-    script_line = _get_not_none(meta, 'build').get('script', '')
+    script_line = meta.get_section('build').get('script', '')
     if (
         'setup.py install' in script_line and
         '--single-version-externally-managed' not in script_line
