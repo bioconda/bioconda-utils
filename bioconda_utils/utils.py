@@ -334,7 +334,7 @@ def get_deps(recipe=None, meta=None, build=True):
 
     all_deps = set()
     for meta in metadata:
-        reqs = meta.get('requirements', {})
+        reqs = meta.get_section('requirements', {})
         if build:
             deps = reqs.get('build', [])
         else:
@@ -399,7 +399,8 @@ def get_dag(recipes, config, blacklist=None, restrict=True):
                 yield name
 
     dag = nx.DiGraph()
-    dag.add_nodes_from(meta['package']['name'] for meta, recipe in metadata)
+    dag.add_nodes_from(meta.get_value('package/name')
+                       for meta, recipe in metadata)
     for meta, recipe in metadata:
         name = meta.get_value('package/name')
         dag.add_edges_from((dep, name)

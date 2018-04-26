@@ -2,7 +2,8 @@ import pandas
 import yaml
 from helpers import Recipes
 from bioconda_utils import lint_functions
-from bioconda_utils import linting
+from bioconda_utils import linting, utils
+
 
 def run_lint(
     func,
