@@ -55,6 +55,9 @@ import pkg_resources
 import re
 from distutils.version import LooseVersion
 
+import conda
+import conda_build
+
 from . import utils
 
 import logging
@@ -116,6 +119,7 @@ DOCKERFILE_TEMPLATE = \
 """
 FROM bioconda/bioconda-utils-build-env
 {self.proxies}
+RUN /opt/conda/bin/conda install -y conda={conda_ver} conda-build={conda_build_ver}
 """
 
 class DockerCalledProcessError(sp.CalledProcessError):
@@ -357,7 +361,11 @@ class RecipeBuilder(object):
                 ).read())
 
         with open(os.path.join(build_dir, "Dockerfile"), 'w') as fout:
-            fout.write(self.dockerfile_template.format(self=self))
+            fout.write(self.dockerfile_template.format(
+                self=self,
+                conda_ver=conda.__version__,
+                conda_build_ver=conda_build.__version__)
+            )
 
         logger.debug('Dockerfile:\n' + open(fout.name).read())
 
@@ -440,9 +448,10 @@ class RecipeBuilder(object):
 
         # Write build script to tempfile
         build_dir = os.path.realpath(tempfile.mkdtemp())
+        script = self.build_script_template.format(
+            self=self, arch='noarch' if noarch else 'linux-64')
         with open(os.path.join(build_dir, 'build_script.bash'), 'w') as fout:
-            fout.write(self.build_script_template.format(
-                self=self, arch='noarch' if noarch else 'linux-64'))
+            fout.write(script)
         build_script = fout.name
         logger.debug('DOCKER: Container build script: \n%s', open(fout.name).read())
 
