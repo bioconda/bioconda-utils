@@ -153,7 +153,7 @@ def load_all_meta(recipe, config=None):
     For each environment, yield the rendered meta.yaml.
     """
     if config is None:
-        config = load_conda_config(platform=platform)
+        config = load_conda_config()
     return [meta for (meta, _, _) in api.render(recipe,
                                                 config=config)]
 
