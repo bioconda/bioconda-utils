@@ -468,7 +468,7 @@ def test_built_package_paths():
 
     assert os.path.basename(
         utils.built_package_paths(r.recipe_dirs['one'])[0]
-    ) == ['one-0.1-py36_0.tar.bz2']
+    ) == 'one-0.1-py36_0.tar.bz2'
 
 
 def test_string_or_float_to_integer_python():

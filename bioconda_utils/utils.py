@@ -334,7 +334,7 @@ def get_deps(recipe=None, meta=None, build=True):
 
     all_deps = set()
     for meta in metadata:
-        reqs = meta.get_section('requirements', {})
+        reqs = meta.get_section('requirements')
         if build:
             deps = reqs.get('build', [])
         else:

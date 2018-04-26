@@ -51,7 +51,7 @@ def _get_deps(meta, section=None):
 
     get_name = lambda dep: dep.split()[0]
 
-    reqs = meta.get('requirements')
+    reqs = meta.get_section('requirements')
     if reqs is None:
         return []
     if section is None:
@@ -138,7 +138,7 @@ def missing_license(recipe, meta, df):
 
 def missing_tests(recipe, meta, df):
     test_files = ['run_test.py', 'run_test.sh', 'run_test.pl']
-    if not  meta.get_value('test'):
+    if not meta.get_section('test'):
         if not any([os.path.exists(os.path.join(recipe, f)) for f in
                     test_files]):
             return {
@@ -149,11 +149,7 @@ def missing_tests(recipe, meta, df):
 
 def missing_hash(recipe, meta, df):
     # could be a meta-package if no source section or if None
-    try:
-        src = meta['source']
-        if src is None:
-            return
-    except KeyError:
+    if not meta.get_section('source'):
         return
 
     if not any(meta.get_value('{}/{}'.format(src, checksum))
@@ -165,19 +161,16 @@ def missing_hash(recipe, meta, df):
 
 
 def uses_git_url(recipe, meta, df):
-    try:
-        src = meta.get('source', {})
-        if src is None:
-            # metapackage?
-            return
-
-        if 'git_url' in src:
-            return {
-                'uses_git_url': True,
-                'fix': 'use tarballs whenever possible',
-            }
-    except KeyError:
+    src = meta.get_section('source')
+    if not src:
+        # metapackage?
         return
+
+    if 'git_url' in src:
+        return {
+            'uses_git_url': True,
+            'fix': 'use tarballs whenever possible',
+        }
 
 
 def uses_perl_threaded(recipe, meta, df):
@@ -276,7 +269,7 @@ def setup_py_install_args(recipe, meta, df):
 
 def invalid_identifiers(recipe, meta, df):
     try:
-        identifiers = meta['extra']['identifiers']
+        identifiers = meta.get_section('extra').get('identifiers', [])
         if not isinstance(identifiers, list):
             return { 'invalid_identifiers': True,
                      'fix': 'extra:identifiers must hold a list of identifiers' }
@@ -293,8 +286,8 @@ def invalid_identifiers(recipe, meta, df):
 
 
 def deprecated_numpy_spec(recipe, meta, df):
-    reqs = meta.get('requirements')
-    if reqs is None:
+    reqs = meta.get_section('requirements')
+    if not reqs:
         return
     for section in ['build', 'run']:
         for dep in reqs.get(section, []):
