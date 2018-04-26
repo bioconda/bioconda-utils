@@ -395,8 +395,8 @@ def get_dag(recipes, config, blacklist=None, restrict=True):
 
     def get_inner_deps(dependencies):
         for dep in dependencies:
-            if name in name2recipe or not restrict:
-                yield name
+            if dep in name2recipe or not restrict:
+                yield dep
 
     dag = nx.DiGraph()
     dag.add_nodes_from(meta.get_value('package/name')
