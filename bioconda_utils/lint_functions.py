@@ -292,16 +292,11 @@ def invalid_identifiers(recipe, metas, df):
 
 
 def deprecated_numpy_spec(recipe, metas, df):
-    for meta in metas:
-        reqs = meta.get_section('requirements')
-        if not reqs:
-            continue
-        for section in ['build', 'run']:
-            for dep in reqs.get(section, []):
-                if dep.startswith('numpy') and 'x.x' in dep:
-                    return { 'deprecated_numpy_spec': True,
-                             'fix': 'omit x.x as pinning of numpy is now '
-                                    'handled automatically'}
+    with open(os.path.join(recipe, "meta.yaml")) as recipe:
+        if re.search("numpy( )+x\.x", recipe.read()):
+            return { 'deprecated_numpy_spec': True,
+                     'fix': 'omit x.x as pinning of numpy is now '
+                            'handled automatically'}
 
 
 registry = (

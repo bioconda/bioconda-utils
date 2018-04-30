@@ -211,8 +211,9 @@ def lint(recipes, df, exclude=None, registry=None):
         skip_for_this_recipe = set(skip_dict[recipe])
 
         # skips defined in meta.yaml
-        persistent = meta.get_section('extra').get('skip-lints', [])
-        skip_for_this_recipe.update(persistent)
+        for meta in metas:
+            persistent = meta.get_section('extra').get('skip-lints', [])
+            skip_for_this_recipe.update(persistent)
 
         for func in registry:
             if func.__name__ in skip_for_this_recipe:
