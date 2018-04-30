@@ -488,7 +488,6 @@ def test_rendering_sandboxing():
     """, from_string=True)
 
     r.write_recipes()
-    pkg_paths = utils.built_package_paths(r.recipe_dirs['one'])
     env = {
         # First one is allowed, others are not
         'CONDA_ARBITRARY_VAR': 'conda-val-here',
@@ -508,6 +507,7 @@ def test_rendering_sandboxing():
 
     if 'GITHUB_TOKEN' in os.environ:
         with pytest.raises(sp.CalledProcessError) as excinfo:
+            pkg_paths = utils.built_package_paths(r.recipe_dirs['one'])
             res = build.build(
                 recipe=r.recipe_dirs['one'],
                 recipe_folder='.',
@@ -515,8 +515,7 @@ def test_rendering_sandboxing():
                 mulled_test=False,
                 _raise_error=True,
             )
-        assert ("Undefined Jinja2 variables remain (['GITHUB_TOKEN']).  "
-                "Please enable source downloading and try again.") in str(excinfo.value.stdout)
+        assert ("'GITHUB_TOKEN' is undefined" in str(excinfo.value.stdout))
     else:
         # recipe for "one" should fail because GITHUB_TOKEN is not a jinja var.
         with pytest.raises(SystemExit) as excinfo:
@@ -526,7 +525,7 @@ def test_rendering_sandboxing():
                 pkg_paths=pkg_paths,
                 mulled_test=False
             )
-        assert "'GITHUB_TOKEN' is undefined" in str(excinfo.value)
+        assert "'GITHUB_TOKEN' is undefined" in str(excinfo.value.stdout)
 
     r = Recipes(
         """
@@ -540,24 +539,26 @@ def test_rendering_sandboxing():
 
     """, from_string=True)
     r.write_recipes()
-    pkg_paths = utils.built_package_paths(r.recipe_dirs['two'])
-    for pkg in pkg_paths:
-        ensure_missing(pkg)
 
-    res = build.build(
-        recipe=r.recipe_dirs['two'],
-        recipe_folder='.',
-        pkg_paths=pkg_paths,
-        mulled_test=False
-    )
+    with utils.temp_env(env):
+        pkg_paths = utils.built_package_paths(r.recipe_dirs['two'])
+        for pkg in pkg_paths:
+            ensure_missing(pkg)
 
-    for pkg in pkg_paths:
-        t = tarfile.open(pkg)
-        tmp = tempfile.mkdtemp()
-        target = 'info/recipe/meta.yaml'
-        t.extract(target, path=tmp)
-        contents = yaml.load(open(os.path.join(tmp, target)).read())
-        assert contents['extra']['var2'] == 'conda-val-here', contents
+        res = build.build(
+            recipe=r.recipe_dirs['two'],
+            recipe_folder='.',
+            pkg_paths=pkg_paths,
+            mulled_test=False
+        )
+
+        for pkg in pkg_paths:
+            t = tarfile.open(pkg)
+            tmp = tempfile.mkdtemp()
+            target = 'info/recipe/meta.yaml'
+            t.extract(target, path=tmp)
+            contents = yaml.load(open(os.path.join(tmp, target)).read())
+            assert contents['extra']['var2'] == 'conda-val-here', contents
 
 
 def test_sandboxed():
