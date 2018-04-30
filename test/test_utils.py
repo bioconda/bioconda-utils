@@ -519,6 +519,7 @@ def test_rendering_sandboxing():
     else:
         # recipe for "one" should fail because GITHUB_TOKEN is not a jinja var.
         with pytest.raises(SystemExit) as excinfo:
+            pkg_paths = utils.built_package_paths(r.recipe_dirs['one'])
             res = build.build(
                 recipe=r.recipe_dirs['one'],
                 recipe_folder='.',
@@ -643,8 +644,8 @@ def test_skip_dependencies():
     for k, v in r.recipe_dirs.items():
         pkgs[k] = utils.built_package_paths(v)
 
-    for pkgs in pkgs.values():
-        for pkg in pkgs:
+    for _pkgs in pkgs.values():
+        for pkg in _pkgs:
             ensure_missing(pkg)
 
     build.build_recipes(
@@ -663,8 +664,8 @@ def test_skip_dependencies():
         assert not os.path.exists(pkg)
 
     # clean up
-    for pkgs in pkgs.values():
-        for pkg in pkgs:
+    for _pkgs in pkgs.values():
+        for pkg in _pkgs:
             ensure_missing(pkg)
 
 
