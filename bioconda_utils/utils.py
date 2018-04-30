@@ -579,9 +579,7 @@ def built_package_paths(recipe):
     but without the subprocess.
     """
     config = load_conda_config()
-    meta = load_metadata(recipe)
-    paths = api.get_output_file_paths(meta, config=config)
-    assert paths, "bug: empty list of paths returned"
+    paths = api.get_output_file_paths(recipe, config=config)
     return paths
 
 

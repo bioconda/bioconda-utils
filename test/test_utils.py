@@ -337,9 +337,6 @@ def test_filter_recipes_no_skipping():
 
 
 def test_filter_recipes_skip_is_true():
-    """
-
-    """
     r = Recipes(
         """
         one:
@@ -354,6 +351,7 @@ def test_filter_recipes_skip_is_true():
     recipes = list(r.recipe_dirs.values())
     filtered = list(
         utils.filter_recipes(recipes))
+    print(filtered)
     assert len(filtered) == 0
 
 
