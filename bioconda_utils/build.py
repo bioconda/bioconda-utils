@@ -89,7 +89,8 @@ def build(
     # build_args = ["--no-build-id"]
 
     # use global variant config file (contains pinnings)
-    build_args = ["--skip-existing"]
+    # build_args = ["--skip-existing"]
+    build_args = []
     if testonly:
         build_args.append("--test")
     else:
