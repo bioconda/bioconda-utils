@@ -89,7 +89,7 @@ def build(
     # build_args = ["--no-build-id"]
 
     # use global variant config file (contains pinnings)
-    # build_args = ["--skip-existing"]
+    build_args = ["--skip-existing"]
     build_args = []
     if testonly:
         build_args.append("--test")
@@ -357,7 +357,7 @@ def build_recipes(
                     'TEST SKIP: '
                     'skipping mulled-build test for %s because it '
                     'depends on conda or conda-build', recipe)
-        
+
         res = build(
             recipe=recipe,
             recipe_folder=recipe_folder,

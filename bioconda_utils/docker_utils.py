@@ -98,7 +98,8 @@ conda config --add channels file://{self.container_staging}  > /dev/null 2>&1
 # conda-build from building all subdirectories
 conda build -e {self.container_staging}/conda_build_config.yaml {self.conda_build_args} {self.container_recipe}/meta.yaml 2>&1
 
-cp `conda build {self.container_recipe}/meta.yaml --output` {self.container_staging}/{arch}
+# copy all built packages to the staging area
+cp `conda build {self.container_recipe}/meta.yaml {self.conda_build_args} --output` {self.container_staging}/{arch}
 # Ensure permissions are correct on the host.
 HOST_USER={self.user_info[uid]}
 chown $HOST_USER:$HOST_USER {self.container_staging}/{arch}/*
