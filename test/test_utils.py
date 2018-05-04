@@ -763,3 +763,28 @@ def test_build_container_default_gcc(tmpdir):
         mulled_test=False,
     )
     assert build_result.success
+
+
+def test_conda_forge_pins(caplog):
+    caplog.set_level(logging.DEBUG)
+    r = Recipes(
+        """
+        one:
+          meta.yaml: |
+            package:
+              name: one
+              version: 0.1
+            requirements:
+              run:
+                - zlib {{ zlib }}
+        """, from_string=True)
+    r.write_recipes()
+    build_result = build.build_recipes(
+        r.basedir,
+        config={},
+        packages="*",
+        testonly=False,
+        force=False,
+        mulled_test=True,
+    )
+    assert build_result
