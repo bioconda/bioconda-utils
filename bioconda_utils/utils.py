@@ -724,6 +724,11 @@ def filter_recipes(recipes, channels=None, force=False):
 
         meta = load_first_metadata(
             recipe, config=load_conda_config(platform=platform))
+
+        # The recipe likely defined skip: True
+        if meta is None:
+            return []
+
         # If on CI, handle noarch.
         if os.environ.get('CI', None) == 'true':
             if meta.get_value('build/noarch'):
