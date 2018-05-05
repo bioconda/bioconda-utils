@@ -1,12 +1,8 @@
-import sys
-
 import pytest
 
 from bioconda_utils import bioconductor_skeleton
 from bioconda_utils import cran_skeleton
 from bioconda_utils import utils
-
-import helpers
 
 
 config = {
@@ -68,16 +64,11 @@ def test_meta_contents(tmpdir):
         'edgeR', recipe_dir=str(tmpdir), config=config, recursive=False)
 
     edger_meta = utils.load_first_metadata(str(tmpdir.join('bioconductor-edger'))).meta
-    assert 'r-rcpp' in edger_meta['requirements']['build']
+    assert 'r-rcpp' in edger_meta['requirements']['run']
 
-    # note that the preprocessing selector is stripped off by yaml parsing, so
-    # just check for gcc
-    if sys.platform == 'linux':
-        assert 'gcc' in edger_meta['requirements']['build']
-    elif sys.platform == 'darwin':
-        assert 'llvm' in edger_meta['requirements']['build']
-    else:
-        raise ValueError('Unhandled platform: {}'.format(sys.platform))
+    # The rendered meta has {{ compiler('c') }} filled in, so we need to check
+    # for one of those filled-in values.
+    assert 'toolchain' in edger_meta['requirements']['build']
 
     # bioconductor, bioarchive, and cargoport
     assert len(edger_meta['source']['url']) == 3
