@@ -113,7 +113,7 @@ def build(
         # want to add TRAVIS* vars if that behavior is not disabled.
         if docker_builder is not None:
 
-            response = docker_builder.build_recipe(
+            docker_builder.build_recipe(
                 recipe_dir=os.path.abspath(recipe),
                 build_args=' '.join(channel_args + build_args),
                 env=whitelisted_env,
@@ -126,7 +126,6 @@ def build(
                         "BUILD FAILED: the built package %s "
                         "cannot be found", pkg_path)
                     return BuildResult(False, None)
-            build_success = True
         else:
 
             # Temporarily reset os.environ to avoid leaking env vars to
@@ -140,9 +139,7 @@ def build(
                       [os.path.join(recipe, 'meta.yaml')]
                 logger.debug('command: %s', cmd)
                 with utils.Progress():
-                    p = utils.run(cmd, env=os.environ, mask=False)
-
-            build_success = True
+                    utils.run(cmd, env=os.environ, mask=False)
 
         logger.info('BUILD SUCCESS %s',
                     ' '.join(os.path.basename(p) for p in pkg_paths))

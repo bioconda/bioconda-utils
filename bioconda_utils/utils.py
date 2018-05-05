@@ -40,16 +40,17 @@ log_stream_handler.setFormatter(ColoredFormatter(
             'CRITICAL': 'red',
         }))
 
+
 def setup_logger(name, loglevel=None):
-    l = logging.getLogger(name)
-    l.propagate = False
+    logger = logging.getLogger(name)
+    logger.propagate = False
     if loglevel:
-        l.setLevel(getattr(logging, loglevel.upper()))
-    l.addHandler(log_stream_handler)
-    return l
+        logger.setLevel(getattr(logging, loglevel.upper()))
+    logger.addHandler(log_stream_handler)
+    return logger
+
 
 logger = setup_logger(__name__)
-
 
 jinja = Environment(
     loader=PackageLoader('bioconda_utils', 'templates'),
@@ -76,7 +77,6 @@ ENV_VAR_BLACKLIST = [
 ENV_VAR_DOCKER_BLACKLIST = [
     'PATH',
 ]
-
 
 
 def get_free_space():
@@ -177,9 +177,8 @@ def load_conda_config(platform=None, trim_skip=True):
     ]
     for cfg in config.variant_config_files:
         assert os.path.exists(cfg), ('error: {0} does not exist'.format(cfg))
-    assert os.path.exists(config.exclusive_config_file), ("error: "
-                          "conda_build_config.yaml not found in "
-                          "environment root")
+    assert os.path.exists(config.exclusive_config_file), (
+        "error: conda_build_config.yaml not found in environment root")
     if platform:
         config.platform = platform
     config.trim_skip = trim_skip
@@ -232,12 +231,13 @@ def run(cmds, env=None, mask=None, **kwargs):
     except sp.CalledProcessError as e:
         e.stdout = e.stdout.decode(errors='replace')
         # mask command arguments
+
         def do_mask(arg):
             if mask is None:
                 # caller has not considered masking, hide the entire command
                 # for security reasons
                 return '<hidden>'
-            elif mask == False:
+            elif mask is False:
                 # masking has been deactivated
                 return arg
             for m in mask:
@@ -722,9 +722,8 @@ def filter_recipes(recipes, channels=None, force=False):
         elif platform == "linux-gnu":
             platform = "linux"
 
-
-        meta = load_first_metadata(recipe,
-                             config=load_conda_config(platform=platform))
+        meta = load_first_metadata(
+            recipe, config=load_conda_config(platform=platform))
         # If on CI, handle noarch.
         if os.environ.get('CI', None) == 'true':
             if meta.get_value('build/noarch'):
