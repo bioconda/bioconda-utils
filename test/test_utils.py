@@ -360,6 +360,31 @@ def test_filter_recipes_skip_is_true():
     assert len(filtered) == 0
 
 
+def test_filter_recipes_skip_is_true_with_CI_env_var():
+    """
+    utils.filter_recipes has a conditional that checks to see if there's
+    a CI=true env var which in some cases only causes failure when running on
+    CI. So temporarily fake it here so that local tests catch errors.
+    """
+    with utils.temp_env(dict(CI="true")):
+        r = Recipes(
+            """
+            one:
+              meta.yaml: |
+                package:
+                  name: one
+                  version: "0.1"
+                build:
+                  skip: true
+            """, from_string=True)
+        r.write_recipes()
+        recipes = list(r.recipe_dirs.values())
+        filtered = list(
+            utils.filter_recipes(recipes))
+        print(filtered)
+        assert len(filtered) == 0
+
+
 def test_filter_recipes_skip_not_py27():
     """
     When all but one Python version is skipped, filtering should do that.
