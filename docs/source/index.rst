@@ -166,4 +166,5 @@ Contents:
     linting
     faqs
     build-system
+    cb3
     changes
