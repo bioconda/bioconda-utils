@@ -124,4 +124,38 @@ macOS builds to the bioconda team.
 
 To ensure that CircleCI uses the bioconda team account, please **disable**
 CircleCI on your fork (look for the big red "Stop Building" button at
-https://circleci.com/dashboard under the settings for your fork.
+https://circleci.com/dashboard under the settings for your fork).
+
+Testing ``bioconda-utils`` locally
+----------------------------------
+
+Follow the instructions at :ref:`bootstrap` to create a separate Miniconda
+installation using the ``bootstrap.py`` script in the `bioconda-recipes` repo.
+
+Then, in the activated environment, install the bioconda-utils test
+requirements, from the top-level directory of the ``bioconda-utils`` repo.
+While the bootstrap script installs bioconda-utils dependencies, if there are
+any changes in ``requirements.txt`` you will want to install them as well.
+
+The bootstrap script already installed bioconda-utils, but we want to install
+it in develop mode so we can make local changes and they will be immediately
+picked up. So we need to uninstall and then reinstall bioconda-utils.
+
+Finally, run the tests using ``pytest``.
+
+In summary:
+
+.. code-block:: bash
+
+    # activate env
+    source ~/.config/bioconda/activate
+
+    # install dependencies
+    conda install --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
+
+    # uninstall and then reinstall
+    pip uninstall bioconda_utils
+    python setup.py develop
+
+    # run tests
+    pytest test -vv
