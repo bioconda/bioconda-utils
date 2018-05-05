@@ -136,6 +136,7 @@ def build(
             with utils.sandboxed_env(whitelisted_env):
                 cmd = CONDA_BUILD_CMD + build_args + channel_args + \
                       ["-e", utils.load_conda_config().exclusive_config_file] + \
+                      ["-m"] + utils.load_conda_config().variant_config_files + \
                       [os.path.join(recipe, 'meta.yaml')]
                 logger.debug('command: %s', cmd)
                 with utils.Progress():

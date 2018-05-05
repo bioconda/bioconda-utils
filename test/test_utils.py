@@ -10,6 +10,7 @@ import contextlib
 import tarfile
 import logging
 import shutil
+from textwrap import dedent
 
 from bioconda_utils import utils
 from bioconda_utils import pkg_test
@@ -27,6 +28,10 @@ from conda_build.metadata import MetaData
 
 # Label that will be used for uploading test packages to anaconda/binstar
 TEST_LABEL = 'bioconda-utils-test'
+
+# PARAMS and ID are used with pytest.fixture. The end result is that, on Linux,
+# any tests that depend on a fixture that uses PARAMS will run twice (once with
+# docker, once without). On OSX, only the non-docker runs.
 
 SKIP_DOCKER_TESTS = sys.platform.startswith('darwin')
 
@@ -785,6 +790,88 @@ def test_conda_forge_pins(caplog):
         packages="*",
         testonly=False,
         force=False,
-        mulled_test=True,
+        mulled_test=False,
     )
     assert build_result
+
+
+def test_bioconda_pins(caplog):
+    """
+    htslib currently only provided by bioconda pinnings
+    """
+    caplog.set_level(logging.DEBUG)
+    r = Recipes(
+        """
+        one:
+          meta.yaml: |
+            package:
+              name: one
+              version: 0.1
+            requirements:
+              run:
+                - htslib {{ htslib }}
+        """, from_string=True)
+    r.write_recipes()
+    build_result = build.build_recipes(
+        r.basedir,
+        config={},
+        packages="*",
+        testonly=False,
+        force=False,
+        mulled_test=False,
+    )
+    assert build_result
+
+
+def test_load_meta_skipping():
+    """
+    Ensure that a skipped recipe returns no metadata
+    """
+    r = Recipes(
+        """
+        one:
+          meta.yaml: |
+            package:
+              name: one
+              version: "0.1"
+            build:
+              skip: true
+        """, from_string=True)
+    r.write_recipes()
+    recipe = r.recipe_dirs['one']
+    assert utils.load_all_meta(recipe) == []
+
+
+def test_variants():
+    """
+    Multiple variants should return multiple metadata
+    """
+    r = Recipes(
+        """
+        one:
+          meta.yaml: |
+            package:
+              name: one
+              version: "0.1"
+            requirements:
+              build:
+                - mypkg {{ mypkg }}
+        """, from_string=True)
+    r.write_recipes()
+    recipe = r.recipe_dirs['one']
+
+    # Write a temporary conda_build_config.yaml that we'll point the config
+    # object to:
+    tmp = tempfile.NamedTemporaryFile(delete=False).name
+    with open(tmp, 'w') as fout:
+        fout.write(
+            dedent(
+                """
+                mypkg:
+                  - 1.0
+                  - 2.0
+                """))
+    config = utils.load_conda_config()
+    config.exclusive_config_file = tmp
+
+    assert len(utils.load_all_meta(recipe, config)) == 2

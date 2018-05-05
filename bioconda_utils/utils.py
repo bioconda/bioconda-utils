@@ -22,7 +22,6 @@ import threading
 from pathlib import PurePath
 
 from conda_build import api
-from conda_build.metadata import MetaData
 from conda.models.version import VersionOrder
 import yaml
 from jinja2 import Environment, PackageLoader
@@ -171,6 +170,13 @@ def load_conda_config(platform=None, trim_skip=True):
     # set path to pinnings from conda forge package
     config.exclusive_config_file = os.path.join(env_root,
                                                 "conda_build_config.yaml")
+    config.variant_config_files = [
+        os.path.join(
+            os.path.dirname(__file__),
+            'bioconda_utils-conda_build_config.yaml')
+    ]
+    for cfg in config.variant_config_files:
+        assert os.path.exists(cfg), ('error: {0} does not exist'.format(cfg))
     assert os.path.exists(config.exclusive_config_file), ("error: "
                           "conda_build_config.yaml not found in "
                           "environment root")
@@ -180,15 +186,17 @@ def load_conda_config(platform=None, trim_skip=True):
     return config
 
 
-def load_metadata(recipe, config=None):
+def load_first_metadata(recipe, config=None):
     """
-    Load metadata for a specific environment.
+    Returns just the first of possibly many metadata files. Used for when you
+    need to do things like check a package name or version number (which are
+    not expected to change between variants).
+
+    If the recipe will be skipped, then returns None
     """
-    if config is None:
-        config = load_conda_config()
-    meta = MetaData(recipe, config=config)
-    meta.parse_again()
-    return meta
+    metas = load_all_meta(recipe, config)
+    if len(metas) > 0:
+        return metas[0]
 
 
 @contextlib.contextmanager
@@ -477,7 +485,7 @@ def get_latest_recipes(recipe_folder, config, package="*"):
         else:
             def get_version(p):
                 return VersionOrder(
-                    load_metadata(os.path.join(p, 'meta.yaml')).get_value('package/version')
+                    load_first_metadata(os.path.join(p, 'meta.yaml')).get_value('package/version')
                 )
             sorted_versions = sorted(group, key=get_version)
             if sorted_versions:
@@ -715,7 +723,7 @@ def filter_recipes(recipes, channels=None, force=False):
             platform = "linux"
 
 
-        meta = load_metadata(recipe,
+        meta = load_first_metadata(recipe,
                              config=load_conda_config(platform=platform))
         # If on CI, handle noarch.
         if os.environ.get('CI', None) == 'true':
