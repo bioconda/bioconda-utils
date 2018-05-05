@@ -35,12 +35,6 @@ BASE_R_PACKAGES = ["base", "compiler", "datasets", "graphics", "grDevices",
                    "grid", "methods", "parallel", "splines", "stats", "stats4",
                    "tcltk", "tools", "utils"]
 
-
-# A list of packages, in recipe name format. If a package depends on something
-# in this list, then we will add the gcc/llvm build-deps as appropriate to the
-# constructed recipe.
-GCC_PACKAGES = ['r-rcpp']
-
 HERE = os.path.abspath(os.path.dirname(__file__))
 
 
@@ -594,12 +588,43 @@ class BioCProjectPage(object):
             else:
                 dependency_mapping[prefix + name.lower() + version] = name
 
-            if (
-                (prefix + name.lower() in GCC_PACKAGES) or
-                (self.description.get('needscompilation', 'no') == 'yes') or
-                (self.description.get('linkingto', None) is not None)
-            ):
-                self.depends_on_gcc = True
+        if (
+            (self.description.get('needscompilation', 'no') == 'yes') or
+            (self.description.get('linkingto', None) is not None)
+        ):
+            # Modified from conda_build.skeletons.cran
+            #
+            with tarfile.open(self.cached_tarball) as tf:
+                need_f = any([f.name.lower().endswith(('.f', '.f90', '.f77')) for f in tf])
+                need_c = True if need_f else \
+                    any([f.name.lower().endswith('.c') for f in tf])
+                need_cxx = any([f.name.lower().endswith(('.cxx', '.cpp', '.cc', '.c++'))
+                                         for f in tf])
+                need_autotools = any([f.name.lower().endswith('/configure') for f in tf])
+                need_make = True if any((need_autotools, need_f, need_cxx, need_c)) else \
+                    any([f.name.lower().endswith(('/makefile', '/makevars'))
+                        for f in tf])
+        else:
+            need_c = need_cxx = need_f = need_autotools = need_make = False
+
+        for name, version in sorted(versions.items()):
+            if name in ['Rcpp', 'RcppArmadillo']:
+                need_cxx = True
+
+        if need_cxx:
+            need_c = True
+
+        self._cb3_build_reqs = {}
+        if need_c:
+            self._cb3_build_reqs['c'] = "{{ compiler('c') }}"
+        if need_cxx:
+            self._cb3_build_reqs['cxx'] = "{{ compiler('cxx') }}"
+        if need_f:
+            self._cb3_build_reqs['fortran'] = "{{ compiler('fortran') }}"
+        if need_autotools:
+            self._cb3_build_reqs['automake'] = 'automake'
+        if need_make:
+            self._cb3_build_reqs['make'] = 'make'
 
         # Add R itself
         if not specific_r_version:
@@ -721,7 +746,7 @@ class BioCProjectPage(object):
                     # object and tries to make a shortcut, causing an error in
                     # decoding unicode. Possible pyaml bug? Anyway, this fixes
                     # it.
-                    ('build', DEPENDENCIES[:]),
+                    ('host', DEPENDENCIES[:]),
                     ('run', DEPENDENCIES[:] + additional_run_deps),
                 )),
             ),
@@ -740,21 +765,25 @@ class BioCProjectPage(object):
                 )),
             ),
         ))
-        if self.depends_on_gcc:
-            d['requirements']['build'].append('GCC_PLACEHOLDER')
-            d['requirements']['build'].append('LLVM_PLACEHOLDER')
+
+        if self._cb3_build_reqs:
+            d['requirements']['build'] = []
+        for k, v in self._cb3_build_reqs.items():
+            d['requirements']['build'].append(k + '_' + "PLACEHOLDER")
 
         rendered = pyaml.dumps(d, width=1e6).decode('utf-8')
-        rendered = rendered.replace('GCC_PLACEHOLDER', 'gcc  # [linux]')
-        rendered = rendered.replace('LLVM_PLACEHOLDER', 'llvm  # [osx]')
         rendered = (
             '{% set version = "' + self.version + '" %}\n' +
             '{% set name = "' + self.package + '" %}\n' +
             '{% set bioc = "' + self.bioc_version + '" %}\n\n' +
             rendered
         )
-        tmp = tempfile.NamedTemporaryFile(delete=False).name
-        with open(tmp, 'w') as fout:
+
+        for k, v in self._cb3_build_reqs.items():
+            rendered = rendered.replace(k + '_' + "PLACEHOLDER", v)
+
+        tmpdir = tempfile.mkdtemp()
+        with open(os.path.join(tmpdir, 'meta.yaml'), 'w') as fout:
             fout.write(rendered)
         return fout.name
 
@@ -894,8 +923,8 @@ def write_recipe(package, recipe_dir, config, force=False, bioc_version=None,
     # *has* changed, then bump the version number.
     meta_file = os.path.join(recipe_dir, 'meta.yaml')
     if os.path.exists(meta_file):
-        updated_meta = utils.load_metadata(proj.meta_yaml).meta
-        current_meta = utils.load_metadata(meta_file).meta
+        updated_meta = utils.load_first_metadata(proj.meta_yaml).meta
+        current_meta = utils.load_first_metadata(meta_file).meta
 
         # pop off the version and build numbers so we can compare the rest of
         # the dicts
