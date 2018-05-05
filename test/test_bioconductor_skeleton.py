@@ -67,7 +67,7 @@ def test_meta_contents(tmpdir):
     bioconductor_skeleton.write_recipe(
         'edgeR', recipe_dir=str(tmpdir), config=config, recursive=False)
 
-    edger_meta = utils.load_metadata(str(tmpdir.join('bioconductor-edger'))).meta
+    edger_meta = utils.load_first_metadata(str(tmpdir.join('bioconductor-edger'))).meta
     assert 'r-rcpp' in edger_meta['requirements']['build']
 
     # note that the preprocessing selector is stripped off by yaml parsing, so
@@ -141,7 +141,7 @@ def test_bioarchive_exists():
 
 def test_annotation_data(tmpdir):
     bioconductor_skeleton.write_recipe('AHCytoBands', str(tmpdir), config, recursive=True)
-    meta = utils.load_metadata(str(tmpdir.join('bioconductor-ahcytobands'))).meta
+    meta = utils.load_first_metadata(str(tmpdir.join('bioconductor-ahcytobands'))).meta
     assert 'wget' in meta['requirements']['run']
     assert len(meta['source']['url']) == 3
     assert not tmpdir.join('bioconductor-ahcytobands', 'build.sh').exists()
@@ -151,7 +151,7 @@ def test_annotation_data(tmpdir):
 
 def test_experiment_data(tmpdir):
     bioconductor_skeleton.write_recipe('affydata', str(tmpdir), config, recursive=True)
-    meta = utils.load_metadata(str(tmpdir.join('bioconductor-affydata'))).meta
+    meta = utils.load_first_metadata(str(tmpdir.join('bioconductor-affydata'))).meta
     assert 'wget' in meta['requirements']['run']
     assert len(meta['source']['url']) == 3
     assert not tmpdir.join('bioconductor-affydata', 'build.sh').exists()
