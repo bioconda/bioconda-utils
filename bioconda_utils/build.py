@@ -106,7 +106,10 @@ def build(
 
     CONDA_BUILD_CMD = [utils.bin_for('conda'), 'build']
 
-    meta = utils.load_metadata(recipe)
+    # Even though there may be variants of the recipe that will be built, we
+    # will only be checking attributes that are independent of variants (pkg
+    # name, version, noarch, whether or not an extended container was used)
+    meta = utils.load_first_metadata(recipe)
 
     try:
         # Note we're not sending the contents of os.environ here. But we do
