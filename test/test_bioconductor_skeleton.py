@@ -68,7 +68,8 @@ def test_meta_contents(tmpdir):
 
     # The rendered meta has {{ compiler('c') }} filled in, so we need to check
     # for one of those filled-in values.
-    assert 'toolchain' in edger_meta['requirements']['build']
+    names = [i.split()[0] for i in edger_meta['requirements']['build']]
+    assert 'toolchain' in names
 
     # bioconductor, bioarchive, and cargoport
     assert len(edger_meta['source']['url']) == 3
