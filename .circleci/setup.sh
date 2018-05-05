@@ -28,6 +28,9 @@ if [[ ! -d $WORKSPACE/miniconda ]]; then
     bash miniconda.sh -b -p $WORKSPACE/miniconda
 
     # step 2: setup channels
+
+    # Added to support the new compiler packages from Anaconda 5
+    conda config --system --add channels anaconda
     conda config --system --add channels defaults
     conda config --system --add channels conda-forge
     conda config --system --add channels bioconda
