@@ -820,7 +820,7 @@ def test_conda_forge_pins(caplog):
     assert build_result
 
     for k, v in r.recipe_dirs.items():
-        for i in utils.build_package_paths(v):
+        for i in utils.built_package_paths(v):
             assert os.path.exists(i)
             ensure_missing(i)
 
@@ -853,7 +853,7 @@ def test_bioconda_pins(caplog):
     assert build_result
 
     for k, v in r.recipe_dirs.items():
-        for i in utils.build_package_paths(v):
+        for i in utils.built_package_paths(v):
             assert os.path.exists(i)
             ensure_missing(i)
 
@@ -932,23 +932,6 @@ def test_cb3_outputs():
     r.write_recipes()
     recipe = r.recipe_dirs['one']
 
-    # Write a temporary conda_build_config.yaml that we'll point the config
-    # object to:
-    tmp = tempfile.NamedTemporaryFile(delete=False).name
-    with open(tmp, 'w') as fout:
-        fout.write(
-            dedent(
-                """
-                python:
-                  - 2.7
-                  - 3.5
-                """))
-    config = utils.load_conda_config()
-    config.exclusive_config_file = tmp
-
-    # should make three: one, libone, and py-one
-    assert len(utils.load_all_meta(recipe, config)) == 3
-
     build_result = build.build_recipes(
         r.basedir,
         config={},
@@ -960,6 +943,6 @@ def test_cb3_outputs():
     assert build_result
 
     for k, v in r.recipe_dirs.items():
-        for i in utils.build_package_paths(v):
+        for i in utils.built_package_paths(v):
             assert os.path.exists(i)
             ensure_missing(i)
