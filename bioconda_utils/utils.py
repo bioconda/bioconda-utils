@@ -18,7 +18,7 @@ from jsonschema import validate
 import datetime
 from distutils.version import LooseVersion
 import time
-import threading
+from threading import Event, Thread
 from pathlib import PurePath
 
 from conda_build import api
@@ -929,14 +929,13 @@ def modified_recipes(git_range, recipe_folder, config_file):
 
 class Progress:
     def __init__(self):
-        self.thread = threading.Thread(target=self.progress)
-        self.stop = False
+        self.thread = Thread(target=self.progress)
+        self.stop = Event()
 
     def progress(self):
-        while not self.stop:
+        while not self.stop.wait(60):
             print(".", end="")
             sys.stdout.flush()
-            time.sleep(60)
         print("")
 
     def __enter__(self):
@@ -944,5 +943,5 @@ class Progress:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.stop = True
+        self.stop.set()
         self.thread.join()
