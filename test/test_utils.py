@@ -910,3 +910,56 @@ def test_variants():
     config.exclusive_config_file = tmp
 
     assert len(utils.load_all_meta(recipe, config)) == 2
+
+
+def test_cb3_outputs():
+    r = Recipes(
+        """
+        one:
+          meta.yaml: |
+            package:
+              name: one
+              version: "0.1"
+
+            outputs:
+              - name: libone
+              - name: py-one
+                requirements:
+                  - {{ pin_subpackage('libone', exact=True) }}
+                  - python  {{ python }}
+
+        """, from_string=True)
+    r.write_recipes()
+    recipe = r.recipe_dirs['one']
+
+    # Write a temporary conda_build_config.yaml that we'll point the config
+    # object to:
+    tmp = tempfile.NamedTemporaryFile(delete=False).name
+    with open(tmp, 'w') as fout:
+        fout.write(
+            dedent(
+                """
+                python:
+                  - 2.7
+                  - 3.5
+                """))
+    config = utils.load_conda_config()
+    config.exclusive_config_file = tmp
+
+    # should make three: one, libone, and py-one
+    assert len(utils.load_all_meta(recipe, config)) == 3
+
+    build_result = build.build_recipes(
+        r.basedir,
+        config={},
+        packages="*",
+        testonly=False,
+        force=False,
+        mulled_test=False,
+    )
+    assert build_result
+
+    for k, v in r.recipe_dirs.items():
+        for i in utils.build_package_paths(v):
+            assert os.path.exists(i)
+            ensure_missing(i)
