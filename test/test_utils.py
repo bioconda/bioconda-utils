@@ -819,6 +819,11 @@ def test_conda_forge_pins(caplog):
     )
     assert build_result
 
+    for k, v in r.recipe_dirs.items():
+        for i in utils.build_package_paths(v):
+            assert os.path.exists(i)
+            ensure_missing(i)
+
 
 def test_bioconda_pins(caplog):
     """
@@ -846,6 +851,11 @@ def test_bioconda_pins(caplog):
         mulled_test=False,
     )
     assert build_result
+
+    for k, v in r.recipe_dirs.items():
+        for i in utils.build_package_paths(v):
+            assert os.path.exists(i)
+            ensure_missing(i)
 
 
 def test_load_meta_skipping():
