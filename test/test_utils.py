@@ -946,3 +946,35 @@ def test_cb3_outputs():
         for i in utils.built_package_paths(v):
             assert os.path.exists(i)
             ensure_missing(i)
+
+def test_compiler():
+    r = Recipes(
+        """
+        one:
+          meta.yaml: |
+            package:
+              name: one
+              version: 0.1
+            requirements:
+              build:
+                - {{ compiler('c') }}
+              host:
+                - python
+              run:
+                - python
+        """, from_string=True)
+    r.write_recipes()
+    build_result = build.build_recipes(
+        r.basedir,
+        config={},
+        packages="*",
+        testonly=False,
+        force=False,
+        mulled_test=False,
+    )
+    assert build_result
+
+    for k, v in r.recipe_dirs.items():
+        for i in utils.built_package_paths(v):
+            assert os.path.exists(i)
+            ensure_missing(i)
