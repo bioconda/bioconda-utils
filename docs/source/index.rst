@@ -89,7 +89,6 @@ packages compiled against R 3.3.1 might not work.
 
 ::
 
-    conda config --add channels anaconda  # NEW as of May 2018
     conda config --add channels defaults
     conda config --add channels conda-forge
     conda config --add channels bioconda
