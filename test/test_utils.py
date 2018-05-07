@@ -839,7 +839,7 @@ def test_bioconda_pins(caplog):
               version: 0.1
             requirements:
               run:
-                - htslib {{ htslib }}
+                - htslib
         """, from_string=True)
     r.write_recipes()
     build_result = build.build_recipes(
