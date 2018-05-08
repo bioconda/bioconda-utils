@@ -188,7 +188,7 @@ use that version.
 Previously we maintained a global, bioconda-specific pinning file (see
 `scripts/env_matrix.yaml
 <https://github.com/bioconda/bioconda-recipes/blob/dd7248c5dcc5ea0237c81bff4d1e6df5a9bdd274/scripts/env_matrix.yml>`_).
-For ``zlibe``, that file defined the variable ``CONDA_ZLIB`` and that variable
+For ``zlib``, that file defined the variable ``CONDA_ZLIB`` and that variable
 was made available to the recipes as a jinja2 variable. One problem with this
 is that we did not often synchronize our pinned versions with conda-forge's
 pinned versions, and this disconnect could cause problems.
