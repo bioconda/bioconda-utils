@@ -803,3 +803,133 @@ def test_deprecated_numpy_spec():
                   - numpy x.x
         ''']
     )
+
+
+def test_should_use_compilers():
+    run_lint(
+        func=lint_functions.should_use_compilers,
+        should_pass=['''
+        a:
+            meta.yaml: |
+              package:
+                name: a
+                version: 0.1
+              requirements:
+                host:
+                  - python
+                run:
+                  - python
+        ''',
+        '''
+        a:
+            meta.yaml: |
+              package:
+                name: a
+                version: 0.1
+              requirements:
+                build:
+                  - {{ compiler ('c') }}
+        '''],
+        should_fail=['''
+        a:
+            meta.yaml: |
+              package:
+                name: a
+                version: 0.1
+              requirements:
+                build:
+                  - gcc  # [linux]
+        ''',
+        '''
+        a:
+            meta.yaml: |
+              package:
+                name: a
+                version: 0.1
+              requirements:
+                run:
+                  - libgcc  # [linux]
+         '''
+        ]
+    )
+
+def test_compilers_must_be_in_build():
+    run_lint(
+        func=lint_functions.compilers_must_be_in_build,
+        should_pass=['''
+        a:
+            meta.yaml: |
+              package:
+                name: a
+                version: 0.1
+              requirements:
+                host:
+                  - python
+                run:
+                  - python
+        ''',
+        '''
+        a:
+            meta.yaml: |
+              package:
+                name: a
+                version: 0.1
+              requirements:
+                build:
+                  - {{ compiler ('c') }}
+        '''],
+        should_fail=['''
+        a:
+            meta.yaml: |
+              package:
+                name: a
+                version: 0.1
+              requirements:
+                run:
+                  - {{ compiler("c") }}
+        ''',
+        '''
+        a:
+            meta.yaml: |
+              package:
+                name: a
+                version: 0.1
+              requirements:
+                host:
+                  - {{ compiler ('c') }}
+         '''
+        ]
+    )
+
+
+def test_should_not_use_fn():
+    run_lint(
+        func=lint_functions.should_not_use_fn,
+        should_pass=['''
+        a:
+            meta.yaml: |
+              package:
+                name: a
+                version: 0.1
+        ''',
+        '''
+        a:
+            meta.yaml: |
+              package:
+                name: a
+                version: 0.1
+              source:
+                url: https://bioconda.github.io/index.html
+        '''],
+        should_fail=['''
+        a:
+            meta.yaml: |
+              package:
+                name: a
+                version: 0.1
+              source:
+                fn: index.html
+                url: https://bioconda.github.io/index.html
+        ''',
+        ]
+    )

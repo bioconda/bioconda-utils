@@ -34,7 +34,7 @@ def _get_deps(meta, section=None):
 
     section : str, list, or None
         If None, returns all dependencies. Otherwise can be a string or list of
-        options [build, run, test] to return section-specific dependencies.
+        options [build, host, run, test] to return section-specific dependencies.
     """
 
     get_name = lambda dep: dep.split()[0]
@@ -43,7 +43,7 @@ def _get_deps(meta, section=None):
     if reqs is None:
         return []
     if section is None:
-        sections = ['build', 'run', 'test']
+        sections = ['build', 'host', 'run', 'test']
     if isinstance(section, str):
         sections = [section]
     deps = []
@@ -113,7 +113,7 @@ def missing_home(recipe, metas, df):
 
 def missing_summary(recipe, metas, df):
     for meta in metas:
-        if not  meta.get_value('about/summary'):
+        if not meta.get_value('about/summary'):
             return {
                 'missing_summary': True,
                 'fix': 'add about:summary',
@@ -122,7 +122,7 @@ def missing_summary(recipe, metas, df):
 
 def missing_license(recipe, metas, df):
     for meta in metas:
-        if not  meta.get_value('about/license'):
+        if not meta.get_value('about/license'):
             return {
                 'missing_license': True,
                 'fix': 'add about:license'
@@ -208,7 +208,6 @@ def has_windows_bat_file(recipe, metas, df):
 
 def should_be_noarch(recipe, metas, df):
     for meta in metas:
-        print(meta.get_value("package/name"))
         deps = _get_deps(meta)
         if (
             ('gcc' not in deps) and
@@ -277,15 +276,15 @@ def invalid_identifiers(recipe, metas, df):
         try:
             identifiers = meta.get_section('extra').get('identifiers', [])
             if not isinstance(identifiers, list):
-                return { 'invalid_identifiers': True,
-                         'fix': 'extra:identifiers must hold a list of identifiers' }
+                return {'invalid_identifiers': True,
+                        'fix': 'extra:identifiers must hold a list of identifiers'}
             if not all(isinstance(i, str) for i in identifiers):
-                return { 'invalid_identifiers': True,
-                         'fix': 'each identifier must be a string' }
+                return {'invalid_identifiers': True,
+                        'fix': 'each identifier must be a string'}
             if not all((':' in i) for i in identifiers):
-                return { 'invalid_identifiers': True,
-                         'fix': 'each identifier must be of the form '
-                                'type:identifier (e.g., doi:123)' }
+                return {'invalid_identifiers': True,
+                        'fix': 'each identifier must be of the form '
+                               'type:identifier (e.g., doi:123)'}
         except KeyError:
             # no identifier section
             continue
@@ -294,9 +293,52 @@ def invalid_identifiers(recipe, metas, df):
 def deprecated_numpy_spec(recipe, metas, df):
     with open(os.path.join(recipe, "meta.yaml")) as recipe:
         if re.search("numpy( )+x\.x", recipe.read()):
-            return { 'deprecated_numpy_spec': True,
-                     'fix': 'omit x.x as pinning of numpy is now '
-                            'handled automatically'}
+            return {'deprecated_numpy_spec': True,
+                    'fix': 'omit x.x as pinning of numpy is now '
+                           'handled automatically'}
+
+
+def should_not_use_fn(recipe, metas, df):
+    for meta in metas:
+        source = meta.get_section('source')
+        if 'fn' in source:
+            return {
+                'should_not_use_fn': True,
+                'fix': 'URL should specify path to file, which will be used as the filename'
+            }
+
+
+def should_use_compilers(recipe, metas, df):
+    for meta in metas:
+        deps = _get_deps(meta)
+        if (
+            ('gcc' in deps) or
+            ('llvm' in deps) or
+            ('libgfortran' in deps) or
+            ('libgcc' in deps)
+
+        ):
+            return {
+                'should_use_compilers': True,
+                'fix': 'use {{ compiler("c") }} or other new-style compilers',
+            }
+
+
+def compilers_must_be_in_build(recipe, metas, df):
+    for meta in metas:
+
+        print(_get_deps(meta, 'run'))
+        if (
+
+            any(['toolchain' in i for i in _get_deps(meta, 'run')]) or
+            any(['toolchain' in i for i in _get_deps(meta, 'host')])
+        ):
+            return {
+                'compilers_must_be_in_build': True,
+                'fix': (
+                    '{{ compiler("c") }} or other new-style compliers can '
+                    'only go in the build: section')
+            }
 
 
 registry = (
@@ -316,11 +358,12 @@ registry = (
     # it breaks packages that use pkg_resources or setuptools console scripts!
     # uses_setuptools,
     has_windows_bat_file,
-
-    # should_be_noarch,
-    #
+    should_be_noarch,
     should_not_be_noarch,
     setup_py_install_args,
     invalid_identifiers,
-    deprecated_numpy_spec
+    deprecated_numpy_spec,
+    should_not_use_fn,
+    should_use_compilers,
+    compilers_must_be_in_build,
 )
