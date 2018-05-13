@@ -29,17 +29,15 @@ which we are not doing yet. However if a recipe uses one of the new ``{{
 compiler() }}`` methods described in :ref:`compiler-tools`, the ``host``
 section is **required**.
 
-Existing recipes that only have a ``build:`` section and do not use the new
-compiler tools (the thousands of existing recipes!) should still work for now;
-they just won't work if we ever try to cross-compile them.  However **new**
-recipes created by ``conda skeleton`` have the new ``host`` section, and this
-seems to be the way conda is going, so we will gradually port over our recipes.
-
 The new ``build`` section should have things like compilers, ``git``,
 ``automake``, ``make``, ``cmake``, and other build tools. If there are no
 compilers or other build tools, there should be no ``build:`` section.
 
 The new ``host`` section should have everything else.
+
+There are many existing recipes that only have a ``build:`` section. They will
+work for now; they just won't work if we ever try to cross-compile them.
+However **new** recipes should have the ``host:`` section.
 
 The ``run`` section remains the same.
 
@@ -171,9 +169,8 @@ Global pinning
 
 - Previously we pinned packages using the syntax ``- zlib {{ CONDA_ZLIB }}*``
   in both the ``build`` and ``run`` dependencies.
-- Instead, we should now just specify package names in the ``host`` section,
-  e.g., as simply ``zlib``. They are pinned automatically. No need to add them
-  to run dependencies, as they will be added automatically.
+- Instead, we should now specify only package names in the ``host`` and ``run``
+  sections e.g., as simply ``zlib``. They are pinned automatically.
 
 Global pinning is the idea of making sure all recipes use the same versions of
 common libraries.  Problems arise when the build-time version does not match
@@ -200,7 +197,9 @@ specify constraints. Specifying variants generally takes the form of writing
 a YAML file. We have adopted the variants defined by conda-forge by installing
 their ``conda-forge-pinning`` conda package in our build environment.
 Technically, that package unpacks the config YAML into our conda environment so
-that it can be used for building all recipes.
+that it can be used for building all recipes. You can see this file at
+`conda_build_config.yaml
+<https://github.com/conda-forge/conda-forge-pinning-feedstock/blob/master/recipe/conda_build_config.yaml>`_
 
 The second major advance in conda-build 3 is the the concept of "run exports".
 The idea here is to specify that any time a dependency (``zlib``, in our running example)
@@ -211,7 +210,7 @@ conda-forge), so in general bioconda collaborators can just add ``zlib`` as
 a build dependency.
 
 Note that we don't have to specify the version of ``zlib`` in the recipe -- it
-is pinned in the ``conda_build_config.yaml`` file  we share with conda-forge.
+is pinned in that ``conda_build_config.yaml`` file we share with conda-forge.
 
 In a similar fashion, the reason that we no longer have to specify ``libgcc``
 as a run dependency (as described above in the compilers section) is that ``{{
@@ -246,9 +245,11 @@ After:
       build:
         - {{ compiler('c') }}
       host:
+        - python
         - zlib
       run:
         - python
+        - zlib
 
 
 .. seealso::
