@@ -261,7 +261,7 @@ In particular, ensure that each identifier starts with a type
 Whitespace is not allowed.
 
 `deprecated_numpy_spec`
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
 Reason for failing: The recipe contains ``numpy x.x`` in build or run requirements.
 
 Rationale: This kind of version pinning is deprecated, and numpy pinning is now
@@ -269,52 +269,30 @@ handled automatically by the system.
 
 How to resolve: Remove the ``x.x``.
 
+`should_not_use_fn`
+~~~~~~~~~~~~~~~~~~~
+Reason for failing: Recipe contains a ``fn:`` key in the ``source:`` section
 
-`*_not_pinned`
-~~~~~~~~~~~~~~
+Rationale: Conda-build 3 no longer requres ``fn:``, and it is redundant with ``url:``.
 
-Reason for failing: The recipe has dependencies that need to be pinned to
-a specific version all across bioconda.
+How to resolve: Remove the ``source: fn:`` key.
 
-Rationale: Sometimes when a core dependency (like ``zlib``, which is used across
-many recipes) is updated it breaks backwards compatibility. In order to avoid
-this, for known-to-be-problematic dependencies we pin to a specific version
-across all recipes.
+`should_use_compilers`
+~~~~~~~~~~~~~~~~~~~~~~
+Reason for failing: The recipe has one of ``gcc``, ``llvm``, ``libgfortran``, or ``libgcc`` as dependencies.
 
-How to resolve: Change the dependency line as follows. For each dependency
-failing the linting, specify a jinja-templated version by converting it to
-uppercase, prefixing it with ``CONDA_``, adding double braces, and adding a ``*``.
+Rationale: Conda-build 3 now uses compiler tools, which are more up-to-date and
+better-supported.
 
-Examples are much easier to understand:
+How to resolve: Use ``{{ compiler() }}`` variables. See :ref:`compiler-tools` for details.
 
-- ``zlib`` should become ``zlib {{ CONDA_ZLIB }}*``
-- ``ncurses`` should become ``ncurses {{ CONDA_NCURSES }}*``
-- ``htslib`` should become ``htslib {{ CONDA_HTSLIB }}*``
-- ``boost`` should become ``boost {{ CONDA_BOOST }}*``
-- ... and so on.
+`compilers_must_be_in_build`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Reason for failing: A ``{{ compiler() }}`` varaiable was found, but not in the ``build:`` section.
 
-Here is an example in the context of a ``meta.yaml`` file where ``zlib`` needs to be
-pinned:
+Rational: The compiler tools must not be in ``host:`` or ``run:`` sections.
 
-.. code-block:: yaml
-
-    # this will give a linting error because zlib is not pinned
-    build:
-      - zlib
-    run:
-      - zlib
-      - bedtools
-
-And here is the fixed version:
-
-.. code-block:: yaml
-
-    # fixed:
-    build:
-      - zlib {{ CONDA_ZLIB }}*
-    run:
-      - zlib {{ CONDA_ZLIB }}*
-      - bedtools
+How to resolve: Move ``{{ compiler() }}`` variables to the ``build:`` section.
 
 
 Developer docs
