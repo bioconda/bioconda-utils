@@ -107,11 +107,12 @@ The above commands do the following:
 - run bioconda-utils in that new installation
 
 If you do not have access to Docker, you can still run the basic test by
-excluding the ``--docker`` and ``--mulled-test`` arguments in the last command:
+telling the bootstrap setup to not use docker, and by excluding the
+``--docker`` and ``--mulled-test`` arguments in the last command:
 
 .. code-block:: bash
 
-    ./bootstrap.py /tmp/miniconda
+    ./bootstrap.py --no-docker /tmp/miniconda
     source ~/.config/bioconda/activate
     bioconda-utils build recipes config.yml --git-range master
 
