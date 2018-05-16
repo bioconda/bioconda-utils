@@ -160,15 +160,15 @@ def load_all_meta(recipe, config=None, finalize=True):
         run_exports). For fast-running tasks like linting, set to False.
     """
     if config is None:
-        config = load_conda_config()
+        config = load_conda_build_config()
     return [meta for (meta, _, _) in api.render(recipe,
                                                 config=config,
                                                 finalize=finalize)]
 
 
-def load_conda_config(platform=None, trim_skip=True):
+def load_conda_build_config(platform=None, trim_skip=True):
     """
-    Load conda config while considering global pinnings from conda-forge.
+    Load conda build config while considering global pinnings from conda-forge.
     """
     config = api.Config(
         no_download_source=True,
@@ -604,7 +604,7 @@ def built_package_paths(recipe):
     Does not necessarily exist; equivalent to `conda build --output recipename`
     but without the subprocess.
     """
-    config = load_conda_config()
+    config = load_conda_build_config()
     paths = api.get_output_file_paths(recipe, config=config)
     return paths
 
@@ -741,7 +741,7 @@ def filter_recipes(recipes, channels=None, force=False):
             platform = "linux"
 
         meta = load_first_metadata(
-            recipe, config=load_conda_config(platform=platform))
+            recipe, config=load_conda_build_config(platform=platform))
 
         # The recipe likely defined skip: True
         if meta is None:

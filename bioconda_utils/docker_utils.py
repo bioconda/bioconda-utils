@@ -329,7 +329,7 @@ class RecipeBuilder(object):
 
         # Copy the conda build config to the staging directory that is
         # visible in the container
-        shutil.copyfile(utils.load_conda_config().exclusive_config_file,
+        shutil.copyfile(utils.load_conda_build_config().exclusive_config_file,
                         os.path.join(self.pkg_dir,
                                      "conda_build_config.yaml"))
 
