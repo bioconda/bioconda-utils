@@ -71,137 +71,146 @@ def _has_preprocessing_selector(recipe):
             return True
 
 
-def in_other_channels(recipe, metas, df):
+def lint_multiple_metas(lint_function):
+    def lint_metas(recipe, metas, df, *args, **kwargs):
+        lint = partial(lint_function, recipe)
+        for meta in metas:
+            ret = lint(meta, df, *args, **kwargs)
+            if ret is not None:
+                return ret
+    return lint_metas
+
+@lint_multiple_metas
+def in_other_channels(recipe, meta, df):
     """
     Does the package exist in any other non-bioconda channels?
     """
-    for meta in metas:
-        results = _subset_df(recipe, meta, df)
-        channels = set(results.channel).difference(['bioconda'])
-        if len(channels):
-            return {
-                'exists_in_channels': channels,
-                'fix': 'consider deprecating',
-            }
+    results = _subset_df(recipe, meta, df)
+    channels = set(results.channel).difference(['bioconda'])
+    if len(channels):
+        return {
+            'exists_in_channels': channels,
+            'fix': 'consider deprecating',
+        }
 
 
-def already_in_bioconda(recipe, metas, df):
+@lint_multiple_metas
+def already_in_bioconda(recipe, meta, df):
     """
     Does the package exist in bioconda?
     """
-    for meta in metas:
-        results = _subset_df(recipe, meta, df)
-        build_section = meta.get_section('build')
-        build_number = int(build_section.get('number', 0))
-        build_results = results[results.build_number == build_number]
-        channels = set(build_results.channel)
-        if 'bioconda' in channels:
+    results = _subset_df(recipe, meta, df)
+    build_section = meta.get_section('build')
+    build_number = int(build_section.get('number', 0))
+    build_results = results[results.build_number == build_number]
+    channels = set(build_results.channel)
+    if 'bioconda' in channels:
+        return {
+            'already_in_bioconda': True,
+            'fix': 'bump version or build number'
+        }
+
+
+@lint_multiple_metas
+def missing_home(recipe, meta, df):
+    if not meta.get_value('about/home'):
+        return {
+            'missing_home': True,
+            'fix': 'add about:home',
+        }
+
+
+@lint_multiple_metas
+def missing_summary(recipe, meta, df):
+    if not meta.get_value('about/summary'):
+        return {
+            'missing_summary': True,
+            'fix': 'add about:summary',
+        }
+
+
+@lint_multiple_metas
+def missing_license(recipe, meta, df):
+    if not meta.get_value('about/license'):
+        return {
+            'missing_license': True,
+            'fix': 'add about:license'
+        }
+
+
+@lint_multiple_metas
+def missing_tests(recipe, meta, df):
+    test_files = ['run_test.py', 'run_test.sh', 'run_test.pl']
+    if not meta.get_section('test'):
+        if not any([os.path.exists(os.path.join(recipe, f)) for f in
+                    test_files]):
             return {
-                'already_in_bioconda': True,
-                'fix': 'bump version or build number'
+                'no_tests': True,
+                'fix': 'add basic tests',
             }
 
 
-def missing_home(recipe, metas, df):
-    for meta in metas:
-        if not meta.get_value('about/home'):
+@lint_multiple_metas
+def missing_hash(recipe, meta, df):
+    # could be a meta-package if no source section or if None
+    sources = meta.get_section('source')
+    if not sources:
+        return
+    if isinstance(sources, dict):
+        sources = [sources]
+
+    for source in sources:
+        if not any(source.get(checksum)
+                   for checksum in ('md5', 'sha1', 'sha256')):
             return {
-                'missing_home': True,
-                'fix': 'add about:home',
+                'missing_hash': True,
+                'fix': 'add md5, sha1, or sha256 hash to "source" section',
             }
 
 
-def missing_summary(recipe, metas, df):
-    for meta in metas:
-        if not meta.get_value('about/summary'):
+@lint_multiple_metas
+def uses_git_url(recipe, meta, df):
+    sources = meta.get_section('source')
+    if not sources:
+        # metapackage?
+        return
+    if isinstance(sources, dict):
+        sources = [sources]
+
+    for source in sources:
+        if 'git_url' in source:
             return {
-                'missing_summary': True,
-                'fix': 'add about:summary',
+                'uses_git_url': True,
+                'fix': 'use tarballs whenever possible',
             }
 
 
-def missing_license(recipe, metas, df):
-    for meta in metas:
-        if not meta.get_value('about/license'):
-            return {
-                'missing_license': True,
-                'fix': 'add about:license'
-            }
+@lint_multiple_metas
+def uses_perl_threaded(recipe, meta, df):
+    if 'perl-threaded' in _get_deps(meta):
+        return {
+            'depends_on_perl_threaded': True,
+            'fix': 'use "perl" instead of "perl-threaded"',
+        }
 
 
-def missing_tests(recipe, metas, df):
-    for meta in metas:
-        test_files = ['run_test.py', 'run_test.sh', 'run_test.pl']
-        if not meta.get_section('test'):
-            if not any([os.path.exists(os.path.join(recipe, f)) for f in
-                        test_files]):
-                return {
-                    'no_tests': True,
-                    'fix': 'add basic tests',
-                }
+@lint_multiple_metas
+def uses_javajdk(recipe, meta, df):
+    if 'java-jdk' in _get_deps(meta):
+        return {
+            'depends_on_java-jdk': True,
+            'fix': 'use "openjdk" instead of "java-jdk"',
+        }
 
 
-def missing_hash(recipe, metas, df):
-    for meta in metas:
-        # could be a meta-package if no source section or if None
-        sources = meta.get_section('source')
-        if not sources:
-            continue
-        if isinstance(sources, dict):
-            sources = [sources]
-
-        for source in sources:
-            if not any(source.get(checksum)
-                       for checksum in ('md5', 'sha1', 'sha256')):
-                return {
-                    'missing_hash': True,
-                    'fix': 'add md5, sha1, or sha256 hash to "source" section',
-                }
-
-
-def uses_git_url(recipe, metas, df):
-    for meta in metas:
-        sources = meta.get_section('source')
-        if not sources:
-            # metapackage?
-            continue
-        if isinstance(sources, dict):
-            sources = [sources]
-
-        for source in sources:
-            if 'git_url' in source:
-                return {
-                    'uses_git_url': True,
-                    'fix': 'use tarballs whenever possible',
-                }
-
-
-def uses_perl_threaded(recipe, metas, df):
-    for meta in metas:
-        if 'perl-threaded' in _get_deps(meta):
-            return {
-                'depends_on_perl_threaded': True,
-                'fix': 'use "perl" instead of "perl-threaded"',
-            }
-
-
-def uses_javajdk(recipe, metas, df):
-    for meta in metas:
-        if 'java-jdk' in _get_deps(meta):
-            return {
-                'depends_on_java-jdk': True,
-                'fix': 'use "openjdk" instead of "java-jdk"',
-            }
-
-
-def uses_setuptools(recipe, metas, df):
-    for meta in metas:
-        if 'setuptools' in _get_deps(meta, 'run'):
-            return {
-                'depends_on_setuptools': True,
-                'fix': ('setuptools might not be a run requirement (unless it uses '
-                        'pkg_resources or setuptools console scripts)'),
-            }
+@lint_multiple_metas
+def uses_setuptools(recipe, meta, df):
+    if 'setuptools' in _get_deps(meta, 'run'):
+        return {
+            'depends_on_setuptools': True,
+            'fix': ('setuptools might not be a run requirement (unless it uses '
+                    'pkg_resources or setuptools console scripts)'),
+        }
 
 
 def has_windows_bat_file(recipe, metas, df):
@@ -212,88 +221,88 @@ def has_windows_bat_file(recipe, metas, df):
         }
 
 
-def should_be_noarch(recipe, metas, df):
-    for meta in metas:
-        deps = _get_deps(meta)
-        if (
-            ('gcc' not in deps) and
-            ('python' in deps) and
-            # This will also exclude recipes with skip sections
-            # which is a good thing, because noarch also implies independence of
-            # the python version.
-            not _has_preprocessing_selector(recipe)
-        ) and (
-            'noarch' not in meta.get_section('build')
-        ):
-            return {
-                'should_be_noarch': True,
-                'fix': 'add "build: noarch" section',
-            }
-
-
-def should_not_be_noarch(recipe, metas, df):
-    for meta in metas:
-        deps = _get_deps(meta)
-        if (
-            ('gcc' in deps) or
-            meta.get_section('build').get('skip', False) in ["true", "True"]
-        ) and (
-            'noarch' in meta.get_section('build')
-        ):
-            print("error")
-            return {
-                'should_not_be_noarch': True,
-                'fix': 'remove "build: noarch" section',
-            }
-
-
-def setup_py_install_args(recipe, metas, df):
-    for meta in metas:
-        if 'setuptools' not in _get_deps(meta, 'build'):
-            continue
-
-        err = {
-            'needs_setuptools_args': True,
-            'fix': ('add "--single-version-externally-managed --record=record.txt" '
-                    'to setup.py command'),
+@lint_multiple_metas
+def should_be_noarch(recipe, meta, df):
+    deps = _get_deps(meta)
+    if (
+        ('gcc' not in deps) and
+        ('python' in deps) and
+        # This will also exclude recipes with skip sections
+        # which is a good thing, because noarch also implies independence of
+        # the python version.
+        not _has_preprocessing_selector(recipe)
+    ) and (
+        'noarch' not in meta.get_section('build')
+    ):
+        return {
+            'should_be_noarch': True,
+            'fix': 'add "build: noarch" section',
         }
 
-        script_line = meta.get_section('build').get('script', '')
-        if (
-            'setup.py install' in script_line and
-            '--single-version-externally-managed' not in script_line
-        ):
-            return err
 
-        build_sh = os.path.join(recipe, 'build.sh')
-        if not os.path.exists(build_sh):
-            continue
-
-        contents = open(build_sh).read()
-        if (
-            'setup.py install' in contents and
-            '--single-version-externally-managed' not in contents
-        ):
-            return err
+@lint_multiple_metas
+def should_not_be_noarch(recipe, meta, df):
+    deps = _get_deps(meta)
+    if (
+        ('gcc' in deps) or
+        meta.get_section('build').get('skip', False) in ["true", "True"]
+    ) and (
+        'noarch' in meta.get_section('build')
+    ):
+        print("error")
+        return {
+            'should_not_be_noarch': True,
+            'fix': 'remove "build: noarch" section',
+        }
 
 
-def invalid_identifiers(recipe, metas, df):
-    for meta in metas:
-        try:
-            identifiers = meta.get_section('extra').get('identifiers', [])
-            if not isinstance(identifiers, list):
-                return {'invalid_identifiers': True,
-                        'fix': 'extra:identifiers must hold a list of identifiers'}
-            if not all(isinstance(i, str) for i in identifiers):
-                return {'invalid_identifiers': True,
-                        'fix': 'each identifier must be a string'}
-            if not all((':' in i) for i in identifiers):
-                return {'invalid_identifiers': True,
-                        'fix': 'each identifier must be of the form '
-                               'type:identifier (e.g., doi:123)'}
-        except KeyError:
-            # no identifier section
-            continue
+@lint_multiple_metas
+def setup_py_install_args(recipe, meta, df):
+    if 'setuptools' not in _get_deps(meta, 'build'):
+        return
+
+    err = {
+        'needs_setuptools_args': True,
+        'fix': ('add "--single-version-externally-managed --record=record.txt" '
+                'to setup.py command'),
+    }
+
+    script_line = meta.get_section('build').get('script', '')
+    if (
+        'setup.py install' in script_line and
+        '--single-version-externally-managed' not in script_line
+    ):
+        return err
+
+    build_sh = os.path.join(recipe, 'build.sh')
+    if not os.path.exists(build_sh):
+        return
+
+    contents = open(build_sh).read()
+    if (
+        'setup.py install' in contents and
+        '--single-version-externally-managed' not in contents
+    ):
+        return err
+
+
+@lint_multiple_metas
+def invalid_identifiers(recipe, meta, df):
+    try:
+        identifiers = meta.get_section('extra').get('identifiers', [])
+        if not isinstance(identifiers, list):
+            return {'invalid_identifiers': True,
+                    'fix': 'extra:identifiers must hold a list of identifiers'}
+        if not all(isinstance(i, str) for i in identifiers):
+            return {'invalid_identifiers': True,
+                    'fix': 'each identifier must be a string'}
+        if not all((':' in i) for i in identifiers):
+            return {'invalid_identifiers': True,
+                    'fix': 'each identifier must be of the form '
+                           'type:identifier (e.g., doi:123)'}
+    except KeyError:
+        # no identifier section
+        return
 
 
 def deprecated_numpy_spec(recipe, metas, df):
@@ -304,53 +313,51 @@ def deprecated_numpy_spec(recipe, metas, df):
                            'handled automatically'}
 
 
-def should_not_use_fn(recipe, metas, df):
-    for meta in metas:
-        sources = meta.get_section('source')
-        if not sources:
-            continue
-        if isinstance(sources, dict):
-            sources = [sources]
+@lint_multiple_metas
+def should_not_use_fn(recipe, meta, df):
+    sources = meta.get_section('source')
+    if not sources:
+        return
+    if isinstance(sources, dict):
+        sources = [sources]
 
-        for source in sources:
-            if 'fn' in source:
-                return {
-                    'should_not_use_fn': True,
-                    'fix': 'URL should specify path to file, which will be used as the filename'
-                }
-
-
-def should_use_compilers(recipe, metas, df):
-    for meta in metas:
-        deps = _get_deps(meta)
-        if (
-            ('gcc' in deps) or
-            ('llvm' in deps) or
-            ('libgfortran' in deps) or
-            ('libgcc' in deps)
-
-        ):
+    for source in sources:
+        if 'fn' in source:
             return {
-                'should_use_compilers': True,
-                'fix': 'use {{ compiler("c") }} or other new-style compilers',
+                'should_not_use_fn': True,
+                'fix': 'URL should specify path to file, which will be used as the filename'
             }
 
 
-def compilers_must_be_in_build(recipe, metas, df):
-    for meta in metas:
+@lint_multiple_metas
+def should_use_compilers(recipe, meta, df):
+    deps = _get_deps(meta)
+    if (
+        ('gcc' in deps) or
+        ('llvm' in deps) or
+        ('libgfortran' in deps) or
+        ('libgcc' in deps)
 
-        print(_get_deps(meta, 'run'))
-        if (
+    ):
+        return {
+            'should_use_compilers': True,
+            'fix': 'use {{ compiler("c") }} or other new-style compilers',
+        }
 
-            any(['toolchain' in i for i in _get_deps(meta, 'run')]) or
-            any(['toolchain' in i for i in _get_deps(meta, 'host')])
-        ):
-            return {
-                'compilers_must_be_in_build': True,
-                'fix': (
-                    '{{ compiler("c") }} or other new-style compliers can '
-                    'only go in the build: section')
-            }
+
+@lint_multiple_metas
+def compilers_must_be_in_build(recipe, meta, df):
+    if (
+
+        any(['toolchain' in i for i in _get_deps(meta, 'run')]) or
+        any(['toolchain' in i for i in _get_deps(meta, 'host')])
+    ):
+        return {
+            'compilers_must_be_in_build': True,
+            'fix': (
+                '{{ compiler("c") }} or other new-style compliers can '
+                'only go in the build: section')
+        }
 
 
 registry = (
