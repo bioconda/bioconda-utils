@@ -293,6 +293,15 @@ def test_missing_hash():
             source:
               md5: 11111111111111111111111111111111
         ''',
+        '''
+        missing_hash:
+          meta.yaml: |
+            package:
+              name: md5hash_list
+              version: "0.1"
+            source:
+              - md5: 11111111111111111111111111111111
+        ''',
         # Should pass when source section is missing
         '''
         missing_hash:
@@ -322,13 +331,24 @@ def test_missing_hash():
               fn: "a.txt"
               sha256: ""
         ''',
+        '''
+        missing_hash:
+          meta.yaml: |
+            package:
+              name: missing_hash_list
+              version: "0.1"
+            source:
+              - fn: "a.txt"
+              - md5: 11111111111111111111111111111111
+        ''',
         ])
 
 
 def test_uses_git_url():
     run_lint(
         func=lint_functions.uses_git_url,
-        should_pass=['''
+        should_pass=[
+        '''
         uses_git_url:
           meta.yaml: |
             package:
@@ -343,8 +363,19 @@ def test_uses_git_url():
             package:
               name: uses_git_url
               version: "0.1"
-        '''],
-        should_fail='''
+        ''',
+        '''
+        uses_git_url:
+          meta.yaml: |
+            package:
+              name: uses_git_url_list
+              version: "0.1"
+            source:
+              - fn: "a.txt"
+        ''',
+        ],
+        should_fail=[
+        '''
         uses_git_url:
           meta.yaml: |
             package:
@@ -352,7 +383,17 @@ def test_uses_git_url():
               version: "0.1"
             source:
               git_url: https://github.com/bioconda/bioconda.git
-        ''')
+        ''',
+        '''
+        uses_git_url:
+          meta.yaml: |
+            package:
+              name: uses_git_url_list
+              version: "0.1"
+            source:
+              - git_url: https://github.com/bioconda/bioconda.git
+        ''',
+        ])
 
 
 def test_uses_perl_threaded():

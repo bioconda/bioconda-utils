@@ -144,30 +144,36 @@ def missing_tests(recipe, metas, df):
 def missing_hash(recipe, metas, df):
     for meta in metas:
         # could be a meta-package if no source section or if None
-        src = meta.get_section('source')
-        if not src:
+        sources = meta.get_section('source')
+        if not sources:
             continue
+        if isinstance(sources, dict):
+            sources = [sources]
 
-        if not any(src.get(checksum)
-                   for checksum in ('md5', 'sha1', 'sha256')):
-            return {
-                'missing_hash': True,
-                'fix': 'add md5, sha1, or sha256 hash to "source" section',
-            }
+        for source in sources:
+            if not any(source.get(checksum)
+                       for checksum in ('md5', 'sha1', 'sha256')):
+                return {
+                    'missing_hash': True,
+                    'fix': 'add md5, sha1, or sha256 hash to "source" section',
+                }
 
 
 def uses_git_url(recipe, metas, df):
     for meta in metas:
-        src = meta.get_section('source')
-        if not src:
+        sources = meta.get_section('source')
+        if not sources:
             # metapackage?
             continue
+        if isinstance(sources, dict):
+            sources = [sources]
 
-        if 'git_url' in src:
-            return {
-                'uses_git_url': True,
-                'fix': 'use tarballs whenever possible',
-            }
+        for source in sources:
+            if 'git_url' in source:
+                return {
+                    'uses_git_url': True,
+                    'fix': 'use tarballs whenever possible',
+                }
 
 
 def uses_perl_threaded(recipe, metas, df):
@@ -300,12 +306,18 @@ def deprecated_numpy_spec(recipe, metas, df):
 
 def should_not_use_fn(recipe, metas, df):
     for meta in metas:
-        source = meta.get_section('source')
-        if 'fn' in source:
-            return {
-                'should_not_use_fn': True,
-                'fix': 'URL should specify path to file, which will be used as the filename'
-            }
+        sources = meta.get_section('source')
+        if not sources:
+            continue
+        if isinstance(sources, dict):
+            sources = [sources]
+
+        for source in sources:
+            if 'fn' in source:
+                return {
+                    'should_not_use_fn': True,
+                    'fix': 'URL should specify path to file, which will be used as the filename'
+                }
 
 
 def should_use_compilers(recipe, metas, df):
