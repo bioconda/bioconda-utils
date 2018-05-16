@@ -78,6 +78,7 @@ def lint_multiple_metas(lint_function):
             ret = lint(meta, df, *args, **kwargs)
             if ret is not None:
                 return ret
+    lint_metas.__name__ = lint_function
     return lint_metas
 
 @lint_multiple_metas
