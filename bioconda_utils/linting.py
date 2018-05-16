@@ -194,7 +194,7 @@ def lint(recipes, df, exclude=None, registry=None):
             for platform in ["linux", "osx"]:
                 config = utils.load_conda_config(platform=platform,
                                                  trim_skip=False)
-                metas.extend(utils.load_all_meta(recipe, config=config))
+                metas.extend(utils.load_all_meta(recipe, config=config, finalize=False))
         except (
             yaml.scanner.ScannerError, yaml.constructor.ConstructorError
         ) as e:

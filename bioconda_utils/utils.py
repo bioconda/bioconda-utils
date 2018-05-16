@@ -147,14 +147,23 @@ def sandboxed_env(env):
         os.environ.update(orig)
 
 
-def load_all_meta(recipe, config=None):
+def load_all_meta(recipe, config=None, finalize=True):
     """
     For each environment, yield the rendered meta.yaml.
+
+    Parameters
+    ----------
+    finalize : bool
+        If True, do a full conda-build render. Determines exact package builds
+        of build/host dependencies. It involves costly dependency resolution
+        via conda and also download of those packages (to inspect possible
+        run_exports). For fast-running tasks like linting, set to False.
     """
     if config is None:
         config = load_conda_config()
     return [meta for (meta, _, _) in api.render(recipe,
-                                                config=config)]
+                                                config=config,
+                                                finalize=finalize)]
 
 
 def load_conda_config(platform=None, trim_skip=True):
@@ -185,15 +194,23 @@ def load_conda_config(platform=None, trim_skip=True):
     return config
 
 
-def load_first_metadata(recipe, config=None):
+def load_first_metadata(recipe, config=None, finalize=True):
     """
     Returns just the first of possibly many metadata files. Used for when you
     need to do things like check a package name or version number (which are
     not expected to change between variants).
 
     If the recipe will be skipped, then returns None
+
+    Parameters
+    ----------
+    finalize : bool
+        If True, do a full conda-build render. Determines exact package builds
+        of build/host dependencies. It involves costly dependency resolution
+        via conda and also download of those packages (to inspect possible
+        run_exports). For fast-running tasks like linting, set to False.
     """
-    metas = load_all_meta(recipe, config)
+    metas = load_all_meta(recipe, config, finalize=finalize)
     if len(metas) > 0:
         return metas[0]
 
@@ -341,7 +358,7 @@ def get_deps(recipe=None, meta=None, build=True):
     """
     if recipe is not None:
         assert isinstance(recipe, str)
-        metadata = load_all_meta(recipe)
+        metadata = load_all_meta(recipe, finalize=False)
     elif meta is not None:
         metadata = [meta]
     else:
@@ -390,7 +407,7 @@ def get_dag(recipes, config, blacklist=None, restrict=True):
     recipes = list(recipes)
     metadata = []
     for recipe in sorted(recipes):
-        for r in load_all_meta(recipe):
+        for r in load_all_meta(recipe, finalize=False):
             metadata.append((r, recipe))
     if blacklist is None:
         blacklist = set()
@@ -484,9 +501,10 @@ def get_latest_recipes(recipe_folder, config, package="*"):
             yield group[0]
         else:
             def get_version(p):
-                return VersionOrder(
-                    load_first_metadata(os.path.join(p, 'meta.yaml')).get_value('package/version')
-                )
+                meta_path = os.path.join(p, 'meta.yaml')
+                meta = load_first_metadata(meta_path, finalize=False)
+                version = meta.get_value('package/version')
+                return VersionOrder(version)
             sorted_versions = sorted(group, key=get_version)
             if sorted_versions:
                 yield sorted_versions[-1]
