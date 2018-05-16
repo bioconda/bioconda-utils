@@ -203,6 +203,7 @@ def test_single_build_with_post_test(single_build):
         pkg_test.test_package(pkg)
 
 
+@pytest.mark.long_running
 def test_multi_build(multi_build):
     for v in multi_build.values():
         for pkg in v:
@@ -752,6 +753,7 @@ def test_build_empty_extra_container():
 
 
 @pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
+@pytest.mark.long_running
 def test_build_container_default_gcc(tmpdir):
     r = Recipes(
         """
