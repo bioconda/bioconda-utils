@@ -22,7 +22,7 @@ from threading import Event, Thread
 from pathlib import PurePath
 
 from conda_build import api
-from conda.models.version import VersionOrder
+from conda.exports import VersionOrder
 import yaml
 from jinja2 import Environment, PackageLoader
 from colorlog import ColoredFormatter
