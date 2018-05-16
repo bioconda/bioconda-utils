@@ -48,10 +48,8 @@ def run_lint(
         recipe, meta, df = r.recipe_dirs[name], r.recipes[name]['meta.yaml'], should_pass_df
         metas = []
         for platform in ["linux", "osx"]:
-            config = utils.load_conda_config(platform=platform,
-                                             trim_skip=False)
-            metas.extend(utils.load_all_meta(r.recipe_dirs[name],
-                                             config=config))
+            config = utils.load_conda_build_config(platform=platform, trim_skip=False)
+            metas.extend(utils.load_all_meta(r.recipe_dirs[name], config=config, finalize=False))
         if expect_pass:
             assert func(recipe, metas, df) is None, "lint did not pass"
         else:
