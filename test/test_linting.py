@@ -611,6 +611,7 @@ def test_has_windows_bat_file():
         ''',]
     )
 
+
 def test_should_not_be_noarch():
     run_lint(
         func=lint_functions.should_not_be_noarch,
@@ -906,10 +907,6 @@ def test_compilers_must_be_in_build():
                   - python
                 run:
                   - python
-        ''',
-        '''
-        a:
-            meta.yaml: |
               package:
                 name: a
                 version: 0.1
@@ -971,4 +968,34 @@ def test_should_not_use_fn():
                 url: https://bioconda.github.io/index.html
         ''',
         ]
+    )
+
+    
+def test_bioconductor_37():
+    run_lint(
+        func=lint_functions.bioconductor_37,
+        should_pass=['''
+        a:
+            meta.yaml: |
+              {% set bioc = "3.6" %}
+              package:
+                name: a
+                version: 0.1
+        '''],
+        should_fail=['''
+        a:
+            meta.yaml: |
+              {% set bioc = "3.7" %}
+              package:
+                name: a
+                version: 0.1
+        ''',
+        '''
+        a:
+            meta.yaml: |
+              {% set bioc = "release" %}
+              package:
+                name: a
+                version: 0.1
+        ''']
     )
