@@ -755,7 +755,7 @@ def get_package_paths(recipe, channel_packages, force=False):
             for pkg, pkg_path in pkgs.items() if force or pkg not in existing]
 
 
-def get_channel_packages(channels):
+def get_all_channel_packages(channels):
     if channels is None:
         channels = []
 

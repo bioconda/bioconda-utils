@@ -321,7 +321,7 @@ def build_recipes(
     all_success = True
     failed_uploads = []
     skip_dependent = defaultdict(list)
-    channel_packages = utils.get_channel_packages(check_channels)
+    channel_packages = utils.get_all_channel_packages(check_channels)
 
     for recipe in recipes:
         recipe_success = True
