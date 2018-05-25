@@ -709,97 +709,60 @@ def changed_since_master(recipe_folder):
     ]
 
 
-def filter_recipes(recipes, channels=None, force=False):
-    """
-    Generator yielding only those (recipe, pkgs) that should be built.
+def get_package_paths(recipe, channel_packages, force=False):
+    # check if package is noarch, if so, build only on linux
+    # with temp_os, we can fool the MetaData if needed.
+    platform = os.environ.get('OSTYPE', sys.platform)
+    if platform.startswith("darwin"):
+        platform = 'osx'
+    elif platform == "linux-gnu":
+        platform = "linux"
 
-    Parameters
-    ----------
-    recipes : iterable
-        Iterable of candidate recipes
+    meta = load_first_metadata(
+        recipe, config=load_conda_build_config(platform=platform))
 
-    channels : None or list
-        Optional list of channels to check for existing recipes
+    # The recipe likely defined skip: True
+    if meta is None:
+        return []
 
-    force : bool
-        Build the package even if it is already available in supplied channels.
-    """
+    # If on CI, handle noarch.
+    if os.environ.get('CI', None) == 'true':
+        if meta.get_value('build/noarch'):
+            if platform != 'linux':
+                logger.debug('FILTER: only building %s on '
+                             'linux because it defines noarch.',
+                             recipe)
+                return []
+
+    # get all packages that would be built
+    pkg_paths = built_package_paths(recipe)
+    pkgs = {os.path.basename(p): p for p in pkg_paths}
+    # check which ones exist already
+    existing = [pkg for pkg in pkgs if pkg in channel_packages]
+
+    for pkg in existing:
+        logger.info(
+            'FILTER: not building %s because '
+            'it is in channel(s) and it is not forced.', pkg)
+    for pkg in pkgs:
+        assert not pkg.endswith("_.tar.bz2"), (
+            "rendered path {} does not "
+            "contain a build number and recipe does not "
+            "define skip for this environment. "
+            "This is a conda bug.".format(pkg))
+    # yield all pkgs that do not yet exist
+    return [pkg_path
+            for pkg, pkg_path in pkgs.items() if force or pkg not in existing]
+
+
+def get_channel_packages(channels):
     if channels is None:
         channels = []
 
     channel_packages = set()
     for channel in channels:
         channel_packages.update(get_channel_packages(channel=channel))
-
-    def tobuild(recipe):
-        # check if package is noarch, if so, build only on linux
-        # with temp_os, we can fool the MetaData if needed.
-        platform = os.environ.get('OSTYPE', sys.platform)
-        if platform.startswith("darwin"):
-            platform = 'osx'
-        elif platform == "linux-gnu":
-            platform = "linux"
-
-        meta = load_first_metadata(
-            recipe, config=load_conda_build_config(platform=platform))
-
-        # The recipe likely defined skip: True
-        if meta is None:
-            return []
-
-        # If on CI, handle noarch.
-        if os.environ.get('CI', None) == 'true':
-            if meta.get_value('build/noarch'):
-                if platform != 'linux':
-                    logger.debug('FILTER: only building %s on '
-                                 'linux because it defines noarch.',
-                                 recipe)
-                    return []
-
-        # get all packages that would be built
-        pkg_paths = built_package_paths(recipe)
-        pkgs = {os.path.basename(p): p for p in pkg_paths}
-        # check which ones exist already
-        existing = [pkg for pkg in pkgs if pkg in channel_packages]
-
-        for pkg in existing:
-            logger.debug(
-                'FILTER: not building %s because '
-                'it is in channel(s) and it is not forced.', pkg)
-        for pkg in pkgs:
-            assert not pkg.endswith("_.tar.bz2"), (
-                "rendered path {} does not "
-                "contain a build number and recipe does not "
-                "define skip for this environment. "
-                "This is a conda bug.".format(pkg))
-        # yield all pkgs that do not yet exist
-        return [pkg_path
-                for pkg, pkg_path in pkgs.items() if pkg not in existing]
-
-    logger.debug('recipes: %s', recipes)
-    recipes = list(recipes)
-    nrecipes = len(recipes)
-    if nrecipes == 0:
-        raise StopIteration
-    max_recipe = max(map(len, recipes))
-    template = (
-        'Filtering {{0}} of {{1}} ({{2:.1f}}%) {{3:<{0}}}'.format(max_recipe)
-    )
-    print(flush=True)
-    try:
-        for i, recipe in enumerate(sorted(recipes)):
-            perc = (i + 1) / nrecipes * 100
-            print(template.format(i + 1, nrecipes, perc, recipe), end='')
-            pkgs = tobuild(recipe)
-            if pkgs:
-                yield recipe, pkgs
-            print(end='\r')
-    except sp.CalledProcessError as e:
-        logger.debug(e.stdout)
-        logger.error(e.stderr)
-        exit(1)
-    finally:
-        print(flush=True)
+    return channel_packages
 
 
 def get_blacklist(blacklists, recipe_folder):

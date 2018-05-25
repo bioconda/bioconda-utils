@@ -264,12 +264,6 @@ def build_recipes(
 
     logger.debug('recipes: %s', recipes)
 
-    logger.info('Filtering recipes')
-    recipe_targets = dict(
-        utils.filter_recipes(
-            recipes, check_channels, force=force))
-    recipes = set(recipe_targets.keys())
-
     dag, name2recipes = utils.get_dag(recipes, config=orig_config, blacklist=blacklist)
     recipe2name = {}
     for k, v in name2recipes.items():
@@ -327,6 +321,7 @@ def build_recipes(
     all_success = True
     failed_uploads = []
     skip_dependent = defaultdict(list)
+    channel_packages = utils.get_channel_packages(check_channels)
 
     for recipe in recipes:
         recipe_success = True
@@ -341,7 +336,12 @@ def build_recipes(
             skipped_recipes.append(recipe)
             continue
 
-        pkg_paths = recipe_targets[recipe]
+        logger.info('Determining expected packages')
+        pkg_paths = utils.get_package_paths(recipe, channel_packages,
+                                            force=force)
+        if not pkg_paths:
+            logger.info("Nothing to be done for recipe %s", recipe)
+            continue
 
         # If a recipe depends on conda, it means it must be installed in
         # the root env, which is not compatible with mulled-build tests. In
