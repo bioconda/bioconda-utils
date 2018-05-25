@@ -24,6 +24,7 @@ from pathlib import PurePath
 from conda_build import api
 from conda.exports import VersionOrder
 import yaml
+import jinja2
 from jinja2 import Environment, PackageLoader
 from colorlog import ColoredFormatter
 
@@ -164,6 +165,38 @@ def load_all_meta(recipe, config=None, finalize=True):
     return [meta for (meta, _, _) in api.render(recipe,
                                                 config=config,
                                                 finalize=finalize)]
+
+
+
+def load_meta_fast(recipe):
+    """
+    Given a package name, find the current meta.yaml file, parse it, and return
+    the dict.
+
+    Parameters
+    ----------
+    recipe : str
+        Path to recipe (directory containing the meta.yaml file)
+
+    config : str or dict
+        Config YAML or dict
+    """
+    class SilentUndefined(jinja2.Undefined):
+        def _fail_with_undefined_error(self, *args, **kwargs):
+            return ""
+        __add__ = __radd__ = __mul__ = __rmul__ = __div__ = __rdiv__ = \
+        __truediv__ = __rtruediv__ = __floordiv__ = __rfloordiv__ = \
+        __mod__ = __rmod__ = __pos__ = __neg__ = __call__ = \
+        __getitem__ = __lt__ = __le__ = __gt__ = __ge__ = __int__ = \
+        __float__ = __complex__ = __pow__ = __rpow__ = \
+        _fail_with_undefined_error
+
+    pth = os.path.join(recipe, 'meta.yaml')
+    jinja_env = jinja2.Environment(undefined=SilentUndefined)
+    content = jinja_env.from_string(
+        open(pth, 'r', encoding='utf-8').read()).render({})
+    meta = yaml.load(content)
+    return meta
 
 
 def load_conda_build_config(platform=None, trim_skip=True):
@@ -407,10 +440,11 @@ def get_dag(recipes, config, blacklist=None, restrict=True):
     logger.info("Generating DAG")
     recipes = list(recipes)
     metadata = []
-    for recipe in sorted(recipes):
-        logger.info("Inspecting %s", recipe)
-        for r in load_all_meta(recipe, finalize=False):
-            metadata.append((r, recipe))
+    for i, recipe in enumerate(sorted(recipes)):
+        meta = load_meta_fast(recipe)
+        metadata.append((meta, recipe))
+        if i % 100 == 0:
+            logger.info("Inspected {} of {} recipes".format(i, len(recipes)))
     if blacklist is None:
         blacklist = set()
 
@@ -423,25 +457,34 @@ def get_dag(recipes, config, blacklist=None, restrict=True):
     # Note that this may change once we support conda-build 3.
     name2recipe = defaultdict(set)
     for meta, recipe in metadata:
-        name = meta.get_value('package/name')
+        name = meta["package"]["name"]
         if name not in blacklist:
             name2recipe[name].update([recipe])
 
+    def get_deps(meta, sec):
+        reqs = meta.get("requirements")
+        if not reqs:
+            return []
+        deps = reqs.get(sec)
+        if not deps:
+            return []
+        return [dep.split()[0] for dep in deps if dep is not None]
+
     def get_inner_deps(dependencies):
+        dependencies = list(dependencies)
         for dep in dependencies:
             if dep in name2recipe or not restrict:
                 yield dep
 
     dag = nx.DiGraph()
-    dag.add_nodes_from(meta.get_value('package/name')
+    dag.add_nodes_from(meta["package"]["name"]
                        for meta, recipe in metadata)
     for meta, recipe in metadata:
-        name = meta.get_value('package/name')
+        name = meta["package"]["name"]
         dag.add_edges_from((dep, name)
                            for dep in set(get_inner_deps(chain(
-                               get_deps(meta=meta),
-                               get_deps(meta=meta,
-                                        build=False)))))
+                               get_deps(meta, "build"),
+                               get_deps(meta, "host")))))
 
     return dag, name2recipe
 
