@@ -118,7 +118,7 @@ chown $HOST_USER:$HOST_USER {self.container_staging}/{arch}/*
 
 DOCKERFILE_TEMPLATE = \
 """
-FROM bioconda/bioconda-utils-build-env
+FROM {self.docker_base_image}
 {self.proxies}
 RUN /opt/conda/bin/conda install -y conda={conda_ver} conda-build={conda_build_ver}
 """
@@ -186,6 +186,7 @@ class RecipeBuilder(object):
         pkg_dir=None,
         keep_image=False,
         image_build_dir=None,
+        docker_base_image=None,
     ):
         """
         Class to handle building a custom docker container that can be used for
@@ -259,6 +260,11 @@ class RecipeBuilder(object):
         image_build_dir : str or None
             If not None, use an existing directory as a docker image context
             instead of a temporary one. For testing purposes only.
+
+        docker_base_image : str or None
+            Name of base image that can be used in `dockerfile_template`.
+            Defaults to 'bioconda/bioconda-utils-build-env:TAG' where TAG is
+            `os.environ.get('BIOCONDA_UTILS_TAG', 'latest')`.
         """
         self.tag = tag
         self.requirements = requirements
@@ -266,6 +272,10 @@ class RecipeBuilder(object):
         self.build_script_template = build_script_template
         self.dockerfile_template = dockerfile_template
         self.keep_image = keep_image
+        if docker_base_image is None:
+            docker_base_image = 'bioconda/bioconda-utils-build-env:{}'.format(
+                os.environ.get('BIOCONDA_UTILS_TAG', 'latest'))
+        self.docker_base_image = docker_base_image
 
         # To address issue #5027:
         #
