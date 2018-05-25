@@ -264,59 +264,56 @@ def build_recipes(
 
     logger.debug('recipes: %s', recipes)
 
-    # TODO remove DAG building for now. It takes too long to read all the metadata
-    # with CB3.
+    dag, name2recipes = utils.get_dag(recipes, config=orig_config, blacklist=blacklist)
+    recipe2name = {}
+    for k, v in name2recipes.items():
+        for i in v:
+            recipe2name[i] = k
 
-    # dag, name2recipes = utils.get_dag(recipes, config=orig_config, blacklist=blacklist)
-    # recipe2name = {}
-    # for k, v in name2recipes.items():
-    #     for i in v:
-    #         recipe2name[i] = k
-    #
-    # if not dag:
-    #     logger.info("Nothing to be done.")
-    #     return True
-    # else:
-    #     logger.info("Building and testing %s recipes in total", len(dag))
-    #     logger.info("Recipes to build: \n%s", "\n".join(dag.nodes()))
-    #
-    # subdags_n = int(os.environ.get("SUBDAGS", 1))
-    # subdag_i = int(os.environ.get("SUBDAG", 0))
-    #
-    # if subdag_i >= subdags_n:
-    #     raise ValueError(
-    #         "SUBDAG=%s (zero-based) but only SUBDAGS=%s "
-    #         "subdags are available")
-    #
-    # # Get connected subdags and sort by nodes
-    # if testonly:
-    #     # use each node as a subdag (they are grouped into equal sizes below)
-    #     subdags = sorted([[n] for n in nx.nodes(dag)])
-    # else:
-    #     # take connected components as subdags
-    #     subdags = sorted(map(sorted, nx.connected_components(dag.to_undirected(
-    #     ))))
-    # # chunk subdags such that we have at most subdags_n many
-    # if subdags_n < len(subdags):
-    #     chunks = [[n for subdag in subdags[i::subdags_n] for n in subdag]
-    #               for i in range(subdags_n)]
-    # else:
-    #     chunks = subdags
-    # if subdag_i >= len(chunks):
-    #     logger.info("Nothing to be done.")
-    #     return True
-    # # merge subdags of the selected chunk
-    # subdag = dag.subgraph(chunks[subdag_i])
-    #
-    # # ensure that packages which need a build are built in the right order
-    # recipes = [recipe
-    #            for package in nx.topological_sort(subdag)
-    #            for recipe in name2recipes[package]]
-    #
-    # logger.info(
-    #     "Building and testing subdag %s of %s (%s recipes)",
-    #     subdag_i + 1, subdags_n, len(recipes)
-    # )
+    if not dag:
+        logger.info("Nothing to be done.")
+        return True
+    else:
+        logger.info("Building and testing %s recipes in total", len(dag))
+        logger.info("Recipes to build: \n%s", "\n".join(dag.nodes()))
+
+    subdags_n = int(os.environ.get("SUBDAGS", 1))
+    subdag_i = int(os.environ.get("SUBDAG", 0))
+
+    if subdag_i >= subdags_n:
+        raise ValueError(
+            "SUBDAG=%s (zero-based) but only SUBDAGS=%s "
+            "subdags are available")
+
+    # Get connected subdags and sort by nodes
+    if testonly:
+        # use each node as a subdag (they are grouped into equal sizes below)
+        subdags = sorted([[n] for n in nx.nodes(dag)])
+    else:
+        # take connected components as subdags
+        subdags = sorted(map(sorted, nx.connected_components(dag.to_undirected(
+        ))))
+    # chunk subdags such that we have at most subdags_n many
+    if subdags_n < len(subdags):
+        chunks = [[n for subdag in subdags[i::subdags_n] for n in subdag]
+                  for i in range(subdags_n)]
+    else:
+        chunks = subdags
+    if subdag_i >= len(chunks):
+        logger.info("Nothing to be done.")
+        return True
+    # merge subdags of the selected chunk
+    subdag = dag.subgraph(chunks[subdag_i])
+
+    # ensure that packages which need a build are built in the right order
+    recipes = [recipe
+               for package in nx.topological_sort(subdag)
+               for recipe in name2recipes[package]]
+
+    logger.info(
+        "Building and testing subdag %s of %s (%s recipes)",
+        subdag_i + 1, subdags_n, len(recipes)
+    )
 
     failed = []
     built_recipes = []
@@ -328,7 +325,7 @@ def build_recipes(
 
     for recipe in recipes:
         recipe_success = True
-        name = os.path.basename(recipe)
+        name = recipe2name[recipe]
 
         if name in skip_dependent:
             logger.info(

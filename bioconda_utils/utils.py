@@ -404,9 +404,11 @@ def get_dag(recipes, config, blacklist=None, restrict=True):
         Dictionary mapping package names to recipe paths. These recipe path
         values are lists and contain paths to all defined versions.
     """
+    logger.info("Generating DAG")
     recipes = list(recipes)
     metadata = []
     for recipe in sorted(recipes):
+        logger.info("Inspecting %s", recipe)
         for r in load_all_meta(recipe, finalize=False):
             metadata.append((r, recipe))
     if blacklist is None:
@@ -751,8 +753,9 @@ def get_package_paths(recipe, channel_packages, force=False):
             "define skip for this environment. "
             "This is a conda bug.".format(pkg))
     # yield all pkgs that do not yet exist
-    return [pkg_path
-            for pkg, pkg_path in pkgs.items() if force or pkg not in existing]
+    return ([pkg_path
+            for pkg, pkg_path in pkgs.items() if force or pkg not in existing],
+            meta)
 
 
 def get_all_channel_packages(channels):
