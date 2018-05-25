@@ -321,148 +321,148 @@ def test_conda_as_dep():
     )
     assert build_result
 
-
-def test_filter_recipes_no_skipping():
-    """
-    No recipes have skip so make sure none are filtered out.
-    """
-    r = Recipes(
-        """
-        one:
-          meta.yaml: |
-            package:
-              name: one
-              version: "0.1"
-        """, from_string=True)
-    r.write_recipes()
-    recipes = list(r.recipe_dirs.values())
-    assert len(recipes) == 1
-    filtered = list(
-        utils.filter_recipes(recipes, channels=['bioconda']))
-    assert len(filtered) == 1
-
-
-def test_filter_recipes_skip_is_true():
-    r = Recipes(
-        """
-        one:
-          meta.yaml: |
-            package:
-              name: one
-              version: "0.1"
-            build:
-              skip: true
-        """, from_string=True)
-    r.write_recipes()
-    recipes = list(r.recipe_dirs.values())
-    filtered = list(
-        utils.filter_recipes(recipes))
-    print(filtered)
-    assert len(filtered) == 0
-
-
-def test_filter_recipes_skip_is_true_with_CI_env_var():
-    """
-    utils.filter_recipes has a conditional that checks to see if there's
-    a CI=true env var which in some cases only causes failure when running on
-    CI. So temporarily fake it here so that local tests catch errors.
-    """
-    with utils.temp_env(dict(CI="true")):
-        r = Recipes(
-            """
-            one:
-              meta.yaml: |
-                package:
-                  name: one
-                  version: "0.1"
-                build:
-                  skip: true
-            """, from_string=True)
-        r.write_recipes()
-        recipes = list(r.recipe_dirs.values())
-        filtered = list(
-            utils.filter_recipes(recipes))
-        print(filtered)
-        assert len(filtered) == 0
-
-
-def test_filter_recipes_skip_not_py27():
-    """
-    When all but one Python version is skipped, filtering should do that.
-    """
-
-    r = Recipes(
-        """
-        one:
-          meta.yaml: |
-            package:
-              name: one
-              version: "0.1"
-            build:
-              skip: True # [not py27]
-            requirements:
-              build:
-                - python
-              run:
-                - python
-        """, from_string=True)
-    r.write_recipes()
-    recipes = list(r.recipe_dirs.values())
-    filtered = list(
-        utils.filter_recipes(recipes, channels=['bioconda']))
-
-    # one recipe, one target
-    assert len(filtered) == 1
-    assert len(filtered[0][1]) == 1
-
-
-def test_filter_recipes_existing_package():
-    "use a known-to-exist package in bioconda"
-
-    # note that we need python as a run requirement in order to get the "pyXY"
-    # in the build string that matches the existing bioconda built package.
-    r = Recipes(
-        """
-        one:
-          meta.yaml: |
-            package:
-              name: gffutils
-              version: "0.8.7.1"
-            requirements:
-              build:
-                - python
-              run:
-                - python
-        """, from_string=True)
-    r.write_recipes()
-    recipes = list(r.recipe_dirs.values())
-    filtered = list(
-        utils.filter_recipes(recipes, channels=['bioconda']))
-    assert len(filtered) == 0
-
-
-def test_filter_recipes_force_existing_package():
-    "same as above but force the recipe"
-
-    # same as above, but this time force the recipe
-    # TODO: refactor as py.test fixture
-    r = Recipes(
-        """
-        one:
-          meta.yaml: |
-            package:
-              name: gffutils
-              version: "0.8.7.1"
-            requirements:
-              run:
-                - python
-        """, from_string=True)
-    r.write_recipes()
-    recipes = list(r.recipe_dirs.values())
-    filtered = list(
-        utils.filter_recipes(
-            recipes, channels=['bioconda'], force=True))
-    assert len(filtered) == 1
+# TODO replace the filter tests with tests for utils.get_package_paths()
+# def test_filter_recipes_no_skipping():
+#     """
+#     No recipes have skip so make sure none are filtered out.
+#     """
+#     r = Recipes(
+#         """
+#         one:
+#           meta.yaml: |
+#             package:
+#               name: one
+#               version: "0.1"
+#         """, from_string=True)
+#     r.write_recipes()
+#     recipes = list(r.recipe_dirs.values())
+#     assert len(recipes) == 1
+#     filtered = list(
+#         utils.filter_recipes(recipes, channels=['bioconda']))
+#     assert len(filtered) == 1
+#
+#
+# def test_filter_recipes_skip_is_true():
+#     r = Recipes(
+#         """
+#         one:
+#           meta.yaml: |
+#             package:
+#               name: one
+#               version: "0.1"
+#             build:
+#               skip: true
+#         """, from_string=True)
+#     r.write_recipes()
+#     recipes = list(r.recipe_dirs.values())
+#     filtered = list(
+#         utils.filter_recipes(recipes))
+#     print(filtered)
+#     assert len(filtered) == 0
+#
+#
+# def test_filter_recipes_skip_is_true_with_CI_env_var():
+#     """
+#     utils.filter_recipes has a conditional that checks to see if there's
+#     a CI=true env var which in some cases only causes failure when running on
+#     CI. So temporarily fake it here so that local tests catch errors.
+#     """
+#     with utils.temp_env(dict(CI="true")):
+#         r = Recipes(
+#             """
+#             one:
+#               meta.yaml: |
+#                 package:
+#                   name: one
+#                   version: "0.1"
+#                 build:
+#                   skip: true
+#             """, from_string=True)
+#         r.write_recipes()
+#         recipes = list(r.recipe_dirs.values())
+#         filtered = list(
+#             utils.filter_recipes(recipes))
+#         print(filtered)
+#         assert len(filtered) == 0
+#
+#
+# def test_filter_recipes_skip_not_py27():
+#     """
+#     When all but one Python version is skipped, filtering should do that.
+#     """
+#
+#     r = Recipes(
+#         """
+#         one:
+#           meta.yaml: |
+#             package:
+#               name: one
+#               version: "0.1"
+#             build:
+#               skip: True # [not py27]
+#             requirements:
+#               build:
+#                 - python
+#               run:
+#                 - python
+#         """, from_string=True)
+#     r.write_recipes()
+#     recipes = list(r.recipe_dirs.values())
+#     filtered = list(
+#         utils.filter_recipes(recipes, channels=['bioconda']))
+#
+#     # one recipe, one target
+#     assert len(filtered) == 1
+#     assert len(filtered[0][1]) == 1
+#
+#
+# def test_filter_recipes_existing_package():
+#     "use a known-to-exist package in bioconda"
+#
+#     # note that we need python as a run requirement in order to get the "pyXY"
+#     # in the build string that matches the existing bioconda built package.
+#     r = Recipes(
+#         """
+#         one:
+#           meta.yaml: |
+#             package:
+#               name: gffutils
+#               version: "0.8.7.1"
+#             requirements:
+#               build:
+#                 - python
+#               run:
+#                 - python
+#         """, from_string=True)
+#     r.write_recipes()
+#     recipes = list(r.recipe_dirs.values())
+#     filtered = list(
+#         utils.filter_recipes(recipes, channels=['bioconda']))
+#     assert len(filtered) == 0
+#
+#
+# def test_filter_recipes_force_existing_package():
+#     "same as above but force the recipe"
+#
+#     # same as above, but this time force the recipe
+#     # TODO: refactor as py.test fixture
+#     r = Recipes(
+#         """
+#         one:
+#           meta.yaml: |
+#             package:
+#               name: gffutils
+#               version: "0.8.7.1"
+#             requirements:
+#               run:
+#                 - python
+#         """, from_string=True)
+#     r.write_recipes()
+#     recipes = list(r.recipe_dirs.values())
+#     filtered = list(
+#         utils.filter_recipes(
+#             recipes, channels=['bioconda'], force=True))
+#     assert len(filtered) == 1
 
 
 def test_get_channel_packages():
