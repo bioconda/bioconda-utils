@@ -794,9 +794,8 @@ def get_package_paths(recipe, channel_packages, force=False):
             "define skip for this environment. "
             "This is a conda bug.".format(pkg))
     # yield all pkgs that do not yet exist
-    return ([pkg_path
-            for pkg, pkg_path in pkgs.items() if force or pkg not in existing],
-            meta)
+    return [pkg_path
+            for pkg, pkg_path in pkgs.items() if force or pkg not in existing]
 
 
 def get_all_channel_packages(channels):
