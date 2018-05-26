@@ -482,9 +482,7 @@ def get_dag(recipes, config, blacklist=None, restrict=True):
     for meta, recipe in metadata:
         name = meta["package"]["name"]
         dag.add_edges_from((dep, name)
-                           for dep in set(get_inner_deps(chain(
-                               get_deps(meta, "build"),
-                               get_deps(meta, "host")))))
+                           for dep in set(get_inner_deps(get_deps(meta, "host"))))
 
     return dag, name2recipe
 
