@@ -162,9 +162,16 @@ def load_all_meta(recipe, config=None, finalize=True):
     """
     if config is None:
         config = load_conda_build_config()
+    # `bypass_env_check=True` prevents evaluating (=environment solving) the
+    # package versions used for `pin_compatible` and the like.
+    # To avoid adding a separate `bypass_env_check` alongside every `finalize`
+    # parameter, just assume we always want to bypass if `finalize is True`.
+    bypass_env_check = (not finalize)
     return [meta for (meta, _, _) in api.render(recipe,
                                                 config=config,
-                                                finalize=finalize)]
+                                                finalize=finalize,
+                                                bypass_env_check=bypass_env_check,
+                                                )]
 
 
 
