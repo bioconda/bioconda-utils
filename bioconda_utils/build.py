@@ -337,7 +337,7 @@ def build_recipes(
             continue
 
         logger.info('Determining expected packages')
-        pkg_paths = utils.get_package_paths(recipe, channel_packages,
+        pkg_paths, _meta = utils.get_package_paths(recipe, channel_packages,
                                             force=force)
         if not pkg_paths:
             logger.info("Nothing to be done for recipe %s", recipe)
