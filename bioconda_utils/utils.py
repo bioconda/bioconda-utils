@@ -852,7 +852,7 @@ def get_all_channel_packages(channels):
         for pkg_key, pkg_build_ids in channel_packages.items():
             all_channel_packages[pkg_key].update(pkg_build_ids)
     all_channel_packages.default_factory = None
-    return channel_packages
+    return all_channel_packages
 
 
 def get_blacklist(blacklists, recipe_folder):
