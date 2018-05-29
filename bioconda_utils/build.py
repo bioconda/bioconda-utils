@@ -340,7 +340,7 @@ def build_recipes(
         try:
             pkg_paths = utils.get_package_paths(recipe, channel_packages,
                                                 force=force)
-        except utils.DivergentBuildsError as e
+        except utils.DivergentBuildsError as e:
             logger.error(
                 'BUILD ERROR: '
                 'packages with divergent build strings in repository '
