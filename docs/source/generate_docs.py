@@ -37,10 +37,10 @@ class RepoData(object):
         logger.info('Loading packages...')
         repodata = defaultdict(lambda: defaultdict(list))
         for platform in ['linux', 'osx']:
-            for pkg in utils.get_channel_packages(channel='bioconda',
-                                                  platform=platform):
-                name, version, _ = self._parse_pkgname(pkg)
-                repodata[name][version].append(platform)
+            channel_packages = utils.get_channel_packages(
+                channel='bioconda', platform=platform)
+            for pkg_key in channel_packages.keys():
+                repodata[pkg_key.name][pkg_key.version].append(platform)
         self.repodata = repodata
         # e.g., repodata = {
         #   'package1': {
@@ -48,14 +48,6 @@ class RepoData(object):
         #       '0.2': ['linux', 'osx'],
         #   },
         # }
-
-    def _parse_pkgname(self, p):
-        p = p.replace('.tar.bz2', '')
-        toks = p.split('-')
-        build_string = toks.pop()
-        version = toks.pop()
-        name = '-'.join(toks)
-        return name, version, build_string
 
     def get_versions(self, p):
         """Get versions available for package
