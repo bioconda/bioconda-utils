@@ -976,3 +976,91 @@ def test_compiler():
         for i in utils.built_package_paths(v):
             assert os.path.exists(i)
             ensure_missing(i)
+              
+            
+ def test_depthcheck_get_recipe():
+    """  
+    Test get_recipes ability to identify different nesting depths of recipes 
+    """
+    r = Recipes(
+        """
+        shallow:
+            meta.yaml: |
+            package:
+                name: shallow
+                version: 0.1
+            build.sh: |
+                #!/bin/bash
+                # do installation
+        normal/normal:
+            meta.yaml: |
+            package:
+                name: normal
+                version: 0.1
+            build.sh:
+                #!/bin/bash
+                python
+        deep/deep/deep:
+            meta.yaml: |
+            package:
+                name: deep
+                version: 0.1
+            build.sh:
+                #!/bin/bash
+        deeper/deeper/deeper/deeper:
+            meta.yaml: |
+            package:
+                name: deeper
+                version: 0.1
+            build.sh:
+                #!/bin/bash
+                # Test bash file
+        F/I/V/E/deep:
+            meta.yaml: |
+            package:
+                name: deep
+                version: 0.1
+            build.sh:
+                #!/bin/bash
+                echo
+        S/I/X/De/e/ep:
+            meta.yaml: |
+            package:
+                name: ep
+                version: 0.1
+            build.sh:
+                #!/bin/bash
+                pwd
+        S/E/V/E/N/D/eep:
+            meta.yaml: |
+            package:
+                name: eep
+                version: 0.1
+            build.sh:
+                #!/bin/bash
+                ## SevenDeep Bash
+        T/W/E/N/T/Y/N/E/S/T/D/I/R/E/C/T/O/R/Y/DEEP:
+            meta.yaml: |
+            package:
+                name: DEEP
+                version: 0.1
+            build.sh:
+                #!/bin/bash
+        """, from_string=True)
+    r.write_recipes()
+
+    build_results = build.build_recipes(
+        r.basedir,
+        config={},
+        packages="*",
+        testonly=False,
+        force=False,
+        mulled_test=False,
+    )
+    assert build_results
+        
+    for k, v in r.recipe_dirs.items():
+        for i in utils.built_package_paths(v):
+            assert os.path.exists(i)
+            ensure_missing(i)
+
