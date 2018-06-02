@@ -463,6 +463,14 @@ def test_conda_as_dep():
 #         utils.filter_recipes(
 #             recipes, channels=['bioconda'], force=True))
 #     assert len(filtered) == 1
+#
+#
+# def test_zero_packages():
+#     """
+#     Regression test; make sure filter_recipes exits cleanly if no recipes were
+#     provided.
+#     """
+#     assert list(utils.filter_recipes([])) == []
 
 
 def test_get_channel_packages():
@@ -714,14 +722,6 @@ class TestSubdags(object):
             with utils.temp_env({'SUBDAGS': '5', 'SUBDAG': '4'}):
                     self._build(recipes_fixture)
             assert 'Nothing to be done' in caplog.records[-1].getMessage()
-
-
-def test_zero_packages():
-    """
-    Regression test; make sure filter_recipes exits cleanly if no recipes were
-    provided.
-    """
-    assert list(utils.filter_recipes([])) == []
 
 
 @pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')

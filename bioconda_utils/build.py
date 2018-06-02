@@ -364,8 +364,19 @@ def build_recipes(
             continue
 
         logger.info('Determining expected packages')
-        pkg_paths, _meta = utils.get_package_paths(recipe, channel_packages,
-                                            force=force)
+        try:
+            pkg_paths = utils.get_package_paths(recipe, channel_packages,
+                                                force=force)
+        except utils.DivergentBuildsError as e:
+            logger.error(
+                'BUILD ERROR: '
+                'packages with divergent build strings in repository '
+                'for recipe %s. A build number bump is likely needed: %s',
+                recipe, e)
+            failed.append(recipe)
+            for n in nx.algorithms.descendants(subdag, name):
+                skip_dependent[n].append(recipe)
+            continue
         if not pkg_paths:
             logger.info("Nothing to be done for recipe %s", recipe)
             continue
