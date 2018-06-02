@@ -290,6 +290,8 @@ def build_recipes(
     if prelint:
         logger.info("Downloading channel information to use for linting")
         df = linting.channel_dataframe(channels=['conda-forge', 'defaults'])
+    else:
+        df = None
 
     dag, name2recipes = utils.get_dag(recipes, config=orig_config, blacklist=blacklist)
     recipe2name = {}
