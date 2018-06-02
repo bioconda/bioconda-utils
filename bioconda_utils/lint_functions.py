@@ -225,8 +225,9 @@ def has_windows_bat_file(recipe, metas, df):
 @lint_multiple_metas
 def should_be_noarch(recipe, meta, df):
     deps = _get_deps(meta)
-    no_compilers = sum(1 for i in deps if
-                        i.startswith('toolchain_')) == 0
+    no_compilers = all(
+        not dep.startswith(('clang_', 'clangxx_', 'gcc_', 'gxx_', 'gfortran_',
+                            'toolchain_')) for dep in deps)
     if (
         no_compilers and
         ('python' in deps) and
