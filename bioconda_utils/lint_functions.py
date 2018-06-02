@@ -225,8 +225,10 @@ def has_windows_bat_file(recipe, metas, df):
 @lint_multiple_metas
 def should_be_noarch(recipe, meta, df):
     deps = _get_deps(meta)
+    no_compilers = sum(1 for i in deps if
+                        i.startswith('toolchain_')) == 0
     if (
-        ('gcc' not in deps) and
+        no_compilers and
         ('python' in deps) and
         # This will also exclude recipes with skip sections
         # which is a good thing, because noarch also implies independence of
