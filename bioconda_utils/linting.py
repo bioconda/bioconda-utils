@@ -182,7 +182,7 @@ def lint(recipes, df, exclude=None, registry=None):
         skip_dict[recipe].append(func)
 
     hits = []
-    for recipe in recipes:
+    for recipe in sorted(recipes):
         # Since lint functions need a parsed meta.yaml, checking for parsing
         # errors can't be a lint function.
         #
@@ -204,7 +204,6 @@ def lint(recipes, df, exclude=None, registry=None):
                  'severity': 'ERROR',
                  'info': result})
             continue
-        logger.debug('lint {}'.format(recipe))
 
         # skips defined in commit message
         skip_for_this_recipe = set(skip_dict[recipe])
