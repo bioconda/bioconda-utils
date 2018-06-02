@@ -204,6 +204,7 @@ def lint(recipes, df, exclude=None, registry=None):
                  'severity': 'ERROR',
                  'info': result})
             continue
+        logger.debug('lint {}'.format(recipe))
 
         # skips defined in commit message
         skip_for_this_recipe = set(skip_dict[recipe])
