@@ -309,6 +309,10 @@ def lint(recipe_folder, config, packages="*", cache=None, list_funcs=False,
 @arg('--keep-image', action='store_true', help='''After building recipes, the
      created Docker image is removed by default to save disk space. Use this
      argument to disable this behavior.''')
+@arg('--prelint', action='store_true', help='''Just before each recipe, apply
+     the linting functions to it. This can be used as an alternative to linting
+     all recipes before any building takes place with the `bioconda-utils lint`
+     command.''')
 def build(
     recipe_folder,
     config,
@@ -324,6 +328,7 @@ def build(
     anaconda_upload=False,
     mulled_upload_target=None,
     keep_image=False,
+    prelint=False,
 ):
     utils.setup_logger('bioconda_utils', loglevel)
 
@@ -383,6 +388,7 @@ def build(
         docker_builder=docker_builder,
         anaconda_upload=anaconda_upload,
         mulled_upload_target=mulled_upload_target,
+        prelint=prelint,
     )
     exit(0 if success else 1)
 

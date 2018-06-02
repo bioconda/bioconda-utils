@@ -3,10 +3,12 @@ from collections import defaultdict, namedtuple
 import os
 import logging
 import networkx as nx
+import pandas
 from . import utils
 from . import docker_utils
 from . import pkg_test
 from . import upload
+from . import linting
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +37,8 @@ def build(
     channels=None,
     docker_builder=None,
     _raise_error=False,
+    prelint=False,
+    df=None,
 ):
     """
     Build a single recipe for a single env
@@ -70,7 +74,25 @@ def build(
     _raise_error : bool
         Instead of returning a failed build result, raise the error instead.
         Used for testing.
+
+    prelint : bool
+        If True, then apply linting just before building. `df` should probably
+        be provided as well.
+
+    df : pandas.DataFrame
+        Dataframe of channel info, likely from linting.channel_dataframe()
     """
+
+    if prelint:
+        logger.info('Linting recipe')
+        report = linting.lint([recipe], df)
+        if report is not None:
+            summarized = pandas.DataFrame(
+                dict(failed_tests=report.groupby('recipe')['check'].agg('unique')))
+            logger.error('\n\nThe following recipes failed linting. See '
+                         'https://bioconda.github.io/linting.html for details:\n\n%s\n',
+                         summarized.to_string())
+            return BuildResult(False, None)
 
     # Clean provided env and exisiting os.environ to only allow whitelisted env
     # vars
@@ -187,6 +209,7 @@ def build_recipes(
     anaconda_upload=False,
     mulled_upload_target=None,
     check_channels=None,
+    prelint=False,
 ):
     """
     Build one or many bioconda packages.
@@ -263,6 +286,10 @@ def build_recipes(
         return True
 
     logger.debug('recipes: %s', recipes)
+
+    if prelint:
+        logger.info("Downloading channel information to use for linting")
+        df = linting.channel_dataframe(channels=['conda-forge', 'defaults'])
 
     dag, name2recipes = utils.get_dag(recipes, config=orig_config, blacklist=blacklist)
     recipe2name = {}
@@ -368,6 +395,8 @@ def build_recipes(
             force=force,
             channels=config['channels'],
             docker_builder=docker_builder,
+            df=df,
+            prelint=prelint,
         )
 
         all_success &= res.success
