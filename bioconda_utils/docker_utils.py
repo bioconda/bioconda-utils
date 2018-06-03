@@ -349,7 +349,7 @@ class RecipeBuilder(object):
 
     def _get_config_path(self, staging_prefix, i, config_file):
         src_basename = os.path.basename(config_file.path)
-        dst_basename = '_'.join(('conda_build_config', i, config_file.arg, src_basename))
+        dst_basename = 'conda_build_config_{}_{}_{}'.format(i, config_file.arg, src_basename)
         return os.path.join(staging_prefix, dst_basename)
 
     def __del__(self):
