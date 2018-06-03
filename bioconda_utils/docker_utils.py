@@ -462,10 +462,11 @@ class RecipeBuilder(object):
         # template.
         if not isinstance(build_args, str):
             raise ValueError('build_args must be str')
-        self.conda_build_args = build_args
+        build_args_list = [build_args]
         for i, config_file in enumerate(utils.get_conda_build_config_files()):
             dst_file = self._get_config_path(self.container_staging, i, config_file)
-            self.conda_build_args += ' '.join((config_file.arg, quote(dst_file)))
+            build_args_list.extend([config_file.arg, quote(dst_file)])
+        self.conda_build_args = ' '.join(build_args_list)
 
         # Write build script to tempfile
         build_dir = os.path.realpath(tempfile.mkdtemp())
