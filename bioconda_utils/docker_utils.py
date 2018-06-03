@@ -45,6 +45,8 @@ Other notes:
 """
 
 import os
+import os.path
+from shlex import quote
 import shutil
 import subprocess as sp
 import tempfile
@@ -96,10 +98,10 @@ conda config --add channels file://{self.container_staging}  > /dev/null 2>&1
 # The actual building...
 # we explicitly point to the meta.yaml, in order to keep
 # conda-build from building all subdirectories
-conda build -e {self.container_staging}/conda_build_config.yaml {self.conda_build_args} {self.container_recipe}/meta.yaml 2>&1
+conda build {self.conda_build_args} {self.container_recipe}/meta.yaml 2>&1
 
 # copy all built packages to the staging area
-cp `conda build {self.container_recipe}/meta.yaml {self.conda_build_args} --output` {self.container_staging}/{arch}
+cp `conda build {self.conda_build_args} {self.container_recipe}/meta.yaml --output` {self.container_staging}/{arch}
 # Ensure permissions are correct on the host.
 HOST_USER={self.user_info[uid]}
 chown $HOST_USER:$HOST_USER {self.container_staging}/{arch}/*
@@ -337,13 +339,18 @@ class RecipeBuilder(object):
                     os.makedirs(pkg_dir)
                 self.pkg_dir = pkg_dir
 
-        # Copy the conda build config to the staging directory that is
+        # Copy the conda build config files to the staging directory that is
         # visible in the container
-        shutil.copyfile(utils.load_conda_build_config().exclusive_config_file,
-                        os.path.join(self.pkg_dir,
-                                     "conda_build_config.yaml"))
+        for i, config_file in enumerate(utils.get_conda_build_config_files()):
+            dst_file = self._get_config_path(self.pkg_dir, i, config_file)
+            shutil.copyfile(config_file.path, dst_file)
 
         self._build_image(image_build_dir)
+
+    def _get_config_path(self, staging_prefix, i, config_file):
+        src_basename = os.path.basename(config_file.path)
+        dst_basename = '_'.join(('conda_build_config', i, config_file.arg, src_basename))
+        return os.path.join(staging_prefix, dst_basename)
 
     def __del__(self):
         if not self.keep_image:
@@ -456,6 +463,9 @@ class RecipeBuilder(object):
         if not isinstance(build_args, str):
             raise ValueError('build_args must be str')
         self.conda_build_args = build_args
+        for i, config_file in enumerate(utils.get_conda_build_config_files()):
+            dst_file = self._get_config_path(self.container_staging, i, config_file)
+            self.conda_build_args += ' '.join((config_file.arg, quote(dst_file)))
 
         # Write build script to tempfile
         build_dir = os.path.realpath(tempfile.mkdtemp())

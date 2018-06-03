@@ -233,6 +233,22 @@ def load_conda_build_config(platform=None, trim_skip=True):
     return config
 
 
+CondaBuildConfigFile = namedtuple('CondaBuildConfigFile', (
+    'arg',  # either '-e' or '-m'
+    'path',
+))
+
+
+def get_conda_build_config_files(config=None):
+    if config is None:
+        config = load_conda_build_config()
+    # TODO: open PR upstream for conda-build to support multiple exclusive_config_files
+    for file_path in ([config.exclusive_config_file] if config.exclusive_config_file else []):
+        yield CondaBuildConfigFile('-e', file_path)
+    for file_path in (config.variant_config_files or []):
+        yield CondaBuildConfigFile('-m', file_path)
+
+
 def load_first_metadata(recipe, config=None, finalize=True):
     """
     Returns just the first of possibly many metadata files. Used for when you
