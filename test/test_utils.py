@@ -992,7 +992,7 @@ def test_depthcheck_get_recipe():
                     version: "0.1"
             build.sh: |
                 #!/bin/bash
-                echo "Shallow created"
+                echo "Shallow Created"
                 pwd
         normal/normal:
             meta.yaml: |
@@ -1005,7 +1005,7 @@ def test_depthcheck_get_recipe():
                         - python 3.6
             build.sh: |
                 #!/bin/bash
-                echo "Testing build.sh though python"
+                echo "Testing build.sh through python"
                 python -h
         deep/deep/deep:
             meta.yaml: |
