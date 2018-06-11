@@ -1065,7 +1065,9 @@ def test_depthcheck_get_recipe():
         mulled_test=False,
     )
     assert build_results
-        
+    
+    assert len(get_recipes(r.basedir)) == 8 
+    
     for k, v in r.recipe_dirs.items():
         for i in utils.built_package_paths(v):
             assert os.path.exists(i)
