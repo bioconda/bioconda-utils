@@ -1031,7 +1031,7 @@ def test_depthcheck_get_recipe():
         F/I/V/E/deep:
             meta.yaml: |
                 package:
-                    name: deep
+                    name: fivedeep
                     version: "0.1"
                 requirements:
                     build:
@@ -1051,7 +1051,7 @@ def test_depthcheck_get_recipe():
         T/W/E/N/T/Y/N/E/S/T/D/I/R/E/C/T/O/R/Y/DEEP:
             meta.yaml: |
                 package:
-                    name: DEEP
+                    name: twentydeep
                     version: "0.1"
         """, from_string=True)
     r.write_recipes()
