@@ -983,69 +983,76 @@ def test_depthcheck_get_recipe():
     Test get_recipes ability to identify different nesting depths of recipes 
     """
     r = Recipes(
+
         """
         shallow:
             meta.yaml: |
-            package:
-                name: shallow
-                version: 0.1
+                package:
+                    name: shallow
+                    version: "0.1"
             build.sh: |
                 #!/bin/bash
-                # do installation
+                echo "Shallow created"
+                pwd
         normal/normal:
             meta.yaml: |
-            package:
-                name: normal
-                version: 0.1
-            build.sh:
+                package:
+                    name: normal
+                    version: "0.1"
+                requirements:
+                    build:
+                        - shallow
+                        - python 3.6
+            build.sh: |
                 #!/bin/bash
-                python
+                echo "Testing build.sh though python"
+                python -h
         deep/deep/deep:
             meta.yaml: |
-            package:
-                name: deep
-                version: 0.1
-            build.sh:
+                package:
+                    name: deep
+                    version: "0.1"
+                requirements:
+                    build:
+                        - normal
+                    run:
+                        - shallow
+            build.sh: |
                 #!/bin/bash
+                ## Empty script
         deeper/deeper/deeper/deeper:
             meta.yaml: |
-            package:
-                name: deeper
-                version: 0.1
-            build.sh:
-                #!/bin/bash
-                # Test bash file
+                package:
+                    name: deeper
+                    version: "0.1"
+                requirements:
+                    run:
+                        - normal
         F/I/V/E/deep:
             meta.yaml: |
-            package:
-                name: deep
-                version: 0.1
-            build.sh:
-                #!/bin/bash
-                echo
+                package:
+                    name: deep
+                    version: "0.1"
+                requirements:
+                    build:
+                        - python 3.6
+                    run:
+                        - python 3.6
         S/I/X/De/e/ep:
             meta.yaml: |
-            package:
-                name: ep
-                version: 0.1
-            build.sh:
-                #!/bin/bash
-                pwd
+                package:
+                    name: ep
+                    version: "0.1"
         S/E/V/E/N/D/eep:
             meta.yaml: |
-            package:
-                name: eep
-                version: 0.1
-            build.sh:
-                #!/bin/bash
-                ## SevenDeep Bash
+                package:
+                    name: eep
+                    version: "0.1"
         T/W/E/N/T/Y/N/E/S/T/D/I/R/E/C/T/O/R/Y/DEEP:
             meta.yaml: |
-            package:
-                name: DEEP
-                version: 0.1
-            build.sh:
-                #!/bin/bash
+                package:
+                    name: DEEP
+                    version: "0.1"
         """, from_string=True)
     r.write_recipes()
 
@@ -1063,4 +1070,3 @@ def test_depthcheck_get_recipe():
         for i in utils.built_package_paths(v):
             assert os.path.exists(i)
             ensure_missing(i)
-            
