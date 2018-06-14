@@ -426,7 +426,8 @@ def build_recipes(
                     if not upload.anaconda_upload(pkg, label):
                         failed_uploads.append(pkg)
             if mulled_upload_target and keep_mulled_test:
-                upload.mulled_upload(res.mulled_images, mulled_upload_target)
+                for img in res.mulled_images:
+                    upload.mulled_upload(img, mulled_upload_target)
 
         # remove traces of the build
         purge()
