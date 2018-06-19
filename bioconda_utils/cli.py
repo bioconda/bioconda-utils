@@ -234,12 +234,8 @@ def lint(recipe_folder, config, packages="*", cache=None, list_funcs=False,
 
     _recipes = select_recipes(packages, git_range, recipe_folder, config_filename, config, force)
 
-    report = linting.lint(
-        _recipes,
-        df=df,
-        exclude=exclude,
-        registry=registry,
-    )
+    lint_args = linting.LintArgs(df=df, exclude=exclude, registry=registry)
+    report = linting.lint(_recipes, lint_args)
 
     # The returned dataframe is in tidy format; summarize a bit to get a more
     # reasonable log
@@ -309,10 +305,16 @@ def lint(recipe_folder, config, packages="*", cache=None, list_funcs=False,
 @arg('--keep-image', action='store_true', help='''After building recipes, the
      created Docker image is removed by default to save disk space. Use this
      argument to disable this behavior.''')
-@arg('--prelint', action='store_true', help='''Just before each recipe, apply
+@arg('--lint', '--prelint', action='store_true', help='''Just before each recipe, apply
      the linting functions to it. This can be used as an alternative to linting
      all recipes before any building takes place with the `bioconda-utils lint`
      command.''')
+@arg('--lint-only', nargs='+',
+     help='''Only run this linting function. Can be used multiple times.''')
+@arg('--lint-exclude', nargs='+',
+     help='''Exclude this linting function. Can be used multiple times.
+     If neither --lint-exclude nor --lint-only is given, this defaults to
+     exclude many less importand lints. (cf. `lint_functions.registry_build`)''')
 def build(
     recipe_folder,
     config,
@@ -328,7 +330,9 @@ def build(
     anaconda_upload=False,
     mulled_upload_target=None,
     keep_image=False,
-    prelint=False,
+    lint=False,
+    lint_only=None,
+    lint_exclude=None,
 ):
     utils.setup_logger('bioconda_utils', loglevel)
 
@@ -378,6 +382,27 @@ def build(
     else:
         docker_builder = None
 
+    if lint:
+        registry = lint_functions.registry
+        if lint_only is not None:
+            registry = tuple(func for func in registry if func.__name__ in lint_only)
+            if len(registry) == 0:
+                sys.stderr.write('No valid linting functions selected, exiting.\n')
+                sys.exit(1)
+        elif lint_exclude is None:
+            lint_exclude = tuple(
+                func.__name__
+                for func in set(lint_functions.registry) - set(lint_functions.registry_build)
+            )
+        df = linting.channel_dataframe()
+        lint_args = linting.LintArgs(df=df, exclude=lint_exclude, registry=registry)
+    else:
+        lint_args = None
+        if lint_only is not None:
+            logger.warning('--lint-only has no effect unless --lint is specified.')
+        if lint_exclude is not None:
+            logger.warning('--lint-exclude has no effect unless --lint is specified.')
+
     success = build_recipes(
         recipe_folder,
         config=config,
@@ -388,7 +413,7 @@ def build(
         docker_builder=docker_builder,
         anaconda_upload=anaconda_upload,
         mulled_upload_target=mulled_upload_target,
-        prelint=prelint,
+        lint_args=lint_args,
     )
     exit(0 if success else 1)
 

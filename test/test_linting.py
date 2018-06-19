@@ -1,5 +1,3 @@
-import pandas
-import yaml
 from helpers import Recipes
 from bioconda_utils import lint_functions
 from bioconda_utils import linting, utils
@@ -76,7 +74,9 @@ def test_empty_build_section():
     # access to contents of possibly empty build section can happen in
     # `should_be_noarch` and `should_not_be_noarch`
     registry = [lint_functions.should_be_noarch, lint_functions.should_not_be_noarch]
-    res = linting.lint(r.recipe_dirs.values(), df=None, registry=registry)
+    res = linting.lint(
+        r.recipe_dirs.values(),
+        linting.LintArgs(df=None, registry=registry))
     assert res is None
 
 
@@ -92,7 +92,9 @@ def test_lint_skip_in_recipe():
               version: "0.1"
         ''', from_string=True)
     r.write_recipes()
-    res = linting.lint(r.recipe_dirs.values(), df=None, registry=[lint_functions.missing_home])
+    res = linting.lint(
+        r.recipe_dirs.values(),
+        linting.LintArgs(df=None, registry=[lint_functions.missing_home]))
     assert res is not None
 
 
@@ -109,7 +111,9 @@ def test_lint_skip_in_recipe():
                 - missing_home
         ''', from_string=True)
     r.write_recipes()
-    res = linting.lint(r.recipe_dirs.values(), df=None, registry=[lint_functions.missing_home])
+    res = linting.lint(
+        r.recipe_dirs.values(),
+        linting.LintArgs(df=None, registry=[lint_functions.missing_home]))
     assert res is None
 
     # should pass; minimal recipe needs to skip these lints
@@ -127,7 +131,7 @@ def test_lint_skip_in_recipe():
                 - no_tests
         ''', from_string=True)
     r.write_recipes()
-    res = linting.lint(r.recipe_dirs.values(), df=None)
+    res = linting.lint(r.recipe_dirs.values(), linting.LintArgs(df=None))
     assert res is not None
 
 
