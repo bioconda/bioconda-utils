@@ -188,12 +188,12 @@ def build(
     for pkg_path in pkg_paths:
         try:
             res = pkg_test.test_package(pkg_path, base_image=base_image)
-
-            logger.info("TEST SUCCESS %s", recipe)
-            mulled_image = pkg_test.get_image_name(pkg_path)
         except sp.CalledProcessError as e:
             logger.error('TEST FAILED: %s', recipe)
             return BuildResult(False, None)
+        else:
+            logger.info("TEST SUCCESS %s", recipe)
+            mulled_images.append(pkg_test.get_image_name(pkg_path))
     return BuildResult(True, mulled_images)
 
 
