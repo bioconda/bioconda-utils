@@ -22,3 +22,4 @@ six=1.11.*
 alabaster=0.7.*
 git=2.14.*
 conda-forge-pinning=2018.05.22
+python>=3.6
