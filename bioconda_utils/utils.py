@@ -79,13 +79,6 @@ ENV_VAR_DOCKER_BLACKLIST = [
 ]
 
 
-def get_section(meta, section_name):
-    section = meta.get_section(section_name)
-    if section is None:
-        return {}
-    return section
-
-
 def get_free_space():
     """Return free space in MB on disk"""
     s = os.statvfs(os.getcwd())
@@ -428,11 +421,10 @@ def get_deps(recipe=None, meta=None, build=True):
 
     all_deps = set()
     for meta in metadata:
-        reqs = get_section(meta, 'requirements')
         if build:
-            deps = reqs.get('build', [])
+            deps = meta.get_value('requirements/build', [])
         else:
-            deps = reqs.get('run', [])
+            deps = meta.get_value('requirements/run', [])
         all_deps.update(dep.split()[0] for dep in deps)
     return all_deps
 
