@@ -80,7 +80,7 @@ ENV_VAR_DOCKER_BLACKLIST = [
 
 
 def get_section(meta, section_name):
-    section = meta.get(section_name)
+    section = meta.get_section(section_name)
     if section is None:
         return {}
     return section
