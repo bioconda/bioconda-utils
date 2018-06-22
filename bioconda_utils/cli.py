@@ -312,9 +312,7 @@ def lint(recipe_folder, config, packages="*", cache=None, list_funcs=False,
 @arg('--lint-only', nargs='+',
      help='''Only run this linting function. Can be used multiple times.''')
 @arg('--lint-exclude', nargs='+',
-     help='''Exclude this linting function. Can be used multiple times.
-     If neither --lint-exclude nor --lint-only is given, this defaults to
-     exclude many less importand lints. (cf. `lint_functions.registry_build`)''')
+     help='''Exclude this linting function. Can be used multiple times.''')
 def build(
     recipe_folder,
     config,
@@ -389,11 +387,6 @@ def build(
             if len(registry) == 0:
                 sys.stderr.write('No valid linting functions selected, exiting.\n')
                 sys.exit(1)
-        elif lint_exclude is None:
-            lint_exclude = tuple(
-                func.__name__
-                for func in set(lint_functions.registry) - set(lint_functions.registry_build)
-            )
         df = linting.channel_dataframe()
         lint_args = linting.LintArgs(df=df, exclude=lint_exclude, registry=registry)
     else:

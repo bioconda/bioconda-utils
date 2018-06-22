@@ -398,16 +398,3 @@ registry = (
     compilers_must_be_in_build,
     bioconductor_37,
 )
-
-registry_build = (
-    in_other_channels,
-    uses_javajdk,
-    uses_perl_threaded,
-    should_be_noarch,
-    should_not_be_noarch,
-    invalid_identifiers,
-    deprecated_numpy_spec,
-    should_use_compilers,
-    compilers_must_be_in_build,
-    bioconductor_37,
-)
