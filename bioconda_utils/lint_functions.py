@@ -39,7 +39,7 @@ def _get_deps(meta, section=None):
     def get_name(dep):
         return dep.split()[0]
 
-    reqs = meta.get_value('requirements')
+    reqs = (meta.get_section('requirements') or {})
     if reqs is None:
         return []
     if section is None:
@@ -48,7 +48,7 @@ def _get_deps(meta, section=None):
         sections = [section]
     deps = []
     for s in sections:
-        dep = reqs.get(s, [])
+        dep = (reqs.get(s) or [])
         if dep:
             deps += [get_name(d) for d in dep]
     return deps
@@ -142,7 +142,7 @@ def missing_license(recipe, meta, df):
 @lint_multiple_metas
 def missing_tests(recipe, meta, df):
     test_files = ['run_test.py', 'run_test.sh', 'run_test.pl']
-    if not meta.get_value('test'):
+    if not meta.get_section('test'):
         if not any([os.path.exists(os.path.join(recipe, f)) for f in
                     test_files]):
             return {
@@ -154,7 +154,7 @@ def missing_tests(recipe, meta, df):
 @lint_multiple_metas
 def missing_hash(recipe, meta, df):
     # could be a meta-package if no source section or if None
-    sources = meta.get_value('source', [])
+    sources = meta.get_section('source')
     if not sources:
         return
     if isinstance(sources, dict):
@@ -171,7 +171,7 @@ def missing_hash(recipe, meta, df):
 
 @lint_multiple_metas
 def uses_git_url(recipe, meta, df):
-    sources = meta.get_value('source', [])
+    sources = meta.get_section('source')
     if not sources:
         # metapackage?
         return
@@ -236,7 +236,7 @@ def should_be_noarch(recipe, meta, df):
         # the python version.
         not _has_preprocessing_selector(recipe)
     ) and (
-        'noarch' not in meta.get_value('build', {})
+        'noarch' not in (meta.get_section('build') or {})
     ):
         return {
             'should_be_noarch': True,
@@ -251,7 +251,7 @@ def should_not_be_noarch(recipe, meta, df):
         ('gcc' in deps) or
         meta.get_value('build/skip', False) in ["true", "True"]
     ) and (
-        'noarch' in meta.get_value('build', {})
+        'noarch' in (meta.get_section('build') or {})
     ):
         print("error")
         return {
@@ -319,7 +319,7 @@ def deprecated_numpy_spec(recipe, metas, df):
 
 @lint_multiple_metas
 def should_not_use_fn(recipe, meta, df):
-    sources = meta.get_value('source', [])
+    sources = meta.get_section('source')
     if not sources:
         return
     if isinstance(sources, dict):
