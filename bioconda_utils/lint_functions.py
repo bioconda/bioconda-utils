@@ -44,8 +44,10 @@ def _get_deps(meta, section=None):
         return []
     if section is None:
         sections = ['build', 'host', 'run', 'test']
-    if isinstance(section, str):
+    elif isinstance(section, str):
         sections = [section]
+    else:
+        sections = section
     deps = []
     for s in sections:
         dep = (reqs.get(s) or [])
