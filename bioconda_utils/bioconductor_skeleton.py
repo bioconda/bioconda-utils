@@ -1029,7 +1029,7 @@ def write_recipe(package, recipe_dir, config, force=False, bioc_version=None,
             R CMD INSTALL --library=$PREFIX/lib/R/library $TARBALL
             rm $TARBALL
             rmdir $STAGING
-            """)
+            """)  # noqa: E501: line too long
         with open(os.path.join(recipe_dir, 'post-link.sh'), 'w') as fout:
             fout.write(dedent(post_link_template))
         pre_unlink_template = "R CMD REMOVE --library=$PREFIX/lib/R/library/ {0}\n".format(package)

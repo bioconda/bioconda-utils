@@ -105,7 +105,6 @@ def single_build(request, recipes_fixture):
         ensure_missing(pkg)
 
 
-
 # TODO: need to have a variant of this where TRAVIS_BRANCH_NAME="master" in
 # order to properly test for upload.
 @pytest.fixture(scope='module', params=PARAMS, ids=IDS)
@@ -944,6 +943,7 @@ def test_cb3_outputs():
         for i in utils.built_package_paths(v):
             assert os.path.exists(i)
             ensure_missing(i)
+
 
 def test_compiler():
     r = Recipes(

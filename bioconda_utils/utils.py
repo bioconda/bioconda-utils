@@ -467,7 +467,7 @@ def get_dag(recipes, config, blacklist=None, restrict=True):
             metadata.append((meta, recipe))
             if i % 100 == 0:
                 logger.info("Inspected {} of {} recipes".format(i, len(recipes)))
-        except:
+        except Exception:
             raise ValueError('Problem inspecting {0}'.format(recipe))
     if blacklist is None:
         blacklist = set()

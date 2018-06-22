@@ -80,7 +80,7 @@ def as_extlink_filter(text):
         return "{0}: :{0}:`{1}`".format(*text)
 
     assert isinstance(text, list), "identifiers have to be given as list"
- 
+
     return list(map(fmt, text))
 
 
@@ -209,7 +209,6 @@ def generate_readme(folder, repodata, renderer):
     except UnableToParse as e:
         logger.error("Failed to parse recipe {}".format(recipe))
         raise e
-
 
     name = metadata.name()
     versions_in_channel = repodata.get_versions(name)

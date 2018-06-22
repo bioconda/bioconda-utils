@@ -105,7 +105,7 @@ cp `conda build {self.conda_build_args} {self.container_recipe}/meta.yaml --outp
 # Ensure permissions are correct on the host.
 HOST_USER={self.user_info[uid]}
 chown $HOST_USER:$HOST_USER {self.container_staging}/{arch}/*
-"""
+"""  # noqa: E501,E122: line too long, continuation line missing indentation or outdented
 
 
 # ----------------------------------------------------------------------------
@@ -123,7 +123,7 @@ DOCKERFILE_TEMPLATE = \
 FROM {self.docker_base_image}
 {self.proxies}
 RUN /opt/conda/bin/conda install -y conda={conda_ver} conda-build={conda_build_ver}
-"""
+"""  # noqa: E122 continuation line missing indentation or outdented
 
 
 class DockerCalledProcessError(sp.CalledProcessError):

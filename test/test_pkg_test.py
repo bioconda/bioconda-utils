@@ -117,7 +117,7 @@ def test_pkg_test_conda_image():
             if [ "${PREFIX}" == /usr/local ] ; then
                 /opt/conda/bin/conda --version > /usr/local/conda-version
             fi
-    """)
+    """)  # noqa: E501: line too long
     built_packages = _build_pkg(recipe)
     for pkg in built_packages:
         pkg_test.test_package(pkg, conda_image="continuumio/miniconda3:4.3.11")
