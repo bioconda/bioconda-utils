@@ -217,8 +217,8 @@ def generate_readme(folder, repodata, renderer):
     # Format the README
     template_options = {
         'name': name,
-        'about': metadata.get_section('about'),
-        'extra': metadata.get_section('extra'),
+        'about': utils.get_section(metadata, 'about'),
+        'extra': utils.get_section(metadata, 'extra'),
         'versions': versions_in_channel,
         'gh_recipes': 'https://github.com/bioconda/bioconda-recipes/tree/master/recipes/',
         'recipe_path': op.dirname(op.relpath(metadata.meta_path, RECIPE_DIR)),

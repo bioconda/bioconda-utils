@@ -175,8 +175,11 @@ def build(
 
     logger.info('TEST START via mulled-build %s', recipe)
 
-    use_base_image = meta.get_section('extra').get('container', {})\
-                                              .get('extended-base')
+    use_base_image = (
+        utils.get_section(meta, 'extra')
+        .get('container', {})
+        .get('extended-base')
+    )
     base_image = 'bioconda/extended-base-image' if use_base_image else None
 
     mulled_images = []

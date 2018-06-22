@@ -6,6 +6,8 @@ import re
 import pandas
 import numpy as np
 
+from .utils import get_section
+
 
 def _subset_df(recipe, meta, df):
     """
@@ -39,7 +41,7 @@ def _get_deps(meta, section=None):
 
     get_name = lambda dep: dep.split()[0]
 
-    reqs = meta.get_section('requirements')
+    reqs = get_section(meta, 'requirements')
     if reqs is None:
         return []
     if section is None:
@@ -101,7 +103,7 @@ def already_in_bioconda(recipe, meta, df):
     Does the package exist in bioconda?
     """
     results = _subset_df(recipe, meta, df)
-    build_section = meta.get_section('build')
+    build_section = get_section(meta, 'build')
     build_number = int(build_section.get('number', 0))
     build_results = results[results.build_number == build_number]
     channels = set(build_results.channel)
@@ -142,7 +144,7 @@ def missing_license(recipe, meta, df):
 @lint_multiple_metas
 def missing_tests(recipe, meta, df):
     test_files = ['run_test.py', 'run_test.sh', 'run_test.pl']
-    if not meta.get_section('test'):
+    if not get_section(meta, 'test'):
         if not any([os.path.exists(os.path.join(recipe, f)) for f in
                     test_files]):
             return {
@@ -154,7 +156,7 @@ def missing_tests(recipe, meta, df):
 @lint_multiple_metas
 def missing_hash(recipe, meta, df):
     # could be a meta-package if no source section or if None
-    sources = meta.get_section('source')
+    sources = get_section(meta, 'source')
     if not sources:
         return
     if isinstance(sources, dict):
@@ -171,7 +173,7 @@ def missing_hash(recipe, meta, df):
 
 @lint_multiple_metas
 def uses_git_url(recipe, meta, df):
-    sources = meta.get_section('source')
+    sources = get_section(meta, 'source')
     if not sources:
         # metapackage?
         return
@@ -236,7 +238,7 @@ def should_be_noarch(recipe, meta, df):
         # the python version.
         not _has_preprocessing_selector(recipe)
     ) and (
-        'noarch' not in meta.get_section('build')
+        'noarch' not in get_section(meta, 'build')
     ):
         return {
             'should_be_noarch': True,
@@ -249,9 +251,9 @@ def should_not_be_noarch(recipe, meta, df):
     deps = _get_deps(meta)
     if (
         ('gcc' in deps) or
-        meta.get_section('build').get('skip', False) in ["true", "True"]
+        get_section(meta, 'build').get('skip', False) in ["true", "True"]
     ) and (
-        'noarch' in meta.get_section('build')
+        'noarch' in get_section(meta, 'build')
     ):
         print("error")
         return {
@@ -271,7 +273,7 @@ def setup_py_install_args(recipe, meta, df):
                 'to setup.py command'),
     }
 
-    script_line = meta.get_section('build').get('script', '')
+    script_line = get_section(meta, 'build').get('script', '')
     if (
         'setup.py install' in script_line and
         '--single-version-externally-managed' not in script_line
@@ -293,7 +295,7 @@ def setup_py_install_args(recipe, meta, df):
 @lint_multiple_metas
 def invalid_identifiers(recipe, meta, df):
     try:
-        identifiers = meta.get_section('extra').get('identifiers', [])
+        identifiers = get_section(meta, 'extra').get('identifiers', [])
         if not isinstance(identifiers, list):
             return {'invalid_identifiers': True,
                     'fix': 'extra:identifiers must hold a list of identifiers'}
@@ -319,7 +321,7 @@ def deprecated_numpy_spec(recipe, metas, df):
 
 @lint_multiple_metas
 def should_not_use_fn(recipe, meta, df):
-    sources = meta.get_section('source')
+    sources = get_section(meta, 'source')
     if not sources:
         return
     if isinstance(sources, dict):

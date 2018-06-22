@@ -218,7 +218,7 @@ def lint(recipes, lint_args):
 
         # skips defined in meta.yaml
         for meta in metas:
-            persistent = meta.get_section('extra').get('skip-lints', [])
+            persistent = utils.get_section(meta, 'extra').get('skip-lints', [])
             skip_for_this_recipe.update(persistent)
 
         for func in registry:
