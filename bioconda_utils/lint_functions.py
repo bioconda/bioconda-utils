@@ -38,8 +38,8 @@ def _get_deps(meta, section=None):
         If None, returns all dependencies. Otherwise can be a string or list of
         options [build, host, run, test] to return section-specific dependencies.
     """
-
-    get_name = lambda dep: dep.split()[0]
+    def get_name(dep):
+        return dep.split()[0]
 
     reqs = get_section(meta, 'requirements')
     if reqs is None:
@@ -82,6 +82,7 @@ def lint_multiple_metas(lint_function):
                 return ret
     lint_metas.__name__ = lint_function.__name__
     return lint_metas
+
 
 @lint_multiple_metas
 def in_other_channels(recipe, meta, df):
@@ -365,6 +366,7 @@ def compilers_must_be_in_build(recipe, meta, df):
                 'only go in the build: section')
         }
 
+
 def bioconductor_37(recipe, meta, df):
     for line in open(os.path.join(recipe, 'meta.yaml')):
         if ('{% set bioc = "3.7" %}' in line) or ('{% set bioc = "release" %}' in line):
@@ -372,6 +374,7 @@ def bioconductor_37(recipe, meta, df):
                 'bioconductor_37': True,
                 'fix': 'Need to wait until R 3.5 conda package is available',
             }
+
 
 registry = (
     in_other_channels,

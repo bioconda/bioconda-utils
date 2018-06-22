@@ -2,8 +2,10 @@ import subprocess as sp
 from collections import defaultdict, namedtuple
 import os
 import logging
+
 import networkx as nx
 import pandas
+
 from . import utils
 from . import docker_utils
 from . import pkg_test
@@ -185,7 +187,7 @@ def build(
     mulled_images = []
     for pkg_path in pkg_paths:
         try:
-            res = pkg_test.test_package(pkg_path, base_image=base_image)
+            pkg_test.test_package(pkg_path, base_image=base_image)
         except sp.CalledProcessError as e:
             logger.error('TEST FAILED: %s', recipe)
             return BuildResult(False, None)

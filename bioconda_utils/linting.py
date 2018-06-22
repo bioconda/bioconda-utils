@@ -6,7 +6,6 @@ from collections import defaultdict, namedtuple
 import pandas as pd
 import numpy as np
 import ruamel_yaml as yaml
-import jinja2
 
 from . import utils
 from . import lint_functions
@@ -73,6 +72,7 @@ TODO:
 usage = """
 Perform various checks on recipes.
 """
+
 
 class LintArgs(namedtuple('LintArgs', (
     'df', 'exclude', 'registry',

@@ -612,7 +612,8 @@ def test_has_windows_bat_file():
               name: has_windows_bat_file
               version: "0.1"
           any.bat: ""
-        ''',]
+        ''',
+        ]
     )
 
 

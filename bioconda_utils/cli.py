@@ -38,7 +38,8 @@ def select_recipes(packages, git_range, recipe_folder, config_filename, config, 
             if os.path.basename(f) in ['meta.yaml', 'build.sh'] and
             os.path.exists(f)
         ]
-        logger.info('Recipes to consider according to git: \n{}'.format('\n '.join(changed_recipes)))
+        logger.info(
+            'Recipes to consider according to git: \n{}'.format('\n '.join(changed_recipes)))
     else:
         changed_recipes = []
 
@@ -98,15 +99,18 @@ def duplicates(
     target_channel = channels[0]
 
     if strict_version:
-        get_spec = lambda pkg: (pkg['name'], pkg['version'])
+        def get_spec(pkg):
+            return (pkg['name'], pkg['version'])
         if not remove and not url:
             print('name', 'version', 'channels', sep='\t')
     elif strict_build:
-        get_spec = lambda pkg: (pkg['name'], pkg['version'], pkg['build'])
+        def get_spec(pkg):
+            return (pkg['name'], pkg['version'], pkg['build'])
         if not remove and not url:
             print('name', 'version', 'build', 'channels', sep='\t')
     else:
-        get_spec = lambda pkg: pkg['name']
+        def get_spec(pkg):
+            return pkg['name']
         if not remove and not url:
             print('name', 'channels', sep='\t')
 
@@ -474,7 +478,10 @@ def dag(recipe_folder, config, packages="*", format='gml', hide_singletons=False
      effect if --reverse-dependencies, which always looks just in the recipe
      dir.''')
 @arg('--loglevel', help="Set logging level (debug, info, warning, error, critical)")
-def dependent(recipe_folder, config, restrict=False, dependencies=None, reverse_dependencies=None, loglevel='warning'):
+def dependent(
+    recipe_folder, config, restrict=False, dependencies=None, reverse_dependencies=None,
+    loglevel='warning',
+):
     """
     Print recipes dependent on a package
     """
@@ -513,7 +520,7 @@ def dependent(recipe_folder, config, restrict=False, dependencies=None, reverse_
      with the specified version in --pkg-version, or if --pkg-version not
      specified, then finds the the latest package version in the latest
      Bioconductor version""")
-@arg('--loglevel',  help='Log level')
+@arg('--loglevel', help='Log level')
 @arg('--recursive', action='store_true', help="""Creates the recipes for all
      Bioconductor and CRAN dependencies of the specified package.""")
 @arg('--skip-if-in-channels', nargs='*', help="""When --recursive is used, it will build
@@ -545,7 +552,7 @@ def bioconductor_skeleton(
     utils.setup_logger('bioconda_utils', loglevel)
     seen_dependencies = set()
 
-    written = _bioconductor_skeleton.write_recipe(
+    _bioconductor_skeleton.write_recipe(
         package, recipe_folder, config, force=force, bioc_version=bioc_version,
         pkg_version=pkg_version, versioned=versioned, recursive=recursive,
         seen_dependencies=seen_dependencies,
@@ -626,4 +633,7 @@ def pypi_check(recipe_folder, config, loglevel='info', packages='*', only_out_of
 
 
 def main():
-    argh.dispatch_commands([build, dag, dependent, lint, duplicates, bioconductor_skeleton, pypi_check, clean_cran_skeleton])
+    argh.dispatch_commands([
+        build, dag, dependent, lint, duplicates,
+        bioconductor_skeleton, pypi_check, clean_cran_skeleton,
+    ])

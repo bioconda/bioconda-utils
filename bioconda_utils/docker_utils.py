@@ -125,6 +125,7 @@ FROM {self.docker_base_image}
 RUN /opt/conda/bin/conda install -y conda={conda_ver} conda-build={conda_build_ver}
 """
 
+
 class DockerCalledProcessError(sp.CalledProcessError):
     pass
 
@@ -485,7 +486,7 @@ class RecipeBuilder(object):
             env_list.append('{0}={1}'.format(k, v))
 
         env_list.append('-e')
-        env_list.append('{0}={1}'.format('HOST_USER_ID',self.user_info['uid']))
+        env_list.append('{0}={1}'.format('HOST_USER_ID', self.user_info['uid']))
 
         cmd = [
             'docker', 'run',

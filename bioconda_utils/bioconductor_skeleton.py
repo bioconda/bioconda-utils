@@ -5,15 +5,16 @@ import tempfile
 import configparser
 from textwrap import dedent
 import tarfile
-import pyaml
 import hashlib
 import os
 import re
-import bs4
 from collections import OrderedDict
 import logging
+
+import bs4
+import pyaml
 import requests
-from colorlog import ColoredFormatter
+
 from . import utils
 from . import cran_skeleton
 
@@ -200,7 +201,10 @@ def find_best_bioc_version(package, version):
     for bioc_version in bioconductor_versions():
         for kind, func in zip(
             ('package', 'data'),
-            (bioconductor_tarball_url, bioconductor_annotation_data_url, bioconductor_experiment_data_url)
+            (
+                bioconductor_tarball_url, bioconductor_annotation_data_url,
+                bioconductor_experiment_data_url,
+            ),
         ):
             url = func(package, version, bioc_version)
             if requests.head(url).status_code == 200:
@@ -261,8 +265,8 @@ class BioCProjectPage(object):
 
             htmls = {
                 'regular_package': os.path.join(
-                    base_url, self.bioc_version, 'bioc', 'html', package
-                    + '.html'),
+                    base_url, self.bioc_version, 'bioc', 'html',
+                    package + '.html'),
                 'annotation_package': os.path.join(
                     base_url, self.bioc_version, 'data', 'annotation', 'html',
                     package + '.html'),
@@ -310,7 +314,6 @@ class BioCProjectPage(object):
 
         self.depends_on_gcc = False
 
-
     @property
     def bioarchive_url(self):
         """
@@ -337,7 +340,8 @@ class BioCProjectPage(object):
         elif response.status_code == 200:
             return url
         else:
-            raise PageNotFoundError("Unexpected error: {0.status_code} ({0.reason})".format(response))
+            raise PageNotFoundError(
+                "Unexpected error: {0.status_code} ({0.reason})".format(response))
 
     @property
     def bioconductor_tarball_url(self):
@@ -396,7 +400,8 @@ class BioCProjectPage(object):
                 find_best_bioc_version(self.package, self.version)
 
             if self._tarball_url is None:
-                raise ValueError("No working URLs found for this version in any bioconductor version")
+                raise ValueError(
+                    "No working URLs found for this version in any bioconductor version")
         return self._tarball_url
 
     @property
@@ -428,7 +433,8 @@ class BioCProjectPage(object):
             if response.status_code == 200:
                 fout.write(response.content)
             else:
-                raise PageNotFoundError('Unexpected error {0.status_code} ({0.reason})'.format(response))
+                raise PageNotFoundError(
+                    'Unexpected error {0.status_code} ({0.reason})'.format(response))
         shutil.move(tmp, fn)
         self._cached_tarball = fn
         return fn
@@ -479,7 +485,6 @@ class BioCProjectPage(object):
         except KeyError:
             return []
 
-
     @property
     def linkingto(self):
         """
@@ -489,7 +494,6 @@ class BioCProjectPage(object):
             return [i.strip() for i in self.description['linkingto'].replace(' ', '').split(',')]
         except KeyError:
             return []
-
 
     def _parse_dependencies(self, items):
         """
@@ -595,15 +599,19 @@ class BioCProjectPage(object):
             # Modified from conda_build.skeletons.cran
             #
             with tarfile.open(self.cached_tarball) as tf:
-                need_f = any([f.name.lower().endswith(('.f', '.f90', '.f77')) for f in tf])
-                need_c = True if need_f else \
-                    any([f.name.lower().endswith('.c') for f in tf])
-                need_cxx = any([f.name.lower().endswith(('.cxx', '.cpp', '.cc', '.c++'))
-                                         for f in tf])
-                need_autotools = any([f.name.lower().endswith('/configure') for f in tf])
-                need_make = True if any((need_autotools, need_f, need_cxx, need_c)) else \
-                    any([f.name.lower().endswith(('/makefile', '/makevars'))
-                        for f in tf])
+                need_f = any(f.name.lower().endswith(('.f', '.f90', '.f77')) for f in tf)
+                if need_f:
+                    need_c = True
+                else:
+                    need_c = any(f.name.lower().endswith('.c') for f in tf)
+                need_cxx = any(
+                    f.name.lower().endswith(('.cxx', '.cpp', '.cc', '.c++')) for f in tf)
+                need_autotools = any(f.name.lower().endswith('/configure') for f in tf)
+                if any((need_autotools, need_f, need_cxx, need_c)):
+                    need_make = True
+                else:
+                    need_make = any(
+                        f.name.lower().endswith(('/makefile', '/makevars')) for f in tf)
         else:
             need_c = need_cxx = need_f = need_autotools = need_make = False
 
@@ -818,7 +826,9 @@ def write_recipe_recursive(proj, seen_dependencies, recipe_dir, config, force,
             continue
 
         if conda_name_without_version in seen_dependencies:
-            logger.debug("{} already created or in existing channels, skipping".format(conda_name_without_version))
+            logger.debug(
+                "{} already created or in existing channels, skipping"
+                .format(conda_name_without_version))
             continue
 
         seen_dependencies.update([conda_name_without_version])
