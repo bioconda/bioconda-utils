@@ -1072,3 +1072,4 @@ def test_depthcheck_get_recipe():
         for i in utils.built_package_paths(v):
             assert os.path.exists(i)
             ensure_missing(i)
+ 
