@@ -71,6 +71,13 @@ def _has_preprocessing_selector(recipe):
             return True
 
 
+def _has_compilers(deps):
+    return any(
+        dep.startswith(('clang_', 'clangxx_', 'gcc_', 'gxx_', 'gfortran_', 'toolchain_'))
+        for dep in deps
+    )
+
+
 def lint_multiple_metas(lint_function):
     def lint_metas(recipe, metas, df, *args, **kwargs):
         lint = partial(lint_function, recipe)
@@ -225,11 +232,8 @@ def has_windows_bat_file(recipe, metas, df):
 @lint_multiple_metas
 def should_be_noarch(recipe, meta, df):
     deps = _get_deps(meta)
-    no_compilers = all(
-        not dep.startswith(('clang_', 'clangxx_', 'gcc_', 'gxx_', 'gfortran_',
-                            'toolchain_')) for dep in deps)
     if (
-        no_compilers and
+        (not _has_compilers(deps)) and
         ('python' in deps) and
         # This will also exclude recipes with skip sections
         # which is a good thing, because noarch also implies independence of
@@ -248,8 +252,8 @@ def should_be_noarch(recipe, meta, df):
 def should_not_be_noarch(recipe, meta, df):
     deps = _get_deps(meta)
     if (
-        ('gcc' in deps) or
-        meta.get_value('build/skip', False) in ["true", "True"]
+        _has_compilers(deps) or
+        meta.get_value('build/skip', False)
     ) and (
         'noarch' in (meta.get_section('build') or {})
     ):
