@@ -4,6 +4,9 @@ from collections import defaultdict, namedtuple
 import os
 import logging
 
+# TODO: UnsatisfiableError is not yet in exports for conda 4.5.4
+# from conda.exports import UnsatisfiableError
+from conda.exceptions import UnsatisfiableError
 import networkx as nx
 import pandas
 
@@ -381,6 +384,15 @@ def build_recipes(
                 'BUILD ERROR: '
                 'packages with divergent build strings in repository '
                 'for recipe %s. A build number bump is likely needed: %s',
+                recipe, e)
+            failed.append(recipe)
+            for n in nx.algorithms.descendants(subdag, name):
+                skip_dependent[n].append(recipe)
+            continue
+        except UnsatisfiableError as e:
+            logger.error(
+                'BUILD ERROR: '
+                'could not determine dependencies for recipe %s: %s',
                 recipe, e)
             failed.append(recipe)
             for n in nx.algorithms.descendants(subdag, name):
