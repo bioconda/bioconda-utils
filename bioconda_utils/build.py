@@ -4,7 +4,9 @@ from collections import defaultdict, namedtuple
 import os
 import logging
 
-from conda.exports import UnsatisfiableError
+# TODO: UnsatisfiableError is not yet in exports for conda 4.5.4
+# from conda.exports import UnsatisfiableError
+from conda.exceptions import UnsatisfiableError
 import networkx as nx
 import pandas
 
