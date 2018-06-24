@@ -8,7 +8,7 @@ import subprocess as sp
 import sys
 import shutil
 import contextlib
-from collections import Iterable, defaultdict, namedtuple
+from collections import Counter, Iterable, defaultdict, namedtuple
 from itertools import product, chain, groupby
 import logging
 import datetime
@@ -626,6 +626,7 @@ def get_channel_repodata(channel='bioconda', platform=None):
 
 
 PackageKey = namedtuple('PackageKey', ('name', 'version', 'build_number'))
+PackageBuild = namedtuple('PackageBuild', ('subdir', 'build_id'))
 
 
 class DivergentBuildsError(Exception):
@@ -634,8 +635,8 @@ class DivergentBuildsError(Exception):
 
 def get_channel_packages(channel='bioconda', platform=None):
     """
-    Retrieves the existing packages for a channel from conda.anaconda.org as a
-    dict where keys are PackageKey instances and values are sets of build strings.
+    Return a PackageKey -> set(PackageBuild) mapping.
+    Retrieves the existing packages for a channel from conda.anaconda.org.
 
     Parameters
     ----------
@@ -650,10 +651,12 @@ def get_channel_packages(channel='bioconda', platform=None):
         channel=channel, platform=platform)
     channel_packages = defaultdict(set)
     for repo in (repodata, noarch_repodata):
+        subdir = repo['info']['subdir']
         for package in repo['packages'].values():
             pkg_key = PackageKey(
                 package['name'], package['version'], package['build_number'])
-            channel_packages[pkg_key].add(package['build'])
+            pkg_build = PackageBuild(subdir, package['build'])
+            channel_packages[pkg_key].add(pkg_build)
     channel_packages.default_factory = None
     return channel_packages
 
@@ -789,7 +792,7 @@ def changed_since_master(recipe_folder):
     ]
 
 
-def get_package_paths(recipe, channel_packages, force=False):
+def _load_platform_metas(recipe, finalize=True):
     # check if package is noarch, if so, build only on linux
     # with temp_os, we can fool the MetaData if needed.
     platform = os.environ.get('OSTYPE', sys.platform)
@@ -798,8 +801,82 @@ def get_package_paths(recipe, channel_packages, force=False):
     elif platform == "linux-gnu":
         platform = "linux"
 
-    metas = load_all_meta(
-        recipe, config=load_conda_build_config(platform=platform))
+    config = load_conda_build_config(platform=platform)
+    return platform, load_all_meta(recipe, config=config, finalize=finalize)
+
+
+def _meta_subdir(meta):
+    # logic extracted from conda_build.variants.bldpkg_path
+    return 'noarch' if meta.noarch or meta.noarch_python else meta.config.host_subdir
+
+
+def _get_pkg_key_build_meta_map(metas):
+    key_build_meta = defaultdict(dict)
+    for meta in metas:
+        pkg_key = PackageKey(meta.name(), meta.version(), int(meta.build_number() or 0))
+        pkg_build = PackageBuild(_meta_subdir(meta), meta.build_id())
+        key_build_meta[pkg_key][pkg_build] = meta
+    key_build_meta.default_factory = None
+    return key_build_meta
+
+
+def check_recipe_skippable(recipe, channel_packages, force=False):
+    """
+    Return True if the same number of builds (per subdir) defined by the recipe
+    are already in channel_packages (and force is False).
+    """
+    if force:
+        return False
+    platform, metas = _load_platform_metas(recipe, finalize=False)
+    key_build_meta = _get_pkg_key_build_meta_map(metas)
+    num_new_pkg_builds = sum(
+        (
+            Counter((pkg_key, pkg_build.subdir) for pkg_build in build_meta.keys())
+            for pkg_key, build_meta in key_build_meta.items()
+        ),
+        Counter()
+    )
+    num_existing_pkg_builds = sum(
+        (
+            Counter(
+                (pkg_key, pkg_build.subdir)
+                for pkg_build in channel_packages.get(pkg_key, set())
+            )
+            for pkg_key in key_build_meta.keys()
+        ),
+        Counter()
+    )
+    return num_new_pkg_builds == num_existing_pkg_builds
+
+
+def _filter_existing_packages(metas, channel_packages):
+    new_metas = []  # MetaData instances of packages not yet in channel
+    existing_metas = []  # MetaData instances of packages already in channel
+    divergent_builds = set()  # set of Dist (i.e., name-version-build) strings
+
+    key_build_meta = _get_pkg_key_build_meta_map(metas)
+    for pkg_key, build_meta in key_build_meta.items():
+        existing_pkg_builds = channel_packages.get(pkg_key, set())
+        for pkg_build, meta in build_meta.items():
+            if pkg_build not in existing_pkg_builds:
+                new_metas.append(meta)
+            else:
+                existing_metas.append(meta)
+        for divergent_build in (existing_pkg_builds - set(build_meta.keys())):
+            divergent_builds.add(
+                '-'.join((pkg_key.name, pkg_key.version, divergent_build.build_id)))
+    return new_metas, existing_metas, divergent_builds
+
+
+def get_package_paths(recipe, channel_packages, force=False):
+    if check_recipe_skippable(recipe, channel_packages, force):
+        # NB: If we skip early here, we don't detect possible divergent builds.
+        logger.info(
+            'FILTER: not building recipe %s because '
+            'the same number of builds are in channel(s) and it is not forced.',
+            recipe)
+        return []
+    platform, metas = _load_platform_metas(recipe, finalize=True)
 
     # The recipe likely defined skip: True
     if not metas:
@@ -834,41 +911,18 @@ def get_package_paths(recipe, channel_packages, force=False):
         api.get_output_file_paths(meta) for meta in build_metas))
 
 
-def _filter_existing_packages(metas, channel_packages):
-    new_metas = []  # MetaData instances of packages not yet in channel
-    existing_metas = []  # MetaData instances of packages already in channel
-    divergent_builds = set()  # set of Dist (i.e., name-version-build) strings
-
-    recipe_pkgs = defaultdict(list)
-    for meta in metas:
-        pkg_key = PackageKey(
-            meta.name(), meta.version(), int(meta.build_number() or 0))
-        recipe_pkgs[pkg_key].append(meta)
-    recipe_pkgs.default_factory = None
-
-    for pkg_key, pkg_metas in recipe_pkgs.items():
-        existing_build_ids = channel_packages.get(pkg_key, set())
-        for meta in pkg_metas:
-            if meta.build_id() not in existing_build_ids:
-                new_metas.append(meta)
-            else:
-                existing_metas.append(meta)
-        pkg_build_ids = set(meta.build_id() for meta in pkg_metas)
-        for divergent_build in (existing_build_ids - pkg_build_ids):
-            divergent_builds.add(
-                '-'.join((pkg_key.name, pkg_key.version, divergent_build)))
-    return new_metas, existing_metas, divergent_builds
-
-
 def get_all_channel_packages(channels):
+    """
+    Return a PackageKey -> set(PackageBuild) mapping.
+    """
     if channels is None:
         channels = []
 
     all_channel_packages = defaultdict(set)
     for channel in channels:
         channel_packages = get_channel_packages(channel=channel)
-        for pkg_key, pkg_build_ids in channel_packages.items():
-            all_channel_packages[pkg_key].update(pkg_build_ids)
+        for pkg_key, pkg_builds in channel_packages.items():
+            all_channel_packages[pkg_key].update(pkg_builds)
     all_channel_packages.default_factory = None
     return all_channel_packages
 

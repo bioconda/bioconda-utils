@@ -1,4 +1,5 @@
 import subprocess as sp
+from itertools import chain
 from collections import defaultdict, namedtuple
 import os
 import logging
@@ -336,11 +337,13 @@ def build_recipes(
         logger.info("Nothing to be done.")
         return True
     # merge subdags of the selected chunk
-    subdag = dag.subgraph(chunks[subdag_i])
-
     # ensure that packages which need a build are built in the right order
+    subdag = dag.subgraph(chain.from_iterable(
+        nx.topological_sort(dag.subgraph(cc)) for cc in chunks[subdag_i]
+    ))
+
     recipes = [recipe
-               for package in nx.topological_sort(subdag)
+               for package in subdag
                for recipe in name2recipes[package]]
 
     logger.info(
