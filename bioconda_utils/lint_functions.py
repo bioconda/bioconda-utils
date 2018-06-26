@@ -36,19 +36,21 @@ def _get_deps(meta, section=None):
         If None, returns all dependencies. Otherwise can be a string or list of
         options [build, host, run, test] to return section-specific dependencies.
     """
+    def get_name(dep):
+        return dep.split()[0]
 
-    get_name = lambda dep: dep.split()[0]
-
-    reqs = meta.get_section('requirements')
+    reqs = (meta.get_section('requirements') or {})
     if reqs is None:
         return []
     if section is None:
         sections = ['build', 'host', 'run', 'test']
-    if isinstance(section, str):
+    elif isinstance(section, str):
         sections = [section]
+    else:
+        sections = section
     deps = []
     for s in sections:
-        dep = reqs.get(s, [])
+        dep = (reqs.get(s) or [])
         if dep:
             deps += [get_name(d) for d in dep]
     return deps
@@ -71,6 +73,15 @@ def _has_preprocessing_selector(recipe):
             return True
 
 
+def _has_compilers(meta):
+    build_deps = _get_deps(meta, ('build', 'host'))
+    return any(
+        dep in {'gcc', 'llvm', 'clangdev', 'llvmdev'} or
+        dep.startswith(('clang_', 'clangxx_', 'gcc_', 'gxx_', 'gfortran_', 'toolchain_'))
+        for dep in build_deps
+    )
+
+
 def lint_multiple_metas(lint_function):
     def lint_metas(recipe, metas, df, *args, **kwargs):
         lint = partial(lint_function, recipe)
@@ -80,6 +91,7 @@ def lint_multiple_metas(lint_function):
                 return ret
     lint_metas.__name__ = lint_function.__name__
     return lint_metas
+
 
 @lint_multiple_metas
 def in_other_channels(recipe, meta, df):
@@ -101,8 +113,7 @@ def already_in_bioconda(recipe, meta, df):
     Does the package exist in bioconda?
     """
     results = _subset_df(recipe, meta, df)
-    build_section = meta.get_section('build')
-    build_number = int(build_section.get('number', 0))
+    build_number = int(meta.get_value('build/number', 0))
     build_results = results[results.build_number == build_number]
     channels = set(build_results.channel)
     if 'bioconda' in channels:
@@ -225,18 +236,15 @@ def has_windows_bat_file(recipe, metas, df):
 @lint_multiple_metas
 def should_be_noarch(recipe, meta, df):
     deps = _get_deps(meta)
-    no_compilers = all(
-        not dep.startswith(('clang_', 'clangxx_', 'gcc_', 'gxx_', 'gfortran_',
-                            'toolchain_')) for dep in deps)
     if (
-        no_compilers and
+        (not _has_compilers(meta)) and
         ('python' in deps) and
         # This will also exclude recipes with skip sections
         # which is a good thing, because noarch also implies independence of
         # the python version.
         not _has_preprocessing_selector(recipe)
     ) and (
-        'noarch' not in meta.get_section('build')
+        'noarch' not in (meta.get_section('build') or {})
     ):
         return {
             'should_be_noarch': True,
@@ -246,12 +254,11 @@ def should_be_noarch(recipe, meta, df):
 
 @lint_multiple_metas
 def should_not_be_noarch(recipe, meta, df):
-    deps = _get_deps(meta)
     if (
-        ('gcc' in deps) or
-        meta.get_section('build').get('skip', False) in ["true", "True"]
+        _has_compilers(meta) or
+        meta.get_value('build/skip', False)
     ) and (
-        'noarch' in meta.get_section('build')
+        'noarch' in (meta.get_section('build') or {})
     ):
         print("error")
         return {
@@ -271,7 +278,7 @@ def setup_py_install_args(recipe, meta, df):
                 'to setup.py command'),
     }
 
-    script_line = meta.get_section('build').get('script', '')
+    script_line = meta.get_value('build/script', '')
     if (
         'setup.py install' in script_line and
         '--single-version-externally-managed' not in script_line
@@ -293,7 +300,7 @@ def setup_py_install_args(recipe, meta, df):
 @lint_multiple_metas
 def invalid_identifiers(recipe, meta, df):
     try:
-        identifiers = meta.get_section('extra').get('identifiers', [])
+        identifiers = meta.get_value('extra/identifiers', [])
         if not isinstance(identifiers, list):
             return {'invalid_identifiers': True,
                     'fix': 'extra:identifiers must hold a list of identifiers'}
@@ -363,6 +370,7 @@ def compilers_must_be_in_build(recipe, meta, df):
                 'only go in the build: section')
         }
 
+
 def bioconductor_37(recipe, meta, df):
     for line in open(os.path.join(recipe, 'meta.yaml')):
         if ('{% set bioc = "3.7" %}' in line) or ('{% set bioc = "release" %}' in line):
@@ -370,6 +378,7 @@ def bioconductor_37(recipe, meta, df):
                 'bioconductor_37': True,
                 'fix': 'Need to wait until R 3.5 conda package is available',
             }
+
 
 registry = (
     in_other_channels,
@@ -396,5 +405,5 @@ registry = (
     should_not_use_fn,
     should_use_compilers,
     compilers_must_be_in_build,
-    bioconductor_37
+    bioconductor_37,
 )

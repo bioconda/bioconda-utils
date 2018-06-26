@@ -43,8 +43,7 @@ def build(
     channels=None,
     docker_builder=None,
     _raise_error=False,
-    prelint=False,
-    df=None,
+    lint_args=None,
 ):
     """
     Build a single recipe for a single env
@@ -81,17 +80,13 @@ def build(
         Instead of returning a failed build result, raise the error instead.
         Used for testing.
 
-    prelint : bool
-        If True, then apply linting just before building. `df` should probably
-        be provided as well.
-
-    df : pandas.DataFrame
-        Dataframe of channel info, likely from linting.channel_dataframe()
+    lint_args : linting.LintArgs | None
+        If not None, then apply linting just before building.
     """
 
-    if prelint:
+    if lint_args is not None:
         logger.info('Linting recipe')
-        report = linting.lint([recipe], df)
+        report = linting.lint([recipe], lint_args)
         if report is not None:
             summarized = pandas.DataFrame(
                 dict(failed_tests=report.groupby('recipe')['check'].agg('unique')))
@@ -111,10 +106,11 @@ def build(
 
     logger.info("BUILD START %s", recipe)
 
-    # --no-build-id is needed for some very long package names that triggers the 89 character limits
-    # this option can be removed as soon as all packages are rebuild with the 255 character limit
-    # Moreover, --no-build-id will block us from using parallel builds in conda-build 2.x
-    # build_args = ["--no-build-id"]
+    # --no-build-id is needed for some very long package names that triggers
+    # the 89 character limits this option can be removed as soon as all
+    # packages are rebuild with the 255 character limit
+    # Moreover, --no-build-id will block us from using parallel builds in
+    # conda-build 2.x build_args = ["--no-build-id"]
 
     # use global variant config file (contains pinnings)
     build_args = ["--skip-existing"]
@@ -186,14 +182,13 @@ def build(
 
     logger.info('TEST START via mulled-build %s', recipe)
 
-    use_base_image = meta.get_section('extra').get('container', {})\
-                                              .get('extended-base')
+    use_base_image = meta.get_value('extra/container', {}).get('extended-base', False)
     base_image = 'bioconda/extended-base-image' if use_base_image else None
 
     mulled_images = []
     for pkg_path in pkg_paths:
         try:
-            res = pkg_test.test_package(pkg_path, base_image=base_image)
+            pkg_test.test_package(pkg_path, base_image=base_image)
         except sp.CalledProcessError as e:
             logger.error('TEST FAILED: %s', recipe)
             return BuildResult(False, None)
@@ -215,7 +210,7 @@ def build_recipes(
     anaconda_upload=False,
     mulled_upload_target=None,
     check_channels=None,
-    prelint=False,
+    lint_args=None,
 ):
     """
     Build one or many bioconda packages.
@@ -264,6 +259,8 @@ def build_recipes(
         `config['channels'][0]`). If this list is empty, then do not check any
         channels.
 
+    lint_args : linting.LintArgs | None
+        If not None, then apply linting just before building.
     """
     orig_config = config
     config = utils.load_config(config)
@@ -293,11 +290,16 @@ def build_recipes(
 
     logger.debug('recipes: %s', recipes)
 
-    if prelint:
-        logger.info("Downloading channel information to use for linting")
-        df = linting.channel_dataframe(channels=['conda-forge', 'defaults'])
-    else:
-        df = None
+    if lint_args is not None:
+        df = lint_args.df
+        if df is None:
+            logger.info("Downloading channel information to use for linting")
+            df = linting.channel_dataframe(channels=['conda-forge', 'defaults'])
+        lint_exclude = (lint_args.exclude or ())
+        if 'already_in_bioconda' not in lint_exclude:
+            lint_exclude = tuple(lint_exclude) + ('already_in_bioconda',)
+            lint_args = linting.LintArgs(lint_args.df, lint_exclude, lint_args.registry)
+        lint_args = linting.LintArgs(df, lint_exclude, lint_args.registry)
 
     dag, name2recipes = utils.get_dag(recipes, config=orig_config, blacklist=blacklist)
     recipe2name = {}
@@ -425,8 +427,7 @@ def build_recipes(
             force=force,
             channels=config['channels'],
             docker_builder=docker_builder,
-            df=df,
-            prelint=prelint,
+            lint_args=lint_args,
         )
 
         all_success &= res.success

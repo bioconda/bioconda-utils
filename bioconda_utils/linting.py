@@ -1,12 +1,11 @@
 import os
 import re
 import itertools
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 
 import pandas as pd
 import numpy as np
 import ruamel_yaml as yaml
-import jinja2
 
 from . import utils
 from . import lint_functions
@@ -75,6 +74,30 @@ Perform various checks on recipes.
 """
 
 
+class LintArgs(namedtuple('LintArgs', (
+    'df', 'exclude', 'registry',
+))):
+    """
+    df : pandas.DataFrame
+        Dataframe containing channel data, typically as output from
+        `channel_dataframe()`
+
+    exclude : list
+        List of function names in `registry` to skip globally. When running on
+        CI, this will be merged with anything else detected from the commit
+        message or LINT_SKIP environment variable using the special string
+        "[skip lint <function name> for <recipe name>]". While those other
+        mechanisms define skipping on a recipe-specific basis, this argument
+        can be used to skip tests for all recipes. Use sparingly.
+
+    registry : list or tuple
+        List of functions to apply to each recipe. If None, defaults to
+        `lint_functions.registry`.
+    """
+    def __new__(cls, df, exclude=None, registry=None):
+        return super().__new__(cls, df, exclude, registry)
+
+
 def channel_dataframe(cache=None, channels=['bioconda', 'conda-forge',
                                             'defaults']):
     """
@@ -120,7 +143,7 @@ def channel_dataframe(cache=None, channels=['bioconda', 'conda-forge',
     return df
 
 
-def lint(recipes, df, exclude=None, registry=None):
+def lint(recipes, lint_args):
     """
     Parameters
     ----------
@@ -128,27 +151,11 @@ def lint(recipes, df, exclude=None, registry=None):
     recipes : list
         List of recipes to lint
 
-    config : str, dict
-        Used to pass any necessary environment variables (CONDA_BOOST, etc) to
-        meta.yaml files. If str, path to config file. If dict, parsed version
-        of the config file.
-
-    df : pandas.DataFrame
-        Dataframe containing channel data, typically as output from
-        `channel_dataframe()`
-
-    exclude : list
-        List of function names in `registry` to skip globally. When running on
-        CI, this will be merged with anything else detected from the commit
-        message or LINT_SKIP environment variable using the special string
-        "[skip lint <function name> for <recipe name>]". While those other
-        mechanisms define skipping on a recipe-specific basis, this argument
-        can be used to skip tests for all recipes. Use sparingly.
-
-    registry : list or tuple
-        List of functions to apply to each recipe. If None, defaults to
-        `lint_functions.registry`.
+    lint_args : LintArgs
     """
+    df = lint_args.df
+    exclude = lint_args.exclude
+    registry = lint_args.registry
 
     if registry is None:
         registry = lint_functions.registry
@@ -211,7 +218,7 @@ def lint(recipes, df, exclude=None, registry=None):
 
         # skips defined in meta.yaml
         for meta in metas:
-            persistent = meta.get_section('extra').get('skip-lints', [])
+            persistent = meta.get_value('extra/skip-lints', [])
             skip_for_this_recipe.update(persistent)
 
         for func in registry:

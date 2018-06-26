@@ -15,12 +15,9 @@ from textwrap import dedent
 from bioconda_utils import utils
 from bioconda_utils import pkg_test
 from bioconda_utils import docker_utils
-from bioconda_utils import cli
 from bioconda_utils import build
 from bioconda_utils import upload
 from helpers import ensure_missing, Recipes
-from conda_build import api
-from conda_build.metadata import MetaData
 
 # TODO: need channel order tests. Could probably do this by adding different
 # file:// channels with different variants of the same package
@@ -108,7 +105,6 @@ def single_build(request, recipes_fixture):
         ensure_missing(pkg)
 
 
-
 # TODO: need to have a variant of this where TRAVIS_BRANCH_NAME="master" in
 # order to properly test for upload.
 @pytest.fixture(scope='module', params=PARAMS, ids=IDS)
@@ -168,7 +164,7 @@ def single_upload():
 
     yield (name, pkg, r.recipe_dirs[name])
 
-    p = sp.run(
+    sp.run(
         ['anaconda', '-t', os.environ.get('ANACONDA_TOKEN'), 'remove',
          'bioconda/{0}'.format(name), '--force'],
         stdout=sp.PIPE, stderr=sp.STDOUT, check=True,
@@ -185,7 +181,7 @@ def test_upload(single_upload):
     name, pkg, recipe = single_upload
     env_name = 'bioconda-utils-test-' + str(uuid.uuid4()).split('-')[0]
     with ensure_env_missing(env_name):
-        p = sp.run(
+        sp.run(
             ['conda', 'create', '-n', env_name,
              '-c', 'bioconda/label/{0}'.format(TEST_LABEL), name],
             stdout=sp.PIPE, stderr=sp.STDOUT, check=True,
@@ -246,8 +242,7 @@ def test_docker_build_image_fails():
         RUN nonexistent command
         """)
     with pytest.raises(sp.CalledProcessError):
-        docker_builder = docker_utils.RecipeBuilder(
-             dockerfile_template=template)
+        docker_utils.RecipeBuilder(dockerfile_template=template)
 
 
 def test_conda_purge_cleans_up():
@@ -547,7 +542,7 @@ def test_rendering_sandboxing():
     if 'GITHUB_TOKEN' in os.environ:
         with pytest.raises(sp.CalledProcessError) as excinfo:
             pkg_paths = utils.built_package_paths(r.recipe_dirs['one'])
-            res = build.build(
+            build.build(
                 recipe=r.recipe_dirs['one'],
                 recipe_folder='.',
                 pkg_paths=pkg_paths,
@@ -559,11 +554,11 @@ def test_rendering_sandboxing():
         # recipe for "one" should fail because GITHUB_TOKEN is not a jinja var.
         with pytest.raises(SystemExit) as excinfo:
             pkg_paths = utils.built_package_paths(r.recipe_dirs['one'])
-            res = build.build(
+            build.build(
                 recipe=r.recipe_dirs['one'],
                 recipe_folder='.',
                 pkg_paths=pkg_paths,
-                mulled_test=False
+                mulled_test=False,
             )
         assert "'GITHUB_TOKEN' is undefined" in str(excinfo.value)
 
@@ -585,11 +580,11 @@ def test_rendering_sandboxing():
         for pkg in pkg_paths:
             ensure_missing(pkg)
 
-        res = build.build(
+        build.build(
             recipe=r.recipe_dirs['two'],
             recipe_folder='.',
             pkg_paths=pkg_paths,
-            mulled_test=False
+            mulled_test=False,
         )
 
         for pkg in pkg_paths:
@@ -932,7 +927,7 @@ def test_cb3_outputs():
 
         """, from_string=True)
     r.write_recipes()
-    recipe = r.recipe_dirs['one']
+    r.recipe_dirs['one']
 
     build_result = build.build_recipes(
         r.basedir,
@@ -948,6 +943,7 @@ def test_cb3_outputs():
         for i in utils.built_package_paths(v):
             assert os.path.exists(i)
             ensure_missing(i)
+
 
 def test_compiler():
     r = Recipes(

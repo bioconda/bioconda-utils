@@ -11,17 +11,17 @@ import contextlib
 from collections import Counter, Iterable, defaultdict, namedtuple
 from itertools import product, chain, groupby
 import logging
-import pkg_resources
-import networkx as nx
-import requests
-from jsonschema import validate
 import datetime
-from distutils.version import LooseVersion
 from threading import Event, Thread
 from pathlib import PurePath
 
 from conda_build import api
 from conda.exports import VersionOrder
+import pkg_resources
+import networkx as nx
+import requests
+from jsonschema import validate
+from distutils.version import LooseVersion
 import yaml
 import jinja2
 from jinja2 import Environment, PackageLoader
@@ -173,7 +173,6 @@ def load_all_meta(recipe, config=None, finalize=True):
                                                 )]
 
 
-
 def load_meta_fast(recipe):
     """
     Given a package name, find the current meta.yaml file, parse it, and return
@@ -190,12 +189,13 @@ def load_meta_fast(recipe):
     class SilentUndefined(jinja2.Undefined):
         def _fail_with_undefined_error(self, *args, **kwargs):
             return ""
+
         __add__ = __radd__ = __mul__ = __rmul__ = __div__ = __rdiv__ = \
-        __truediv__ = __rtruediv__ = __floordiv__ = __rfloordiv__ = \
-        __mod__ = __rmod__ = __pos__ = __neg__ = __call__ = \
-        __getitem__ = __lt__ = __le__ = __gt__ = __ge__ = __int__ = \
-        __float__ = __complex__ = __pow__ = __rpow__ = \
-        _fail_with_undefined_error
+            __truediv__ = __rtruediv__ = __floordiv__ = __rfloordiv__ = \
+            __mod__ = __rmod__ = __pos__ = __neg__ = __call__ = \
+            __getitem__ = __lt__ = __le__ = __gt__ = __ge__ = __int__ = \
+            __float__ = __complex__ = __pow__ = __rpow__ = \
+            _fail_with_undefined_error
 
     pth = os.path.join(recipe, 'meta.yaml')
     jinja_env = jinja2.Environment(undefined=SilentUndefined)
@@ -421,11 +421,10 @@ def get_deps(recipe=None, meta=None, build=True):
 
     all_deps = set()
     for meta in metadata:
-        reqs = meta.get_section('requirements')
         if build:
-            deps = reqs.get('build', [])
+            deps = meta.get_value('requirements/build', [])
         else:
-            deps = reqs.get('run', [])
+            deps = meta.get_value('requirements/run', [])
         all_deps.update(dep.split()[0] for dep in deps)
     return all_deps
 
@@ -468,7 +467,7 @@ def get_dag(recipes, config, blacklist=None, restrict=True):
             metadata.append((meta, recipe))
             if i % 100 == 0:
                 logger.info("Inspected {} of {} recipes".format(i, len(recipes)))
-        except:
+        except Exception:
             raise ValueError('Problem inspecting {0}'.format(recipe))
     if blacklist is None:
         blacklist = set()
@@ -973,11 +972,13 @@ def load_config(path):
     validate_config(path)
 
     if isinstance(path, dict):
+        def relpath(p):
+            return p
         config = path
-        relpath = lambda p: p
     else:
+        def relpath(p):
+            return os.path.join(os.path.dirname(path), p)
         config = yaml.load(open(path))
-        relpath = lambda p: os.path.join(os.path.dirname(path), p)
 
     def get_list(key):
         # always return empty list, also if NoneType is defined in yaml

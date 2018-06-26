@@ -3,7 +3,6 @@ import tempfile
 import yaml
 import os
 import subprocess as sp
-from conda_build.metadata import MetaData
 
 
 def ensure_missing(package):
