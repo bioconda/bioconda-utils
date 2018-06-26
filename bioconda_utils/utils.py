@@ -534,7 +534,7 @@ def get_recipes(recipe_folder, package="*"):
         for newDir in [x for x in glob.glob(path)]:
             for dirpath,dirnames,filenames in os.walk(newDir):
                 if "meta.yaml" in filenames:
-                    yield dirpath
+                    yield dirpath 
 
 
 def get_latest_recipes(recipe_folder, config, package="*"):
