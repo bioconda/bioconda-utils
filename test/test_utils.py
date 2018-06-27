@@ -999,9 +999,10 @@ def test_depthcheck_get_recipe():
                 package:
                     name: normal
                     version: "0.1"
+                build:
+                    skip: true
                 requirements:
                     build:
-                        - shallow
                         - python 3.6
             build.sh: |
                 #!/bin/bash
@@ -1013,8 +1014,10 @@ def test_depthcheck_get_recipe():
                     name: deep
                     version: "0.1"
                 requirements:
+                    build:
+                        - python
                     run:
-                        - shallow
+                        - python
             build.sh: |
                 #!/bin/bash
                 ## Empty script
