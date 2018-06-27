@@ -1013,8 +1013,6 @@ def test_depthcheck_get_recipe():
                     name: deep
                     version: "0.1"
                 requirements:
-                    build:
-                        - normal
                     run:
                         - shallow
             build.sh: |
@@ -1025,9 +1023,6 @@ def test_depthcheck_get_recipe():
                 package:
                     name: deeper
                     version: "0.1"
-                requirements:
-                    run:
-                        - normal
         F/I/V/E/deep:
             meta.yaml: |
                 package:
