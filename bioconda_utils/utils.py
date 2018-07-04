@@ -829,13 +829,6 @@ def check_recipe_skippable(recipe, channel_packages, force=False):
         return False
     platform, metas = _load_platform_metas(recipe, finalize=False)
     key_build_meta = _get_pkg_key_build_meta_map(metas)
-    num_new_pkg_builds = sum(
-        (
-            Counter((pkg_key, pkg_build.subdir) for pkg_build in build_meta.keys())
-            for pkg_key, build_meta in key_build_meta.items()
-        ),
-        Counter()
-    )
     num_existing_pkg_builds = sum(
         (
             Counter(
@@ -843,6 +836,16 @@ def check_recipe_skippable(recipe, channel_packages, force=False):
                 for pkg_build in channel_packages.get(pkg_key, set())
             )
             for pkg_key in key_build_meta.keys()
+        ),
+        Counter()
+    )
+    if num_existing_pkg_builds == Counter():
+        # No packages with same version + build num in channels: no need to skip
+        return False
+    num_new_pkg_builds = sum(
+        (
+            Counter((pkg_key, pkg_build.subdir) for pkg_build in build_meta.keys())
+            for pkg_key, build_meta in key_build_meta.items()
         ),
         Counter()
     )
