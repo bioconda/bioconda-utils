@@ -1,5 +1,4 @@
 import subprocess as sp
-from itertools import chain
 from collections import defaultdict, namedtuple
 import os
 import logging
@@ -321,14 +320,45 @@ def build_recipes(
             "SUBDAG=%s (zero-based) but only SUBDAGS=%s "
             "subdags are available")
 
+    failed = []
+    skip_dependent = defaultdict(list)
+
     # Get connected subdags and sort by nodes
     if testonly:
         # use each node as a subdag (they are grouped into equal sizes below)
         subdags = sorted([[n] for n in nx.nodes(dag)])
     else:
-        # take connected components as subdags
-        subdags = sorted(map(sorted, nx.connected_components(dag.to_undirected(
-        ))))
+        # take connected components as subdags, remove cycles
+        subdags = []
+        for cc_nodes in nx.connected_components(dag.to_undirected()):
+            cc = dag.subgraph(sorted(cc_nodes))
+            nodes_in_cycles = set()
+            for cycle in list(nx.simple_cycles(cc)):
+                logger.error(
+                    'BUILD ERROR: '
+                    'dependency cycle found: %s',
+                    cycle,
+                )
+                nodes_in_cycles.update(cycle)
+            for name in sorted(nodes_in_cycles):
+                cycle_fail_recipes = sorted(name2recipes[name])
+                logger.error(
+                    'BUILD ERROR: '
+                    'cannot build recipes for %s since it cyclically depends '
+                    'on other packages in the current build job. Failed '
+                    'recipes: %s',
+                    name, cycle_fail_recipes,
+                )
+                failed.extend(cycle_fail_recipes)
+                for n in nx.algorithms.descendants(cc, name):
+                    if n in nodes_in_cycles:
+                        continue  # don't count packages twice (failed/skipped)
+                    skip_dependent[n].extend(cycle_fail_recipes)
+            cc_without_cycles = dag.subgraph(
+                name for name in cc if name not in nodes_in_cycles
+            )
+            # ensure that packages which need a build are built in the right order
+            subdags.append(nx.topological_sort(cc_without_cycles))
     # chunk subdags such that we have at most subdags_n many
     if subdags_n < len(subdags):
         chunks = [[n for subdag in subdags[i::subdags_n] for n in subdag]
@@ -339,10 +369,7 @@ def build_recipes(
         logger.info("Nothing to be done.")
         return True
     # merge subdags of the selected chunk
-    # ensure that packages which need a build are built in the right order
-    subdag = dag.subgraph(chain.from_iterable(
-        nx.topological_sort(dag.subgraph(cc)) for cc in chunks[subdag_i]
-    ))
+    subdag = dag.subgraph(chunks[subdag_i])
 
     recipes = [recipe
                for package in subdag
@@ -353,12 +380,10 @@ def build_recipes(
         subdag_i + 1, subdags_n, len(recipes)
     )
 
-    failed = []
     built_recipes = []
     skipped_recipes = []
     all_success = True
     failed_uploads = []
-    skip_dependent = defaultdict(list)
     channel_packages = utils.get_all_channel_packages(check_channels)
 
     for recipe in recipes:
