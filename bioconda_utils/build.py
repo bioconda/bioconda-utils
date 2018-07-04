@@ -298,7 +298,6 @@ def build_recipes(
         lint_exclude = (lint_args.exclude or ())
         if 'already_in_bioconda' not in lint_exclude:
             lint_exclude = tuple(lint_exclude) + ('already_in_bioconda',)
-            lint_args = linting.LintArgs(lint_args.df, lint_exclude, lint_args.registry)
         lint_args = linting.LintArgs(df, lint_exclude, lint_args.registry)
 
     dag, name2recipes = utils.get_dag(recipes, config=orig_config, blacklist=blacklist)
