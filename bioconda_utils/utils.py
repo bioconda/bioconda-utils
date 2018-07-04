@@ -492,7 +492,7 @@ def get_dag(recipes, config, blacklist=None, restrict=True):
         deps = reqs.get(sec)
         if not deps:
             return []
-        return [dep.split()[0] for dep in deps if dep is not None]
+        return [dep.split()[0] for dep in deps if dep]
 
     def get_inner_deps(dependencies):
         dependencies = list(dependencies)
