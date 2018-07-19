@@ -531,10 +531,10 @@ def get_recipes(recipe_folder, package="*"):
         logger.debug(
             "get_recipes(%s, package='%s'): %s", recipe_folder, package, p)
         path = os.path.join(recipe_folder, p)
-        for newDir in [x for x in glob.glob(path)]:
-            for dirpath,dirnames,filenames in os.walk(newDir):
-                if "meta.yaml" in filenames:
-                    yield dirpath 
+        for new_dir in glob.glob(path):
+            for dir_path,dir_names,file_names in os.walk(new_dir):
+                if "meta.yaml" in file_names:
+                    yield dir_path 
 
 
 def get_latest_recipes(recipe_folder, config, package="*"):
