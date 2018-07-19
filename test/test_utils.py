@@ -976,8 +976,7 @@ def test_compiler():
         for i in utils.built_package_paths(v):
             assert os.path.exists(i)
             ensure_missing(i)
-              
-            
+    
 def test_nested_recipes():
     """  
     Test get_recipes ability to identify different nesting depths of recipes 
@@ -1070,4 +1069,3 @@ def test_nested_recipes():
         for i in utils.built_package_paths(v):
             assert os.path.exists(i)
             ensure_missing(i)
- 
