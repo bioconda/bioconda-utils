@@ -978,7 +978,7 @@ def test_compiler():
             ensure_missing(i)
               
             
-def test_depthcheck_get_recipe():
+def test_nested_recipes():
     """  
     Test get_recipes ability to identify different nesting depths of recipes 
     """
