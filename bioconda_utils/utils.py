@@ -492,7 +492,8 @@ def get_dag(recipes, config, blacklist=None, restrict=True):
         deps = reqs.get(sec)
         if not deps:
             return []
-        return [dep.split()[0] for dep in deps if dep is not None]
+        return [dep.split()[0] for dep in deps if dep]
+
 
     def get_inner_deps(dependencies):
         dependencies = list(dependencies)
@@ -505,8 +506,14 @@ def get_dag(recipes, config, blacklist=None, restrict=True):
                        for meta, recipe in metadata)
     for meta, recipe in metadata:
         name = meta["package"]["name"]
-        dag.add_edges_from((dep, name)
-                           for dep in set(get_inner_deps(get_deps(meta, "host"))))
+        dag.add_edges_from(
+            (dep, name)
+            for dep in set(chain(
+                get_inner_deps(get_deps(meta, "build")),
+                get_inner_deps(get_deps(meta, "host")),
+                get_inner_deps(get_deps(meta, "run")),
+            ))
+        )
 
     return dag, name2recipe
 
@@ -531,10 +538,10 @@ def get_recipes(recipe_folder, package="*"):
         logger.debug(
             "get_recipes(%s, package='%s'): %s", recipe_folder, package, p)
         path = os.path.join(recipe_folder, p)
-        yield from map(os.path.dirname,
-                       glob.glob(os.path.join(path, "meta.yaml")))
-        yield from map(os.path.dirname,
-                       glob.glob(os.path.join(path, "*", "meta.yaml")))
+        for new_dir in glob.glob(path):
+            for dir_path,dir_names,file_names in os.walk(new_dir):
+                if "meta.yaml" in file_names:
+                    yield dir_path
 
 
 def get_latest_recipes(recipe_folder, config, package="*"):
@@ -829,13 +836,6 @@ def check_recipe_skippable(recipe, channel_packages, force=False):
         return False
     platform, metas = _load_platform_metas(recipe, finalize=False)
     key_build_meta = _get_pkg_key_build_meta_map(metas)
-    num_new_pkg_builds = sum(
-        (
-            Counter((pkg_key, pkg_build.subdir) for pkg_build in build_meta.keys())
-            for pkg_key, build_meta in key_build_meta.items()
-        ),
-        Counter()
-    )
     num_existing_pkg_builds = sum(
         (
             Counter(
@@ -843,6 +843,16 @@ def check_recipe_skippable(recipe, channel_packages, force=False):
                 for pkg_build in channel_packages.get(pkg_key, set())
             )
             for pkg_key in key_build_meta.keys()
+        ),
+        Counter()
+    )
+    if num_existing_pkg_builds == Counter():
+        # No packages with same version + build num in channels: no need to skip
+        return False
+    num_new_pkg_builds = sum(
+        (
+            Counter((pkg_key, pkg_build.subdir) for pkg_build in build_meta.keys())
+            for pkg_key, build_meta in key_build_meta.items()
         ),
         Counter()
     )
