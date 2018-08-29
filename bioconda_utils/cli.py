@@ -273,7 +273,8 @@ def lint(recipe_folder, config, packages="*", cache=None, list_funcs=False,
             msg = linting.markdown_report()
             github_integration.push_comment(
                 user, repo, pull_request, msg)
-        logger.info("\n\nThe following recipes passed linting:\n\n%s\n", summarized.to_string())
+        if _recipes:
+            logger.info("\n\nThe following recipes passed linting:\n%s", '\n'.join(_recipes))
 
 
 @arg('recipe_folder', help='Path to top-level dir of recipes.')
