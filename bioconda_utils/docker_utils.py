@@ -93,7 +93,7 @@ set -e
 # exists before adding the channel.
 mkdir -p {self.container_staging}/linux-64
 mkdir -p {self.container_staging}/noarch
-conda config --add channels file://{self.container_staging}  > /dev/null 2>&1
+conda config --add channels file://{self.container_staging}
 
 # The actual building...
 # we explicitly point to the meta.yaml, in order to keep
