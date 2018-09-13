@@ -489,7 +489,7 @@ class RecipeBuilder(object):
         env_list.append('{0}={1}'.format('HOST_USER_ID', self.user_info['uid']))
 
         cmd = [
-            'docker', 'run',
+            'docker', 'run', '-t',
             '--net', 'host',
             '--rm',
             '-v', '{0}:/opt/build_script.bash'.format(build_script),
