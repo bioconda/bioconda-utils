@@ -82,7 +82,7 @@ logger = logging.getLogger(__name__)
 BUILD_SCRIPT_TEMPLATE = \
 """
 #!/bin/bash
-set -e
+set -eo pipefail
 
 # Add the host's mounted conda-bld dir so that we can use its contents as
 # dependencies for building this recipe.
@@ -93,7 +93,9 @@ set -e
 # exists before adding the channel.
 mkdir -p {self.container_staging}/linux-64
 mkdir -p {self.container_staging}/noarch
-conda config --add channels file://{self.container_staging}
+conda config --add channels file://{self.container_staging} 2> >(
+    grep -vF "Warning: 'file://{self.container_staging}' already in 'channels' list, moving to the top" >&2
+)
 
 # The actual building...
 # we explicitly point to the meta.yaml, in order to keep
