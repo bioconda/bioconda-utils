@@ -42,7 +42,7 @@ variables:
       name: Install bioconda-utils
       command: python setup.py install
 
-    
+
 jobs:
   test-linux:
     <<: *linux
@@ -98,7 +98,22 @@ jobs:
       - run:
           name: Build and upload docs
           command: .circleci/build-docs.sh
-
+  bioconda-recipes-local-build:
+    <<: *linux
+    steps:
+      - checkout
+      - run:
+          name: Building Docker image
+          command: docker build -t bioconda/bioconda-utils-build-env:latest .
+          no_output_timeout: 1200
+      - run:
+          name: Fetching bioconda-recipes
+          command: git clone --depth 1 https://github.com/bioconda/bioconda-recipes
+          no_output_timeout: 1200
+      - run:
+          name: Running bioconda-recipes local build
+          command: cd bioconda-recipes && circleci build
+          no_output_timeout: 1200
 
 
 workflows:
@@ -113,6 +128,8 @@ workflows:
       - test-macos:
           context: org-global
       - build-docs:
+          context: org-global
+      - bioconda-recipes-local-build:
           context: org-global
   bioconda-utils-nightly-docs:
      triggers:
