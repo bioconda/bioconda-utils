@@ -121,14 +121,14 @@ workflows:
   # workflow for testing pushes and PRs
   bioconda-utils-test:
     jobs:
-      - test-linux:
-          context: org-global
-      - test-linux (long_running):
-          context: org-global
-      - test-macos:
-          context: org-global
-      - build-docs:
-          context: org-global
+      # - test-linux:
+      #     context: org-global
+      # - test-linux (long_running):
+      #     context: org-global
+      # - test-macos:
+      #     context: org-global
+      # - build-docs:
+      #     context: org-global
       - bioconda-recipes-local-build:
           context: org-global
   bioconda-utils-nightly-docs:
