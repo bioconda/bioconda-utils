@@ -112,7 +112,7 @@ jobs:
           no_output_timeout: 1200
       - run:
           name: Running bioconda-recipes local build
-          command: cd bioconda-recipes && circleci build
+          command: cd bioconda-recipes && circleci build --verbose
           no_output_timeout: 1200
 
 
