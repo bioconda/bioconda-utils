@@ -10,6 +10,7 @@ import contextlib
 import tarfile
 import logging
 import shutil
+import filecmp
 from textwrap import dedent
 
 from bioconda_utils import utils
@@ -472,6 +473,66 @@ def test_get_channel_packages():
     with pytest.raises(requests.HTTPError):
         utils.get_channel_packages('bioconda_xyz_nonexistent_channel')
     utils.get_channel_packages('bioconda')
+
+
+def test_bump_build_numbers():
+    r = Recipes(
+        """
+        valid:
+          meta.yaml: |
+            package:
+              name: one
+              version: "0.1"
+            build:
+              number: 1
+
+        invalid_jinja:
+          meta.yaml: |
+            package:
+              name: two
+              version: "0.1"
+            build:
+              number: {{ CONDA_NCURSES }}
+
+        no_build_num:
+          meta.yaml: |
+            package:
+              name: two
+              version: "0.1"
+        """, from_string=True)
+    r.write_recipes()
+
+    expected = Recipes(
+        """
+        valid:
+          meta.yaml: |
+            package:
+              name: one
+              version: "0.1"
+            build:
+              number: 2
+
+        invalid_jinja:
+          meta.yaml: |
+            package:
+              name: two
+              version: "0.1"
+            build:
+              number: {{ CONDA_NCURSES }}
+
+        no_build_num:
+          meta.yaml: |
+            package:
+              name: two
+              version: "0.1"
+        """, from_string=True)
+    expected.write_recipes()
+
+    utils.bump_build_numbers(r.recipe_dirs.values())
+    get_meta = lambda recipe: os.path.join(recipe, "meta.yaml")
+    for recipe, path in r.recipe_dirs.items():
+        assert filecmp.cmp(get_meta(path),
+                           get_meta(expected.recipe_dirs[recipe]))
 
 
 def test_built_package_paths():

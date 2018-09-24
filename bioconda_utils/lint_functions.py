@@ -3,6 +3,7 @@ import glob
 import os
 import re
 
+import yaml
 import pandas
 import numpy as np
 
@@ -91,6 +92,65 @@ def lint_multiple_metas(lint_function):
                 return ret
     lint_metas.__name__ = lint_function.__name__
     return lint_metas
+
+
+def _superfluous_jinja_var(recipe, entry, required=False,
+                           jinja_var=re.compile(r"{{.*?}}"),
+                           jinja_var_def=re.compile(r"{%.+?%}")):
+    with open(os.path.join(recipe, 'meta.yaml')) as content:
+        def quote_var(match, quotes='"\''):
+            if (content[match.start() - 1] not in quotes and
+                content[match.end()] not in quotes):
+                return '"{}"'.format(match.group())
+            else:
+                return match.group()
+
+        # remove var defs to make yaml happy
+        content = jinja_var_def.sub("", content.read())
+        # quote var usages if necessary to make yaml happy
+        content = jinja_var.sub(quote_var, content)
+        # load as plain yaml
+        meta = yaml.load(content, Loader=yaml.SafeLoader)
+    m = meta
+    xpath = entry.split('/')
+    for p in xpath:
+        try:
+            m = m[p]
+        except KeyError:
+            if required:
+                return {
+                    'missing_entry': True,
+                    'fix': 'add entry {} to meta.yaml'.format(entry)
+                }
+            else:
+                return
+
+    match = jinja_var.search(m)
+    if match:
+        return {
+            'unwanted_jinja_var': True,
+            'fix': 'remove jinja var {} from entry {} in '
+                   'meta.yaml'.format(match.group(), entry)
+        }
+
+
+def jinja_var_name(recipe, meta, df,):
+    return _superfluous_jinja_var(recipe, 'package/name', required=True)
+
+
+def jinja_var_buildnum(recipe, meta, df,):
+    return _superfluous_jinja_var(recipe, 'build/number', required=True)
+
+
+def jinja_var_version(recipe, meta, df):
+    return _superfluous_jinja_var(recipe, 'package/version', required=True)
+
+
+def jinja_var_checksum(recipe, meta, df):
+    for checksum in ["sha256", "sha1", "md5"]:
+        ret = _superfluous_jinja_var(recipe, 'source/{}'.format(checksum))
+        if ret:
+            return ret
 
 
 @lint_multiple_metas
@@ -405,5 +465,9 @@ registry = (
     should_not_use_fn,
     should_use_compilers,
     compilers_must_be_in_build,
+    jinja_var_version,
+    jinja_var_buildnum,
+    jinja_var_name,
+    jinja_var_checksum,
     #bioconductor_37,
 )
