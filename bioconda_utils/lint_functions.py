@@ -110,7 +110,7 @@ def _superfluous_jinja_var(recipe, entry, required=False,
         # quote var usages if necessary to make yaml happy
         content = jinja_var.sub(quote_var, content)
         # load as plain yaml
-        meta = yaml.load(content, Loader=yaml.SafeLoader)
+        meta = yaml.load(content, Loader=yaml.BaseLoader)
     m = meta
     xpath = entry.split('/')
     for p in xpath:
