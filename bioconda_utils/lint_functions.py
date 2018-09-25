@@ -129,8 +129,8 @@ def _superfluous_jinja_var(recipe, entry, required=False,
     if match:
         return {
             'unwanted_jinja_var': True,
-            'fix': 'remove jinja var {} from entry {} in '
-                   'meta.yaml'.format(match.group(), entry)
+            'fix': 'replace jinja var {} in entry {} in '
+                   'meta.yaml with a concrete value'.format(match.group(), entry)
         }
 
 
