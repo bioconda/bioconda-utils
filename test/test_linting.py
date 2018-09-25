@@ -1148,6 +1148,32 @@ def test_jinja_var_checksum():
         ]
     )
 
+
+def test_missing_buildnum():
+    run_lint(
+        func=lint_functions.missing_buildnum,
+        should_pass=[
+            '''
+            a:
+                meta.yaml: |
+                  package:
+                    name: a
+                    version: 0.1
+                  build:
+                    number: 0
+            ''',
+        ],
+        should_fail=[
+            r'''
+            a:
+                meta.yaml: |
+                  package:
+                    name: a
+                    version: 0.1
+            ''',
+        ]
+    )
+
 #def test_bioconductor_37():
 #    run_lint(
 #        func=lint_functions.bioconductor_37,

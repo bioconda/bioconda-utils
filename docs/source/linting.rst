@@ -312,16 +312,45 @@ Rational: The compiler tools must not be in ``host:`` or ``run:`` sections.
 How to resolve: Move ``{{ compiler() }}`` variables to the ``build:`` section.
 
 
-`unwanted_jinja_var`
+`jinja_var_version`
 ~~~~~~~~~~~~~~~~~~~~
-Reason for the failing: The recipe uses a jinja variable for version, package name, build number or checksum.
+Reason for the failing: The recipe uses a jinja variable for defining the package version
 
 Rationale: Using a jinja variable for package version is no longer necessary with conda-build 3, because the version can be referenced from all over the ``meta.yaml`` via the jinja expression ``{{ PKG_VERSION }}``.
-For the other cases (package name, build number, checksum), using a jinja variable has no benefit, because they are usually only specified at a single place in the ``meta.yaml``.
-Therefore, it is better for both human readability and parseability to stick to plain YAML syntax in these cases.
 
-How to resolve: Directly specify name, version, build number and checksum at the corresponding entry in the ``meta.yaml``.
+How to resolve: Directly specify version, in the corresponding entry in the ``meta.yaml``.
 Use the jinja expression ``{{ PKG_VERSION }}`` to refer to the version in other places of the ``meta.yaml``, e.g., in the ``url``.
+
+
+`jinja_var_name`
+~~~~~~~~~~~~~~~~
+
+Reason for the failing: The recipe uses a jinja variable for package name.
+
+Rationale: For package name, using a jinja variable has no benefit, because it is not supposed to change with updates.
+Therefore, it is better for both human readability and parseability to stick to plain YAML syntax.
+
+How to resolve: Directly specify name in the corresponding entry in the ``meta.yaml``.
+
+`jinja_var_buildnum`
+~~~~~~~~~~~~~~~~~~~~
+
+Reason for the failing: The recipe uses a jinja variable for the build number.
+
+Rationale: For build number, using a jinja variable has no benefit, because, although it changes during updates, it only appears at one place in the ``meta.yaml``.
+Therefore, it is better for both human readability and parseability to stick to plain YAML syntax.
+
+How to resolve: Directly specify build number in the corresponding entry in the ``meta.yaml``.
+
+`jinja_var_checksum`
+~~~~~~~~~~~~~~~~~~~~
+
+Reason for the failing: The recipe uses a jinja variable for the source checksum.
+
+Rationale: For checksum (sha1, sha256, or md5), using a jinja variable has no benefit, because, although it changes during updates, it only appears at one place in the ``meta.yaml``.
+Therefore, it is better for both human readability and parseability to stick to plain YAML syntax.
+
+How to resolve: Directly specify checksum in the corresponding entry in the ``meta.yaml``.
 
 
 `missing_entry`

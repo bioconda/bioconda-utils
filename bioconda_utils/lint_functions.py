@@ -94,7 +94,7 @@ def lint_multiple_metas(lint_function):
     return lint_metas
 
 
-def _superfluous_jinja_var(recipe, entry, required=False,
+def _superfluous_jinja_var(recipe, entry,
                            jinja_var=re.compile(r"{{.*?}}"),
                            jinja_var_def=re.compile(r"{%.+?%}")):
     with open(os.path.join(recipe, 'meta.yaml')) as content:
@@ -117,13 +117,7 @@ def _superfluous_jinja_var(recipe, entry, required=False,
         try:
             m = m[p]
         except KeyError:
-            if required:
-                return {
-                    'missing_entry': True,
-                    'fix': 'add entry {} to meta.yaml'.format(entry)
-                }
-            else:
-                return
+            return
 
     match = jinja_var.search(m)
     if match:
@@ -135,15 +129,15 @@ def _superfluous_jinja_var(recipe, entry, required=False,
 
 
 def jinja_var_name(recipe, meta, df,):
-    return _superfluous_jinja_var(recipe, 'package/name', required=True)
+    return _superfluous_jinja_var(recipe, 'package/name')
 
 
 def jinja_var_buildnum(recipe, meta, df,):
-    return _superfluous_jinja_var(recipe, 'build/number', required=True)
+    return _superfluous_jinja_var(recipe, 'build/number')
 
 
 def jinja_var_version(recipe, meta, df):
-    return _superfluous_jinja_var(recipe, 'package/version', required=True)
+    return _superfluous_jinja_var(recipe, 'package/version')
 
 
 def jinja_var_checksum(recipe, meta, df):
@@ -151,6 +145,15 @@ def jinja_var_checksum(recipe, meta, df):
         ret = _superfluous_jinja_var(recipe, 'source/{}'.format(checksum))
         if ret:
             return ret
+
+
+@lint_multiple_metas
+def missing_buildnum(recipe, meta, df):
+    if meta.get_value('build/number') is None:
+        return {
+            'missing_buildnum': True,
+            'fix': 'add build->number to meta.yaml'
+        }
 
 
 @lint_multiple_metas
@@ -469,5 +472,6 @@ registry = (
     jinja_var_buildnum,
     jinja_var_name,
     jinja_var_checksum,
+    missing_buildnum,
     #bioconductor_37,
 )
