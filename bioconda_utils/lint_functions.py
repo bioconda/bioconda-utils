@@ -94,9 +94,12 @@ def lint_multiple_metas(lint_function):
     return lint_metas
 
 
-def _superfluous_jinja_var(recipe, entry,
-                           jinja_var=re.compile(r"{{.*?}}"),
-                           jinja_var_def=re.compile(r"{%.+?%}")):
+JINJA_VAR_DEF = re.compile(r"{%.+?%}")
+JINJA_VAR = re.compile(r"{{.*?}}")
+
+
+def load_plain_yaml(recipe):
+    """Load meta.yaml without applying any jinja templating."""
     with open(os.path.join(recipe, 'meta.yaml')) as content:
         def quote_var(match, quotes='"\''):
             if (content[match.start() - 1] not in quotes and
@@ -106,11 +109,15 @@ def _superfluous_jinja_var(recipe, entry,
                 return match.group()
 
         # remove var defs to make yaml happy
-        content = jinja_var_def.sub("", content.read())
+        content = JINJA_VAR_DEF.sub("", content.read())
         # quote var usages if necessary to make yaml happy
-        content = jinja_var.sub(quote_var, content)
+        content = JINJA_VAR.sub(quote_var, content)
         # load as plain yaml
-        meta = yaml.load(content, Loader=yaml.BaseLoader)
+        return yaml.load(content, Loader=yaml.BaseLoader)
+
+
+def _superfluous_jinja_var(recipe, entry):
+    meta = load_plain_yaml(recipe)
     m = meta
     xpath = entry.split('/')
     for p in xpath:
@@ -119,7 +126,7 @@ def _superfluous_jinja_var(recipe, entry,
         except KeyError:
             return
 
-    match = jinja_var.search(m)
+    match = JINJA_VAR.search(m)
     if match:
         return {
             'unwanted_jinja_var': True,
@@ -147,9 +154,11 @@ def jinja_var_checksum(recipe, meta, df):
             return ret
 
 
-@lint_multiple_metas
 def missing_buildnum(recipe, meta, df):
-    if meta.get_value('build/number') is None:
+    meta = load_plain_yaml(recipe)
+    try:
+        meta['build']['number']
+    except KeyError:
         return {
             'missing_buildnum': True,
             'fix': 'add build->number to meta.yaml'
