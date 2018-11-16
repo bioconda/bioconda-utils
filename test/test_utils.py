@@ -748,6 +748,41 @@ def test_build_empty_extra_container():
 
 
 @pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
+def test_convert_windows():
+    r = Recipes(
+        """
+        one:
+          meta.yaml: |
+           package:
+             name: one
+             version: 0.1
+           requirements:
+             host:
+               - python
+             run:
+               - python
+           extra:
+             convert:
+               platforms:
+                 - win-64
+        """
+    )
+    r.write_recipes()
+    pkgs = utils.built_package_paths(r.recipe_dirs['one'])
+
+    build_result = build.build(
+        recipe=r.recipe_dirs['one'],
+        recipe_folder='.',
+        pkg_paths=pkgs,
+        mulled_test=False,
+    )
+    assert build_result.success
+    for pkg in chain(pkgs, build_result.converted_pkgs):
+        assert os.path.exists(pkg)
+        ensure_missing(pkg)
+
+
+@pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
 @pytest.mark.long_running
 def test_build_container_default_gcc(tmpdir):
     r = Recipes(
