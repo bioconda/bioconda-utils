@@ -762,9 +762,8 @@ def test_convert_windows():
              run:
                - python
            extra:
-             convert:
-               platforms:
-                 - win-64
+             convert-to:
+               - win-64
         """
     )
     r.write_recipes()

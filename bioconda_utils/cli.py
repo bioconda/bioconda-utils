@@ -325,7 +325,7 @@ def lint(recipe_folder, config, packages="*", cache=None, list_funcs=False,
      ignored if you specify --git-range.''')
 @arg('--convert-to-platforms', action='store_true',
      help='''Additionally convert python-only packages to platforms specified
-     in extra->convert->platforms in the meta.yaml. A typical target platform
+     in extra->convert-to in the meta.yaml. A typical target platform
      would be win-64.''')
 def build(
     recipe_folder,

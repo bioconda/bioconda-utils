@@ -85,7 +85,7 @@ def build(
         If not None, then apply linting just before building.
 
     convert_to_platforms : bool
-        If True, convert to platforms given in extra->convert->platforms
+        If True, convert to platforms given in extra->convert-to
     """
 
     if lint_args is not None:
@@ -204,7 +204,7 @@ def build(
 
     # convert to given platforms
     converted_pkgs = []
-    for platform in meta.get_value('extra/convert/platforms', []):
+    for platform in meta.get_value('extra/convert-to', []):
         for pkg in pkg_paths:
             try:
                 converted_pkgs.append(utils.convert(pkg, platform))
@@ -284,7 +284,7 @@ def build_recipes(
 
     convert_to_platforms : bool
         If True, try to convert packages to the additional platforms specified in
-        extra->convert->platforms. This will only work for pure Python packages.
+        extra->convert-to. This will only work for pure Python packages.
     """
     orig_config = config
     config = utils.load_config(config)
