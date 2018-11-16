@@ -323,6 +323,10 @@ def lint(recipe_folder, config, packages="*", cache=None, list_funcs=False,
      already present in one of these channels will be skipped. The default is
      the first two channels specified in the config file. Note that this is
      ignored if you specify --git-range.''')
+@arg('--convert-to-platforms', action='store_true',
+     help='''Additionally convert python-only packages to platforms specified
+     in extra->convert->platforms in the meta.yaml. A typical target platform
+     would be win-64.''')
 def build(
     recipe_folder,
     config,
@@ -342,6 +346,7 @@ def build(
     lint_only=None,
     lint_exclude=None,
     check_channels=None,
+    convert_to_platforms=False
 ):
     utils.setup_logger('bioconda_utils', loglevel)
 
@@ -419,6 +424,7 @@ def build(
         mulled_upload_target=mulled_upload_target,
         lint_args=lint_args,
         check_channels=check_channels,
+        convert_to_platforms=convert_to_platforms,
     )
     exit(0 if success else 1)
 

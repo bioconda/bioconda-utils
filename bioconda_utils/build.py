@@ -19,7 +19,7 @@ from . import linting
 logger = logging.getLogger(__name__)
 
 
-BuildResult = namedtuple("BuildResult", ["success", "mulled_images"])
+BuildResult = namedtuple("BuildResult", ["success", "mulled_images", "converted_pkgs"])
 
 
 def purge():
@@ -44,6 +44,7 @@ def build(
     docker_builder=None,
     _raise_error=False,
     lint_args=None,
+    convert_to_platforms=False,
 ):
     """
     Build a single recipe for a single env
@@ -82,6 +83,9 @@ def build(
 
     lint_args : linting.LintArgs | None
         If not None, then apply linting just before building.
+
+    convert_to_platforms : bool
+        If True, convert to platforms given in extra->convert->platforms
     """
 
     if lint_args is not None:
@@ -93,7 +97,7 @@ def build(
             logger.error('\n\nThe following recipes failed linting. See '
                          'https://bioconda.github.io/linting.html for details:\n\n%s\n',
                          summarized.to_string())
-            return BuildResult(False, None)
+            return BuildResult(False, None, [])
 
     # Clean provided env and exisiting os.environ to only allow whitelisted env
     # vars
@@ -152,7 +156,7 @@ def build(
                     logger.error(
                         "BUILD FAILED: the built package %s "
                         "cannot be found", pkg_path)
-                    return BuildResult(False, None)
+                    return BuildResult(False, None, [])
         else:
 
             # Temporarily reset os.environ to avoid leaking env vars to
@@ -168,6 +172,8 @@ def build(
                 with utils.Progress():
                     utils.run(cmd, env=os.environ, mask=False)
 
+
+
         logger.info('BUILD SUCCESS %s',
                     ' '.join(os.path.basename(p) for p in pkg_paths))
 
@@ -175,10 +181,10 @@ def build(
             logger.error('BUILD FAILED %s', recipe)
             if _raise_error:
                 raise e
-            return BuildResult(False, None)
+            return BuildResult(False, None, [])
 
     if not mulled_test:
-        return BuildResult(True, None)
+        return BuildResult(True, None, [])
 
     logger.info('TEST START via mulled-build %s', recipe)
 
@@ -191,11 +197,24 @@ def build(
             pkg_test.test_package(pkg_path, base_image=base_image)
         except sp.CalledProcessError as e:
             logger.error('TEST FAILED: %s', recipe)
-            return BuildResult(False, None)
+            return BuildResult(False, None, [])
         else:
             logger.info("TEST SUCCESS %s", recipe)
             mulled_images.append(pkg_test.get_image_name(pkg_path))
-    return BuildResult(True, mulled_images)
+
+    # convert to given platforms
+    converted_pkgs = []
+    for platform in meta.get_value('extra/convert/platforms', []):
+        for pkg in pkg_paths:
+            try:
+                converted_pkgs.append(utils.convert(pkg, platform))
+            except sp.CalledProcessError as e:
+                logger.error('CONVERSION FAILED: %s', recipe)
+                return BuildResult(False, None, [])
+            else:
+                logger.info('CONVERSION SUCCESS: %s', recipe)
+
+    return BuildResult(True, mulled_images, converted_pkgs)
 
 
 def build_recipes(
@@ -211,6 +230,7 @@ def build_recipes(
     mulled_upload_target=None,
     check_channels=None,
     lint_args=None,
+    convert_to_platforms=False,
 ):
     """
     Build one or many bioconda packages.
@@ -261,6 +281,10 @@ def build_recipes(
 
     lint_args : linting.LintArgs | None
         If not None, then apply linting just before building.
+
+    convert_to_platforms : bool
+        If True, try to convert packages to the additional platforms specified in
+        extra->convert->platforms. This will only work for pure Python packages.
     """
     orig_config = config
     config = utils.load_config(config)
@@ -454,6 +478,7 @@ def build_recipes(
             channels=config['channels'],
             docker_builder=docker_builder,
             lint_args=lint_args,
+            convert_to_platforms=convert_to_platforms
         )
 
         all_success &= res.success
@@ -464,7 +489,7 @@ def build_recipes(
             for n in nx.algorithms.descendants(subdag, name):
                 skip_dependent[n].append(recipe)
         elif not testonly:
-            for pkg in pkg_paths:
+            for pkg in chain(pkg_paths, res.converted_pkgs):
                 # upload build
                 if anaconda_upload:
                     if not upload.anaconda_upload(pkg, label):

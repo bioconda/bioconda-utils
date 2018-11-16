@@ -12,6 +12,7 @@ from collections import Counter, Iterable, defaultdict, namedtuple
 from itertools import product, chain, groupby
 import logging
 import datetime
+import tempfile
 from threading import Event, Thread
 from pathlib import PurePath
 
@@ -1100,3 +1101,12 @@ class Progress:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.stop.set()
         self.thread.join()
+
+
+def convert(pkg_path, platform):
+    """Convert pure-python package to another platform and return the path."""
+    tmp = tempfile.gettempdir()
+    # try running conda convert
+    run(['conda', 'convert', '-p', platform,
+         '-o', tmp, pkg_path])
+    return os.path.join(tmp, os.path.basename(packagepath))
