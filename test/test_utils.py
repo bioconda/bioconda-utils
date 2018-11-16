@@ -764,8 +764,7 @@ def test_convert_windows():
            extra:
              convert-to:
                - win-64
-        """
-    )
+        """, from_string=True)
     r.write_recipes()
     pkgs = utils.built_package_paths(r.recipe_dirs['one'])
 
