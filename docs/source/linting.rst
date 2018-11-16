@@ -353,13 +353,17 @@ Therefore, it is better for both human readability and parseability to stick to 
 How to resolve: Directly specify checksum in the corresponding entry in the ``meta.yaml``.
 
 
-`missing_entry`
+`missing_buildnum`
 ~~~~~~~~~~~~~~~
-Reason for the failing: The recipe is missing a required entry.
+Reason for the failing: The recipe is missing a build number definition.
 
-Rationale: The missing entry is crucial for building or updating the package. Affected entries are ``package::name``, ``package::version``, and ``build::number``.
+Rationale: Build number is crucial for building or updating the package.
+Although conda would infer it automatically, it is for operational reasons beneficial
+always have it explicitly defined in the recipe.
 
-How to resolve: add the missing entry.
+
+
+How to resolve: add ``.
 
 
 ..
