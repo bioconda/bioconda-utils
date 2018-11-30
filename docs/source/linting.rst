@@ -312,6 +312,60 @@ Rational: The compiler tools must not be in ``host:`` or ``run:`` sections.
 How to resolve: Move ``{{ compiler() }}`` variables to the ``build:`` section.
 
 
+`jinja_var_version`
+~~~~~~~~~~~~~~~~~~~~
+Reason for the failing: The recipe uses a jinja variable for defining the package version
+
+Rationale: Using a jinja variable for package version is no longer necessary with conda-build 3, because the version can be referenced from all over the ``meta.yaml`` via the jinja expression ``{{ PKG_VERSION }}``.
+
+How to resolve: Directly specify version, in the corresponding entry in the ``meta.yaml``.
+Use the jinja expression ``{{ PKG_VERSION }}`` to refer to the version in other places of the ``meta.yaml``, e.g., in the ``url``.
+
+
+`jinja_var_name`
+~~~~~~~~~~~~~~~~
+
+Reason for the failing: The recipe uses a jinja variable for package name.
+
+Rationale: For package name, using a jinja variable has no benefit, because it is not supposed to change with updates.
+Therefore, it is better for both human readability and parseability to stick to plain YAML syntax.
+
+How to resolve: Directly specify name in the corresponding entry in the ``meta.yaml``.
+
+`jinja_var_buildnum`
+~~~~~~~~~~~~~~~~~~~~
+
+Reason for the failing: The recipe uses a jinja variable for the build number.
+
+Rationale: For build number, using a jinja variable has no benefit, because, although it changes during updates, it only appears at one place in the ``meta.yaml``.
+Therefore, it is better for both human readability and parseability to stick to plain YAML syntax.
+
+How to resolve: Directly specify build number in the corresponding entry in the ``meta.yaml``.
+
+`jinja_var_checksum`
+~~~~~~~~~~~~~~~~~~~~
+
+Reason for the failing: The recipe uses a jinja variable for the source checksum.
+
+Rationale: For checksum (sha1, sha256, or md5), using a jinja variable has no benefit, because, although it changes during updates, it only appears at one place in the ``meta.yaml``.
+Therefore, it is better for both human readability and parseability to stick to plain YAML syntax.
+
+How to resolve: Directly specify checksum in the corresponding entry in the ``meta.yaml``.
+
+
+`missing_buildnum`
+~~~~~~~~~~~~~~~
+Reason for the failing: The recipe is missing a build number definition.
+
+Rationale: Build number is crucial for building or updating the package.
+Although conda would infer it automatically, it is for operational reasons beneficial
+always have it explicitly defined in the recipe.
+
+
+
+How to resolve: add ``.
+
+
 ..
     `bioconductor_37`
     ~~~~~~~~~~~~~~~~~

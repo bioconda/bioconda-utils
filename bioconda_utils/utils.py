@@ -1082,6 +1082,42 @@ def modified_recipes(git_range, recipe_folder, config_file):
     return existing
 
 
+def bump_build_numbers(recipes):
+    def bump(recipe):
+        if not recipe.endswith("meta.yaml"):
+            recipe = os.path.join(recipe, "meta.yaml")
+        state = 'general'
+        res = []
+        num = None
+        bumped = None
+        with open(recipe) as content:
+            for line in content:
+                if line.startswith('build'):
+                    state = 'build'
+                elif state == 'build' and line.lstrip().startswith('number:'):
+                    toks = line.split(':')
+                    if toks == 1:
+                        logger.warning("Failed to parse build number of recipe "
+                                       "%s: expected format 'number: value' "
+                                       "violated.", recipe)
+                        return
+                    try:
+                        num = int(toks[1].strip())
+                    except ValueError as e:
+                        logger.warning("Failed to parse build number of "
+                                       "recipe %s: %s", recipe, e)
+                        return
+                    bumped = num + 1
+                    line = '{}: {}\n'.format(toks[0], bumped)
+                res.append(line)
+        with open(recipe, "w") as out:
+            out.writelines(res)
+        logger.info("Bumped build number of recipe {} from {} to {}".format(recipe, num, bumped))
+
+    for recipe in recipes:
+        bump(recipe)
+
+
 class Progress:
     def __init__(self):
         self.thread = Thread(target=self.progress)

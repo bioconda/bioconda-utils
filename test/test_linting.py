@@ -1019,6 +1019,161 @@ def test_should_not_use_fn():
     )
 
 
+def test_jinja_var_name():
+    run_lint(
+        func=lint_functions.jinja_var_name,
+        should_pass=[
+            '''
+            a:
+                meta.yaml: |
+                  package:
+                    name: a
+                    version: 0.1
+                  build:
+                    number: 0
+            ''',
+        ],
+        should_fail=[
+            r'''
+            a:
+                meta.yaml: |
+                  {% set name = "a" %}
+                  package:
+                    name: "{{ name|lower }}"
+                    version: 0.1
+                  build:
+                    number: 0
+            ''',
+            r'''
+            a:
+                meta.yaml: |
+                  {% set name = "a" %}
+                  package:
+                    name: {{ name }}
+                    version: 0.1
+                  build:
+                    number: 0
+            ''',
+        ]
+    )
+
+
+def test_jinja_var_version():
+    run_lint(
+        func=lint_functions.jinja_var_version,
+        should_pass=[
+            '''
+            a:
+                meta.yaml: |
+                  package:
+                    name: a
+                    version: 0.1
+                  build:
+                    number: 0
+            ''',
+        ],
+        should_fail=[
+            r'''
+            a:
+                meta.yaml: |
+                  {% set version = "1.0" %}
+                  package:
+                    name: a
+                    version: {{ version }}
+                  build:
+                    number: 0
+            ''',
+        ]
+    )
+
+
+def test_jinja_var_buildnum():
+    run_lint(
+        func=lint_functions.jinja_var_buildnum,
+        should_pass=[
+            '''
+            a:
+                meta.yaml: |
+                  package:
+                    name: a
+                    version: 0.1
+                  build:
+                    number: 0
+            ''',
+        ],
+        should_fail=[
+            r'''
+            a:
+                meta.yaml: |
+                  {% set buildnum = 1 %}
+                  package:
+                    name: a
+                    version: 0.1
+                  build:
+                    number: {{ buildnum }}
+            ''',
+        ]
+    )
+
+
+def test_jinja_var_checksum():
+    run_lint(
+        func=lint_functions.jinja_var_checksum,
+        should_pass=[
+            '''
+            a:
+                meta.yaml: |
+                  package:
+                    name: a
+                    version: 0.1
+                  build:
+                    number: 0
+                  source:
+                    sha256: abc
+            ''',
+        ],
+        should_fail=[
+            r'''
+            a:
+                meta.yaml: |
+                  {% set sha256 = "abc" %}
+                  package:
+                    name: a
+                    version: 0.1
+                  build:
+                    number: 0
+                  source:
+                    sha256: {{ sha256 }}
+            ''',
+        ]
+    )
+
+
+def test_missing_buildnum():
+    run_lint(
+        func=lint_functions.missing_buildnum,
+        should_pass=[
+            '''
+            a:
+                meta.yaml: |
+                  package:
+                    name: a
+                    version: 0.1
+                  build:
+                    number: 0
+            ''',
+        ],
+        should_fail=[
+            r'''
+            a:
+                meta.yaml: |
+                  package:
+                    name: a
+                    version: 0.1
+            ''',
+        ]
+    )
+
 #def test_bioconductor_37():
 #    run_lint(
 #        func=lint_functions.bioconductor_37,

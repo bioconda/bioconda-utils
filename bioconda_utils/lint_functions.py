@@ -3,6 +3,7 @@ import glob
 import os
 import re
 
+import yaml
 import pandas
 import numpy as np
 
@@ -92,6 +93,77 @@ def lint_multiple_metas(lint_function):
                 return ret
     lint_metas.__name__ = lint_function.__name__
     return lint_metas
+
+
+JINJA_VAR_DEF = re.compile(r"{%.+?%}")
+JINJA_VAR = re.compile(r"{{.*?}}")
+
+
+def load_plain_yaml(recipe):
+    """Load meta.yaml without applying any jinja templating."""
+    with open(os.path.join(recipe, 'meta.yaml')) as content:
+        def quote_var(match, quotes='"\''):
+            if (content[match.start() - 1] not in quotes and
+                content[match.end()] not in quotes):
+                return '"{}"'.format(match.group())
+            else:
+                return match.group()
+
+        # remove var defs to make yaml happy
+        content = JINJA_VAR_DEF.sub("", content.read())
+        # quote var usages if necessary to make yaml happy
+        content = JINJA_VAR.sub(quote_var, content)
+        # load as plain yaml
+        return yaml.load(content, Loader=yaml.BaseLoader)
+
+
+def _superfluous_jinja_var(recipe, entry):
+    meta = load_plain_yaml(recipe)
+    m = meta
+    xpath = entry.split('/')
+    for p in xpath:
+        try:
+            m = m[p]
+        except KeyError:
+            return
+
+    match = JINJA_VAR.search(m)
+    if match:
+        return {
+            'unwanted_jinja_var': True,
+            'fix': 'replace jinja var {} in entry {} in '
+                   'meta.yaml with a concrete value'.format(match.group(), entry)
+        }
+
+
+def jinja_var_name(recipe, meta, df,):
+    return _superfluous_jinja_var(recipe, 'package/name')
+
+
+def jinja_var_buildnum(recipe, meta, df,):
+    return _superfluous_jinja_var(recipe, 'build/number')
+
+
+def jinja_var_version(recipe, meta, df):
+    return _superfluous_jinja_var(recipe, 'package/version')
+
+
+def jinja_var_checksum(recipe, meta, df):
+    for checksum in ["sha256", "sha1", "md5"]:
+        ret = _superfluous_jinja_var(recipe, 'source/{}'.format(checksum))
+        if ret:
+            return ret
+
+
+def missing_buildnum(recipe, meta, df):
+    meta = load_plain_yaml(recipe)
+    try:
+        meta['build']['number']
+    except KeyError:
+        return {
+            'missing_buildnum': True,
+            'fix': 'add build->number to meta.yaml'
+        }
 
 
 @lint_multiple_metas
@@ -408,5 +480,10 @@ registry = (
     should_not_use_fn,
     should_use_compilers,
     compilers_must_be_in_build,
+    jinja_var_version,
+    jinja_var_buildnum,
+    jinja_var_name,
+    jinja_var_checksum,
+    missing_buildnum,
     #bioconductor_37,
 )

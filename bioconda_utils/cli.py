@@ -651,6 +651,16 @@ def pypi_check(recipe_folder, config, loglevel='info', packages='*', only_out_of
         print('\t'.join(map(str, result)))
 
 
+@arg('recipe', nargs="+", help='Path to recipes')
+@arg('--loglevel', default='debug', help='Log level')
+def bump_build_number(recipes, loglevel="info"):
+    """
+    Bumps the build number in given recipes.
+    """
+    utils.setup_logger('bioconda_utils', loglevel)
+    utils.bump_build_number(recipes)
+
+
 def main():
     argh.dispatch_commands([
         build, dag, dependent, lint, duplicates,
