@@ -13,18 +13,6 @@ cxx_compiler:
 fortran_compiler:              # [unix or win64]
   - gfortran                   # [(linux or osx)                      and (environ.get('CF_COMPILER_STACK') == 'comp7')]
 
-zip_keys:
-  # Dual compiler zip
-  -                             # [                                       (environ.get('CF_COMPILER_STACK') == 'comp7')]
-    - c_compiler                # [(linux or osx)                     and (environ.get('CF_COMPILER_STACK') == 'comp7')]
-    - cxx_compiler              # [(linux or osx)                     and (environ.get('CF_COMPILER_STACK') == 'comp7')]
-    - fortran_compiler          # [(linux or osx)                     and (environ.get('CF_COMPILER_STACK') == 'comp7')]
-    - channel_sources           # [(linux or osx)                     and (environ.get('CF_COMPILER_STACK') == 'comp7')]
-    - channel_targets           # [(linux or osx)                     and (environ.get('CF_COMPILER_STACK') == 'comp7')]
-    - docker_image              # [linux                              and (environ.get('CF_COMPILER_STACK') == 'comp7')]
-    - build_number_decrement    # [(linux or osx)                     and (environ.get('CF_COMPILER_STACK') == 'comp7')]
-
-
 pin_run_as_build:
   htslib:
     max_pin: x.x
