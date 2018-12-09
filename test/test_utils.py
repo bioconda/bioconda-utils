@@ -747,51 +747,6 @@ def test_build_empty_extra_container():
         ensure_missing(pkg)
 
 
-@pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
-@pytest.mark.long_running
-def test_build_container_default_gcc(tmpdir):
-    r = Recipes(
-        """
-        one:
-          meta.yaml: |
-            package:
-              name: one
-              version: 0.1
-            test:
-              commands:
-                - gcc --version
-                - 'gcc --version | grep "gcc (GCC) 4.8.2 20140120 (Red Hat 4.8.2-15)"'
-        """, from_string=True)
-    r.write_recipes()
-
-    # Tests with the repository's Dockerfile instead of already uploaded images.
-    # Copy repository to image build directory so everything is in docker context.
-    image_build_dir = os.path.join(tmpdir, "repo")
-    src_repo_dir = os.path.join(os.path.dirname(__file__), "..")
-    shutil.copytree(src_repo_dir, image_build_dir)
-    # Dockerfile will be recreated by RecipeBuilder => extract template and delete file
-    dockerfile = os.path.join(image_build_dir, "Dockerfile")
-    with open(dockerfile) as f:
-        dockerfile_template = f.read().replace("{", "{{").replace("}", "}}")
-    os.remove(dockerfile)
-
-    docker_builder = docker_utils.RecipeBuilder(
-        dockerfile_template=dockerfile_template,
-        use_host_conda_bld=True,
-        image_build_dir=image_build_dir,
-    )
-
-    pkg_paths = utils.built_package_paths(r.recipe_dirs['one'])
-    build_result = build.build(
-        recipe=r.recipe_dirs['one'],
-        recipe_folder='.',
-        pkg_paths=pkg_paths,
-        docker_builder=docker_builder,
-        mulled_test=False,
-    )
-    assert build_result.success
-
-
 def test_conda_forge_pins(caplog):
     caplog.set_level(logging.DEBUG)
     r = Recipes(
