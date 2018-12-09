@@ -65,7 +65,8 @@ ENV_VAR_WHITELIST = [
     'PATH',
     'LC_*',
     'LANG',
-    'MACOSX_DEPLOYMENT_TARGET'
+    'MACOSX_DEPLOYMENT_TARGET',
+    'CF_COMPILER_STACK'
 ]
 
 # Of those that make it through the whitelist, remove these specific ones
