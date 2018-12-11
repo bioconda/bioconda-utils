@@ -188,7 +188,8 @@ def build(
     mulled_images = []
     for pkg_path in pkg_paths:
         try:
-            pkg_test.test_package(pkg_path, base_image=base_image)
+            pkg_test.test_package(pkg_path, base_image=base_image, channels=["conda-forge/label/gcc7", "local", "bioconda/label/gcc7", "bioconda", "defaults"])
+
         except sp.CalledProcessError as e:
             logger.error('TEST FAILED: %s', recipe)
             return BuildResult(False, None)
