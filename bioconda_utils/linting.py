@@ -1,12 +1,11 @@
 import os
 import re
 import itertools
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 
 import pandas as pd
 import numpy as np
 import ruamel_yaml as yaml
-import jinja2
 
 from . import utils
 from . import lint_functions
@@ -58,9 +57,6 @@ TODO:
   - if version changed, ensure build number is 0
   - if version unchanged, ensure build number incremented
 
-- currently we only check a single environment (see the `get_meta` function).
-  This should probably be converted to a generator function.
-
 - currently we don't pay attention to py27/py3. It would be nice to handle
   that.
 
@@ -78,99 +74,13 @@ Perform various checks on recipes.
 """
 
 
-def get_meta(recipe, config):
+class LintArgs(namedtuple('LintArgs', (
+    'exclude', 'registry',
+))):
     """
-    Given a package name, find the current meta.yaml file, parse it, and return
-    the dict.
-
-    Parameters
-    ----------
-    recipe : str
-        Path to recipe (directory containing the meta.yaml file)
-
-    config : str or dict
-        Config YAML or dict
-    """
-    cfg = utils.load_config(config)
-
-    # TODO: Currently just uses the first env. Should turn this into
-    # a generator.
-
-    env = dict(next(iter(utils.EnvMatrix(cfg['env_matrix']))))
-
-    pth = os.path.join(recipe, 'meta.yaml')
-    jinja_env = jinja2.Environment()
-    content = jinja_env.from_string(
-        open(pth, 'r', encoding='utf-8').read()).render(env)
-    meta = yaml.round_trip_load(content, preserve_quotes=True)
-    return meta
-
-
-def channel_dataframe(cache=None, channels=['bioconda', 'conda-forge',
-                                            'defaults']):
-    """
-    Return channel info as a dataframe.
-
-    Parameters
-    ----------
-
-    cache : str
-        Filename of cached channel info
-
-    channels : list
-        Channels to include in the dataframe
-    """
-    if cache is not None and os.path.exists(cache):
-        df = pd.read_table(cache)
-    else:
-        # Get the channel data into a big dataframe
-        dfs = []
-        for platform in ['linux', 'osx']:
-            for channel in channels:
-                repo, noarch = utils.get_channel_repodata(channel, platform)
-                x = pd.DataFrame(repo)
-                x = x.drop([
-                    'arch',
-                    'default_numpy_version',
-                    'default_python_version',
-                    'platform',
-                    'subdir'])
-                for k in [
-                    'build', 'build_number', 'name', 'version', 'license',
-                    'platform'
-                ]:
-                    x[k] = x['packages'].apply(lambda y: y.get(k, np.nan))
-
-                x['channel'] = channel
-                dfs.append(x)
-
-        df = pd.concat(dfs).drop(['info', 'packages'], axis=1)
-
-        if cache is not None:
-            df.to_csv(cache, sep='\t')
-    return df
-
-
-def lint(recipes, config, df, exclude=None, registry=None):
-    """
-    Parameters
-    ----------
-
-    recipes : list
-        List of recipes to lint
-
-    config : str, dict
-        Used to pass any necessary environment variables (CONDA_BOOST, etc) to
-        meta.yaml files. If str, path to config file. If dict, parsed version
-        of the config file.
-
-    df : pandas.DataFrame
-        Dataframe containing channel data, typically as output from
-        `channel_dataframe()`
-
     exclude : list
         List of function names in `registry` to skip globally. When running on
-        travis, this will be merged with anything else detected from the commit
+        CI, this will be merged with anything else detected from the commit
         message or LINT_SKIP environment variable using the special string
         "[skip lint <function name> for <recipe name>]". While those other
         mechanisms define skipping on a recipe-specific basis, this argument
@@ -180,34 +90,37 @@ def lint(recipes, config, df, exclude=None, registry=None):
         List of functions to apply to each recipe. If None, defaults to
         `lint_functions.registry`.
     """
+    def __new__(cls, exclude=None, registry=None):
+        return super().__new__(cls, exclude, registry)
+
+
+def lint(recipes, lint_args):
+    """
+    Parameters
+    ----------
+
+    recipes : list
+        List of recipes to lint
+
+    lint_args : LintArgs
+    """
+    exclude = lint_args.exclude
+    registry = lint_args.registry
 
     if registry is None:
         registry = lint_functions.registry
 
     skip_dict = defaultdict(list)
 
-    # We want to get the commit message of HEAD to see if we should skip any
-    # linting tests. However, for PRs, travis tests the merge from PR to
-    # master. This means that we can't rely on "TRAVIS_COMMIT_MESSAGE" env var
-    # since, for PRs, it will be "merge $hash into $hash".
-    #
-    # For PRs, we need TRAVIS_PULL_REQUEST_SHA
-    #
-    # If not on travis, then don't look for any commit messages.
     commit_message = ""
-
-    on_travis = os.environ.get('TRAVIS') == 'true'
-    pull_request = os.environ.get('TRAVIS_PULL_REQUEST', 'false') != 'false'
-
-    if not on_travis and 'LINT_SKIP' in os.environ:
+    if 'LINT_SKIP' in os.environ:
+        # Allow overwriting of commit message
         commit_message = os.environ['LINT_SKIP']
-
-    if on_travis and pull_request:
-        p = utils.run(
-            ['git', 'log', '--format=%B', '-n', '1',
-             os.environ['TRAVIS_PULL_REQUEST_SHA']]
-        )
-        commit_message = p.stdout
+    else:
+        # Obtain commit message from last commit.
+        commit_message = utils.run(
+            ['git', 'log', '--format=%B', '-n', '1'], mask=False
+        ).stdout
 
     # For example the following text in the commit message will skip
     # lint_functions.uses_setuptools for recipe argparse:
@@ -226,15 +139,18 @@ def lint(recipes, config, df, exclude=None, registry=None):
         skip_dict[recipe].append(func)
 
     hits = []
-    for recipe in recipes:
+    for recipe in sorted(recipes):
         # Since lint functions need a parsed meta.yaml, checking for parsing
         # errors can't be a lint function.
         #
         # TODO: do we need a way to skip this the same way we can skip lint
         # functions? I can't think of a reason we'd want to keep an unparseable
         # YAML.
+        metas = []
         try:
-            meta = get_meta(recipe, config)
+            for platform in ["linux", "osx"]:
+                config = utils.load_conda_build_config(platform=platform, trim_skip=False)
+                metas.extend(utils.load_all_meta(recipe, config=config, finalize=False))
         except (
             yaml.scanner.ScannerError, yaml.constructor.ConstructorError
         ) as e:
@@ -248,19 +164,27 @@ def lint(recipes, config, df, exclude=None, registry=None):
         logger.debug('lint {}'.format(recipe))
 
         # skips defined in commit message
-        skip_for_this_recipe = skip_dict[recipe]
+        skip_for_this_recipe = set(skip_dict[recipe])
 
         # skips defined in meta.yaml
-        persistent = meta.get('extra', {}).get('skip-lints', [])
-        skip_for_this_recipe += persistent
+        for meta in metas:
+            persistent = meta.get_value('extra/skip-lints', [])
+            skip_for_this_recipe.update(persistent)
 
         for func in registry:
             if func.__name__ in skip_for_this_recipe:
-                logger.info(
-                    'Commit message defines skip lint test %s for recipe %s'
-                    % (func.__name__, recipe))
+                skip_sources = [
+                    ('Commit message', skip_dict[recipe]),
+                    ('skip-lints', persistent),
+                ]
+                for source, skips in skip_sources:
+                    if func.__name__ not in skips:
+                        continue
+                    logger.info(
+                        '%s defines skip lint test %s for recipe %s'
+                        % (source, func.__name__, recipe))
                 continue
-            result = func(recipe, meta, df)
+            result = func(recipe, metas)
             if result:
                 hits.append(
                     {'recipe': recipe,
@@ -294,18 +218,3 @@ def markdown_report(report=None):
     else:
         tmpl = utils.jinja.get_template("lint_failure.md")
         return tmpl.render(report=report)
-
-
-def bump_build_number(d):
-    """
-    Increase the build number of a recipe, adding the relevant keys if needed.
-
-    d : dict-like
-        Parsed meta.yaml, from get_meta()
-    """
-    if 'build' not in d:
-        d['build'] = {'number': 0}
-    elif 'number' not in d['build']:
-        d['build']['number'] = 0
-    d['build']['number'] += 1
-    return d

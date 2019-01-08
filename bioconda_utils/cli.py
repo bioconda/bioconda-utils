@@ -4,7 +4,6 @@ import sys
 import os
 import shlex
 import logging
-from colorlog import ColoredFormatter
 from collections import defaultdict
 
 import argh
@@ -13,7 +12,6 @@ import networkx as nx
 from networkx.drawing.nx_pydot import write_dot
 import pandas
 
-
 from . import utils
 from .build import build_recipes
 from . import docker_utils
@@ -21,31 +19,9 @@ from . import lint_functions
 from . import linting
 from . import github_integration
 from . import bioconductor_skeleton as _bioconductor_skeleton
-from . import pypi
-
-
-log_stream_handler = logging.StreamHandler()
-log_stream_handler.setFormatter(ColoredFormatter(
-        "%(asctime)s %(log_color)sBIOCONDA %(levelname)s%(reset)s %(message)s",
-        datefmt="%H:%M:%S",
-        reset=True,
-        log_colors={
-            'DEBUG': 'cyan',
-            'INFO': 'green',
-            'WARNING': 'yellow',
-            'ERROR': 'red',
-            'CRITICAL': 'red',
-        }))
-
+from . import cran_skeleton
 
 logger = logging.getLogger(__name__)
-
-
-def setup_logger(loglevel):
-    l = logging.getLogger('bioconda_utils')
-    l.propagate = False
-    l.setLevel(getattr(logging, loglevel.upper()))
-    l.addHandler(log_stream_handler)
 
 
 def select_recipes(packages, git_range, recipe_folder, config_filename, config, force):
@@ -61,7 +37,8 @@ def select_recipes(packages, git_range, recipe_folder, config_filename, config, 
             if os.path.basename(f) in ['meta.yaml', 'build.sh'] and
             os.path.exists(f)
         ]
-        logger.info('Recipes to consider according to git: \n{}'.format('\n '.join(changed_recipes)))
+        logger.info(
+            'Recipes to consider according to git: \n{}'.format('\n '.join(changed_recipes)))
     else:
         changed_recipes = []
 
@@ -70,11 +47,15 @@ def select_recipes(packages, git_range, recipe_folder, config_filename, config, 
     selected_recipes = list(utils.get_recipes(recipe_folder, packages))
     _recipes = []
     for recipe in selected_recipes:
+        stripped = os.path.relpath(recipe, recipe_folder)
+        if stripped in blacklisted_recipes and recipe in changed_recipes:
+            logger.warning('%s is blacklisted but also has changed. Consider '
+                           'removing from blacklist if you want to build it', recipe)
         if force:
             _recipes.append(recipe)
             logger.debug('forced: %s', recipe)
             continue
-        if recipe in blacklisted_recipes:
+        if stripped in blacklisted_recipes:
             logger.debug('blacklisted: %s', recipe)
             continue
         if git_range:
@@ -100,85 +81,89 @@ def select_recipes(packages, git_range, recipe_folder, config_filename, config, 
 @arg('--remove', action='store_true', help='Remove packages from anaconda.')
 @arg('--dryrun', '-n', action='store_true', help='Only print removal plan.')
 @arg('--url', action='store_true', help='Print anaconda urls.')
-def duplicates(
-    config,
-    strict_version=False,
-    strict_build=False,
-    dryrun=False,
-    remove=False,
-    url=False
-):
+@arg('--channel', help="Channel to check for duplicates")
+@arg('--loglevel', help="Set logging level (debug, info, warning, error, critical)")
+def duplicates(config,
+               strict_version=False,
+               strict_build=False,
+               dryrun=False,
+               remove=False,
+               url=False,
+               channel='bioconda',
+               loglevel='info'):
     """
     Detect packages in bioconda that have duplicates in the other defined
     channels.
     """
+    utils.setup_logger('bioconda_utils', loglevel)
+
+    if remove and not strict_build:
+        raise ValueError('Removing packages is only supported in case of '
+                         '--strict-build.')
+
     config = utils.load_config(config)
+    if channel not in config['channels']:
+        raise ValueError("Channel given with --channel must be in config channels")
+    our_channel = channel
+    channels = [c for c in config['channels'] if c != our_channel]
+    logger.info("Checking for packages from %s also present in %s",
+                our_channel, channels)
 
-    channels = config['channels']
-    target_channel = channels[0]
-
-    if strict_version:
-        get_spec = lambda pkg: (pkg['name'], pkg['version'])
-        if not remove and not url:
-            print('name', 'version', 'channels', sep='\t')
-    elif strict_build:
-        get_spec = lambda pkg: (pkg['name'], pkg['version'], pkg['build'])
-        if not remove and not url:
-            print('name', 'version', 'build', 'channels', sep='\t')
-    else:
-        get_spec = lambda pkg: pkg['name']
-        if not remove and not url:
-            print('name', 'channels', sep='\t')
+    check_fields = ['name']
+    if strict_version or strict_build:
+        check_fields += ['version']
+    if strict_build:
+        check_fields += ['build']
 
     def remove_package(spec):
-        if not strict_build:
-            raise ValueError('Removing packages is only supported in case of '
-                             '--strict-build.')
         fn = '{}-{}-{}.tar.bz2'.format(*spec)
         name, version = spec[:2]
         subcmd = [
             'remove', '-f',
             '{channel}/{name}/{version}/{fn}'.format(
-                name=name, version=version, fn=fn, channel=target_channel
+                name=name, version=version, fn=fn, channel=our_channel
             )
         ]
         if dryrun:
-            print(utils.bin_for('anaconda'), *subcmd)
+            logger.info(" ".join([utils.bin_for('anaconda')] + subcmd))
         else:
             token = os.environ.get('ANACONDA_TOKEN')
             if token is None:
                 token = []
             else:
                 token = ['-t', token]
-            print(utils.run([utils.bin_for('anaconda')] + token + subcmd).stdout)
-
-    def get_packages(channel):
-        return {get_spec(pkg)
-                for repodata in utils.get_channel_repodata(channel)
-                for pkg in repodata['packages'].values()}
+            logger.info(utils.run([utils.bin_for('anaconda')] + token + subcmd, mask=[token]).stdout)
 
     # packages in our channel
-    packages = get_packages(target_channel)
+    repodata = utils.RepoData()
+    our_package_specs = set(repodata.get_package_data(check_fields, our_channel))
+    logger.info("%s unique packages specs to consider in %s",
+                len(our_package_specs), our_channel)
 
     # packages in channels we depend on
-    common = defaultdict(list)
-    for channel in channels[1:]:
-        pkgs = get_packages(channel)
-        for pkg in packages & pkgs:
-            common[pkg].append(channel)
+    duplicate = defaultdict(list)
+    for channel in channels:
+        package_specs = set(repodata.get_package_data(check_fields, channel))
+        logger.info("%s unique packages specs to consider in %s",
+                    len(package_specs), channel)
+        dups = our_package_specs & package_specs
+        logger.info("  (of which %s are duplicate)", len(dups))
+        for spec in dups:
+            duplicate[spec].append(channel)
 
-    for pkg, _channels in sorted(common.items()):
+    print('\t'.join(check_fields + ['channels']))
+    for spec, dup_channels in sorted(duplicate.items()):
         if remove:
-            remove_package(pkg)
+            remove_package(spec)
         else:
             if url:
                 if not strict_version and not strict_build:
                     print('https://anaconda.org/{}/{}'.format(
-                          target_channel, pkg[0]))
+                          our_channel, spec[0]))
                 print('https://anaconda.org/{}/{}/files?version={}'.format(
-                    target_channel, *pkg))
+                    our_channel, *spec))
             else:
-                print(*pkg, *_channels, sep='\t')
+                print(*spec, ','.join(dup_channels), sep='\t')
 
 
 @arg('recipe_folder', help='Path to top-level dir of recipes.')
@@ -204,7 +189,7 @@ def duplicates(
      be sent to the current commit on github. Also needs --user and --repo to
      be set. Requires the env var GITHUB_TOKEN to be set. Note that pull
      requests from forks will not have access to encrypted variables on
-     travis-ci, so this feature may be of limited use.''')
+     ci, so this feature may be of limited use.''')
 @arg('--commit', help='Commit on github on which to update status')
 @arg('--push-comment', action='store_true', help='''If set, the lint status
      will be posted as a comment in the corresponding pull request (given by
@@ -234,13 +219,14 @@ def lint(recipe_folder, config, packages="*", cache=None, list_funcs=False,
     If --push-status is not set, reports a TSV of linting results to stdout.
     Otherwise pushes a commit status to the specified commit on github.
     """
-    setup_logger(loglevel)
+    utils.setup_logger('bioconda_utils', loglevel)
 
     if list_funcs:
         print('\n'.join([i.__name__ for i in lint_functions.registry]))
         sys.exit(0)
 
-    df = linting.channel_dataframe(cache=cache)
+    if cache is not None:
+        utils.RepoData().set_cache(cache)
     registry = lint_functions.registry
 
     if only is not None:
@@ -254,13 +240,8 @@ def lint(recipe_folder, config, packages="*", cache=None, list_funcs=False,
 
     _recipes = select_recipes(packages, git_range, recipe_folder, config_filename, config, force)
 
-    report = linting.lint(
-        _recipes,
-        config=config,
-        df=df,
-        exclude=exclude,
-        registry=registry,
-    )
+    lint_args = linting.LintArgs(exclude=exclude, registry=registry)
+    report = linting.lint(_recipes, lint_args)
 
     # The returned dataframe is in tidy format; summarize a bit to get a more
     # reasonable log
@@ -325,14 +306,24 @@ def lint(recipe_folder, config, packages="*", cache=None, list_funcs=False,
      packages should be stored on the host. Default is to use the host's
      conda-bld dir. If --docker is not specified, then this argument is
      ignored.''')
-@arg('--conda-build-version',
-     help='''Version of conda-build to use if building
-     in a docker container. Has no effect otherwise.''')
 @arg('--anaconda-upload', action='store_true', help='''After building recipes, upload
      them to Anaconda. This requires $ANACONDA_TOKEN to be set.''')
 @arg('--keep-image', action='store_true', help='''After building recipes, the
      created Docker image is removed by default to save disk space. Use this
      argument to disable this behavior.''')
+@arg('--lint', '--prelint', action='store_true', help='''Just before each recipe, apply
+     the linting functions to it. This can be used as an alternative to linting
+     all recipes before any building takes place with the `bioconda-utils lint`
+     command.''')
+@arg('--lint-only', nargs='+',
+     help='''Only run this linting function. Can be used multiple times.''')
+@arg('--lint-exclude', nargs='+',
+     help='''Exclude this linting function. Can be used multiple times.''')
+@arg('--check-channels', nargs='+',
+     help='''Channels to check recipes against before building. Any recipe
+     already present in one of these channels will be skipped. The default is
+     the first two channels specified in the config file. Note that this is
+     ignored if you specify --git-range.''')
 def build(
     recipe_folder,
     config,
@@ -345,12 +336,15 @@ def build(
     mulled_test=False,
     build_script_template=None,
     pkg_dir=None,
-    conda_build_version=docker_utils.DEFAULT_CONDA_BUILD_VERSION,
     anaconda_upload=False,
     mulled_upload_target=None,
     keep_image=False,
+    lint=False,
+    lint_only=None,
+    lint_exclude=None,
+    check_channels=None,
 ):
-    setup_logger(loglevel)
+    utils.setup_logger('bioconda_utils', loglevel)
 
     cfg = utils.load_config(config)
     setup = cfg.get('setup', None)
@@ -393,11 +387,29 @@ def build(
             build_script_template=build_script_template,
             pkg_dir=pkg_dir,
             use_host_conda_bld=use_host_conda_bld,
-            conda_build_version=conda_build_version,
             keep_image=keep_image,
         )
     else:
         docker_builder = None
+
+    if lint:
+        registry = lint_functions.registry
+        if lint_only is not None:
+            registry = tuple(func for func in registry if func.__name__ in lint_only)
+            if len(registry) == 0:
+                sys.stderr.write('No valid linting functions selected, exiting.\n')
+                sys.exit(1)
+        lint_args = linting.LintArgs(exclude=lint_exclude, registry=registry)
+    else:
+        lint_args = None
+        if lint_only is not None:
+            logger.warning('--lint-only has no effect unless --lint is specified.')
+        if lint_exclude is not None:
+            logger.warning('--lint-exclude has no effect unless --lint is specified.')
+
+    label = os.getenv('BIOCONDA_LABEL', None)
+    if label == "":
+        label = None
 
     success = build_recipes(
         recipe_folder,
@@ -409,6 +421,9 @@ def build(
         docker_builder=docker_builder,
         anaconda_upload=anaconda_upload,
         mulled_upload_target=mulled_upload_target,
+        lint_args=lint_args,
+        check_channels=check_channels,
+        label=label,
     )
     exit(0 if success else 1)
 
@@ -462,8 +477,6 @@ def dag(recipe_folder, config, packages="*", format='gml', hide_singletons=False
             print('\n'.join(recipes) + '\n')
 
 
-
-
 @arg('recipe_folder', help='Path to recipes directory')
 @arg('config', help='Path to yaml file specifying the configuration')
 @arg('--dependencies', nargs='+',
@@ -478,7 +491,10 @@ def dag(recipe_folder, config, packages="*", format='gml', hide_singletons=False
      effect if --reverse-dependencies, which always looks just in the recipe
      dir.''')
 @arg('--loglevel', help="Set logging level (debug, info, warning, error, critical)")
-def dependent(recipe_folder, config, restrict=False, dependencies=None, reverse_dependencies=None, loglevel='warning'):
+def dependent(
+    recipe_folder, config, restrict=False, dependencies=None, reverse_dependencies=None,
+    loglevel='warning',
+):
     """
     Print recipes dependent on a package
     """
@@ -486,7 +502,7 @@ def dependent(recipe_folder, config, restrict=False, dependencies=None, reverse_
         raise ValueError(
             '`dependencies` and `reverse_dependencies` are mutually exclusive')
 
-    setup_logger(loglevel)
+    utils.setup_logger('bioconda_utils', loglevel)
 
     d, n2r = utils.get_dag(utils.get_recipes(recipe_folder, "*"), config, restrict=restrict)
 
@@ -502,86 +518,180 @@ def dependent(recipe_folder, config, restrict=False, dependencies=None, reverse_
 
 
 @arg('package', help='''Bioconductor package name. This is case-sensitive, and
-     must match the package name on the Bioconductor site.''')
+     must match the package name on the Bioconductor site. If "update-all-packages"
+     is specified, then all packages in a given bioconductor release will be
+     created/updated (--force is then implied).''')
 @arg('recipe_folder', help='Path to recipes directory')
 @arg('config', help='Path to yaml file specifying the configuration')
-@arg('--versioned', action='store_true',
-                help='''If specified, recipe will be created in
-                RECIPES/<package>/<version>''')
-@arg('--force', action='store_true',
-                help='Overwrite the contents of an existing recipe')
-@arg('--pkg-version',
-                help='Package version to use instead of the current one')
-@arg('--bioc-version',
-                help="""Version of Bioconductor to target. If not
-                specified, then automatically finds the latest version of
-                Bioconductor with the specified version in --pkg-version,
-                or if --pkg-version not specified, then finds the the
-                latest package version in the latest Bioconductor
-                version""")
-@arg('--loglevel', default='debug',
-                help='Log level')
+@arg('--versioned', action='store_true', help='''If specified, recipe will be
+     created in RECIPES/<package>/<version>''')
+@arg('--force', action='store_true', help='''Overwrite the contents of an
+     existing recipe. If --recursive is also used, then overwrite *all* recipes
+     created.''')
+@arg('--pkg-version', help='''Package version to use instead of the current
+     one''')
+@arg('--bioc-version', help="""Version of Bioconductor to target. If not
+     specified, then automatically finds the latest version of Bioconductor
+     with the specified version in --pkg-version, or if --pkg-version not
+     specified, then finds the the latest package version in the latest
+     Bioconductor version""")
+@arg('--loglevel', help='Log level')
+@arg('--recursive', action='store_true', help="""Creates the recipes for all
+     Bioconductor and CRAN dependencies of the specified package.""")
+@arg('--skip-if-in-channels', nargs='*', help="""When --recursive is used, it will build
+     *all* recipes. Use this argument to skip recursive building for packages
+     that already exist in the packages listed here.""")
 def bioconductor_skeleton(
     recipe_folder, config, package, versioned=False, force=False,
-    pkg_version=None, bioc_version=None, loglevel='info'
+    pkg_version=None, bioc_version=None, loglevel='debug', recursive=False,
+    skip_if_in_channels=['conda-forge', 'bioconda'],
 ):
     """
     Build a Bioconductor recipe. The recipe will be created in the `recipes`
-    directory and will be prefixed by "bioconductor-".
+    directory and will be prefixed by "bioconductor-". If `--recursive` is set,
+    then any R dependency recipes will be prefixed by "r-".
+
+    These R recipes must be evaluated on a case-by-case basis to determine if
+    they are relevant to biology (in which case they should be submitted to
+    bioconda) or not (submit to conda-forge).
+
+    Biology-related:
+        `bioconda-utils clean-cran-skeleton <recipe> --no-windows`
+        and submit to Bioconda.
+
+    Not bio-related:
+        `bioconda-utils clean-cran-skeleton <recipe>`
+        and submit to conda-forge.
+
     """
-    setup_logger(loglevel)
-    _bioconductor_skeleton.write_recipe(
-        package, recipe_folder, config, force=force, bioc_version=bioc_version,
-        pkg_version=pkg_version, versioned=versioned
-    )
+    utils.setup_logger('bioconda_utils', loglevel)
+    seen_dependencies = set()
+
+    if package == "update-all-packages":
+        if not bioc_version:
+            bioc_version = _bioconductor_skeleton.latest_bioconductor_release_version()
+        packages = _bioconductor_skeleton.fetchPackages(bioc_version)
+        problems = []
+        for k, v in packages.items():
+            try:
+                _bioconductor_skeleton.write_recipe(
+                    k, recipe_folder, config, force=True, bioc_version=bioc_version,
+                    pkg_version=v['Version'], versioned=versioned, packages=packages,
+                    skip_if_in_channels=skip_if_in_channels)
+            except:
+                problems.append(k)
+        if len(problems):
+            sys.exit("The following recipes had problems and were not finished: {}".format(", ".join(problems)))
+    else:
+        _bioconductor_skeleton.write_recipe(
+            package, recipe_folder, config, force=force, bioc_version=bioc_version,
+            pkg_version=pkg_version, versioned=versioned, recursive=recursive,
+            seen_dependencies=seen_dependencies,
+            skip_if_in_channels=skip_if_in_channels)
+
+
+@arg('recipe', help='''Path to recipe to be cleaned''')
+@arg('--no-windows', action='store_true', help="""Use this when submitting an
+     R package to Bioconda. After a CRAN skeleton is created, any
+     Windows-related lines will be removed and the bld.bat file will be
+     removed.""")
+def clean_cran_skeleton(recipe, no_windows=False):
+    """
+    Cleans skeletons created by `conda skeleton cran`.
+
+    Before submitting to conda-forge or Bioconda, recipes generated with `conda
+    skeleton cran` need to be cleaned up: comments removed, licenses fixed, and
+    other linting.
+
+    Use --no-windows for a Bioconda submission.
+    """
+    cran_skeleton.clean_skeleton_files(recipe, no_windows=no_windows)
 
 
 @arg('recipe_folder', help='Path to recipes directory')
 @arg('config', help='Path to yaml file specifying the configuration')
-@arg('--loglevel', default='debug', help='Log level')
+@arg('--loglevel', default='info', help='Log level')
 @arg('--packages',
      nargs="+",
      help='Glob for package[s] to show in DAG. Default is to show all '
      'packages. Can be specified more than once')
-@arg('--only-out-of-date', help='Only report results for packages that need an update')
-def pypi_check(recipe_folder, config, loglevel='info', packages='*', only_out_of_date=False):
+@arg('--exclude-subrecipes', help='''By default, only subrecipes explicitly
+     enabled for watch in meta.yaml are considered. Set to 'always' to
+     exclude all subrecipes.  Set to 'never' to include all subrecipes''')
+@arg('--exclude-channels', nargs="+", help='''Exclude recipes
+     building packages present in other channels. Set to 'none' to disable
+     check.''')
+@arg('--ignore-blacklists', help='''Do not exclude recipes from blacklist''')
+@arg('--cache', help='''To speed up debugging, use repodata cached locally in
+     the provided filename. If the file does not exist, it will be created
+     the first time. Caution: The cache will not be updated if
+     exclude-channels is changed''')
+@arg('--unparsed-urls', help='''Write unrecognized urls to this file''')
+@arg('--failed-urls', help='''Write urls with permanent failure to this file''')
+@arg('--check-branch', help='''Check if recipe has active branch''')
+@arg("--create-branch", action="store_true", help='''Create branch for each
+     update''')
+@arg("--create-pr", action="store_true", help='''Create PR for each update.
+     Implies create-branch.''')
+@arg("--max-updates", help='''Exit after ARG updates''')
+@arg("--parallel", help='''Maximum number of recipes to consider in parallel''')
+@arg("--dry-run", help='''Don't update remote git or github"''')
+def autobump(recipe_folder, config, loglevel='info', packages='*', cache=None,
+             failed_urls=None, unparsed_urls=None,
+             exclude_subrecipes=None, exclude_channels='conda-forge',
+             ignore_blacklists=False,
+             check_branch=False, create_branch=False, create_pr=False,
+             max_updates=0, parallel=100, dry_run=False):
     """
-    Checks recipes to see if an updated version is available on PyPI.
-
-    Recipes are only checked if "pypi" is somewhere in the source URL of their
-    meta.yaml.
-
-    A TSV is reported to stdout, with columns:
-        name:
-            package name
-
-        bioconda_version:
-            latest existing recipe version
-
-        pypi_version:
-            latest version on PyPI. If None, a PyPI package could not be found.
-
-        needs_update:
-            True if PyPI version is later than bioconda_version
-
-        conda_forge_version:
-            latest version in the conda-forge channel. "None" if not available
-            in conda-forge.
-
-        action:
-            One of the following:
-                - unavailable (not found on PyPI, check name)
-                - up-to-date (no action needed)
-                - update-bioconda (simply need to re-run conda skeleton)
-                - remove-from-bioconda (conda-forge has later version)
-                - decide-where-to-update (both conda-forge and bioconda are out-of-date)
+    Updates recipes in recipe_folder
     """
-    setup_logger(loglevel)
-    for result in pypi.check_all(recipe_folder, config):
-        if only_out_of_date:
-            if not result[3]:
-                continue
-        print('\t'.join(map(str, result)))
+    utils.setup_logger('bioconda_utils', loglevel)
+    from . import update
+    from . import githandler
+    from . import hosters
+    scanner = update.Scanner(recipe_folder, packages, config,
+                             cache and cache + "_scan.pkl",
+                             max_inflight=parallel)
+    if not ignore_blacklists:
+        scanner.add(update.ExcludeBlacklisted)
+    if exclude_subrecipes != "never":
+        scanner.add(update.ExcludeSubrecipe,
+                    always=exclude_subrecipes == "always")
+    git_handler = None
+    if check_branch or create_branch or create_pr:
+        git_handler = githandler.GitHandler(recipe_folder, dry_run)
+        scanner.add(update.GitLoadRecipe, git_handler)
+    else:
+        scanner.add(update.LoadRecipe)
+    if exclude_channels != ["none"]:
+        if not isinstance(exclude_channels, list):
+            exclude_channels = [exclude_channels]
+        scanner.add(update.ExcludeOtherChannel, exclude_channels,
+                    cache and cache + "_repodata.txt")
+
+    scanner.add(update.UpdateVersion, hosters.Hoster.select_hoster, unparsed_urls)
+    scanner.add(update.UpdateChecksums, failed_urls)
+
+    if create_branch or create_pr:
+        scanner.add(update.GitWriteRecipe, git_handler)
+    else:
+        scanner.add(update.WriteRecipe)
+
+    if create_pr:
+        token = os.environ["GITHUB_TOKEN"]
+        if not token:
+            logger.critical("GITHUB_TOKEN required to create PRs")
+            exit(1)
+        scanner.add(update.CreatePullRequest, git_handler, token, dry_run)
+    if max_updates:
+        scanner.add(update.MaxUpdates, max_updates)
+    scanner.run()
+    if git_handler:
+        git_handler.close()
+
 
 def main():
-    argh.dispatch_commands([build, dag, dependent, lint, duplicates, bioconductor_skeleton, pypi_check])
+    argh.dispatch_commands([
+        build, dag, dependent, lint, duplicates,
+        bioconductor_skeleton, clean_cran_skeleton, autobump
+    ])

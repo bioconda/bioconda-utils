@@ -6,22 +6,25 @@ Guidelines for ``bioconda`` recipes
 bioconda recipe checklist
 -------------------------
 - Source URL is stable (:ref:`details <stable-url>`)
-- md5 or sha256 hash included for source download (:ref:`details <hashes>`)
+- sha256 or md5 hash included for source download (:ref:`details <hashes>`)
 - Appropriate build number (:ref:`details <buildnum>`)
 - `.bat` file for Windows removed (:ref:`details <bat-files>`)
 - Remove unnecessary comments (:ref:`details <comments-in-meta>`)
 - Adequate tests included (:ref:`details <tests>`)
 - Files created by the recipe follow the FSH (:ref:`details <fsh-section>`)
 - License allows redistribution and license is indicated in ``meta.yaml``
-- Package does not already exist in the `defaults`, `r`, or `conda-forge`
+- Package does not already exist in the `defaults` or `conda-forge`
   channels with some exceptions (:ref:`details <channel-exceptions>`)
 - Package is appropriate for bioconda (:ref:`details <appropriate-for-bioconda>`)
 - If the recipe installs custom wrapper scripts, usage notes should be added to
   ``extra -> notes`` in the ``meta.yaml``.
-- **Update 12 Jun 2017**: If the recipe is a pure Python package, it is marked
-  as a `"noarch"
+- **Update 7 Feb 2018**: Previously we had recommended that if the recipe is
+  a pure Python package, it should be marked as a `"noarch"
   <https://www.continuum.io/blog/developer-blog/condas-new-noarch-packages>`_
-  package (:ref:`details <noarch>`).
+  package (:ref:`details <noarch>`). However due to technical incompatibilies
+  we can't do this -- so please DO NOT use ``"noarch"`` for now.
+- **Update 7 Mar 2018**: When patching a recipe, please provide details on how
+  you tried to address the problem upstream (:ref:`details <patching>`)
 
 .. _stable-url:
 
@@ -37,12 +40,19 @@ TODO: additional info on the various R and bioconductor URLs
 
 Hashes
 ~~~~~~
-Use `md5sum` (Linux) or `md5` (OSX) on a file to compute its md5 hash, and copy
-this into the recipe. A quick way of doing this is:
+We support either sha256 or md5 checksums to verify the integrity of the source
+package. If a checksum is provided alongside the source package, then use that.
+Otherwise we prefer sha256 over md5.
+
+Use ``shasum -a 256 ...`` (or ``sha256sum``  or ``openssl sha256`` etc) on a
+file to compute its sha256 hash, and copy this into the recipe, for example:
 
 .. code-block:: bash
 
-    wget -O- $URL | md5sum
+    wget -O- $URL | shasum -a 256
+
+Likewise use `md5sum` (Linux) or `md5` (OSX) on a file to compute its md5 hash,
+and copy this into the recipe.
 
 .. _buildnum:
 
@@ -102,7 +112,7 @@ consider opening a pull request with `conda-forge
 <https://conda-forge.github.io/#add_recipe>`_ which hosts general packages.
 
 The exception to this is with R packages. We are still coordinating with
-anaconda and conda-forge about the best place to keep general R packages. In
+Anaconda and conda-forge about the best place to keep general R packages. In
 the meantime, R packages that are not specific to bioinformatics and that
 aren't already in the `conda-forge` channel can be added to bioconda.
 
@@ -116,19 +126,23 @@ dev suffixes, see `here
 
 "Noarch" packages
 ~~~~~~~~~~~~~~~~~
-A ``noarch`` package can be created for pure Python packages, data packages, or
-packages that do not require compilation. This single ``noarch`` package can be
-used across multiple platforms, which saves on build time and saves on storage
-space on the bioconda channel.
+**Update 7 Feb 2018** For now please DO NOT use ``noarch`` until technical
+compatibility issues are resolved.
 
-For pure Python packages, add ``noarch: python`` to the ``build`` section.
+.. Deprecated advice:
+.. A ``noarch`` package can be created for pure Python packages, data packages, or
+   packages that do not require compilation. This single ``noarch`` package can be
+   used across multiple platforms, which saves on build time and saves on storage
+   space on the bioconda channel.
 
-For other generic packages (like a data package), add ``noarch: generic`` to
-the ``build`` section.
+.. For pure Python packages, add ``noarch: python`` to the ``build`` section.
 
-See `here
-<https://www.continuum.io/blog/developer-blog/condas-new-noarch-packages>`_ for
-more details.
+.. For other generic packages (like a data package), add ``noarch: generic`` to
+   the ``build`` section.
+
+.. See `here
+   <https://www.continuum.io/blog/developer-blog/condas-new-noarch-packages>`_ for
+   more details.
 
 Dependencies
 ~~~~~~~~~~~~
@@ -148,9 +162,32 @@ include them in the PR. One shortcut is to use `anaconda search -t conda
 recipes can give some clues into building a version of the dependency for
 bioconda.
 
+.. _patching:
+
+Patching
+~~~~~~~~
+Some recipes require small patches to get the tests to pass, for example,
+fixing hard-coded shebang lines (as described at
+:ref:`perl-or-python-not-found`). Other patches are more extensive. When
+patching a recipe, please first make an effort to fix the issue upstream and
+document that effort in your pull request by either linking to the relevant
+upstream PR or indicating that you have contacted the author. The goal is not
+to block merging your PR until upstream is fixed, but rather to make sure
+upstream authors know there's an issue that other users (including non-bioconda
+users) might be having. Ideally, upstream would fix the issue quickly and the
+PR could be modified, but it's fine to merge with the patches and if/when
+upstream fixes, a separate bioconda PR could be opened that pulls in those
+upstream changes.
+
 
 Python
 ------
+
+.. note::
+
+    If you have conda-build 3 installed locally and use ``conda skeleton``,
+    please see :ref:`cb3-recipes-in-cb2`.
+
 If a Python package is available on PyPI, use ``conda skeleton pypi
 <packagename>`` to create a recipe, then remove the ``bld.bat`` and any extra
 comments in ``meta.yaml`` and ``build.sh``. The test that is automatically
@@ -194,6 +231,41 @@ in the meta.yaml`
 
 R (CRAN)
 --------
+
+.. note::
+
+    If you have conda-build 3 installed locally and use ``conda skeleton``,
+    please see :ref:`cb3-recipes-in-cb2`.
+
+.. note::
+
+    Using the ``conda skeleton cran`` method results in a recipe intended to be
+    built for Windows as well, with lines like:
+
+    .. code-block:: yaml
+
+         {% set posix = 'm2-' if win else '' %}
+         {% set native = 'm2w64-' if win else '' %}
+
+    and
+
+    .. code-block:: yaml
+
+        test:
+          commands:
+            - $R -e "library('RNeXML')"  # [not win]
+            - "\"%R%\" -e \"library('RNeXML')\""  # [win]
+
+    The bioconda channel does not build for Windows. To keep recipes
+    streamlined, please remove the "set posix" and "set native" lines described
+    above and convert the `test:commands:` block to only:
+
+    .. code-block:: yaml
+
+        test:
+          commands:
+            - $R -e "library('RNeXML')"
+
 Use ``conda skeleton cran <packagename>`` where ``packagename`` is a
 package available on CRAN and is *case-sensitive*. Either run that command
 in the ``recipes`` dir or move the recipe it creates to ``recipes``. The
@@ -218,15 +290,12 @@ R (Bioconductor)
 ----------------
 
 Use the ``bioconda-utils bioconductor-skeleton`` tool to build a Bioconductor
-skeleton. Note that if you set up your development environment using
-``simulate-travis-py --bootstrap /tmp/miniconda`` then ``bioconda-utils`` is
-installed but by design is not added to your path in order to maintain
-separation from any of your existing environments. So you will need to call
-``/tmp/minoconda/bioconda-utils bioconductor-skeleton -h`` to view the help.
+skeleton. After using the :ref:`bootstrap` method to set up a testing
+environment and activating that environment (which will ensure the correct
+versions of bioconda-utils and conda-build), from the top level of the
+``bioconda-recipes`` repository run::
 
-For example, in the bioconda-recipes directory::
-
-    /tmp/miniconda/bioconda-utils bioconductor-skeleton recipes config.yml DESeq2
+    bioconda-utils bioconductor-skeleton recipes config.yml DESeq2
 
 Note that the provided package name is a case-sensitive package available on
 Bioconductor. The output recipe name will have a ``bioconductor-`` prefix and
@@ -286,44 +355,45 @@ C/C++
 -----
 
 Build tools (e.g., ``autoconf``) and compilers (e.g., ``gcc``) should be
-specified in the build requirements.
+specified in the build requirements. Compilers are handled via a special macro.
+E.g., `{{ compiler('c')}}` ensures that the correct version of `gcc` is used.
+For the C++ variant `g++`, you need to use `{{ compiler('cxx') }}`.
+These rules apply for both Linux and macOS.
 
-We have decided that to optimize compatibility, ``gcc`` needs to be added as
-a dependency rather than assume it is in the build environment. However there
-is still discussion on how best to do this on OSX. For now, please add ``gcc``
-(for Linux packages) and ``llvm`` (for OSX packages) to the ``meta.yaml`` as
-follows:
+Conda distinguishes between dependencies needed for building (the `build` section),
+and dependencies needed during build time (the `host` section).
+For example, the following
+
 
 .. code:: yaml
 
     requirements:
       build:
-        - gcc   # [not osx]
-        - llvm  # [osx]
-
+        - {{ compiler('c') }}
+      host:
+        - zlib
       run:
-        - libgcc    # [not osx]
+        - zlib
 
-If the package uses ``zlib``, then please see the :ref:`troubleshooting section on zlib <zlib>`.
+specifies that a recipe needs the C compiler to build, and zlib present during
+building and running.
+
+For two examples see:
 
 - example requiring ``autoconf``: `srprism
   <https://github.com/bioconda/bioconda-recipes/tree/master/recipes/srprism>`_
 - simple example: `samtools
   <https://github.com/bioconda/bioconda-recipes/tree/master/recipes/samtools>`_
 
+If the package uses ``zlib``, then please see the :ref:`troubleshooting section on zlib <zlib>`.
+
 If your package links dynamically against a particular library, it is
 often necessary to pin the version against which it was compiled, in
 order to avoid ABI incompatibilities. Instead of hardcoding a particular
-version in the recipe, we use jinja templates to achieve this. This helps
-ensure that all bioconda packages are binary-compatible with each other. For
-example, bioconda provides an environnmnet variable ``CONDA_BOOST`` that
-contains the current major version of Boost. You should pin your boost
-dependency against that version. An example is the `salmon recipe
-<https://github.com/bioconda/bioconda-recipes/tree/master/recipes/salmon>`_.
-You find the libraries you can currently pin in `scripts/env\_matrix.yml
-<https://github.com/bioconda/bioconda-recipes/blob/master/scripts/env_matrix.yml>`_.
-If you need to pin another library, please notify @bioconda/core, and we will
-set up a corresponding environment variable.
+version in the recipe, we rely on conda doing this automatically.
+We use globally defined configurations, namely `this for dependencies from conda-forge <https://github.com/conda-forge/conda-forge-pinning-feedstock/blob/master/recipe/conda_build_config.yaml>`_
+and `this for dependencies in bioconda <https://github.com/bioconda/bioconda-utils/blob/master/bioconda_utils/bioconda_utils-conda_build_config.yaml>`_.
+If you need to pin another library, please notify @bioconda/core, and we will extend these lists.
 
 It's not uncommon to have difficulty compiling package into a portable
 conda package. Since there is no single solution, here are some examples
@@ -354,6 +424,25 @@ some ideas on what to try:
   and `soapdenovo
   <https://github.com/bioconda/bioconda-recipes/tree/master/recipes/soapdenovo>`_
   have many fixes to makefiles
+
+Haskell
+-------
+
+Bioconda has a small number of haskell tools. Most often they are built with
+``stack`` (which is available on `conda-forge
+<https://github.com/conda-forge/stack-feedstock>`__). `NGLess
+<https://github.com/bioconda/bioconda-recipes/blob/master/recipes/ngless/build.sh>`__
+provides an example of how to call ``stack``. Here are a few notes:
+
+- ``LD_LIBRARY_PATH``/``LIBRARY_PATH`` are set to include both
+  ``${PREFIX}/lib`` and the system paths (otherwise, ``stack setup`` will
+  fail).
+- Create a directory (called ``fake-home`` in this example) and set it as
+  ``$HOME``, further setting ``$STACK_ROOT`` to use a subdirectory of this
+  ``$HOME``.
+
+Mac OS X support is generally missing (any help is appreciated, see `#6607
+<https://github.com/bioconda/bioconda-recipes/issues/6607>`__).
 
 General command-line tools
 --------------------------
@@ -406,11 +495,6 @@ Other examples of interest
 
 Packaging is hard. Here are some examples, in no particular order, of how
 contributors have solved various problems:
-
-- `blast
-  <https://github.com/bioconda/bioconda-recipes/tree/master/recipes/blast>`_
-  has an OS-specific installation -- OSX copies binaries while on Linux it is
-  compiled.
 
 - `graphviz
   <https://github.com/bioconda/bioconda-recipes/tree/master/recipes/graphviz>`_
@@ -475,7 +559,7 @@ An adequate test must be included in the recipe. An "adequate" test
 depends on the recipe, but must be able to detect a successful
 installation. While many packages may ship their own test suite (unit
 tests or otherwise), including these in the recipe is not recommended
-since it may timeout the build system on Travis-CI. We especially want to avoid
+since it may timeout the build system on CircleCI. We especially want to avoid
 including any kind of test data in the repository.
 
 Note that a test must return an exit code of 0. The test can be in the ``test``
@@ -484,12 +568,12 @@ docs <http://conda.pydata.org/docs/building/meta-yaml.html#test-section>`_ for
 testing).
 
 It is recommended to pipe unneeded stdout/stderr to /dev/null to avoid
-cluttering the output in the Travis-CI build environment.
+cluttering the output in the CircleCI build environment.
 
 Link and unlink scripts (pre- and post- install hooks)
 ------------------------------------------------------
 It is possible to include `scripts
-<http://conda.pydata.org/docs/spec.html#link-and-unlink-scripts>`_ that are
+<https://conda.io/docs/user-guide/tasks/build-packages/link-scripts.html>`_ that are
 executed before or after installing a package, or before uninstalling
 a package. These scripts can be helpful for alerting the user that manual
 actions are required after adding or removing a package. For example,

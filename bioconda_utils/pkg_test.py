@@ -3,6 +3,7 @@ import tempfile
 import tarfile
 import os
 import shlex
+from shutil import which
 import logging
 
 from . import utils
@@ -10,6 +11,11 @@ from . import utils
 from conda_build.metadata import MetaData
 
 logger = logging.getLogger(__name__)
+
+# Use Miniconda 4.3.27 for now to avoid running into an issue in
+# 'conda >4.4.7,<4.4.11': https://github.com/conda/conda/issues/6811
+# TODO: Make this configurable in bioconda_utils.build and bioconda_utils.cli.
+MULLED_CONDA_IMAGE = "continuumio/miniconda3:4.3.27"
 
 
 def get_tests(path):
@@ -45,8 +51,8 @@ def get_tests(path):
     tests = ' && '.join(tests)
     tests = tests.replace('$R ', 'Rscript ')
     # this is specific to involucro, the way how we build our containers
-    tests = tests.replace('$PREFIX', '/usr/local/')
-    tests = tests.replace('${PREFIX}', '/usr/local/')
+    tests = tests.replace('$PREFIX', '/usr/local')
+    tests = tests.replace('${PREFIX}', '/usr/local')
 
     return tests
 
@@ -77,9 +83,10 @@ def get_image_name(path):
 def test_package(
     path,
     name_override=None,
-    channels=["conda-forge", "defaults"],
+    channels=("conda-forge", "local", "bioconda", "defaults"),
     mulled_args="",
-    base_image=None
+    base_image=None,
+    conda_image=MULLED_CONDA_IMAGE,
 ):
     """
     Tests a built package in a minimal docker container.
@@ -92,9 +99,9 @@ def test_package(
     name_override : str
         Passed as the --name-override argument to mulled-build
 
-    channels : None | str | list
-        The local channel of the provided package will be added automatically;
-        `channels` are channels to use in addition to the local channel.
+    channels : list
+        List of Conda channels to use. Must include an entry "local" for the
+        local build channel.
 
     mulled_args : str
         Mechanism for passing arguments to the mulled-build command. They will
@@ -104,6 +111,9 @@ def test_package(
     base_image : None | str
         Specify custom base image. Busybox is used in the default case.
 
+    conda_image : None | str
+        Conda Docker image to install the package with during the mulled based
+        tests.
     """
 
     assert path.endswith('.tar.bz2'), "Unrecognized path {0}".format(path)
@@ -112,16 +122,19 @@ def test_package(
     conda_bld_dir = os.path.abspath(os.path.dirname(os.path.dirname(path)))
 
     sp.check_call([utils.bin_for('conda'), 'index', os.path.dirname(path)])
+    # always build noarch index to make conda happy
+    sp.check_call([utils.bin_for('conda'), 'index', os.path.join(conda_bld_dir, "noarch")])
 
     spec = get_image_name(path)
 
-    extra_channels = ['file://{0}'.format(conda_bld_dir)]
-    if channels is None:
-        channels = []
-    if isinstance(channels, str):
-        channels = [channels]
-    extra_channels.extend(channels)
-    channel_args = ['--extra-channels', ','.join(extra_channels)]
+    if "local" not in channels:
+        raise ValueError('"local" must be in channel list')
+
+    channels = [
+        'file://{0}'.format(conda_bld_dir) if channel == 'local' else channel
+        for channel in channels
+    ]
+    channel_args = ['--channels', ','.join(channels)]
 
     tests = get_tests(path)
     logger.debug('Tests to run: %s', tests)
@@ -137,13 +150,21 @@ def test_package(
         cmd += ['--name-override', name_override]
     cmd += channel_args
     cmd += shlex.split(mulled_args)
+
+    # galaxy-lib always downloads involucro, unless it's in cwd or its path is explicitly given.
+    # TODO: This should go into galaxy-lib. Once it is fixed upstream, remove this here.
+    involucro_path = which('involucro')
+    if involucro_path:
+        cmd += ['--involucro-path', involucro_path]
+
     logger.debug('mulled-build command: %s' % cmd)
 
     env = os.environ.copy()
     if base_image is not None:
         env["DEST_BASE_IMAGE"] = base_image
+    env["CONDA_IMAGE"] = conda_image
     with tempfile.TemporaryDirectory() as d:
         with utils.Progress():
-            p = utils.run(cmd, env=env, cwd=d)
+            p = utils.run(cmd, env=env, cwd=d, mask=False)
 
     return p

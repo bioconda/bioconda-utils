@@ -5,7 +5,7 @@ In order to ensure high-quality packages, we now perform routine checks on each
 recipe (called `linting
 <http://stackoverflow.com/questions/8503559/what-is-linting>`_). By default,
 linting is performed on any recipes that have changed relative to the master
-branch. The travis-ci build will fail if any of the linting checks fail. Below
+branch. The CircleCI build will fail if any of the linting checks fail. Below
 is a list of the checks performed and how to fix them if they fail.
 
 Skipping a linting test
@@ -21,7 +21,7 @@ should be skipped.
 For example, if the linter reports a ``uses_setuptools`` issue for
 ``recipes/mypackage``, but you are certain the package really needs
 setuptools, you can add ``[lint skip uses_setuptools for recipes/mypackage]``
-to the commit message and this linting test will be skipped on Travis-CI.
+to the commit message and this linting test will be skipped on CircleCI.
 Multiple tests can be skipped by adding additional special text. For example,
 ``[lint skip uses_setuptools for recipes/pkg1] [lint skip in_other_channels for
 recipes/pkg2/0.3.5]``. Note in the latter case that the second recipe has
@@ -30,11 +30,11 @@ a subdirectory for an older version.
 Technically we check for the regular expression ``\[\s*lint skip (?P<func>\w+)
 for (?P<recipe>.*?)\s*\]`` in the commit message of the HEAD commit. However,
 often we want to test changes locally without committing.  When running
-``simulate-travis.py`` locally for testing, you can add the same special text to
-a temporary environment variable ``LINT_SKIP``. The same example above could be
-tested locally like this without having to make a commit::
+locally for testing, you can add the same special text to a temporary
+environment variable ``LINT_SKIP``. The same example above could be tested
+locally like this without having to make a commit::
 
-    LINT_SKIP="[lint skip uses_setuptools for recipes/mypackage]" ./simulate-travis.py
+    LINT_SKIP="[lint skip uses_setuptools for recipes/mypackage]" circleci build
 
 Skipping persistently on a per-recipe basis
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -48,6 +48,21 @@ skipped, for example::
       skip-lints:
         - uses_git_url
         - uses_setuptools
+
+.. _in-conda-forge:
+
+Recipes duplicated in conda-forge
+---------------------------------
+
+Sometimes when adding or updating a recipe in a pull request to `conda-forge`
+the conda-forge linter will warn that a recipe with the same name already
+exists in bioconda. When this happens, usually the best thing to do is:
+
+1. Submit -- but don't merge yet! -- a PR to bioconda that removes the recipe.
+   In that PR, reference the conda-forge/staged-recipes PR.
+2. Merge the conda-forge PR adding or updating the recipe
+3. Merge the bioconda PR deleting the recipe
+
 
 Linting functions
 -----------------
@@ -68,8 +83,8 @@ a bioconda-specific patch is required. However it is almost always better to
 fix or update the recipe in the other channel. Note that the package in the
 bioconda channel will remain in order to maintain reproducibility.
 
-`already_in_bioconda`
-~~~~~~~~~~~~~~~~~~~~~
+`already_in_bioconda` (currently disabled)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Reason for failing: The current package version, build, and platform
 (linux/osx) already exists in the bioconda channel.
 
@@ -137,16 +152,18 @@ How to resolve: Add a hash in the `source section
 ~~~~~~~~~~~~~~~~~~
 Reason for failing: The package should be labelled as ``noarch``.
 
-Rationale: A ``noarch`` package should be created for pure Python packages, data packages, or
-packages that do not require compilation. With this a single ``noarch`` package can be
-used across multiple platforms and (in case of Python) Python versions, which saves
-on build time and saves on storage space on the bioconda channel.
+Rationale: A ``noarch`` package should be created for pure Python packages,
+data packages, or packages that do not require compilation. With this a single
+``noarch`` package can be used across multiple platforms and (in case of
+Python) Python versions, which saves on build time and saves on storage space
+on the bioconda channel.
 
-How to resolve: For pure Python packages, add ``noarch: python`` to the ``build`` section.
-**Don't do this if your Python package has a command line interface**, as these are not
-independent of the Python version!
-For other generic packages (like a data package), add ``noarch: generic`` to the ``build`` section.
-See `here <https://www.continuum.io/blog/developer-blog/condas-new-noarch-packages>`_ for
+How to resolve: For pure Python packages, add ``noarch: python`` to the
+``build`` section.  **Don't do this if your Python package has a command line
+interface**, as these are not independent of the Python version!  For other
+generic packages (like a data package), add ``noarch: generic`` to the
+``build`` section.  See `here
+<https://www.continuum.io/blog/developer-blog/condas-new-noarch-packages>`_ for
 more details.
 
 `should_not_be_noarch`
@@ -194,8 +211,8 @@ recipes is updated, it will fail this check.
 
 How to resolve: Change ``java-jdk`` to ``openjdk``.
 
-`uses_setuptools`
-~~~~~~~~~~~~~~~~~
+`uses_setuptools` (currently disabled)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Reason for failing: The recipe has ``setuptools`` as a run dependency.
 
 Rationale: ``setuptools`` is typically used to install dependencies for Python
@@ -203,7 +220,13 @@ packages but most of the time this is not needed within a conda package as
 a run dependency.
 
 How to resolve: Ensure that all dependencies are explicitly defined. Some
-packages do need setuptools, in which case this can be overridden.
+packages do need ``setuptools``, in which case this can be overridden.
+``setuptools`` may be required, e.g., if a package loads resources via
+``pkg_resources`` which is part of ``setuptools``. That dependency can also be
+introduced implicitly when ``setuptools``-created console scripts are used.
+To avoid this, make sure to carry ``console_scripts`` entry points from
+``setup.py`` over to ``meta.yaml`` to replace them with scripts created by
+``conda``/``conda-build`` which don't require ``pkg_resources``.
 
 `has_windows_bat_file`
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -236,52 +259,69 @@ to::
 
     $PYTHON setup.py install --single-version-externally-managed --record=record.txt
 
-`*_not_pinned`
-~~~~~~~~~~~~~~
+`invalid_identifiers`
+~~~~~~~~~~~~~~~~~~~~~
+Reason for failing: The recipe has an ``extra -> identifiers`` section with an
+invalid format.
 
-Reason for failing: The recipe has dependencies that need to be pinned to
-a specific version all across bioconda.
+Rationale: The identifiers section has to be machine readable.
 
-Rationale: Sometimes when a core dependency (like ``zlib``, which is used across
-many recipes) is updated it breaks backwards compatibility. In order to avoid
-this, for known-to-be-problematic dependencies we pin to a specific version
-across all recipes.
+How to resolve: Ensure that the section is of the following format::
 
-How to resolve: Change the dependency line as follows. For each dependency
-failing the linting, specify a jinja-templated version by converting it to
-uppercase, prefixing it with ``CONDA_``, adding double braces, and adding a ``*``.
+    extra:
+      identifiers:
+        - doi:10.1093/bioinformatics/bts480
+        - biotools:Snakemake
 
-Examples are much easier to understand:
+In particular, ensure that each identifier starts with a type
+(`doi`, `biotools`, ...), followed by a colon and the identifier.
+Whitespace is not allowed.
 
-- ``zlib`` should become ``zlib {{ CONDA_ZLIB }}*``
-- ``ncurses`` should become ``ncurses {{ CONDA_NCURSES }}*``
-- ``htslib`` should become ``htslib {{ CONDA_HTSLIB }}*``
-- ``boost`` should become ``boost {{ CONDA_BOOST }}*``
-- ... and so on.
+`deprecated_numpy_spec`
+~~~~~~~~~~~~~~~~~~~~~~~
+Reason for failing: The recipe contains ``numpy x.x`` in build or run requirements.
 
-Here is an example in the context of a ``meta.yaml`` file where ``zlib`` needs to be
-pinned:
+Rationale: This kind of version pinning is deprecated, and numpy pinning is now
+handled automatically by the system.
 
-.. code-block:: yaml
+How to resolve: Remove the ``x.x``.
 
-    # this will give a linting error because zlib is not pinned
-    build:
-      - zlib
-    run:
-      - zlib
-      - bedtools
+`should_not_use_fn`
+~~~~~~~~~~~~~~~~~~~
+Reason for failing: Recipe contains a ``fn:`` key in the ``source:`` section
 
-And here is the fixed version:
+Rationale: Conda-build 3 no longer requres ``fn:``, and it is redundant with ``url:``.
 
-.. code-block:: yaml
+How to resolve: Remove the ``source: fn:`` key.
 
-    # fixed:
-    build:
-      - zlib {{ CONDA_ZLIB }}*
-    run:
-      - zlib {{ CONDA_ZLIB }}*
-      - bedtools
+`should_use_compilers`
+~~~~~~~~~~~~~~~~~~~~~~
+Reason for failing: The recipe has one of ``gcc``, ``llvm``, ``libgfortran``, or ``libgcc`` as dependencies.
 
+Rationale: Conda-build 3 now uses compiler tools, which are more up-to-date and
+better-supported.
+
+How to resolve: Use ``{{ compiler() }}`` variables. See :ref:`compiler-tools` for details.
+
+`compilers_must_be_in_build`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Reason for failing: A ``{{ compiler() }}`` varaiable was found, but not in the ``build:`` section.
+
+Rational: The compiler tools must not be in ``host:`` or ``run:`` sections.
+
+How to resolve: Move ``{{ compiler() }}`` variables to the ``build:`` section.
+
+
+..
+    `bioconductor_37`
+    ~~~~~~~~~~~~~~~~~
+    Reason for failing: The recipe specifies Bioconductor 3.7 or "release".
+
+    Rationale: We cannot update Bioconductor packages yet -- see `#8947
+    <https://github.com/bioconda/bioconda-recipes/issues/8947>`_ for details.
+
+    How to resolve: Please use Bioconductor 3.6 only; otherwise we need to wait
+    until R 3.5.1 is released.
 
 Developer docs
 --------------

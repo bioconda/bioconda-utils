@@ -1,0 +1,20 @@
+# Additional bioconda-specific pinnings to use in addition to those specified
+# in
+# https://github.com/conda-forge/conda-forge-pinning-feedstock/blob/master/recipe/conda_build_config.yaml
+
+pin_run_as_build:
+  htslib:
+    max_pin: x.x
+  bamtools:
+    max_pin: x.x.x
+  libdeflate:
+    max_pin: x.x
+
+htslib:
+  - 1.9
+bamtools:
+  - 2.4.1
+libdeflate:
+  - 1.0
+r_base:
+  - 3.5.1

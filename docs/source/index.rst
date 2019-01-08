@@ -11,36 +11,52 @@ bioinformatics software. Bioconda consists of:
 
 - a `repository of recipes <https://github.com/bioconda/bioconda-recipes>`_ hosted on GitHub
 - a `build system <https://github.com/bioconda/bioconda-utils>`_ that turns these recipes into conda packages
-- a `repository of >2700 bioinformatics packages
+- a `repository of more than 3000 bioinformatics packages
   <https://anaconda.org/bioconda/>`_ ready to use with ``conda install``
 - Over 250 contributors that add, modify, update and maintain the recipes
 
-Each package added to Bioconda also has a corresponding Docker  `BioContainer
-<https://biocontainers.pro>`_ automatically created and uploaded to Quay.io.
-
-**Browse packages in the bioconda channel:** :ref:`recipes`
-
-**Browse BioContainer packages:** `Biocontainers Registry UI
-<https://biocontainers.pro/registry/#/>`_
-
-The conda package manager has recently made installing software a vastly more
+The conda package manager makes installing software a vastly more
 streamlined process. Conda is a combination of other package managers you may
 have encountered, such as pip, CPAN, CRAN, Bioconductor, apt-get, and homebrew.
 Conda is both language- and OS-agnostic, and can be used to install C/C++,
 Fortran, Go, R, Python, Java etc programs on Linux, Mac OSX, and Windows.
 
-Conda allows separation of packages into separate repositories, or `channels`.
+Conda allows separation of packages into repositories, or `channels`.
 The main `defaults` channel has a large number of common packages. Users can
 add additional channels from which to install software packages not available
 in the defaults channel. Bioconda is one such channel specializing in
 bioinformatics software.
 
+When using Bioconda please **cite our article** `Grüning, Björn, Ryan Dale, Andreas Sjödin, Brad A. Chapman, Jillian Rowe, Christopher H. Tomkins-Tinch, Renan Valieris, the Bioconda Team, and Johannes Köster. 2018. "Bioconda: Sustainable and Comprehensive Software Distribution for the Life Sciences". Nature Methods, 2018 <https://doi.org/10.1038/s41592-018-0046-7>`_.
+
+Bioconda has been acknowledged by NATURE in their
+`technology blog <http://blogs.nature.com/naturejobs/2017/11/03/techblog-bioconda-promises-to-ease-bioinformatics-software-installation-woes/>`_.
+
+Each package added to Bioconda also has a corresponding Docker  `BioContainer
+<https://biocontainers.pro>`_ automatically created and uploaded to Quay.io.
+
+**Browse packages in the Bioconda channel:** :ref:`recipes`
+
+**Browse BioContainer packages:** `Biocontainers Registry UI
+<https://biocontainers.pro/registry/#/>`_
+
+----
+
+Bioconda is a derivative mark of Anaconda :sup:`®`, a trademark of Anaconda,
+Inc registered in the U.S. and other countries.  Anaconda, Inc.
+grants permission of the derivative use but is not associated with Bioconda.
+
+The Bioconda channel is sponsored by `Anaconda, Inc <https://www.anaconda.com/>`_
+in the form of providing unlimited (in time and space) storage.
+Bioconda is supported by `Circle CI <https://circleci.com/>`_ via an open
+source plan including free Linux and MacOS builds.
+
 
 .. _using-bioconda:
 
-Using bioconda
+Using Bioconda
 ==============
-**bioconda supports only 64-bit Linux and Mac OSX**.
+**Bioconda supports only 64-bit Linux and Mac OSX**.
 
 
 1. Install conda
@@ -64,35 +80,30 @@ package. The Python 3 version is recommended.
 
 After installing conda you will need to add the bioconda channel as well as the
 other channels bioconda depends on. **It is important to add them in this
-order** so that the priority is set correctly (that is, bioconda is highest
+order** so that the priority is set correctly (that is, conda-forge is highest
 priority).
 
 The `conda-forge` channel contains many general-purpose packages not already
-found in the `defaults` channel. The `r` channel is only included due to
-backward compatibility.  It is not mandatory, but without the `r` channel
-packages compiled against R 3.3.1 might not work.
+found in the `defaults` channel.
 
 
 ::
 
-    (conda config --add channels r)
     conda config --add channels defaults
-    conda config --add channels conda-forge
     conda config --add channels bioconda
-
+    conda config --add channels conda-forge
 
 3. Install packages
 -------------------
 :ref:`Browse the packages <recipes>` to see what's available.
 
-bioconda is now enabled, so any packages on the bioconda channel can be installed into the current conda environment::
+Bioconda is now enabled, so any packages on the bioconda channel can be installed into the current conda environment::
 
     conda install bwa
 
 Or a new environment can be created::
 
     conda create -n aligners bwa bowtie hisat star
-
 
 
 4. Join the team
@@ -112,7 +123,7 @@ pull requests.
 ------------------
 
 Consider `adding a badge <_static/badge-generator/>`_ to your posters and presentations to promote
-that a tool can be easily installed from bioconda.
+that a tool can be easily installed from Bioconda.
 
 
 Contributors
@@ -126,17 +137,15 @@ Core
 * `Brad Chapman <https://github.com/chapmanb>`_
 * `Chris Tomkins-Tinch <https://github.com/tomkinsc>`_
 * `Björn Grüning <https://github.com/bgruening>`_
+* `Andreas Sjödin <https://github.com/druvus>`_
+* `Jillian Rowe <https://github.com/jerowe>`_
+* `Renan Valieris <https://github.com/rvalieris>`_
+* `Marcel Bargull <https://github.com/mbargull>`_
 
 Others
 ------
 Bioconda has over 250 contributors, see `here <https://github.com/bioconda/bioconda-recipes/graphs/contributors>`_.
 
-----
-
-Bioconda is a derivative mark of Anaconda :sup:`®`, a trademark of Continuum Analytics, Inc registered in the U.S. and other countries.
-Continuum Analytics, Inc. grants permission of the derivative use but is not associated with Bioconda.
-
-The Bioconda channel is sponsored by `Continuum Analytics <https://www.continuum.io/>`_.
 
 Contributor documentation
 -------------------------
@@ -153,6 +162,9 @@ Contents:
 
     recipes
     contributing
+    updating
     linting
     faqs
+    build-system
+    cb3
     changes

@@ -1,161 +1,171 @@
 import os
 import os.path as op
 from collections import defaultdict
-from jinja2 import Template
-from bioconda_utils import utils
+from jinja2.sandbox import SandboxedEnvironment
+from bioconda_utils.utils import RepoData
+from sphinx.util import logging as sphinx_logging
+from sphinx.util import status_iterator
+from sphinx.util.parallel import ParallelTasks, parallel_available, make_chunks
+from sphinx.util.rst import escape as rst_escape
+from sphinx.util.osutil import ensuredir
+from sphinx.jinja2glue import BuiltinTemplateLoader
+from distutils.version import LooseVersion
+
+# Aquire a logger
+try:
+    logger = sphinx_logging.getLogger(__name__)
+except AttributeError:  # not running within sphinx
+    import logging
+    logger = logging.getLogger(__name__)
 
 try:
     from conda_build.metadata import MetaData
-except Exception as e:
-    import traceback
-    traceback.print_exc()
-    raise e
-from distutils.version import LooseVersion
+    from conda_build.exceptions import UnableToParse
+except Exception:
+    logging.exception("Failed to import MetaData")
+    raise
 
 
 BASE_DIR = op.dirname(op.abspath(__file__))
 RECIPE_DIR = op.join(op.dirname(BASE_DIR), 'bioconda-recipes', 'recipes')
 OUTPUT_DIR = op.join(BASE_DIR, 'recipes')
 
-# jinja2 template for the DataTable of recipes
-RECIPES_TEMPLATE = u"""\
-.. _recipes:
-
-Available packages
-==================
-
-.. toctree::
-   :hidden:
-   :maxdepth: 1
-   :glob:
-
-   recipes/*/*
-
-.. raw:: html
-
-    <table id="recipestable" class="display" cellspacing="0" width="100%">
-    <thead>
-        <tr>
-        {% for key in keys %}
-        <th>{{ key }}</th>
-        {% endfor %}
-        </tr>
-    </thead>
-    <tbody>
-    {% for r in recipes %}
-    <tr>
-        {% for k in keys %}
-        <td>{{ r[k] }}</td>
-        {% endfor %}
-    </tr>
-    {% endfor %}
-    </tbody>
-    <tfoot></tfoot>
-    </table>
-"""
 
 
-README_TEMPLATE = u"""\
-.. _`{title}`:
 
-{title}
-{title_underline}
+def as_extlink_filter(text):
+    """Jinja2 filter converting identifier (list) to extlink format
 
-|downloads|
+    Args:
+      text: may be string or list of strings
 
-{summary}
+    >>> as_extlink_filter("biotools:abyss")
+    "biotools: :biotool:`abyss`"
 
-======== ===========
-Home     {home}
-Versions {versions}
-License  {license}
-Recipe   {recipe}
-======== ===========
-
-Installation
-------------
-
-.. highlight: bash
-
-With an activated Bioconda channel (see :ref:`set-up-channels`), install with::
-
-   conda install {title}
-
-and update with::
-
-   conda update {title}
-
-{notes}
-
-|docker|
-
-A Docker container is available at https://quay.io/repository/biocontainers/{title}.
-
-Link to this page
------------------
-
-Render an |badge| badge with the following Markdown::
-
-   [![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat-square)](http://bioconda.github.io/recipes/{title}/README.html)
-
-.. |badge| image:: https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat-square
-           :target: http://bioconda.github.io/recipes/{title}/README.html
-.. |downloads| image:: https://anaconda.org/bioconda/{title}/badges/downloads.svg
-               :target: https://anaconda.org/bioconda/{title}
-.. |docker| image:: https://quay.io/repository/biocontainers/{title}/status
-                :target: https://quay.io/repository/biocontainers/{title}
-
-
-"""
-
-def parse_pkgname(p):
-    p = p.replace('.tar.bz2', '')
-    toks = p.split('-')
-    build_string = toks.pop()
-    version = toks.pop()
-    name = '-'.join(toks)
-    return dict(name=name, version=version, build_string=build_string)
-
-
-def setup(*args):
+    >>> as_extlink_filter(["biotools:abyss", "doi:123"])
+    "biotools: :biotool:`abyss`, doi: :doi:`123`"
     """
-    Go through every folder in the `bioconda-recipes/recipes` dir
-    and generate a README.rst file.
+    def fmt(text):
+        assert isinstance(text, str), "identifier has to be a string"
+        text = text.split(":", 1)
+        assert len(text) == 2, "identifier needs at least one colon"
+        return "{0}: :{0}:`{1}`".format(*text)
+
+    assert isinstance(text, list), "identifiers have to be given as list"
+
+    return list(map(fmt, text))
+
+
+def underline_filter(text):
+    """Jinja2 filter adding =-underline to row of text
+
+    >>> underline_filter("headline")
+    "headline\n========"
     """
-    print('Generating package READMEs...')
+    return text + "\n" + "=" * len(text)
 
 
-    repodata = defaultdict(lambda: defaultdict(list))
-    for platform in ['linux', 'osx']:
-        for pkg in utils.get_channel_packages(channel='bioconda', platform=platform):
-            d = parse_pkgname(pkg)
-            repodata[d['name']][d['version']].append(platform)
+def escape_filter(text):
+    """Jinja2 filter escaping RST symbols in text
 
-    # e.g., repodata = {
-    #   'package1': {
-    #       '0.1': ['linux'],
-    #       '0.2': ['linux', 'osx'],
-    #   },
-    #}
+    >>> excape_filter("running `cmd.sh`")
+    "running \`cmd.sh\`"
+    """
+    if text:
+        return rst_escape(text)
+    return text
 
-    summaries = []
-    recipes = []
 
-    for folder in os.listdir(RECIPE_DIR):
-        # Subfolders correspond to different versions
-        versions = []
-        for sf in os.listdir(op.join(RECIPE_DIR, folder)):
-            if not op.isdir(op.join(RECIPE_DIR, folder, sf)):
-                # Not a folder
-                continue
-            try:
-                LooseVersion(sf)
-            except ValueError:
-                print("'{}' does not look like a proper version!".format(sf))
-                continue
-            versions.append(sf)
-        #versions.sort(key=LooseVersion, reverse=True)
-        # Read the meta.yaml file
+class Renderer(object):
+    """Jinja2 template renderer
+
+    - Loads and caches templates from paths configured in conf.py
+    - Makes additional jinja filters available:
+      - underline -- turn text into a RSt level 1 headline
+      - escape -- escape RST special characters
+      - as_extlink -- convert (list of) identifiers to extlink references
+    """
+    def __init__(self, app):
+        template_loader = BuiltinTemplateLoader()
+        template_loader.init(app.builder)
+        template_env = SandboxedEnvironment(loader=template_loader)
+        template_env.filters['escape'] = escape_filter
+        template_env.filters['underline'] = underline_filter
+        template_env.filters['as_extlink'] = as_extlink_filter
+        self.env = template_env
+        self.templates = {}
+
+    def render(self, template_name, context):
+        """Render a template file to string
+
+        Args:
+          template_name: Name of template file
+          context: dictionary to pass to jinja
+        """
+        try:
+            template = self.templates[template_name]
+        except KeyError:
+            template = self.env.get_template(template_name)
+            self.templates[template_name] = template
+
+        return template.render(**context)
+
+    def render_to_file(self, file_name, template_name, context):
+        """Render a template file to a file
+
+        Ensures that target directories exist and only writes
+        the file if the content has changed.
+
+        Args:
+          file_name: Target file name
+          template_name: Name of template file
+          context: dictionary to pass to jinja
+
+        Returns:
+          True if a file was written
+        """
+        content = self.render(template_name, context)
+        # skip if exists and unchanged:
+        if os.path.exists(file_name):
+            with open(file_name, encoding="utf-8") as f:
+                if f.read() == content:
+                    return False  # unchanged
+        ensuredir(op.dirname(file_name))
+
+        with open(file_name, "wb") as f:
+            f.write(content.encode("utf-8"))
+        return True
+
+
+def generate_readme(folder, repodata, renderer):
+    """Generates README.rst for the recipe in folder
+
+    Args:
+      folder: Toplevel folder name in recipes directory
+      repodata: RepoData object
+      renderer: Renderer object
+
+    Returns:
+      List of template_options for each concurrent version for
+      which meta.yaml files exist in the recipe folder and its
+      subfolders
+    """
+    # Subfolders correspond to different versions
+    versions = []
+    for sf in os.listdir(op.join(RECIPE_DIR, folder)):
+        if not op.isdir(op.join(RECIPE_DIR, folder, sf)):
+            # Not a folder
+            continue
+        try:
+            LooseVersion(sf)
+        except ValueError:
+            logger.error("'{}' does not look like a proper version!"
+                         "".format(sf))
+            continue
+        versions.append(sf)
+
+    # Read the meta.yaml file(s)
+    try:
         recipe = op.join(RECIPE_DIR, folder, "meta.yaml")
         if op.exists(recipe):
             metadata = MetaData(recipe)
@@ -167,79 +177,98 @@ def setup(*args):
                 metadata = MetaData(recipe)
             else:
                 # ignore non-recipe folders
-                continue
+                return []
+    except UnableToParse as e:
+        logger.error("Failed to parse recipe {}".format(recipe))
+        raise e
 
-        name = metadata.name()
-        versions_in_channel = sorted(repodata[name].keys())
+    name = metadata.name()
+    versions_in_channel = repodata.get_versions(name)
 
-        # Format the README
-        notes = metadata.get_section('extra').get('notes', '')
-        if notes:
-            if isinstance(notes,list): notes = "\n".join(notes)
-            notes = 'Notes\n-----\n\n' + notes
-        summary = metadata.get_section('about').get('summary', '')
-        summaries.append(summary)
-        template_options = {
-            'title': metadata.name(),
-            'title_underline': '=' * len(metadata.name()),
-            'summary': summary,
-            'home': metadata.get_section('about').get('home', ''),
-            'versions': ', '.join(versions_in_channel),
-            'license': metadata.get_section('about').get('license', ''),
-            'recipe': ('https://github.com/bioconda/bioconda-recipes/tree/master/recipes/' +
-                op.dirname(op.relpath(metadata.meta_path, RECIPE_DIR))),
-            'notes': notes
-        }
+    # Format the README
+    template_options = {
+        'name': name,
+        'about': (metadata.get_section('about') or {}),
+        'extra': (metadata.get_section('extra') or {}),
+        'versions': versions_in_channel,
+        'gh_recipes': 'https://github.com/bioconda/bioconda-recipes/tree/master/recipes/',
+        'recipe_path': op.dirname(op.relpath(metadata.meta_path, RECIPE_DIR)),
+        'Package': '<a href="recipes/{0}/README.html">{0}</a>'.format(name)
+    }
 
-        # Add additional keys to template_options for use in the recipes
-        # datatable.
+    renderer.render_to_file(
+        op.join(OUTPUT_DIR, folder, 'README.rst'),
+        'readme.rst_t',
+        template_options)
+
+    recipes = []
+    for version, version_info in sorted(versions_in_channel.items()):
+        t = template_options.copy()
+        t.update({
+            'Linux': '<i class="fa fa-linux"></i>' if 'linux' in version_info else '',
+            'OSX': '<i class="fa fa-apple"></i>' if 'osx' in version_info else '',
+            'Version': version
+        })
+        recipes.append(t)
+    return recipes
 
 
-        template_options['Package'] = (
-            '<a href="recipes/{0}/README.html">{0}</a>'.format(name)
-        )
+def generate_recipes(app):
+    """
+    Go through every folder in the `bioconda-recipes/recipes` dir,
+    have a README.rst file generated and generate a recipes.rst from
+    the collected data.
+    """
+    renderer = Renderer(app)
+    repodata = RepoData()
+    recipes = []
+    recipe_dirs = os.listdir(RECIPE_DIR)
 
-        for version in versions_in_channel:
-            t = template_options.copy()
-            if 'linux' in repodata[name][version]:
-                t['Linux'] = '<i class="fa fa-linux"></i>'
-            if 'osx' in repodata[name][version]:
-                t['OSX'] = '<i class="fa fa-apple"></i>'
-            t['Version'] = version
-            recipes.append(t)
+    if parallel_available and len(recipe_dirs) > 5:
+        nproc = app.parallel
+    else:
+        nproc = 1
 
-        readme = README_TEMPLATE.format(**template_options)
-        # Write to file
-        try:
-            os.makedirs(op.join(OUTPUT_DIR, folder))  # exist_ok=True on Python 3
-        except OSError:
-            pass
-        output_file = op.join(OUTPUT_DIR, folder, 'README.rst')
+    if nproc == 1:
+        for folder in status_iterator(
+                recipe_dirs,
+                'Generating package READMEs...',
+                "purple", len(recipe_dirs), app.verbosity):
+            recipes.extend(generate_readme(folder, repodata, renderer))
+    else:
+        tasks = ParallelTasks(nproc)
+        chunks = make_chunks(recipe_dirs, nproc)
 
-        # avoid re-writing the same contents, which invalidates the
-        # sphinx-build cache
-        if os.path.exists(output_file):
-            if open(output_file, encoding='utf-8').read() == readme:
-                continue
+        def process_chunk(chunk):
+            _recipes = []
+            for folder in chunk:
+                _recipes.extend(generate_readme(folder, repodata, renderer))
+            return _recipes
 
-        with open(output_file, 'wb') as ofh:
-            ofh.write(readme.encode('utf-8'))
+        def merge_chunk(chunk, res):
+            recipes.extend(res)
 
-    # render the recipes datatable page
-    t = Template(RECIPES_TEMPLATE)
-    recipes_contents = t.render(
-        recipes=recipes,
+        for chunk in status_iterator(
+                chunks,
+                'Generating package READMEs with {} threads...'.format(nproc),
+                "purple", len(chunks), app.verbosity):
+            tasks.add_task(process_chunk, chunk, merge_chunk)
+        logger.info("waiting for workers...")
+        tasks.join()
 
+    updated = renderer.render_to_file("source/recipes.rst", "recipes.rst_t", {
+        'recipes': recipes,
         # order of columns in the table; must be keys in template_options
-        keys=['Package', 'Version', 'License', 'Linux', 'OSX']
-    )
-    recipes_rst = 'source/recipes.rst'
-    if not (
-        os.path.exists(recipes_rst)
-        and (open(recipes_rst).read() == recipes_contents)
-    ):
-        with open(recipes_rst, 'w') as fout:
-            fout.write(recipes_contents)
+        'keys': ['Package', 'Version', 'License', 'Linux', 'OSX']
+    })
+    if updated:
+        logger.info("Updated source/recipes.rst")
 
-if __name__ == '__main__':
-    setup()
+
+def setup(app):
+    app.connect('builder-inited', generate_recipes)
+    return {
+        'version': "0.0.0",
+        'parallel_read_safe': True,
+        'parallel_write_safe': True
+    }

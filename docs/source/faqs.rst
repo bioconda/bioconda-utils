@@ -44,92 +44,56 @@ users can install them with `conda install`.
     has details on exactly what a package contains and how it is installed into
     an environment.
 
-Continuous integration (Travis-CI)
+Continuous integration (Circle CI)
 ----------------------------------
-We use the Travis-CI continuous integration service. Continuous integration
+We use the Circle CI continuous integration service. Continuous integration
 tests each small incremental change to code to ensure that everything is
-up-to-date and correct. Travis-CI graciously provides this service for free to
+up-to-date and correct. Circle CI graciously provides this service for free to
 open-source projects. It is connected to GitHub such that each time a pull
-request or merge occurs, a new Travis-CI build is created. For bioconda,
+request or merge occurs, a new Circle CI build is created. For bioconda,
 a "build" means identifying any recipes that need to built, running
 `conda-build` on them, and testing to make sure they work.
 
-How is Travis-CI set up and configured?
+How is Circle CI set up and configured?
 ---------------------------------------
 
-- `.travis.yml` is read by the Travis-CI worker.
+- `.circleci/config.yml` is read by the Circle CI worker.
 
-- The worker runs `scripts/travis-setup.sh`. This installs conda, adds
+- The worker runs `.circleci/setup.sh`. This installs conda, adds
   channels, and installs `bioconda-utils`
 
-- The worker runs `scripts/travis-run.sh`. If the system is Linux, then the
-  build is performed in a docker container (the one listed in `.travis.yml`).
-  If OSX, then the build is performed without docker.
+- The worker runs tests defined in `.circleci/config.yml`.
 
+A local version of the Circle CI tests can be executed via the
+:ref:`Circle CI client <circleci-client>`. Note that this version lacks some
+additional tests that are executed in the online version. Thus, it can be that
+a local test passes while the online test fails.
+Nevertheless, the local test should capture most problems, such that it is highly
+encouraged to first run a local test in order to save quota on Circle CI.
 
-There are some environmental variables that exist on Travis-CI. The
-`simulate-travis.py` script adds these so that a locally-run test behaves close
-as possible to the Travis-CI run.
-
-
-What does "SUBDAG" mean on Travis-CI?
--------------------------------------
-The test results page on travis-ci.org for a PR or merge shows 4 separate
-sub-tests. There are two for Linux and two for OSX.
-
-We have limited resources on Travis-CI on which to build packages. In an
-attempt to speed up builds, we split the full DAG of recipes that need to be
-built in to multiple independent sub-DAGs. These are named `SUBDAG 0` and
-`SUBDAG 1`. Each sub-DAG is considered an independent build and they are run in
-parallel. If you submit a single recipe, which sub-DAG it is built on is
-nondeterministic so if you don't see log output for the recipe in one sub-DAG,
-check the other.
-
-The `simulate-travis.py` script sets the number of sub-DAGs to 1 so that there
-is only a single process running the builds.
-
-How are environmental variables defined and used?
+How are dependencies pinned to particular versions?
 -------------------------------------------------
 
-In some cases a recipe may need to pin the version of a dependency.  Jinja2
-templating is used within recipes to use a uniform set of versions for core
-packages used by bioconda packages. For example, see this `meta.yaml
-<https://github.com/bioconda/bioconda-recipes/blob/f5eb63e30a76fd13c28663786d219c9f7750267c/recipes/gfold/meta.yaml>`_
-that uses a variable to hold the current GSL (GNU Scientific Library) version
-supported by bioconda.
+In some cases a recipe may need to pin the version of a dependency.
+A global set of default versions to pin against is shared with conda-forge and
+can be found `here <https://github.com/conda-forge/conda-forge-pinning-feedstock/blob/master/recipe/conda_build_config.yaml>`_.
+For new dependencies that are contained in conda-forge and not yet in this list,
+please update the list via a pull request.
+Local pinnings can be achieved by adding a file ``conda_build_config.yaml`` next
+to your ``meta.yaml``.
 
-The currently defined dependencies are defined in `scripts/env_matrix.yml` and
-are sent to `conda-build` by setting them as environment variables. More
-specifically:
-
-- `config.yml` indicates an `env_matrix` file in which CONDA_GSL is defined
-    - `config.yaml` example
-  <https://github.com/bioconda/bioconda-recipes/blob/0be2881ef95be68feb09fae7814e0217aca57285/config.yml#L1>`_ pointing to file
-
-    - `env_matrix.yml` example
-      <https://github.com/bioconda/bioconda-recipes/blob/0be2881ef95be68feb09fae7814e0217aca57285/scripts/env_matrix.yml>` defining CONDA_GSL.
-
-- When figuring out which recipes need to be built, the filtering step attaches
-  each unique env to a Target object. For example, one env might be
-  `CONDA_GSL=1.6; CONDA_PY=27, CONDA_R=3.3.1;` while a different env would be
-  `CONDA_GSL=1.6; CONDA_PY=35, CONDA_R=3.3.1;`.
-
-- That env is provided to the build function which is either sent directly to
-  docker as environment variables, or used to temporarily update os.environ so
-  that conda-build sees it.
-
-- These environment variables are then seen by conda-build and used to fill in
-  the templated variables via jinja2.
+To find out against which version you can pin a package, e.g. x.y.* or x.* please use [ABI-Laboratory](https://abi-laboratory.pro/tracker/).
 
 What's the lifecycle of a bioconda package?
 -------------------------------------------
 
 - Submit a pull request with a new recipe or an updated recipe
-- Travis-CI automatically builds and tests the changed recipe[s] using
+- Circle CI automatically builds and tests the changed recipe[s] using
   conda-build. Test results are shown on the PR.
 - If tests fail, push changes to PR until they pass.
 - Once tests pass, merge into master branch
-- Travis-CI tests again, but this time after testing the built packages are uploaded to the bioconda channel on anaconda.org
+- Circle CI tests again, but this time after testing the built packages are
+  uploaded to the bioconda channel on anaconda.org.
 - Users can now install the package just like any other conda package with
   `conda install`.
 
@@ -137,3 +101,61 @@ Once uploaded to anaconda.org, it is our intention to never delete any old
 packages. Even if a recipe in the bioconda repo is updated to a new version,
 the old version will remain on anaconda.org. ContinuumIO has graciously agreed
 to sponsor the storage required by the bioconda channel.
+Nevertheless, it can sometimes happen that we have to mark packages as broken
+in order to avoid that they are accidentally pulled by the conda solver.
+In such a case it is only possible to install them by specifically considering
+the `broken` label, i.e.,
+
+.. code-block:: bash
+
+    conda install -c conda-forge -c bioconda -c defaults -c bioconda/label/broken my-package=<broken-version>
+
+
+.. _circlecimacos:
+
+CircleCI macOS plans
+--------------------
+In the past we had recommended enabling CircleCI for your fork to help conserve
+the bioconda team's build time quota. However this did not work very well:
+macOS builds on CircleCI require an extra macOS plan, which is not free to
+users. The result was that contributors' pull requests would fail tests simply
+due to not having a paid macOS plan. Luckily, CircleCI has generously provided
+macOS builds to the bioconda team.
+
+To ensure that CircleCI uses the bioconda team account, please **disable**
+CircleCI on your fork (look for the big red "Stop Building" button at
+https://circleci.com/dashboard under the settings for your fork).
+
+Testing ``bioconda-utils`` locally
+----------------------------------
+
+Follow the instructions at :ref:`bootstrap` to create a separate Miniconda
+installation using the ``bootstrap.py`` script in the `bioconda-recipes` repo.
+
+Then, in the activated environment, install the bioconda-utils test
+requirements, from the top-level directory of the ``bioconda-utils`` repo.
+While the bootstrap script installs bioconda-utils dependencies, if there are
+any changes in ``requirements.txt`` you will want to install them as well.
+
+The bootstrap script already installed bioconda-utils, but we want to install
+it in develop mode so we can make local changes and they will be immediately
+picked up. So we need to uninstall and then reinstall bioconda-utils.
+
+Finally, run the tests using ``pytest``.
+
+In summary:
+
+.. code-block:: bash
+
+    # activate env
+    source ~/.config/bioconda/activate
+
+    # install dependencies
+    conda install --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
+
+    # uninstall and then reinstall
+    pip uninstall bioconda_utils
+    python setup.py develop
+
+    # run tests
+    pytest test -vv
