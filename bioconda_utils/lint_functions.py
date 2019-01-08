@@ -151,14 +151,11 @@ def missing_tests(recipe, meta):
 
 @lint_multiple_metas
 def malformed_tests(recipe, meta):
-    if 'test' in meta:
-        # will cause mulled to fail
-        if any("'" in line for line in meta['test']):
-            return {
-                'single_quote_in_tests': True,
-                'fix': 'use double quotes or move to separate test file'
-            }
-
+    if any("'" in cmd for cmd in meta.get_value('test/commands', [])):
+        return {
+            'single_quote_in_tests': True,
+            'fix': 'use double quotes or move to separate test file'
+        }
 
 @lint_multiple_metas
 def missing_hash(recipe, meta):
