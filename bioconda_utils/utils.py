@@ -949,6 +949,10 @@ def load_config(path):
         config['channels'] = get_list('channels')
 
     default_config.update(config)
+
+    # register config object in RepoData
+    RepoData.register_config(default_config)
+
     return default_config
 
 
@@ -1193,8 +1197,12 @@ class RepoData:
     columns = _load_columns + ['channel', 'subdir', 'platform']
     #: Platforms loaded
     platforms = ['linux', 'osx', 'noarch']
-    #: Channels loaded
-    channels = ['conda-forge', 'bioconda', 'defaults']
+    # config object
+    config = None
+
+    @classmethod
+    def register_config(cls, config):
+        cls.config = config
 
     __instance = None
     def __new__(cls):
@@ -1212,6 +1220,13 @@ class RepoData:
             warnings.warn("RepoData cache set after first use", BiocondaUtilsWarning)
         else:
             self.cache_file = cache
+
+    @property
+    def channels(self):
+        """Return channels to load."""
+        assert self.config is not None, ("bug: ensure to load config "
+                                         "before instantiating RepoData.")
+        return self.config["channels"]
 
     @property
     def df(self):
