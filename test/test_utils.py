@@ -81,6 +81,11 @@ def recipes_fixture():
         for pkg in pkgs:
             ensure_missing(pkg)
 
+@pytest.fixture(scope='module')
+def config_fixture():
+    yield utils.load_config(
+        os.path.join(os.path.dirname(__file__), "test-config.yaml"))
+
 
 @pytest.fixture(scope='module', params=PARAMS, ids=IDS)
 def single_build(request, recipes_fixture):
@@ -108,7 +113,7 @@ def single_build(request, recipes_fixture):
 # TODO: need to have a variant of this where TRAVIS_BRANCH_NAME="master" in
 # order to properly test for upload.
 @pytest.fixture(scope='module', params=PARAMS, ids=IDS)
-def multi_build(request, recipes_fixture):
+def multi_build(request, recipes_fixture, config_fixture):
     """
     Builds the "one", "two", and "three" recipes.
     """
@@ -121,7 +126,7 @@ def multi_build(request, recipes_fixture):
     build.build_recipes(
         recipe_folder=recipes_fixture.basedir,
         docker_builder=docker_builder,
-        config={},
+        config=config_fixture,
         mulled_test=mulled_test,
     )
     built_packages = recipes_fixture.pkgs
@@ -220,14 +225,14 @@ def test_docker_builder_build(recipes_fixture):
 
 
 @pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
-def test_docker_build_fails(recipes_fixture):
+def test_docker_build_fails(recipes_fixture, config_fixture):
     "test for expected failure when a recipe fails to build"
     docker_builder = docker_utils.RecipeBuilder(
         build_script_template="exit 1")
     assert docker_builder.build_script_template == 'exit 1'
     result = build.build_recipes(
         recipes_fixture.basedir,
-        config={},
+        config=config_fixture,
         docker_builder=docker_builder,
         mulled_test=True,
     )
@@ -293,7 +298,7 @@ def test_get_deps():
     assert list(utils.get_deps(r.recipe_dirs['three'], build=False)) == ['two']
 
 
-def test_conda_as_dep():
+def test_conda_as_dep(config_fixture):
     r = Recipes(
         """
         one:
@@ -308,7 +313,7 @@ def test_conda_as_dep():
     r.write_recipes()
     build_result = build.build_recipes(
         r.basedir,
-        config={},
+        config=config_fixture,
         packages="*",
         testonly=False,
         force=False,
@@ -639,7 +644,7 @@ def test_env_sandboxing():
         ensure_missing(pkg)
 
 
-def test_skip_dependencies():
+def test_skip_dependencies(config_fixture):
     r = Recipes(
         """
         one:
@@ -678,7 +683,7 @@ def test_skip_dependencies():
 
     build.build_recipes(
         r.basedir,
-        config={},
+        config=config_fixture,
         packages="*",
         testonly=False,
         force=False,
@@ -698,8 +703,8 @@ def test_skip_dependencies():
 
 
 class TestSubdags(object):
-    def _build(self, recipes_fixture):
-        build.build_recipes(recipes_fixture.basedir, config={}, mulled_test=False)
+    def _build(self, recipes_fixture, config_fixture):
+        build.build_recipes(recipes_fixture.basedir, config=config_fixture, mulled_test=False)
 
     def test_subdags_out_of_range(self, recipes_fixture):
         with pytest.raises(ValueError):
@@ -786,7 +791,7 @@ def test_build_container_default_gcc(tmpdir):
     assert build_result.success
 
 
-def test_conda_forge_pins(caplog):
+def test_conda_forge_pins(caplog, config_fixture):
     caplog.set_level(logging.DEBUG)
     r = Recipes(
         """
@@ -802,7 +807,7 @@ def test_conda_forge_pins(caplog):
     r.write_recipes()
     build_result = build.build_recipes(
         r.basedir,
-        config={},
+        config=config_fixture,
         packages="*",
         testonly=False,
         force=False,
@@ -816,7 +821,7 @@ def test_conda_forge_pins(caplog):
             ensure_missing(i)
 
 
-def test_bioconda_pins(caplog):
+def test_bioconda_pins(caplog, config_fixture):
     """
     htslib currently only provided by bioconda pinnings
     """
@@ -835,7 +840,7 @@ def test_bioconda_pins(caplog):
     r.write_recipes()
     build_result = build.build_recipes(
         r.basedir,
-        config={},
+        config=config_fixture,
         packages="*",
         testonly=False,
         force=False,
@@ -903,7 +908,7 @@ def test_variants():
     assert len(utils.load_all_meta(recipe, config)) == 2
 
 
-def test_cb3_outputs():
+def test_cb3_outputs(config_fixture):
     r = Recipes(
         """
         one:
@@ -925,7 +930,7 @@ def test_cb3_outputs():
 
     build_result = build.build_recipes(
         r.basedir,
-        config={},
+        config=config_fixture,
         packages="*",
         testonly=False,
         force=False,
@@ -939,7 +944,7 @@ def test_cb3_outputs():
             ensure_missing(i)
 
 
-def test_compiler():
+def test_compiler(config_fixture):
     r = Recipes(
         """
         one:
@@ -958,7 +963,7 @@ def test_compiler():
     r.write_recipes()
     build_result = build.build_recipes(
         r.basedir,
-        config={},
+        config=config_fixture,
         packages="*",
         testonly=False,
         force=False,
@@ -971,7 +976,7 @@ def test_compiler():
             assert os.path.exists(i)
             ensure_missing(i)
 
-def test_nested_recipes():
+def test_nested_recipes(config_fixture):
     """
     Test get_recipes ability to identify different nesting depths of recipes
     """
@@ -1049,7 +1054,7 @@ def test_nested_recipes():
 
     build_results = build.build_recipes(
         r.basedir,
-        config={},
+        config=config_fixture,
         packages="*",
         testonly=False,
         force=False,
