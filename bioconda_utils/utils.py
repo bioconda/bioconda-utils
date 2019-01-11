@@ -939,7 +939,7 @@ def load_config(path):
 
     default_config = {
         'blacklists': [],
-        'channels': [],
+        'channels': ['bioconda', 'conda-forge', 'defaults'],
         'requirements': None,
         'upload_channel': 'bioconda'
     }
@@ -1208,6 +1208,8 @@ class RepoData:
     def __new__(cls):
         """Makes RepoData a singleton"""
         if RepoData.__instance is None:
+            assert self.config is not None, ("bug: ensure to load config "
+                                             "before instantiating RepoData.")
             RepoData.__instance = object.__new__(cls)
         return RepoData.__instance
 
@@ -1224,8 +1226,6 @@ class RepoData:
     @property
     def channels(self):
         """Return channels to load."""
-        assert self.config is not None, ("bug: ensure to load config "
-                                         "before instantiating RepoData.")
         return self.config["channels"]
 
     @property
