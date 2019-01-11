@@ -83,8 +83,10 @@ def recipes_fixture():
 
 @pytest.fixture(scope='module')
 def config_fixture():
-    yield utils.load_config(
+    config = utils.load_config(
         os.path.join(os.path.dirname(__file__), "test-config.yaml"))
+    RepoData.register_config(config)
+    yield config
 
 
 @pytest.fixture(scope='module', params=PARAMS, ids=IDS)
