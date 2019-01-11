@@ -85,7 +85,6 @@ def recipes_fixture():
 def config_fixture():
     config = utils.load_config(
         os.path.join(os.path.dirname(__file__), "test-config.yaml"))
-    RepoData.register_config(config)
     yield config
 
 
