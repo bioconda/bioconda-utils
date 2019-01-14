@@ -183,14 +183,16 @@ def generate_readme(folder, repodata, renderer):
         raise e
 
     name = metadata.name()
-    versions_in_channel = sorted(repodata.get_versions(name), key=LooseVersion, reverse=True)
+    versions_in_channel = repodata.get_versions(name)
+    sorted_versions = sorted(versions_in_channel.keys(), key=LooseVersion, reverse=True)
+
 
     # Format the README
     template_options = {
         'name': name,
         'about': (metadata.get_section('about') or {}),
         'extra': (metadata.get_section('extra') or {}),
-        'versions': versions_in_channel,
+        'versions': sorted_versions,
         'gh_recipes': 'https://github.com/bioconda/bioconda-recipes/tree/master/recipes/',
         'recipe_path': op.dirname(op.relpath(metadata.meta_path, RECIPE_DIR)),
         'Package': '<a href="recipes/{0}/README.html">{0}</a>'.format(name)
@@ -202,7 +204,8 @@ def generate_readme(folder, repodata, renderer):
         template_options)
 
     recipes = []
-    for version, version_info in sorted(versions_in_channel.items()):
+    for version in sorted_versions:
+        version_info = versions_in_channel[version]
         t = template_options.copy()
         t.update({
             'Linux': '<i class="fa fa-linux"></i>' if 'linux' in version_info else '',
