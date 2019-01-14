@@ -183,7 +183,7 @@ def generate_readme(folder, repodata, renderer):
         raise e
 
     name = metadata.name()
-    versions_in_channel = repodata.get_versions(name)
+    versions_in_channel = sorted(repodata.get_versions(name), key=LooseVersion, reverse=True)
 
     # Format the README
     template_options = {
