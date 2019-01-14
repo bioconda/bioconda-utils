@@ -150,6 +150,14 @@ def missing_tests(recipe, meta):
 
 
 @lint_multiple_metas
+def malformed_tests(recipe, meta):
+    if any("'" in cmd for cmd in meta.get_value('test/commands', [])):
+        return {
+            'single_quote_in_tests': True,
+            'fix': 'use double quotes or move to separate test file'
+        }
+
+@lint_multiple_metas
 def missing_hash(recipe, meta):
     # could be a meta-package if no source section or if None
     sources = meta.get_section('source')
@@ -374,6 +382,7 @@ registry = (
 
     # disabling for now until we get better per-OS version detection
     # already_in_bioconda,
+    malformed_tests,
     missing_tests,
     missing_home,
     missing_license,
