@@ -707,15 +707,15 @@ class TestSubdags(object):
     def _build(self, recipes_fixture, config_fixture):
         build.build_recipes(recipes_fixture.basedir, config=config_fixture, mulled_test=False)
 
-    def test_subdags_out_of_range(self, recipes_fixture):
+    def test_subdags_out_of_range(self, recipes_fixture, config_fixture):
         with pytest.raises(ValueError):
             with utils.temp_env({'SUBDAGS': '1', 'SUBDAG': '5'}):
-                self._build(recipes_fixture)
+                self._build(recipes_fixture, config_fixture)
 
-    def test_subdags_more_than_recipes(self, caplog, recipes_fixture):
+    def test_subdags_more_than_recipes(self, caplog, recipes_fixture, config_fixture):
         with caplog.at_level(logging.INFO):
             with utils.temp_env({'SUBDAGS': '5', 'SUBDAG': '4'}):
-                    self._build(recipes_fixture)
+                    self._build(recipes_fixture, config_fixture)
             assert 'Nothing to be done' in caplog.records[-1].getMessage()
 
 
