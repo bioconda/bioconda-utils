@@ -9,7 +9,7 @@ from sphinx.util.parallel import ParallelTasks, parallel_available, make_chunks
 from sphinx.util.rst import escape as rst_escape
 from sphinx.util.osutil import ensuredir
 from sphinx.jinja2glue import BuiltinTemplateLoader
-from distutils.version import LooseVersion
+from conda.exports import VersionOrder
 
 # Aquire a logger
 try:
@@ -157,10 +157,9 @@ def generate_readme(folder, repodata, renderer):
             # Not a folder
             continue
         try:
-            LooseVersion(sf)
-        except ValueError:
-            logger.error("'{}' does not look like a proper version!"
-                         "".format(sf))
+            VersionOrder(sf)
+        except e:
+            logger.error(str(e))
             continue
         versions.append(sf)
 
@@ -184,7 +183,7 @@ def generate_readme(folder, repodata, renderer):
 
     name = metadata.name()
     versions_in_channel = repodata.get_versions(name)
-    sorted_versions = sorted(versions_in_channel.keys(), key=LooseVersion, reverse=True)
+    sorted_versions = sorted(versions_in_channel.keys(), key=VersionOrder, reverse=True)
 
 
     # Format the README
