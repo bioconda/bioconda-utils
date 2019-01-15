@@ -1276,6 +1276,8 @@ class RepoData:
             repo = json.loads(json_data)
             df = pd.DataFrame.from_dict(repo['packages'], 'index',
                                         columns=self._load_columns)
+            # Ensure that version is always a string.
+            df['version'] = df['version'].astype(str)
             df['channel'] = channel
             df['platform'] = platform
             df['subdir'] = repo['info']['subdir']
