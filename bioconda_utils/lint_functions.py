@@ -347,10 +347,11 @@ def should_use_compilers(recipe, meta):
 
 @lint_multiple_metas
 def compilers_must_be_in_build(recipe, meta):
+    is_compiler = lambda entry: 'gcc_linux-64' in entry or 'clang_osx-64' in entry or 'gxx_linux-64' in entry or 'clangxx_osx-64' in entry
     if (
 
-        any(['toolchain' in i for i in _get_deps(meta, 'run')]) or
-        any(['toolchain' in i for i in _get_deps(meta, 'host')])
+        any(is_compiler(i) for i in _get_deps(meta, 'run')) or
+        any(is_compiler(i) for i in _get_deps(meta, 'host'))
     ):
         return {
             'compilers_must_be_in_build': True,
