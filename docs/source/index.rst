@@ -70,7 +70,7 @@ package. The Python 3 version is recommended.
 .. seealso::
 
     * :ref:`conda-anaconda-minconda`
-    * The conda `FAQs <http://conda.pydata.org/docs/faq.html>`_ explain how
+    * The conda `FAQs <https://bioconda.github.io/faqs.html>`_ explain how
       it's easy to use with existing Python installations.
 
 
