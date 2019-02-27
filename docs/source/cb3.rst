@@ -70,7 +70,7 @@ After:
 .. seealso::
 
     See the `requirements section
-    <https://conda.io/docs/user-guide/tasks/build-packages/define-metadata.html#requirements-section>`_
+    <https://docs.conda.io/projects/conda-build/en/latest/source/resources/define-metadata.html#requirements-section>`_
     of the conda docs for more info.
 
 
@@ -140,7 +140,7 @@ After:
 .. seealso::
 
     - The `compiler tools
-      <https://conda.io/docs/user-guide/tasks/build-packages/compiler-tools.html>`_
+      <https://docs.conda.io/projects/conda-build/en/latest/source/resources/compiler-tools.html>`_
       section of the conda docs has much more info.
 
     - The default compiler options are defined by conda-build in the
@@ -150,7 +150,7 @@ After:
 
     - More details on "strong" and "weak" exports (using examples of libpng and
       libgcc) can be found in the `export runtime requirements
-      <https://conda.io/docs/user-guide/tasks/build-packages/define-metadata.html#export-runtime-requirements>`_
+      <https://docs.conda.io/projects/conda-build/en/latest/source/resources/define-metadata.html#export-runtime-requirements>`_
       conda documentation.
 
 
@@ -255,7 +255,7 @@ After:
 .. seealso::
 
     The `build variants
-    <https://conda.io/docs/user-guide/tasks/build-packages/variants.html#>`_
+    <https://docs.conda.io/projects/conda-build/en/latest/source/resources/variants.html>`_
     section of the conda docs has much more information.
 
     We share the packages pinned by conda-forge, which can be found in their
