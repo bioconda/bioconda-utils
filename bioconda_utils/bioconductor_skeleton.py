@@ -874,7 +874,7 @@ def write_recipe_recursive(proj, seen_dependencies, recipe_dir, config, force,
 
 def write_recipe(package, recipe_dir, config, force=False, bioc_version=None,
                  pkg_version=None, versioned=False, recursive=False, seen_dependencies=None,
-                 packages=None, skip_if_in_channels=None):
+                 packages=None, skip_if_in_channels=None, only_datapkgs=False):
     """
     Write the meta.yaml and build.sh files. If the package is detected to be
     a data package (bsed on the detected URL from Bioconductor), then also
@@ -922,6 +922,11 @@ def write_recipe(package, recipe_dir, config, force=False, bioc_version=None,
     """
     config = utils.load_config(config)
     proj = BioCProjectPage(package, bioc_version, pkg_version, packages=packages)
+    
+    if only_datapkgs and not proj.is_data_package:
+        logger.info("Skipping non-data package {}".format(proj.package))
+        return
+
     logger.info('Making recipe for: {}'.format(package))
 
     if seen_dependencies is None:
@@ -972,7 +977,7 @@ def write_recipe(package, recipe_dir, config, force=False, bioc_version=None,
         ):
             proj.build_number = int(current_build_number) + 1
         if 'extra' in current_meta:
-            exclude = set(['final', 'copy_test_source_files'])
+            exclude = set(['final', 'copy_test_source_files', 'parent_recipe'])
             proj.extra = {x: y for x, y in current_meta['extra'].items() if x not in exclude}
 
     with open(os.path.join(recipe_dir, 'meta.yaml'), 'w') as fout:
@@ -1002,7 +1007,6 @@ def write_recipe(package, recipe_dir, config, force=False, bioc_version=None,
                 proj.bioconductor_tarball_url,
                 bioarchive_url(proj.package, proj.version, proj.bioc_version),
                 cargoport_url(proj.package, proj.version, proj.bioc_version),
-                proj.cargoport_url
             ]
             if u is not None
         ]

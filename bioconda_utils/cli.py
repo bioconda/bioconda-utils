@@ -669,11 +669,13 @@ def dependent(recipe_folder, config, restrict=False,
 @arg('--skip-if-in-channels', nargs='*', help="""When --recursive is used, it will build
      *all* recipes. Use this argument to skip recursive building for packages
      that already exist in the packages listed here.""")
+@arg('--only-datapkgs', action='store_true', help="""Only consider data packages.
+     To be used in combination with 'update-all-packages'.""")
 @enable_logging('debug')
 def bioconductor_skeleton(
     recipe_folder, config, package, versioned=False, force=False,
     pkg_version=None, bioc_version=None, recursive=False,
-    skip_if_in_channels=['conda-forge', 'bioconda']):
+    skip_if_in_channels=['conda-forge', 'bioconda'], only_datapkgs=False):
     """
     Build a Bioconductor recipe. The recipe will be created in the `recipes`
     directory and will be prefixed by "bioconductor-". If `--recursive` is set,
@@ -704,7 +706,8 @@ def bioconductor_skeleton(
                 _bioconductor_skeleton.write_recipe(
                     k, recipe_folder, config, force=True, bioc_version=bioc_version,
                     pkg_version=v['Version'], versioned=versioned, packages=packages,
-                    skip_if_in_channels=skip_if_in_channels)
+                    skip_if_in_channels=skip_if_in_channels,
+                    only_datapkgs=only_datapkgs)
             except:
                 problems.append(k)
         if len(problems):
