@@ -319,7 +319,7 @@ def build_recipes(
     failed = []
     skip_dependent = defaultdict(list)
 
-    subdag, subdags_n = graph.get_subdag_chunk(dag, name2recipes, subdag_n, subdag_i,
+    subdag, subdags_n = graph.get_subdag(dag, name2recipes, subdag_n, subdag_i,
                                     ignore_dependencies=testonly)
     if subdag is None:
         logger.info("Nothing to be done.")
