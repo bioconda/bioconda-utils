@@ -319,54 +319,11 @@ def build_recipes(
     failed = []
     skip_dependent = defaultdict(list)
 
-    # Get connected subdags and sort by nodes
-    if testonly:
-        # use each node as a subdag (they are grouped into equal sizes below)
-        subdags = sorted([[n] for n in nx.nodes(dag)])
-    else:
-        # take connected components as subdags, remove cycles
-        subdags = []
-        for cc_nodes in nx.connected_components(dag.to_undirected()):
-            cc = dag.subgraph(sorted(cc_nodes))
-            nodes_in_cycles = set()
-            for cycle in list(nx.simple_cycles(cc)):
-                logger.error(
-                    'BUILD ERROR: '
-                    'dependency cycle found: %s',
-                    cycle,
-                )
-                nodes_in_cycles.update(cycle)
-            for name in sorted(nodes_in_cycles):
-                cycle_fail_recipes = sorted(name2recipes[name])
-                logger.error(
-                    'BUILD ERROR: '
-                    'cannot build recipes for %s since it cyclically depends '
-                    'on other packages in the current build job. Failed '
-                    'recipes: %s',
-                    name, cycle_fail_recipes,
-                )
-                failed.extend(cycle_fail_recipes)
-                for n in nx.algorithms.descendants(cc, name):
-                    if n in nodes_in_cycles:
-                        continue  # don't count packages twice (failed/skipped)
-                    skip_dependent[n].extend(cycle_fail_recipes)
-            cc_without_cycles = dag.subgraph(
-                name for name in cc if name not in nodes_in_cycles
-            )
-            # ensure that packages which need a build are built in the right order
-            subdags.append(nx.topological_sort(cc_without_cycles))
-    # chunk subdags such that we have at most subdags_n many
-    if subdags_n < len(subdags):
-        chunks = [[n for subdag in subdags[i::subdags_n] for n in subdag]
-                  for i in range(subdags_n)]
-    else:
-        chunks = subdags
-    if subdag_i >= len(chunks):
+    subdag, subdags_n = graph.get_subdag_chunk(dag, name2recipes, subdag_n, subdag_i,
+                                    ignore_dependencies=testonly)
+    if subdag is None:
         logger.info("Nothing to be done.")
         return True
-    # merge subdags of the selected chunk
-    subdag = dag.subgraph(chunks[subdag_i])
-
 
     recipes = [recipe
                for package in subdag

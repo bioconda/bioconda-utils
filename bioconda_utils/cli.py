@@ -83,7 +83,7 @@ def select_recipes(packages, git_range, recipe_folder, config_filename, config, 
         # Recipes with changed `meta.yaml` or `build.sh` files
         changed_recipes = [
             os.path.dirname(f) for f in modified
-            if os.path.basename(f) in ['meta.yaml', 'build.sh'] and
+            if os.path.basename(f) in ['meta.yaml', 'build.sh', 'post-link.sh', 'pre-unlink.sh'] and
             os.path.exists(f)
         ]
         logger.info(
@@ -836,9 +836,18 @@ def autobump(recipe_folder, config, packages='*', cache=None,
     if git_handler:
         git_handler.close()
 
+@arg('recipe_folder', help='Path to recipes directory')
+@arg('config', help='Path to yaml file specifying the configuration')
+@arg('--subdag', '-k', required=True, metavar='K', type=int, help='Commit the K-th of N subdags.')
+@arg('--subdags', '-n', required=True, metavar='N', type=int, help='Number of subdags to consider.')
+@arg('--message', '--msg', required=True, metavar='MSG', help='Commit message, will be rendered as "MSG: subdag K of N".')
+@enable_logging()
+def commit_subdags(recipe_folder, config, subdag=None, subdags=None, message=None):
+    utils.commit_subdags(recipe_folder, config, subdags, subdag, message)
+
 
 def main():
     argh.dispatch_commands([
         build, dag, dependent, lint, duplicates, update_pinning,
-        bioconductor_skeleton, clean_cran_skeleton, autobump
+        bioconductor_skeleton, clean_cran_skeleton, autobump, commit_subdags
     ])

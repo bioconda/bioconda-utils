@@ -1370,3 +1370,37 @@ class RepoData:
         if isinstance(key, str):
             return list(df[key])
         return df[key].itertuples(index=False)
+
+
+def commit_subdags(recipe_folder, config_file, n, i, msg):
+    """Creates a git commit for the k-th of n subdags of recipes, ensuring that
+       dependent recipes are committed together.
+    """
+    from . import graph
+    import git
+
+    repo = git.Repo(recipe_folder, search_parent_directories=True)
+
+    recipes = sorted(set(map(
+        os.path.dirname, modified_recipes(["HEAD"], recipe_folder, config_file)
+        )))
+    logger.info("%s recipes changed in total", len(recipes))
+
+    # build dag
+    dag, name2recipes = graph.build(recipes, config=load_config(config_file))
+
+    # obtain subdag
+    subdag, n = graph.get_subdag(dag, name2recipes, n, i)
+
+    if not subdag:
+        logger.info("Nothing to be done.")
+        return
+
+    for pkg in subdag:
+        pkg_recipes = name2recipes[pkg]
+        for recipe in pkg_recipes:
+            logger.info(f"Adding recipe {recipe}")
+            repo.index.add([recipe])
+
+    logger.info(f"Committing subdag {i} of {n}.")
+    repo.index.commit(f"{msg}: subdag {i} of {n}")
