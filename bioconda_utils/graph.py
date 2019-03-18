@@ -139,3 +139,60 @@ def filter(dag, packages):
                 raise
 
     return nx.subgraph(dag, nodes)
+
+
+def get_subdag(dag, name2recipes, n, i, ignore_dependencies=False):
+    """Return ith of n chunks over dependency graph, such that there is no
+       dependency pointing outside of the chunk, unless ignore_dependencies is
+       set to True.
+
+       Returns None if there are no nodes left to put into chunk i.
+    """
+    # Get connected subdags and sort by nodes
+    if ignore_dependencies:
+        # use each node as a subdag (they are grouped into equal sizes below)
+        subdags = sorted([[n] for n in nx.nodes(dag)])
+    else:
+        # take connected components as subdags, remove cycles
+        subdags = []
+        for cc_nodes in nx.connected_components(dag.to_undirected()):
+            cc = dag.subgraph(sorted(cc_nodes))
+            nodes_in_cycles = set()
+            for cycle in list(nx.simple_cycles(cc)):
+                logger.error(
+                    'BUILD ERROR: '
+                    'dependency cycle found: %s',
+                    cycle,
+                )
+                nodes_in_cycles.update(cycle)
+            for name in sorted(nodes_in_cycles):
+                cycle_fail_recipes = sorted(name2recipes[name])
+                logger.error(
+                    'BUILD ERROR: '
+                    'cannot build recipes for %s since it cyclically depends '
+                    'on other packages in the current build job. Failed '
+                    'recipes: %s',
+                    name, cycle_fail_recipes,
+                )
+                failed.extend(cycle_fail_recipes)
+                for n in nx.algorithms.descendants(cc, name):
+                    if n in nodes_in_cycles:
+                        continue  # don't count packages twice (failed/skipped)
+                    skip_dependent[n].extend(cycle_fail_recipes)
+            cc_without_cycles = dag.subgraph(
+                name for name in cc if name not in nodes_in_cycles
+            )
+            # ensure that packages which need a build are built in the right order
+            subdags.append(nx.topological_sort(cc_without_cycles))
+    # chunk subdags such that we have at most subdags_n many
+    if n < len(subdags):
+        chunks = [[node for subdag in subdags[i::n] for node in subdag]
+                  for i in range(n)]
+    else:
+        chunks = subdags
+    if i >= len(chunks):
+        return None
+    # merge subdags of the selected chunk
+    subdag = dag.subgraph(chunks[i])
+
+    return subdag, len(chunks)
