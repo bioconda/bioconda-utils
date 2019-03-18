@@ -319,11 +319,12 @@ def build_recipes(
     failed = []
     skip_dependent = defaultdict(list)
 
-    subdag, subdags_n = graph.get_subdag(dag, name2recipes, subdags_n, subdag_i,
+    ret = graph.get_subdag(dag, name2recipes, subdags_n, subdag_i,
                                     ignore_dependencies=testonly)
-    if subdag is None:
+    if ret is None:
         logger.info("Nothing to be done.")
         return True
+    subdag, subdags_n = ret
 
     recipes = [recipe
                for package in subdag
