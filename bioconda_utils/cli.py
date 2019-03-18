@@ -1,5 +1,11 @@
 #!/usr/bin/env python
 
+# Workaround for spurious numpy warning message
+# ".../importlib/_bootstrap.py:219: RuntimeWarning: numpy.dtype size \
+# changed, may indicate binary incompatibility. Expected 96, got 88"
+import warnings
+warnings.filterwarnings("ignore", message="numpy.dtype size changed")
+
 import sys
 import os
 import shlex
@@ -633,8 +639,6 @@ def dependent(recipe_folder, config, restrict=False,
         raise ValueError(
             'One of `--dependencies` or `--reverse-dependencies` is required.')
 
-    utils.setup_logger('bioconda_utils', loglevel)
-
     d, n2r = graph.build(utils.get_recipes(recipe_folder, "*"), config, restrict=restrict)
 
     if reverse_dependencies is not None:
@@ -694,7 +698,6 @@ def bioconductor_skeleton(
         and submit to conda-forge.
 
     """
-    utils.setup_logger('bioconda_utils', loglevel)
     seen_dependencies = set()
 
     if package == "update-all-packages":
@@ -836,6 +839,23 @@ def autobump(recipe_folder, config, packages='*', cache=None,
     if git_handler:
         git_handler.close()
 
+
+@arg('--loglevel', default='info', help='Log level')
+def bot(loglevel='info'):
+    """Locally accedd bioconda-bot command API
+
+    To run the bot locally, use:
+
+    $ gunicorn bioconda_utils.bot:init_app_internal_celery --worker-class aiohttp.worker.GunicornWebWorker
+
+    You can append --reload to have gunicorn reload if any of the python files change.
+    """
+
+    utils.setup_logger('bioconda_utils', loglevel)
+
+    logger.error("Nothing here yet")
+
+
 @arg('recipe_folder', help='Path to recipes directory')
 @arg('config', help='Path to yaml file specifying the configuration')
 @arg('--subdag', '-k', required=True, metavar='K', type=int, help='Commit the K-th of N subdags.')
@@ -844,10 +864,10 @@ def autobump(recipe_folder, config, packages='*', cache=None,
 @enable_logging()
 def commit_subdags(recipe_folder, config, subdag=None, subdags=None, message=None):
     utils.commit_subdags(recipe_folder, config, subdags, subdag, message)
-
-
+    
+    
 def main():
     argh.dispatch_commands([
         build, dag, dependent, lint, duplicates, update_pinning,
-        bioconductor_skeleton, clean_cran_skeleton, autobump, commit_subdags
+        bioconductor_skeleton, clean_cran_skeleton, autobump, bot, commit_subdags
     ])
