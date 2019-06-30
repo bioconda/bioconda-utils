@@ -109,7 +109,7 @@ async def handle_check_run(event, ghapi):
         else:
             logger.error("Unknown requested action in check run: %s", requested_action)
     else:
-        logger.error("Unknown action %s", action)
+        logger.info("Action '%s' unhandled", action)
 
 @event_routes.register("pull_request")
 async def handle_pull_request(event, ghapi):
