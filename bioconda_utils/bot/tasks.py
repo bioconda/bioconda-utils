@@ -442,23 +442,23 @@ async def merge_pr(self, pr_number: int, comment_id: int, ghapi) -> Tuple[bool, 
     head_ref = pr['head']['ref']
     head_sha = pr['head']['sha']
     head_user = pr['head']['repo']['owner']['login']
-    # get path for Circle
+
+    # get artifacts from circleci
     if head_user == ghapi.user:
-        branch = head_ref
+        circle_path = head_ref
     else:
-        branch = "pull/{}".format(pr_number)
+        circle_path = "pull/{}".format(pr_number)
+    capi = AsyncCircleAPI(ghapi.session, token=CIRCLE_TOKEN)
+    artifacts = await capi.get_artifacts(circle_path, head_sha)
 
     lines = []
-
-    capi = AsyncCircleAPI(ghapi.session, token=CIRCLE_TOKEN)
-    artifacts = await capi.get_artifacts(branch, head_sha)
     files = []
     images = []
     packages = []
-    for path, url, buildno in artifacts:
+    for path, url, _buildno in artifacts:
         match = PACKAGE_RE.match(url)
         if match:
-            repo_url, arch, fname = match.groups()
+            _repo_url, arch, fname = match.groups()
             fpath = os.path.join(arch, fname)
             files.append((url, fpath))
             packages.append(fpath)
@@ -483,7 +483,7 @@ async def merge_pr(self, pr_number: int, comment_id: int, ghapi) -> Tuple[bool, 
         try:
             fds = []
             urls = []
-            for url,path in files:
+            for url, path in files:
                 fpath = os.path.join(tmpdir, path)
                 fdir = os.path.dirname(fpath)
                 if not os.path.exists(fdir):
@@ -569,9 +569,15 @@ async def merge_pr(self, pr_number: int, comment_id: int, ghapi) -> Tuple[bool, 
     if not res:
         return res, msg
 
-    if not branch.startswith('pull/'):
-        logger.info("Trying to delete branch %s", branch)
-        await ghapi.delete_branch(branch)
+    if head_user == ghapi.user:
+        # PR head branch is on same account as our install - it's a PR not
+        # from a fork. Go ahead and try to delete the branch.
+        if head_ref in ('master', 'bulk'):
+            # Safeguard - never delete master or bulk!
+            logger.error("Cowardly refusing to delete master or bulk")
+        else:
+            logger.info("Trying to delete branch %s", head_ref)
+            await ghapi.delete_branch(head_ref)
 
     return res, msg
 
