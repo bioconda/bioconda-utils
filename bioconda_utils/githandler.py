@@ -588,6 +588,7 @@ class TempGitHandler(GitHandlerBase):
 
         # Make location of repo in tmpdir from url
         _, _, fname = url.rpartition('@')
+        fname = fname.lstrip('https://')
         tmpname = getattr(cls._local_mirror_tmpdir, 'name', cls._local_mirror_tmpdir)
         mirror_name = os.path.join(tmpname, fname)
 
