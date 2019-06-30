@@ -8,6 +8,7 @@ import re
 import tempfile
 import subprocess
 from typing import List, Union
+import shutil
 
 import git
 import yaml
@@ -631,6 +632,8 @@ class TempGitHandler(GitHandlerBase):
                  fork_user=None,
                  fork_repo=None,
                  dry_run=False) -> None:
+        self._clean = True
+
         userpass = ""
         if password is not None and username is None:
             username = "x-access-token"
@@ -664,12 +667,19 @@ class TempGitHandler(GitHandlerBase):
         logger.info("Finished setting up repo in %s", self.tempdir)
         super().__init__(repo, dry_run, home_url, fork_url)
 
+    def keep_tempdir(self):
+        """Disable temp dir removal on `close`"""
+        self._clean = False
 
     def close(self) -> None:
         """Remove temporary clone and cleanup resources"""
         super().close()
-        logger.info("Removing repo from %s", self.tempdir.name)
-        self.tempdir.cleanup()
+        if self._clean:
+            logger.info("Removing repo from %s", self.tempdir.name)
+            self.tempdir.cleanup()
+        else:
+            logger.warning("Keeping repo in %s%s", self.tempdir.name, "_saved")
+            shutil.copytree(self.tempdir.name, self.tempdir.name + "_saved")
 
 
 class BiocondaRepo(GitHandler, BiocondaRepoMixin):
