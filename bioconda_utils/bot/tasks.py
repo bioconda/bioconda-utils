@@ -570,7 +570,9 @@ async def merge_pr(self, pr_number: int, comment_id: int, ghapi) -> Tuple[bool, 
         return res, msg
 
     if not branch.startswith('pull/'):
+        logger.info("Trying to delete branch %s", branch)
         await ghapi.delete_branch(branch)
+
     return res, msg
 
 
