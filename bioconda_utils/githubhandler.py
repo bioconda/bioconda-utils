@@ -893,7 +893,7 @@ class GitHubHandler:
         content = content_bytes.decode('utf-8')
         return content
 
-    async def delete_branch(self, ref: str) -> None:
+    async def delete_branch(self, ref: str) -> bool:
         """Delete a branch (ref)
 
         Arguments:
@@ -901,7 +901,12 @@ class GitHubHandler:
         """
         var_data = copy(self.var_default)
         var_data['ref'] = ref
-        await self.api.delete(self.GIT_REFERENCE, var_data)
+        try:
+            await self.api.delete(self.GIT_REFERENCE, var_data)
+            return True
+        except gidgethub.InvalidField as exc:
+            logger.info("Failed to delete branch %s: %s", ref, exc)
+            return False
 
     def _deparse_card_pr_number(self, card: Dict[str, Any]) -> Dict[str, Any]:
         """Extracts the card's issue's number from the content_url
