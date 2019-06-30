@@ -92,7 +92,7 @@ class Checkout:
             elif self.ref:
                 fork_user = None
                 fork_repo = None
-                branch_name = "unknown"
+                branch_name = None
                 ref = self.ref
             elif self.branch_name:
                 fork_user = None

@@ -218,6 +218,14 @@ class GitHandlerBase():
             return None
         for remote_ref in remote_refs:
             if remote_ref.remote_ref_path == branch_name:
+                remote_heads = [head for head in self.fork_remote.refs
+                                if head.commit.hexsha == branch_name]
+                if remote_heads:
+                    if len(remote_heads) > 1:
+                        logger.warning("Found multiple heads for %s - using %s",
+                                       branch_name, remote_heads[0])
+                        logger.warning("  other options: %s", remote_heads[1:])
+                    return remote_heads[0]
                 return remote_ref.ref
 
     def get_latest_master(self):
@@ -249,6 +257,9 @@ class GitHandlerBase():
             remote_branch = self.get_remote_branch(remote_branch, try_fetch=False)
         if remote_branch is None:
             return None
+        if branch_name is None:
+            branch_name = remote_branch.remote_head
+            logger.info("Resolved %s to %s", remote_branch, branch_name)
         self.repo.create_head(branch_name, remote_branch)
         return self.get_local_branch(branch_name)
 
