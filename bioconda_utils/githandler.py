@@ -543,8 +543,15 @@ class TempGitHandler(GitHandlerBase):
     might be working in multiple threads and want to avoid blocking waits for
     a single repo. It also improves robustness: If something goes wrong with this
     repo, it will not break the entire process.
-    """
 
+    This class uses a bare clone as a cache to speed up subsequent
+    instantiations of temporary git clones. This bare "caching" clone
+    will be created in a temporary directory. To save on download
+    times when debugging, you can use the environment variable
+    ``BIOCONDA_REPO_CACHEDIR`` to specify a directory lasting accross
+    instantiations of the Python interpreter.
+
+    """
     _local_mirror_tmpdir: Union[str, tempfile.TemporaryDirectory] = None
 
     @classmethod
@@ -669,3 +676,7 @@ class BiocondaRepo(GitHandler, BiocondaRepoMixin):
 
 class TempBiocondaRepo(TempGitHandler, BiocondaRepoMixin):
     pass
+
+
+# Allow setting a pre-checkout from env
+TempGitHandler.set_mirror_dir(os.environ.get('BIOCONDA_REPO_CACHEDIR'))
