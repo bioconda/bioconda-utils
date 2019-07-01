@@ -146,6 +146,7 @@ class Recipe():
         "cdt": lambda x: x
     }
 
+    _selector_re = re.compile(r'# +\[.*\]')
 
     def __init__(self, recipe_dir, recipe_folder):
         if not recipe_dir.startswith(recipe_folder):
@@ -750,6 +751,17 @@ class Recipe():
         if self._conda_tempdir:
             self._conda_tempdir.cleanup()
             self._conda_tempdir = None
+
+    def has_selector(self, section: str = '') -> bool:
+        """Checks if the recipe uses ``# [cond]`` line selectors
+
+        Args:
+          section: Limit check to section
+
+        """
+        if self._selector_re.search(self.get_raw(section)):
+            return True
+        return False
 
 
 def load_parallel_iter(recipe_folder, packages):
