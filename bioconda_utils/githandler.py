@@ -258,7 +258,7 @@ class GitHandlerBase():
             remote_branch = self.get_remote_branch(remote_branch, try_fetch=False)
         if remote_branch is None:
             return None
-        if branch_name is None:
+        if branch_name is None and hasattr(remote_branch, 'remote_head'):
             branch_name = remote_branch.remote_head
             logger.info("Resolved %s to %s", remote_branch, branch_name)
         self.repo.create_head(branch_name, remote_branch)
