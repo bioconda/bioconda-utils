@@ -415,7 +415,7 @@ class Recipe():
           a tuple of first_row, first_column, last_row, last_column
         """
         if not path:
-            return 0, 0, len(self.meta_yaml), len(self.meta_yaml[-1])
+            return 0, 0, len(self.meta_yaml)-1, len(self.meta_yaml[-1])
 
         nodes, keys = self._walk(path)
         nodes.pop()  # pop parsed value
@@ -524,10 +524,10 @@ class Recipe():
             _, col, row, _ = self.get_raw_range(found_path)
             backup = deepcopy(self.meta_yaml)
             for key in path.split('/')[len(keys):]:
-                self.meta_yaml.insert(row, ' ' * col + key + ':')
+                self.meta_yaml.insert(row + 1, ' ' * col + key + ':')
                 row += 1
                 col += 2
-            self.meta_yaml[row-1] += " marker"
+            self.meta_yaml[row] += " None"
             self.render()
 
         # get old content
