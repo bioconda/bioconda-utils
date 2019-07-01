@@ -10,6 +10,10 @@ import re
 
 from . import LintCheck, ERROR, WARNING, INFO
 
+from logging import getLogger
+
+logger = getLogger(__name__)
+
 
 # Noarch or not checks:
 #
@@ -21,6 +25,7 @@ from . import LintCheck, ERROR, WARNING, INFO
 #   a) NOT marked ``noarch: python``
 #   b) Not use ``- python [<>]3``,
 #      but use ``skip: True  # [py[23]k]``
+
 
 class should_be_noarch_python(LintCheck):
     """The recipe should be build as ``noarch``
@@ -47,6 +52,7 @@ class should_be_noarch_python(LintCheck):
         self.message(section='build', data=True)
 
     def fix(self, _message, _data):
+        logger.warning("Lint fix: setting build/noarch=python")
         self.recipe.set('build/noarch', 'python')
         return True
 
@@ -73,6 +79,7 @@ class should_be_noarch_generic(LintCheck):
         self.message(section='build', data=True)
 
     def fix(self, _message, _data):
+        logger.warning("Lint fix: setting build/noarch=generic")
         self.recipe.set('build/noarch', 'generic')
         return True
 
