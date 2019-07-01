@@ -770,11 +770,18 @@ class Recipe():
         return False
 
     def is_noarch(self, python: bool =  None) -> bool:
-        """Checks if the recipe is marked noarch"""
+        """Checks if the recipe is marked noarch
+
+        Args:
+          python: If true, checks for noarch python.
+                  If false, checks for noarch not python.
+        """
         noarch = self.get('build/noarch', False)
         if python:
             return noarch == 'python'
-        return noarch in (True, 'generic')
+        if python is False:
+            return noarch in (True, 'generic')
+        return noarch in (True, 'generic', 'python')
 
     def has_dep(self, dep: str = None, section=None) -> bool:
         """Checks if the recipe requires **dep**
