@@ -763,6 +763,30 @@ class Recipe():
             return True
         return False
 
+    def has_compiler(self) -> bool:
+        """Checks if the recipe uses a compiler"""
+        if any(dep.startswith('compiler_') for dep in self.get_deps()):
+               return True
+        return False
+
+    def is_noarch(self, python: bool =  None) -> bool:
+        """Checks if the recipe is marked noarch"""
+        noarch = self.get('build/noarch', False)
+        if python:
+            return noarch == 'python'
+        return noarch in (True, 'generic')
+
+    def has_dep(self, dep: str = None, section=None) -> bool:
+        """Checks if the recipe requires **dep**
+
+        Args:
+          dep: The dependency to check for or None
+          section: The section(s) the dep must occur in
+        """
+        if dep:
+            return dep in self.get_deps_dict(section)
+        return bool(self.get_deps_dict(section))
+
 
 def load_parallel_iter(recipe_folder, packages):
     recipes = list(utils.get_recipes(recipe_folder, packages))
