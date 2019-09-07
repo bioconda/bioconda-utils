@@ -272,8 +272,11 @@ class Recipe():
             return None
         if not variants:
             return None
-        if any(" " in v for v in variants):
-            # can't handle "[py2k or osx]" style things
+        for k in list(variants.keys()):
+            if " " in k:
+                # can't handle "[py2k or osx]" style things
+                del variants[k]
+        if not variants:
             return None
 
         new_lines = []
