@@ -1,7 +1,7 @@
 # basics
 python>=3.6
-conda=4.6.12
-conda-build=3.17.8
+conda=4.6.14
+conda-build=3.18.9
 conda-verify=3.1.*
 argh=0.26.*          # CLI
 colorlog=3.1.*       # Logging
@@ -10,12 +10,12 @@ ruamel_yaml=0.15.*   # Recipe YAML parsing
 pyaml=17.12.*        # Faster YAML parser (deprecate?)
 networkx=1.11
 pandas=0.23.*
-numpy=1.15.*
+libblas=*=*openblas  # Avoid large mkl package (pulled in by pandas)
 boltons=18.*
 jsonschema=2.6.*     # JSON schema verification
 
 # pinnings
-conda-forge-pinning=2019.03.04
+conda-forge-pinning=2019.07.11
 
 # tools
 anaconda-client=1.6.*  # anaconda_upload
