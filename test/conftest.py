@@ -97,14 +97,21 @@ def recipes_folder(tmpdir: py.path.local):
 
 
 def dict_merge(base, add):
+    """Merge **add** into **base**
+
+    Takes care to keep ruamel.yaml CommentedMap comments intact.
+    """
     for key, value in add.items():
         if isinstance(value, dict):
-            base[key] = dict_merge(base.get(key, {}), value)
+            base[key] = dict_merge(base.get(key, type(base)()), value)
         elif isinstance(base, list):
             for num in range(len(base)):
-                base[num][key] = dict_merge(base[num].get(key, {}), add)
+                base[num][key] = dict_merge(base[num].get(key, type(base[num])()), add)
         else:
             base[key] = value
+            if hasattr(add, 'copy_attributes') and \
+               hasattr(base, 'copy_attributes'):
+                add.copy_attributes(base)
     return base
 
 

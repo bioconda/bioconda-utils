@@ -117,8 +117,18 @@ async def command_bump(ghapi, issue_number, _user, *_args):
 
 
 @command_routes.register("lint")
-async def command_lint(ghapi, issue_number, _user, *_args):
-    """Lint the current recipe"""
+async def command_lint(ghapi, issue_number, _user, *args):
+    """Lint the current recipe
+
+    If the additional argument ``fix`` is provided, an attempt to fix errors
+    will be scheduled instead of a new check run. This is identical to clicking
+    the "Fix Issues" button on the checks page.
+    """
+    if args:
+        if args[0] == 'fix':
+            pr = await ghapi.get_prs(number=issue_number)
+            tasks.lint_fix.s(None, pr['head']['sha'], ghapi).apply_async()
+            return f"Scheduled fixing lints in #{issue_number}"
     (
         tasks.get_latest_pr_commit.s(issue_number, ghapi) |
         tasks.create_check_run.s(ghapi)

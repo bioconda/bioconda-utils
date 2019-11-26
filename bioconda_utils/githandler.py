@@ -8,6 +8,7 @@ import re
 import tempfile
 import subprocess
 from typing import List, Union
+import shutil
 
 import git
 import yaml
@@ -218,6 +219,14 @@ class GitHandlerBase():
             return None
         for remote_ref in remote_refs:
             if remote_ref.remote_ref_path == branch_name:
+                remote_heads = [head for head in self.fork_remote.refs
+                                if head.commit.hexsha == branch_name]
+                if remote_heads:
+                    if len(remote_heads) > 1:
+                        logger.warning("Found multiple heads for %s - using %s",
+                                       branch_name, remote_heads[0])
+                        logger.warning("  other options: %s", remote_heads[1:])
+                    return remote_heads[0]
                 return remote_ref.ref
 
     def get_latest_master(self):
@@ -249,6 +258,9 @@ class GitHandlerBase():
             remote_branch = self.get_remote_branch(remote_branch, try_fetch=False)
         if remote_branch is None:
             return None
+        if branch_name is None and hasattr(remote_branch, 'remote_head'):
+            branch_name = remote_branch.remote_head
+            logger.info("Resolved %s to %s", remote_branch, branch_name)
         self.repo.create_head(branch_name, remote_branch)
         return self.get_local_branch(branch_name)
 
@@ -532,8 +544,15 @@ class TempGitHandler(GitHandlerBase):
     might be working in multiple threads and want to avoid blocking waits for
     a single repo. It also improves robustness: If something goes wrong with this
     repo, it will not break the entire process.
-    """
 
+    This class uses a bare clone as a cache to speed up subsequent
+    instantiations of temporary git clones. This bare "caching" clone
+    will be created in a temporary directory. To save on download
+    times when debugging, you can use the environment variable
+    ``BIOCONDA_REPO_CACHEDIR`` to specify a directory lasting accross
+    instantiations of the Python interpreter.
+
+    """
     _local_mirror_tmpdir: Union[str, tempfile.TemporaryDirectory] = None
 
     @classmethod
@@ -570,6 +589,7 @@ class TempGitHandler(GitHandlerBase):
 
         # Make location of repo in tmpdir from url
         _, _, fname = url.rpartition('@')
+        fname = fname.lstrip('https://')
         tmpname = getattr(cls._local_mirror_tmpdir, 'name', cls._local_mirror_tmpdir)
         mirror_name = os.path.join(tmpname, fname)
 
@@ -612,6 +632,8 @@ class TempGitHandler(GitHandlerBase):
                  fork_user=None,
                  fork_repo=None,
                  dry_run=False) -> None:
+        self._clean = True
+
         userpass = ""
         if password is not None and username is None:
             username = "x-access-token"
@@ -645,12 +667,19 @@ class TempGitHandler(GitHandlerBase):
         logger.info("Finished setting up repo in %s", self.tempdir)
         super().__init__(repo, dry_run, home_url, fork_url)
 
+    def keep_tempdir(self):
+        """Disable temp dir removal on `close`"""
+        self._clean = False
 
     def close(self) -> None:
         """Remove temporary clone and cleanup resources"""
         super().close()
-        logger.info("Removing repo from %s", self.tempdir.name)
-        self.tempdir.cleanup()
+        if self._clean:
+            logger.info("Removing repo from %s", self.tempdir.name)
+            self.tempdir.cleanup()
+        else:
+            logger.warning("Keeping repo in %s%s", self.tempdir.name, "_saved")
+            shutil.copytree(self.tempdir.name, self.tempdir.name + "_saved")
 
 
 class BiocondaRepo(GitHandler, BiocondaRepoMixin):
@@ -658,3 +687,7 @@ class BiocondaRepo(GitHandler, BiocondaRepoMixin):
 
 class TempBiocondaRepo(TempGitHandler, BiocondaRepoMixin):
     pass
+
+
+# Allow setting a pre-checkout from env
+TempGitHandler.set_mirror_dir(os.environ.get('BIOCONDA_REPO_CACHEDIR'))

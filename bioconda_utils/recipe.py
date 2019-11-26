@@ -146,6 +146,7 @@ class Recipe():
         "cdt": lambda x: x
     }
 
+    _selector_re = re.compile(r'# +\[.*\]')
 
     def __init__(self, recipe_dir, recipe_folder):
         if not recipe_dir.startswith(recipe_folder):
@@ -415,7 +416,7 @@ class Recipe():
           a tuple of first_row, first_column, last_row, last_column
         """
         if not path:
-            return 0, 0, len(self.meta_yaml), len(self.meta_yaml[-1])
+            return 0, 0, len(self.meta_yaml)-1, len(self.meta_yaml[-1])
 
         nodes, keys = self._walk(path)
         nodes.pop()  # pop parsed value
@@ -524,10 +525,10 @@ class Recipe():
             _, col, row, _ = self.get_raw_range(found_path)
             backup = deepcopy(self.meta_yaml)
             for key in path.split('/')[len(keys):]:
-                self.meta_yaml.insert(row, ' ' * col + key + ':')
+                self.meta_yaml.insert(row + 1, ' ' * col + key + ':')
                 row += 1
                 col += 2
-            self.meta_yaml[row-1] += " marker"
+            self.meta_yaml[row] += " None"
             self.render()
 
         # get old content
@@ -750,6 +751,48 @@ class Recipe():
         if self._conda_tempdir:
             self._conda_tempdir.cleanup()
             self._conda_tempdir = None
+
+    def has_selector(self, section: str = '') -> bool:
+        """Checks if the recipe uses ``# [cond]`` line selectors
+
+        Args:
+          section: Limit check to section
+
+        """
+        if self._selector_re.search(self.get_raw(section)):
+            return True
+        return False
+
+    def has_compiler(self) -> bool:
+        """Checks if the recipe uses a compiler"""
+        if any(dep.startswith('compiler_') for dep in self.get_deps()):
+               return True
+        return False
+
+    def is_noarch(self, python: bool =  None) -> bool:
+        """Checks if the recipe is marked noarch
+
+        Args:
+          python: If true, checks for noarch python.
+                  If false, checks for noarch not python.
+        """
+        noarch = self.get('build/noarch', False)
+        if python:
+            return noarch == 'python'
+        if python is False:
+            return noarch in (True, 'generic')
+        return noarch in (True, 'generic', 'python')
+
+    def has_dep(self, dep: str = None, section=None) -> bool:
+        """Checks if the recipe requires **dep**
+
+        Args:
+          dep: The dependency to check for or None
+          section: The section(s) the dep must occur in
+        """
+        if dep:
+            return dep in self.get_deps_dict(section)
+        return bool(self.get_deps_dict(section))
 
 
 def load_parallel_iter(recipe_folder, packages):

@@ -191,10 +191,10 @@ tests:
   expect: has_windows_bat_file
 # FIXME: should_be_noarch without python
 - name: should_be_noarch_python
-  add: { requirements: { build: [python], run: [python] } }
+  add: { requirements: { host: [python], run: [python] } }
   expect: should_be_noarch_python
 - name: should_be_noarch_python_good
-  add: { build: { noarch: python }, requirements: { build: [python], run: [python] } }
+  add: { build: { noarch: python }, requirements: { host: [python], run: [python] } }
 - name: should_be_noarch_python_good_skip
   add:
     build: { noarch: python, skip: false }
@@ -204,16 +204,32 @@ tests:
     build: { noarch: python }
     requirements: { build: [compiler_gcc]}
   expect: should_not_be_noarch_compiler
-- name: should_not_be_noarch_skip
+- name: should_not_be_noarch_python_skip
   add:
     build:
       noarch: python
+      skip: True  # [osx]
+  expect: should_not_be_noarch_skip
+- name: should_not_be_noarch_generic_skip
+  add:
+    build:
+      noarch: generic
       skip: True  # [osx]
   expect: should_not_be_noarch_skip
 - name: should_not_be_noarch_source
   expect: should_not_be_noarch_source
   remove: source
   add:
+    source:
+      - url: https://somewhere  # [linux]
+        sha256: 123
+      - url: https://elsewhere  # [osx]
+        sha256: 123
+- name: should_not_be_noarch_source_good
+  remove: source
+  add:
+    build:
+      noarch: False
     source:
       - url: https://somewhere  # [linux]
         sha256: 123
