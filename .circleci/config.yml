@@ -61,7 +61,7 @@ variables:
         --no-check-pending-deps \
         --no-follow-graph \
         --exclude 'bioconductor-*' \
-        --commit-as BiocondaBot 47040946+BiocondaBot@users.noreply.github.com \
+        --commit-as biocondabot2020 biocondabot2020@gmail.com \
         $AUTOBUMP_OPTS
   test_linux: &test_linux
     <<: *linux
