@@ -9,11 +9,14 @@ import logging
 import collections
 import enum
 
+# FIXME: trim_build_only_deps is not exported via conda_build.api!
+from conda_build.metadata import trim_build_only_deps
 import networkx as nx
 
 from .utils import RepoData, load_conda_build_config, parallel_iter
 
 # for type checking
+from typing import List, Optional, Set, Tuple
 from .recipe import Recipe, RecipeError
 from conda_build.metadata import MetaData
 
@@ -127,7 +130,44 @@ class State(enum.Flag):
         return self & self.FAIL
 
 
-def check(recipe: Recipe, build_config, keep_metas=False) -> State:
+def _get_used_variants(meta: MetaData) -> Set[str]:
+    dependencies = set(meta.get_used_vars())
+    trim_build_only_deps(meta, dependencies)
+    return dependencies
+
+
+def _uses_skip_variants(
+        metas: List[Tuple[MetaData, bool, bool]], skip_variants: Optional[Set[str]] = None,
+) -> bool:
+    if not skip_variants:
+        return False
+    for meta, _, _ in metas:
+        if not skip_variants.isdisjoint(_get_used_variants(meta)):
+            return True
+    return False
+
+
+def _check_metas(metas: List[Tuple[MetaData, bool, bool]]) -> State:
+    flags = State(0)
+    for meta, _, _ in metas:
+        if meta.skip():
+            flags |= State.SKIP
+        elif have_variant(meta):
+            flags |= State.HAVE
+        elif will_build_variant(meta):
+            flags |= State.BUMPED
+        elif have_variant_but_for_python(meta):
+            flags |= State.BUMP_PYTHON_ONLY
+        else:
+            logger.info("Package %s=%s=%s missing!",
+                         meta.name(), meta.version(), meta.build_id())
+            flags |= State.BUMP
+    return flags
+
+
+def check(
+        recipe: Recipe, build_config, keep_metas=False, skip_variants: Optional[Set[str]] = None,
+) -> State:
     """Determine if a given recipe should have its build number increments
     (bumped) due to a recent change in pinnings.
 
@@ -135,6 +175,7 @@ def check(recipe: Recipe, build_config, keep_metas=False) -> State:
       recipe: The recipe to check
       build_config: conda build config object
       keep_metas: If true, `Recipe.conda_release` is not called
+      skip_variants: Set of variant strings that cause a skip if they are used
 
     Returns:
       Tuple of state and a list of rendered MetaYaml variant objects
@@ -155,19 +196,10 @@ def check(recipe: Recipe, build_config, keep_metas=False) -> State:
         return State.FAIL
 
     flags = State(0)
-    for meta, _, _ in metas:
-        if meta.skip():
-            flags |= State.SKIP
-        elif have_variant(meta):
-            flags |= State.HAVE
-        elif will_build_variant(meta):
-            flags |= State.BUMPED
-        elif have_variant_but_for_python(meta):
-            flags |= State.BUMP_PYTHON_ONLY
-        else:
-            logger.info("Package %s=%s=%s missing!",
-                         meta.name(), meta.version(), meta.build_id())
-            flags |= State.BUMP
+    if _uses_skip_variants(metas, skip_variants=skip_variants):
+        flags |= State.SKIP
+    else:
+        flags |= _check_metas(metas)
     if not keep_metas:
         recipe.conda_release()
     return flags

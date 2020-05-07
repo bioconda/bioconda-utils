@@ -532,6 +532,10 @@ def dag(recipe_folder, config, packages="*", format='gml', hide_singletons=False
 @arg('--packages',
      nargs="+",
      help='Glob for package[s] to update, as needed due to a change in pinnings')
+@arg('--skip-with-variants-from',
+     nargs="+",
+     help="""List of variant strings for which pinning update is skipped for
+     recipes that use at least one of those.""")
 @arg('--skip-additional-channels',
      nargs='*',
      help="""Skip updating/bumping packges that are already built with
@@ -548,12 +552,14 @@ def dag(recipe_folder, config, packages="*", format='gml', hide_singletons=False
 @enable_threads()
 @enable_debugging()
 def update_pinning(recipe_folder, config, packages="*",
+                   skip_with_variants_from=None,
                    skip_additional_channels=None,
                    bump_only_python=False,
                    cache=None):
     """Bump a package build number and all dependencies as required due
     to a change in pinnings
     """
+    skip_variants = set(skip_with_variants_from or ())
     config = utils.load_config(config)
     if skip_additional_channels:
         config['channels'] += skip_additional_channels
@@ -578,7 +584,11 @@ def update_pinning(recipe_folder, config, packages="*",
     hadErrors = set()
     bumpErrors = set()
 
-    needs_bump = partial(update_pinnings.check, build_config=build_config)
+    needs_bump = partial(
+        update_pinnings.check,
+        build_config=build_config,
+        skip_variants=skip_variants,
+    )
 
     State = update_pinnings.State
 
