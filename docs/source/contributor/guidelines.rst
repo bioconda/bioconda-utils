@@ -269,11 +269,11 @@ R (CRAN)
 
     and
      
-     .. code-block:: yaml
+    .. code-block:: yaml
      
-         requirements:
-           build:
-             - {{ posix }}zip               # [win]
+        requirements:
+          build:
+            - {{ posix }}zip             # [win]
 
     The bioconda channel does not build for Windows. To keep recipes
     streamlined, please remove the "set posix" and "set native" lines described
