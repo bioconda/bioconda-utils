@@ -26,6 +26,7 @@ anaconda-client=1.6.*  # anaconda_upload
 involucro=1.1.*        # mulled test and container build
 skopeo=0.1.35          # docker upload
 git=2.14.*             # well - git
+shellcheck=0.7.*       # shellcheck linter
 
 # hosters - special regex not supported by RE
 regex=2018.08.29
