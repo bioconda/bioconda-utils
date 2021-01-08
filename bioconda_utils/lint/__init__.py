@@ -87,6 +87,7 @@ Module Autodocs
    check_noarch
    check_policy
    check_repo
+   check_shellcheck
    check_syntax
 
 """
