@@ -421,12 +421,32 @@ def load_all_meta(recipe, config=None, finalize=True):
     # To avoid adding a separate `bypass_env_check` alongside every `finalize`
     # parameter, just assume we always want to bypass if `finalize is True`.
     bypass_env_check = (not finalize)
-    return [meta for (meta, _, _) in api.render(recipe,
-                                                config=config,
-                                                finalize=finalize,
-                                                bypass_env_check=bypass_env_check,
-                                                )]
 
+    def metas(config):
+        return [meta for (meta, _, _) in api.render(recipe,
+                                                    config=config,
+                                                    finalize=finalize,
+                                                    bypass_env_check=bypass_env_check,
+                                                    )]
+
+    try:
+        return metas(config)
+    except ValueError as error:
+        # Try again with downloading allowed if rendering the recipe requires
+        # downloading the source, e.g. if meta.yaml uses Conda's
+        # load_setup_py_data() function.  The conditional targets the following
+        # exception:
+        #
+        #     ValueError: no_download_source specified, but can't fully render
+        #       recipe without downloading source.  Please fix the recipe, or
+        #       don't use no_download_source.
+        #
+        if str(error).startswith("no_download_source specified"):
+            logger.warn("Recipe appears to require downloading source; re-trying.")
+            config.no_download_source = False
+            return metas(config)
+        else:
+            raise
 
 
 def load_meta_fast(recipe: str, env=None):
