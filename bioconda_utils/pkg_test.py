@@ -60,7 +60,7 @@ def get_tests(path):
     tests = tests.replace('$PREFIX', '/usr/local')
     tests = tests.replace('${PREFIX}', '/usr/local')
 
-    return tests
+    return f"bash -c {shlex.quote(tests)}"
 
 
 def get_image_name(path):
