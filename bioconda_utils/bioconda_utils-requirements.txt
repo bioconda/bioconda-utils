@@ -51,6 +51,7 @@ jinja2>=2.10.1,<2.11.a0
 
 # docs
 sphinx>=2
+celery
 sphinx-autodoc-typehints
 alabaster=0.7.*
 docutils
