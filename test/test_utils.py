@@ -1101,3 +1101,42 @@ def test_conda_build_sysroot(config_fixture):
         for i in utils.built_package_paths(v):
             assert os.path.exists(i)
             ensure_missing(i)
+
+
+@pytest.mark.long_running_1
+def test_skip_unsatisfiable_pin_compatible(config_fixture):
+    """
+    Test unsatisfiable variants which are skipped get filtered out.
+    """
+    r = Recipes(
+        """
+        one:
+          meta.yaml: |
+            package:
+              name: one
+              version: 0.2
+        two:
+          meta.yaml: |
+            package:
+              name: two
+              version: 0.1
+            build:
+              skip: True  # [one == '0.1']
+            requirements:
+              host:
+                - one
+                - one >=0.2
+              run:
+                - {{ pin_compatible('one') }}
+          conda_build_config.yaml: |
+            one:
+              - 0.1
+              - 0.2
+        """, from_string=True)
+    r.write_recipes()
+    build_result = build.build_recipes(
+        r.basedir, config_fixture, [r.recipe_dirs["one"]],
+        testonly=False, force=False, mulled_test=False,
+    )
+    assert build_result
+    assert len(utils.load_all_meta(r.recipe_dirs["two"])) == 1
