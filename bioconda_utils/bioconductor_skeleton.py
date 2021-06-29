@@ -972,7 +972,7 @@ class BioCProjectPage(object):
                 # This is filled in manually later since pyaml.dumps will mess of the formatting otherwise
                 d['requirements']['build'] = ["PLACEHOLDER"]
 
-            d['test']['commands'] = ['''LD_LIBRARY_PATH="${BUILD_PREFIX}/x86_64-conda_cos6-linux-gnu/sysroot/usr/lib64" $R -e "library('{{ name }}')"''']
+            d['test']['commands'] = ['''LD_LIBRARY_PATH="${BUILD_PREFIX}/x86_64-conda-linux-gnu/sysroot/usr/lib64:${BUILD_PREFIX}/lib" $R -e "library('{{ name }}')"''']
 
 
         if self.extra:
@@ -1209,7 +1209,7 @@ def write_recipe(package, recipe_dir, config, force=False, bioc_version=None,
                 '''))
             if needs_x:
                 fout.write(dedent(
-                    '''export LD_LIBRARY_PATH=${BUILD_PREFIX}/x86_64-conda_cos6-linux-gnu/sysroot/usr/lib64
+                    '''export LD_LIBRARY_PATH=${BUILD_PREFIX}/x86_64-conda-linux-gnu/sysroot/usr/lib64:${BUILD_PREFIX}/lib
                     '''))
             fout.write(dedent('''$R CMD INSTALL --build .'''))
 
