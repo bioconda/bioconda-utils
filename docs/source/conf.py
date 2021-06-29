@@ -339,7 +339,7 @@ set_type_checking_flag = True
 
 # Bioconda Sphinx Extension Config:
 # Git Url for repository containing recipes
-bioconda_repo_url = 'https://github.com/fxwiegand/bioconda-recipes.git'
+bioconda_repo_url = 'https://github.com/bioconda/bioconda-recipes.git'
 
 # Path within that repository to folder containing recipes
 # bioconda_recipes_path = 'recipes'
