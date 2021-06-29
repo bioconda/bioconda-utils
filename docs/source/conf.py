@@ -135,6 +135,8 @@ html_theme_options = {
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['static']
 
+html_js_files = ['vega.min.js', 'vega-lite.min.js', 'vega-embed.min.js']
+
 # Add any extra paths that contain custom files (such as robots.txt or
 # .htaccess) here, relative to this directory. These files are copied
 # directly to the root of the documentation.
@@ -337,7 +339,7 @@ set_type_checking_flag = True
 
 # Bioconda Sphinx Extension Config:
 # Git Url for repository containing recipes
-bioconda_repo_url = 'https://github.com/bioconda/bioconda-recipes.git'
+bioconda_repo_url = 'https://github.com/fxwiegand/bioconda-recipes.git'
 
 # Path within that repository to folder containing recipes
 # bioconda_recipes_path = 'recipes'
