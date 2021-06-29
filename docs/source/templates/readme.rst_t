@@ -93,7 +93,7 @@
 
     <script>
         var package = "{{name}}";
-        var versions = [{%- for version in package.versions[:10] -%} "{{ version.split('-')[0] }}"{%- if not loop.last -%},{%- endif -%} {%- endfor -%}];
+        var versions = [{%- for version in package.versions[:5] -%} "{{ version.split('-')[0] }}"{%- if not loop.last -%},{%- endif -%} {%- endfor -%}];
     </script>
 
 {% endfor %}
