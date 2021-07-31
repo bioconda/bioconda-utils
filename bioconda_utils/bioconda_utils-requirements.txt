@@ -22,14 +22,14 @@ jsonschema=2.6.*     # JSON schema verification
 # pinnings
 conda-forge-pinning=2021.05.28.18.39.39
 
-# tools
-anaconda-client=1.6.*  # anaconda_upload
-involucro=1.1.*        # mulled test and container build
-skopeo=0.1.35          # docker upload
-git=2.14.*             # well - git
+## tools
+#anaconda-client=1.6.*  # anaconda_upload
+#involucro=1.1.*        # mulled test and container build
+#skopeo=0.1.35          # docker upload
+#git=2.14.*             # well - git
 
-# hosters - special regex not supported by RE
-regex=2018.08.29
+## hosters - special regex not supported by RE
+#regex=2018.08.29
 
 ## asyncio
 #aiohttp=3.4.*      # HTTP lib
@@ -49,8 +49,8 @@ regex=2018.08.29
 #galaxy-lib>=18.9.1
 #jinja2>=2.10.1,<2.11.a0
 
-# docs
-sphinx>=4.1
+## docs
+#sphinx>=4.1
 #celery
 #sphinx-autodoc-typehints
 #alabaster=0.7.*
