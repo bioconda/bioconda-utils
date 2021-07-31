@@ -44,17 +44,17 @@ gitpython>=3.0.8,3.0.*    # githandler
 gidgethub=3.0.*           # githubhandler
 pyjwt=1.7.*               # githubhandler (JWT signing)
 
-## unknown
-#beautifulsoup4=4.6.*
-#galaxy-lib>=18.9.1
-#jinja2>=2.10.1,<2.11.a0
+# unknown
+beautifulsoup4=4.6.*
+galaxy-lib>=18.9.1
+jinja2>=2.10.1,<2.11.a0
 
-## docs
-#sphinx>=4.1
-#celery
-#sphinx-autodoc-typehints
-#alabaster=0.7.*
-#docutils
+# docs
+sphinx>=4.1
+celery
+sphinx-autodoc-typehints
+alabaster=0.7.*
+docutils
 
-## The bioconductor skeleton needs this
-#requests=2.22.*
+# The bioconductor skeleton needs this
+requests=2.22.*
