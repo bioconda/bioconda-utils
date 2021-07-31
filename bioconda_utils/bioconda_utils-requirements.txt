@@ -38,11 +38,11 @@ aioftp=0.12.*      # FTP lib
 backoff=1.6.*      # retrying of failed API calls
 cachetools=3.0.*   # request caching (NEEDED?)
 
-# client API wrappers
-gitpython>=3.0.8,3.0.*    # githandler
-                          # needs >=3.0.8 due to https://github.com/conda-forge/staged-recipes/issues/10874
-gidgethub=3.0.*           # githubhandler
-pyjwt=1.7.*               # githubhandler (JWT signing)
+## client API wrappers
+#gitpython>=3.0.8,3.0.*    # githandler
+#                          # needs >=3.0.8 due to https://github.com/conda-forge/staged-recipes/issues/10874
+#gidgethub=3.0.*           # githubhandler
+#pyjwt=1.7.*               # githubhandler (JWT signing)
 
 ## unknown
 #beautifulsoup4=4.6.*
@@ -53,7 +53,7 @@ pyjwt=1.7.*               # githubhandler (JWT signing)
 sphinx>=4.1
 celery
 sphinx-autodoc-typehints
-alabaster=0.7.*
+#alabaster=0.7.*
 docutils
 
 # The bioconductor skeleton needs this
