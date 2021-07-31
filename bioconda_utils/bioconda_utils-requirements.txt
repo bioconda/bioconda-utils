@@ -31,12 +31,12 @@ git=2.14.*             # well - git
 # hosters - special regex not supported by RE
 regex=2018.08.29
 
-# asyncio
-aiohttp=3.4.*      # HTTP lib
-aiofiles=0.4.*     # async open
-aioftp=0.12.*      # FTP lib
-backoff=1.6.*      # retrying of failed API calls
-cachetools=3.0.*   # request caching (NEEDED?)
+## asyncio
+#aiohttp=3.4.*      # HTTP lib
+#aiofiles=0.4.*     # async open
+#aioftp=0.12.*      # FTP lib
+#backoff=1.6.*      # retrying of failed API calls
+#cachetools=3.0.*   # request caching (NEEDED?)
 
 ## client API wrappers
 #gitpython>=3.0.8,3.0.*    # githandler
@@ -51,10 +51,10 @@ cachetools=3.0.*   # request caching (NEEDED?)
 
 # docs
 sphinx>=4.1
-celery
-sphinx-autodoc-typehints
+#celery
+#sphinx-autodoc-typehints
 #alabaster=0.7.*
-docutils
+#docutils
 
-# The bioconductor skeleton needs this
-requests=2.22.*
+## The bioconductor skeleton needs this
+#requests=2.22.*
