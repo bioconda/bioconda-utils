@@ -3,5 +3,5 @@
 # so please keep that documentation up to date as they change
 
 # basics
-conda=4.8.4
+conda
 networkx=1.11.*
