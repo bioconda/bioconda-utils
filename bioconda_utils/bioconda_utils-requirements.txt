@@ -12,7 +12,7 @@ colorlog=3.1.*       # Logging
 tqdm>=4.26           # Progress monitor
 ruamel_yaml=0.15.*   # Recipe YAML parsing
 pyaml=17.12.*        # Faster YAML parser (deprecate?)
-networkx=2.6.*
+networkx=1.11.*
 pandas=0.23.*
 numpy=1.19.*         # Avoid breaking pandas on OSX
 libblas=*=*openblas  # Avoid large mkl package (pulled in by pandas)
@@ -38,23 +38,23 @@ aioftp=0.12.*      # FTP lib
 backoff=1.6.*      # retrying of failed API calls
 cachetools=3.0.*   # request caching (NEEDED?)
 
-## client API wrappers
-#gitpython>=3.0.8,3.0.*    # githandler
-#                          # needs >=3.0.8 due to https://github.com/conda-forge/staged-recipes/issues/10874
-#gidgethub=3.0.*           # githubhandler
-#pyjwt=1.7.*               # githubhandler (JWT signing)
+# client API wrappers
+gitpython>=3.0.8,3.0.*    # githandler
+                          # needs >=3.0.8 due to https://github.com/conda-forge/staged-recipes/issues/10874
+gidgethub=3.0.*           # githubhandler
+pyjwt=1.7.*               # githubhandler (JWT signing)
 
-## unknown
-#beautifulsoup4=4.6.*
-#galaxy-lib>=18.9.1
-#jinja2>=2.10.1,<2.11.a0
+# unknown
+beautifulsoup4=4.6.*
+galaxy-lib>=18.9.1
+jinja2>=2.10.1,<2.11.a0
 
-## docs
-#sphinx>=4.1
-#celery
-#sphinx-autodoc-typehints
-#alabaster=0.7.*
-#docutils
+# docs
+sphinx>=4.1
+celery
+sphinx-autodoc-typehints
+alabaster=0.7.*
+docutils
 
-## The bioconductor skeleton needs this
-#requests=2.22.*
+# The bioconductor skeleton needs this
+requests=2.22.*
