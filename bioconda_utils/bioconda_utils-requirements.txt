@@ -3,5 +3,6 @@
 # so please keep that documentation up to date as they change
 
 # basics
+python=3.7.*
 conda
 networkx=1.11.*
