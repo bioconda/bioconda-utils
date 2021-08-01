@@ -4,5 +4,5 @@
 
 # basics
 python=3.7.*
-conda
-networkx=1.11.*
+conda=4.8.4
+networkx=2.6.*
