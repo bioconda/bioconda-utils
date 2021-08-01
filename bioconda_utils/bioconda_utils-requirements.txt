@@ -38,16 +38,16 @@ aioftp=0.12.*      # FTP lib
 backoff=1.6.*      # retrying of failed API calls
 cachetools=3.0.*   # request caching (NEEDED?)
 
-# client API wrappers
-gitpython>=3.0.8,3.0.*    # githandler
-                          # needs >=3.0.8 due to https://github.com/conda-forge/staged-recipes/issues/10874
-gidgethub=3.0.*           # githubhandler
-pyjwt=1.7.*               # githubhandler (JWT signing)
+## client API wrappers
+#gitpython>=3.0.8,3.0.*    # githandler
+#                          # needs >=3.0.8 due to https://github.com/conda-forge/staged-recipes/issues/10874
+#gidgethub=3.0.*           # githubhandler
+#pyjwt=1.7.*               # githubhandler (JWT signing)
 
-# unknown
-beautifulsoup4=4.6.*
-galaxy-lib>=18.9.1
-jinja2>=2.10.1,<2.11.a0
+## unknown
+#beautifulsoup4=4.6.*
+#galaxy-lib>=18.9.1
+#jinja2>=2.10.1,<2.11.a0
 
 ## docs
 #sphinx>=4.1
