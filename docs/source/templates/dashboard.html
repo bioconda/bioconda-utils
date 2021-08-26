@@ -11,6 +11,7 @@ window.onload = function() {
     let spec = {
        "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
        "description": "Total bioconda downloads.",
+       "title": "Total bioconda downloads",
        "data": {"values": []},
        "width": "container",
        "mark": "line",
@@ -30,11 +31,12 @@ window.onload = function() {
     // Download download plot data
     $.get( "https://raw.githubusercontent.com/bioconda/bioconda-stats/main/package-downloads/anaconda.org/bioconda.json", function( p_data ) {
     p_data = JSON.parse(p_data);
-    let package_data = p_data["downloads_per_package"].slice(-10);
+    let package_data = p_data["downloads_per_package"].slice(-20);
 
     let package_spec = {
        "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
        "description": "Top downloaded packages.",
+       "title": "Top 20 packages",
        "data": {"values": []},
        "width": "container",
        "mark": "bar",
