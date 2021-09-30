@@ -1,56 +1,22 @@
 <div style="width: 100%" id="download_plot"></div>
+<div style="width: 100%" id="cdf_plot"></div>
 
 <script>
     window.onload = async function() {
-        versions = [...new Set(versions)];
-
-        let download_data = [];
-
-        for (const version of versions) {
-            let url = `https://raw.githubusercontent.com/bioconda/bioconda-stats/main/package-downloads/anaconda.org/bioconda/${package}/${version}.json`;
-            await $.get({
-                url: url,
-                success: function( data ) {
-                    data = JSON.parse(data);
-                    data = data["downloads_per_date"];
-                    let first;
-                    if (data.length > 14) {
-                        first = data.length - 14;
-                    } else {
-                        first = 1;
-                    }
-                    for (let i = first; i < data.length; i++) {
-                        data[i]["delta"] = data[i]["total"] - data[i - 1]["total"];
-                        data[i]["version"] = version;
-                        download_data.push(data[i]);
-                    }
-                },
-                error: function (xhr, ajaxOptions, thrownError) {
-                    console.log('error fetching data from bioconda stats repo!');
-                }
+        $.get(`https://raw.githubusercontent.com/bioconda/bioconda-plots/main/resources/cdf.vl.json`, function( data ) {
+            let spec = JSON.parse(data);
+            $.get(`https://raw.githubusercontent.com/bioconda/bioconda-plots/main/plots/${package}/cdf.json`, function( plot_data ) {
+                spec.data.values = JSON.parse(plot_data);
+                vegaEmbed('#cdf_plot', spec);
             });
-        }
+        });
 
-        let spec = {
-            "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-            "description": "A simple bar chart with embedded data.",
-            "data": {"values": []},
-            "width": "container",
-            "mark": {
-                "type": "line",
-                "point": {
-                    "filled": true,
-                }
-            },
-            "encoding": {
-                 "x": {"field": "date", "type": "temporal","timeUnit": "yearmonthdate", "title": "date", "axis": {"labelAngle": -15}},
-                 "y": {"field": "delta", "type": "quantitative", "title": "downloads"},
-                 "color": {"field": "version", "type": "nominal"},
-                 "tooltip": {"field": "delta"}
-            }
-        };
-
-        spec.data.values = download_data;
-        vegaEmbed('#download_plot', spec);
+        $.get(`https://raw.githubusercontent.com/bioconda/bioconda-plots/main/resources/versions.vl.json`, function( data ) {
+            let spec = JSON.parse(data);
+            $.get(`https://raw.githubusercontent.com/bioconda/bioconda-plots/main/plots/${package}/versions.json`, function( plot_data ) {
+                spec.data.values = JSON.parse(plot_data);
+                vegaEmbed('#download_plot', spec);
+            });
+        });
     }
 </script>
