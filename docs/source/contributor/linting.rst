@@ -289,6 +289,12 @@ Bioconda and it's recipe repository consistent and clean.
    package all of CRAN. For that reason, we only allow CRAN packages
    on Bioconda if they depend on other Bioconda packages.
 
+.. lint-check:: version_starts_with_v
+
+   Version numbers in Conda recipes need to follow PEP 386 and may
+   not start with a "v". With a "v", the uploaded package displays
+   incorrectly on the Anaconda website.
+
 
 Syntax
 ~~~~~~
