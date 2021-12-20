@@ -419,13 +419,35 @@ def load_all_meta(recipe, config=None, finalize=True):
     # `bypass_env_check=True` prevents evaluating (=environment solving) the
     # package versions used for `pin_compatible` and the like.
     # To avoid adding a separate `bypass_env_check` alongside every `finalize`
-    # parameter, just assume we always want to bypass if `finalize is True`.
-    bypass_env_check = (not finalize)
-    return [meta for (meta, _, _) in api.render(recipe,
-                                                config=config,
-                                                finalize=finalize,
-                                                bypass_env_check=bypass_env_check,
-                                                )]
+    # parameter, just assume we do not want to bypass if `finalize is True`.
+    metas = [
+        meta
+        for (meta, _, _) in api.render(
+            recipe,
+            config=config,
+            finalize=False,
+            bypass_env_check=True,
+        )
+    ]
+    # Render again if we want the finalized version.
+    # Rendering the non-finalized version beforehand lets us filter out
+    # variants that get skipped. (E.g., with a global `numpy 1.16` pin for
+    # py==27 the env check fails when evaluating `pin_compatible('numpy')` for
+    # recipes that use a pinned `numpy` and also require `numpy>=1.17` but
+    # actually skip py==27. Filtering out that variant beforehand avoids this.
+    if finalize:
+        metas = [
+            meta
+            for non_finalized_meta in metas
+            for (meta, _, _) in api.render(
+                recipe,
+                config=config,
+                variants=non_finalized_meta.config.variant,
+                finalize=True,
+                bypass_env_check=False,
+            )
+        ]
+    return metas
 
 
 

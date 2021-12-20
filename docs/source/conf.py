@@ -5,13 +5,7 @@ import datetime
 import os
 import sys
 
-# TODO: Remove the following filterwarnings when upstream issue is resolved:
-#       https://github.com/agronholm/sphinx-autodoc-typehints/issues/133
-import sphinx.util.inspect
 import sphinx_autodoc_typehints
-if getattr(sphinx_autodoc_typehints, 'Signature') is sphinx.util.inspect.Signature:
-    import warnings
-    warnings.filterwarnings('ignore', message='sphinx.util.inspect.Signature\(\) is deprecated')
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -134,6 +128,8 @@ html_theme_options = {
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['static']
+
+html_js_files = ['vega.min.js', 'vega-lite.min.js', 'vega-embed.min.js']
 
 # Add any extra paths that contain custom files (such as robots.txt or
 # .htaccess) here, relative to this directory. These files are copied

@@ -198,13 +198,14 @@ class RequirementsField(GroupedField):
     - Entry added to domain data ``backrefs`` so that we can
       use the requirements to collect required-by data later.
     """
-    def make_field(self, types, domain, items, env=None):
+    def make_field(self, types, domain, items, env=None, inliner=None, location=None):
         fieldname = nodes.field_name('', self.label)
         listnode = self.list_type()
         for fieldarg, content in items:
             par = nodes.paragraph()
             par.extend(self.make_xrefs(self.rolename, domain, fieldarg,
-                                       addnodes.literal_strong, env=env))
+                                       addnodes.literal_strong, env=env,
+                                       inliner=inliner, location=location))
             if content and content[0].astext():
                 par += nodes.Text(' ')
                 par += content
@@ -226,7 +227,7 @@ class RequiredByField(Field):
     body that will later be filled with the reverse dependencies by
     `resolve_required_by_xrefs`
     """
-    def make_field(self, types, domain, item, env=None):
+    def make_field(self, types, domain, items, env=None, inliner=None, location=None):
         fieldname = nodes.field_name('', self.label)
         backref = addnodes.pending_xref(
             '',
@@ -495,7 +496,7 @@ class CondaDomain(Domain):
           - -1: object should not show up in search at all
         """
         for (typ, name), (docname, ref) in self.data['objects'].items():
-            dispname = "Recipe '{}'".format(name)
+            dispname = "{} '{}'".format(typ, name)
             yield name, dispname, typ, docname, ref, 1
 
     def merge_domaindata(self, docnames: List[str], otherdata: Dict) -> None:

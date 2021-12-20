@@ -123,3 +123,13 @@ class cran_packages_to_conda_forge(LintCheck):
                    for dep in deps):
                    self.message()
 
+
+class version_starts_with_v(LintCheck):
+    """The version string should not start with a "v" character
+
+    Version numbers in Conda recipes need to follow PEP 386
+
+    """
+    def check_recipe(self, recipe):
+        if recipe.get('package/version', '').startswith('v'):
+            self.message()

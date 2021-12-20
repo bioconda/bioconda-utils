@@ -339,6 +339,9 @@ tests:
 - name: build_number_needs_bump
   expect: build_number_needs_bump
   add: { package: { version: 0.0.1 } }
+- name: version_starts_with_v
+  expect: version_starts_with_v
+  add: { package: { version: "v0.1" } }
 - name: in_other_channels
   expect: in_other_channels
   repodata: { conda-forge: { one: [{version: 0.1}], two: [version: 0.1] } }
