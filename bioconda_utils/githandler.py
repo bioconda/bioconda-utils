@@ -503,7 +503,12 @@ class GitHandler(GitHandlerBase):
         super().__init__(repo, dry_run, home, fork, allow_dirty)
 
         #: Branch to restore after running
-        self.prev_active_branch = self.repo.active_branch
+        try:
+            self.prev_active_branch = self.repo.active_branch
+        except:
+            # This will fail on CI nodes from forks, but we don't need to switch back and forth between branches there
+            logger.warning("Couldn't get the active branch name, we must be on detached HEAD")
+            pass
 
     def checkout_master(self):
         """Check out master branch (original branch restored by `close()`)"""
