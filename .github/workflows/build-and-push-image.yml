@@ -16,6 +16,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+      fetch-depth: 0
 
     - id: get-tag
       run: |
@@ -39,13 +40,3 @@ jobs:
         for tag in ${{ steps.buildah-build.outputs.tags }} ; do
           podman run --rm "${image}:${tag}" bioconda-utils --version
         done
-
-    - if: ${{ github.event.release }}
-      name: Push To Quay
-      uses: redhat-actions/push-to-registry@v2
-      with:
-        image: ${{ steps.buildah-build.outputs.image }}
-        tags: ${{ steps.buildah-build.outputs.tags }}
-        registry: ${{ secrets.QUAY_BIOCONDA_REPO }}
-        username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
-        password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
