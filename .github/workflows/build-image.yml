@@ -1,8 +1,5 @@
-name: Build and Push Image
+name: Build image
 on:
-  release:
-    types:
-    - published
   pull_request:
     paths-ignore:
     - '.circleci/**'
@@ -11,7 +8,7 @@ on:
 
 jobs:
   build:
-    name: Build and Push Image
+    name: Build image
     runs-on: ubuntu-20.04
 
     steps:
@@ -23,7 +20,7 @@ jobs:
         tag=${{ github.event.release && github.event.release.tag_name || github.sha }}
         printf %s "::set-output name=tag::${tag#v}"
 
-    - name: Build Image
+    - name: Build image
       id: buildah-build
       uses: redhat-actions/buildah-build@v2
       with:
@@ -34,7 +31,7 @@ jobs:
         dockerfiles: |
           ./Dockerfile
 
-    - name: Test Built Image
+    - name: Test built image
       run: |
         image='${{ steps.buildah-build.outputs.image }}'
         for tag in ${{ steps.buildah-build.outputs.tags }} ; do
