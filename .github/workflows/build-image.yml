@@ -1,8 +1,5 @@
-name: Build and Push Image
+name: Build image
 on:
-  release:
-    types:
-    - published
   pull_request:
     paths-ignore:
     - '.circleci/**'
@@ -11,18 +8,19 @@ on:
 
 jobs:
   build:
-    name: Build and Push Image
+    name: Build image
     runs-on: ubuntu-20.04
 
     steps:
     - uses: actions/checkout@v2
+      fetch-depth: 0
 
     - id: get-tag
       run: |
         tag=${{ github.event.release && github.event.release.tag_name || github.sha }}
         printf %s "::set-output name=tag::${tag#v}"
 
-    - name: Build Image
+    - name: Build image
       id: buildah-build
       uses: redhat-actions/buildah-build@v2
       with:
@@ -33,19 +31,9 @@ jobs:
         dockerfiles: |
           ./Dockerfile
 
-    - name: Test Built Image
+    - name: Test built image
       run: |
         image='${{ steps.buildah-build.outputs.image }}'
         for tag in ${{ steps.buildah-build.outputs.tags }} ; do
           podman run --rm "${image}:${tag}" bioconda-utils --version
         done
-
-    - if: ${{ github.event.release }}
-      name: Push To Quay
-      uses: redhat-actions/push-to-registry@v2
-      with:
-        image: ${{ steps.buildah-build.outputs.image }}
-        tags: ${{ steps.buildah-build.outputs.tags }}
-        registry: ${{ secrets.QUAY_BIOCONDA_REPO }}
-        username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
-        password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}

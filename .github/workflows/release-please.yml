@@ -1,0 +1,58 @@
+on:
+  push:
+    branches:
+      - master
+
+name: release-please
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+
+      - uses: GoogleCloudPlatform/release-please-action@v2
+        id: release
+        with:
+          release-type: python
+          package-name: bioconda-utils
+
+      - uses: actions/checkout@v2
+        if: ${{ steps.release.outputs.release_created }}
+        with:
+          fetch-depth: 0
+
+      - id: get-tag
+        if: ${{ steps.release.outputs.release_created }}
+        run: |
+          tag=${{ github.event.release && github.event.release.tag_name || github.sha }}
+          printf %s "::set-output name=tag::${tag#v}"
+
+      - name: Build Image
+        if: ${{ steps.release.outputs.release_created }}
+        id: buildah-build
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: bioconda-utils-build-env-cos7
+          tags: >-
+            latest
+            ${{ steps.get-tag.outputs.tag }}
+          dockerfiles: |
+            ./Dockerfile
+
+      - name: Test Built Image
+        if: ${{ steps.release.outputs.release_created }}
+        run: |
+          image='${{ steps.buildah-build.outputs.image }}'
+          for tag in ${{ steps.buildah-build.outputs.tags }} ; do
+            podman run --rm "${image}:${tag}" bioconda-utils --version
+          done
+
+      - name: Push To Quay
+        if: ${{ steps.release.outputs.release_created }}
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.buildah-build.outputs.image }}
+          tags: ${{ steps.buildah-build.outputs.tags }}
+          registry: ${{ secrets.QUAY_BIOCONDA_REPO }}
+          username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
+          password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
