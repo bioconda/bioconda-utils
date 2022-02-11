@@ -94,6 +94,7 @@ set -eo pipefail
 # exists before adding the channel.
 mkdir -p {self.container_staging}/linux-64
 mkdir -p {self.container_staging}/noarch
+touch {self.container_staging}/noarch/repodata.json
 conda config --add channels file://{self.container_staging} 2> >(
     grep -vF "Warning: 'file://{self.container_staging}' already in 'channels' list, moving to the top" >&2
 )
@@ -105,6 +106,7 @@ conda build {self.conda_build_args} {self.container_recipe}/meta.yaml 2>&1
 
 # copy all built packages to the staging area
 cp `conda build {self.conda_build_args} {self.container_recipe}/meta.yaml --output` {self.container_staging}/{arch}
+conda index {self.container_staging}
 # Ensure permissions are correct on the host.
 HOST_USER={self.user_info[uid]}
 chown $HOST_USER:$HOST_USER {self.container_staging}/{arch}/*
