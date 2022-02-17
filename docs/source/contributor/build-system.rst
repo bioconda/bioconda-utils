@@ -3,7 +3,7 @@ Build system
 
 The build system for Bioconda takes recipes and converts them into conda
 packages that are uploaded to anaconda.org as well as Docker containers that
-are uploaded to quay.io. All of this happens in a transparent way, with all
+are uploaded to quay.io as part of the Biocontainers project. All of this happens in a transparent way, with all
 build logs available for inspection. The code for the build system can be found
 in `bioconda-utils <https://github.com/bioconda/bioconda-utils>`_, but parts
 are also with the ``bioconda-recipes`` repo. This document serves as
@@ -11,7 +11,7 @@ a high-level overview; the code remains the authoritative source on exactly
 what happens during a build.
 
 Why so complicated? We have to work within the constraints of conda-build,
-Docker, and CircleCI, while simultaneously supporting the same build system on
+Docker, and Azure, while simultaneously supporting the same build system on
 a local machine so contributors can test. We also have isolated bioconda-utils
 from bioconda-recipes to better facilitate testing of the infrastructure, and
 to (one day!) make it general enough that others can use the framework for
@@ -22,27 +22,28 @@ simplify, and do so where we can.
 Stages of a bioconda build
 --------------------------
 A GitHub pull request, or any pushed changes to a GitHub pull request, triggers
-a new build on CircleCI. One build can contain mulitple recipes, limited only
-by the time limit imposed by CircleCI (they have generously given us an
-extended build time).  Each build on CircleCI starts with a fresh VM, so we
+a new build on Azure DevOps. One build can contain mulitple recipes, limited only
+by the time limit imposed by Azure.
+Each build on Azure starts with a fresh VM, so we
 need to create the entire bioconda-build system environment from scratch for
 each build.
 
-When testing locally with ``circleci build``, we use the
+When testing locally, we use the
 ``quay.io/bioconda/bioconda-utils-build-env-cos7`` Docker container to avoid changing the
 local system. This container is defined by `this Dockerfile
 <https://github.com/bioconda/bioconda-utils/blob/master/Dockerfile>`_.
 
 
-Otherwise, when running on CircleCI, a new Linux or MacOS VM is created for
+Otherwise, when running on Azure, a new Linux or MacOS VM is created for
 each build.
 
-The steps are orchestrated by the `circleci config file
-<https://github.com/bioconda/bioconda-recipes/blob/master/.circleci/config.yml>`_.
+The steps are orchestrated by the `Azure config file <https://github.com/bioconda/bioconda-recipes/blob/master/azure-pipeline.yml>`_.
 
 
 Configure the environment
 ~~~~~~~~~~~~~~~~~~~~~~~~~
+
+N.B., due to transitioning to Azure, the remainder of this section is no longer relevant and requires rewritting.
 
 - Configure the CI environment:
     - ``bioconda-recipes: .circleci/config.yml`` is the primary configuration
