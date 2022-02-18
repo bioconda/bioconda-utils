@@ -48,6 +48,7 @@ pyjwt=1.7.*               # githubhandler (JWT signing)
 beautifulsoup4=4.6.*
 galaxy-lib>=18.9.1
 jinja2>=2.10.1,<2.11.a0
+markupsafe<2.1           # markupsafe 2.1 breaks jinja2
 
 # docs
 sphinx>=4.1
