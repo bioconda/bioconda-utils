@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.18.1
+
+### Bug Fixes
+
+* Sync libdeflate pinning with conda-forge
+
 ## [0.18.0](https://www.github.com/bioconda/bioconda-utils/compare/v0.17.10...v0.18.0) (2022-02-20)
 
 
