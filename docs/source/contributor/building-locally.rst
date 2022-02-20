@@ -1,7 +1,7 @@
 Testing Recipes Locally
 =======================
 
-Queue times on CircleCI may sometimes make it more convenient and
+Queue times on Azure DevOps may sometimes make it more convenient and
 faster to work on complex packages locally. There are several ways to
 do so, each with their own caveats.
 
@@ -9,61 +9,20 @@ do so, each with their own caveats.
    :local:
 
 
-.. _circleci-client:
+.. _bioconda_utils:
 
-Using the Circle CI Client
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+Using bioconda-utils
+~~~~~~~~~~~~~~~~~~~~
 
-You can execute an almost exact copy of our Linux build pipeline by
-`installing the CircleCI client locally
-<https://circleci.com/docs/2.0/local-cli>`_ and running it from the
-folder where your copy of ``bioconda-recipes`` resides::
+Whether on a CI node or locally, Bioconda packages are built and tested using ``bioconda-utils``.
+You can install ``bioconda-utils`` locally by creating a new conda environment:
 
-    # Ensure the build container is up-to-date
-    docker pull quay.io/bioconda/bioconda-utils-build-env:latest
+.. code-block::
 
-    # Run the build locally
-    circleci build
+    # You can use "conda create" here instead, if you don't have mamba installed
+    mamba create -n bioconda -c conda-forge -c bioconda bioconda-utils
 
-You will have to have "commited" some changes as described above. The
-command will run our build system just as it is run online in a docker
-container. It will detect which recipes where modified using the
-``git`` history and proceed with linting and building those.
-
-Please note that this will only run the Linux build steps.
-
-You can use Docker volume bind-mounts to capture the local package
-channel with the newly built packages::
-
-    mkdir /tmp/conda-bld
-    circleci build --volume /tmp/conda-bld:/opt/conda/conda-bld
-
-After a successful build, you can then install from the local channel by
-providing the path to it::
-
-    conda install -c file:///tmp/conda-bld your-package
-
-Note that if the package also exists with the same version or a newer
-version in remote channels, then you may need to specify the exact local
-build string in your package spec to ensure your local build is
-installed, e.g.  ``your-package ==x.y.z build_string``.  See
-`conda-build:resources/package-spec` for more details on how to specify
-packages.
-
-
-.. _bootstrap:
-
-Using the "Bootstrap" Method
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Due to technical limitations of the Circle CI client, the above test does
-**not** run the more stringent ``mulled-build`` tests. To do so, use the
-following commands:
-
-.. code-block:: bash
-
-    ./bootstrap.py /tmp/miniconda
-    source ~/.config/bioconda/activate
+    conda activate bioconda
 
     # optional linting
     bioconda-utils lint --git-range master
@@ -73,14 +32,9 @@ following commands:
 
 The above commands do the following:
 
-- Install a separate miniconda installation in a temporary directory:
-   - Set up bioconda channels,
-   - install bioconda-utils dependencies into the root environment of
-     that installation,
-   - and write the file ``~/.config/bioconda/activate``
-- Source that new file to specifically activate the root environment
-  of the new installation
-- Run ``bioconda-utils`` in the new installation:
+- Creates a new environment with bioconda-utils.
+- Activates the new environment. You can later just start at ``conda activate bioconda``
+- Run ``bioconda-utils`` in the new environment:
    - The ``lint`` command will run the lint checks on your recipes
    - The ``build`` command will run the build pipeline
 
@@ -99,13 +53,7 @@ The above commands do the following:
      to be included in the build container.
 
 If you do not have access to Docker, you can still run the basic test by
-telling the bootstrap setup to not use docker, and by excluding the
-``--docker`` and ``--mulled-test`` arguments in the last command::
-
-    ./bootstrap.py --no-docker /tmp/miniconda
-    source ~/.config/bioconda/activate
-    bioconda-utils build --git-range master
-
+omitting the ``--docker`` and ``--mulled-test`` options.
 
 Using the "Debug" Method
 ~~~~~~~~~~~~~~~~~~~~~~~~

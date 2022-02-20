@@ -32,7 +32,8 @@ variables:
     macos:
       xcode: "9.4.1"
   linux: &linux
-    machine: true
+    machine:
+      image: ubuntu-2004:202201-02
   install_bioconda_utils: &install_bioconda_utils
     run:
       name: Install bioconda-utils
