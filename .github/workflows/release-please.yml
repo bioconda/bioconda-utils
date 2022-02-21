@@ -26,6 +26,7 @@ jobs:
         run: |
           foo=${{ github.event.release }}
           bar=${{ github.event.release.tag_name }}
+          
           printf %s "::set-output name=foo::${foo}"
           printf %s "::set-output name=bar::${bar}"
           tag=${{ github.event.release && github.event.release.tag_name || github.sha }}
