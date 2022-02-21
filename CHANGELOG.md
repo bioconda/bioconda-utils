@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.18.3](https://www.github.com/bioconda/bioconda-utils/compare/v0.18.2...v0.18.3) (2022-02-21)
+
+
+### Bug Fixes
+
+* hard-code tag to fix docker container ([#747](https://www.github.com/bioconda/bioconda-utils/issues/747)) ([79946cd](https://www.github.com/bioconda/bioconda-utils/commit/79946cdba71fabac40eae60c1f513c878c85d71b))
+
 ### [0.18.2](https://www.github.com/bioconda/bioconda-utils/compare/v0.18.1...v0.18.2) (2022-02-21)
 
 
