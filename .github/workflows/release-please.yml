@@ -24,8 +24,14 @@ jobs:
       - id: get-tag
         if: ${{ steps.release.outputs.release_created }}
         run: |
+          foo=${{ github.event.release }}
+          bar=${{ github.event.release.tag_name }}
+          
+          printf %s "::set-output name=foo::${foo}"
+          printf %s "::set-output name=bar::${bar}"
           tag=${{ github.event.release && github.event.release.tag_name || github.sha }}
-          printf %s "::set-output name=tag::${tag#v}"
+          #printf %s "::set-output name=tag::${tag#v}"
+          printf %s "::set-output name=tag::0.18.3"
 
       - name: Build Image
         if: ${{ steps.release.outputs.release_created }}
