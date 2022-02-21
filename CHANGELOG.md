@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.18.2](https://www.github.com/bioconda/bioconda-utils/compare/v0.18.1...v0.18.2) (2022-02-21)
+
+
+### Bug Fixes
+
+* image tag is screwed up ([#745](https://www.github.com/bioconda/bioconda-utils/issues/745)) ([3feb6d0](https://www.github.com/bioconda/bioconda-utils/commit/3feb6d01d6eeb606b77a5eb74b1f2240c5f48fa7))
+
 ### [0.18.1](https://www.github.com/bioconda/bioconda-utils/compare/v0.18.0...v0.18.1) (2022-02-21)
 
 
