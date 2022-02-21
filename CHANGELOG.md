@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.18.1](https://www.github.com/bioconda/bioconda-utils/compare/v0.18.0...v0.18.1) (2022-02-21)
+
+
+### Bug Fixes
+
+* missing container ([#743](https://www.github.com/bioconda/bioconda-utils/issues/743)) ([caf6680](https://www.github.com/bioconda/bioconda-utils/commit/caf6680b5caa4443c80074561d96ff2ac3e072b3))
+
 ## 0.18.1
 
 ### Bug Fixes
