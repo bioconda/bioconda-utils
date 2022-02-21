@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.18.4](https://www.github.com/bioconda/bioconda-utils/compare/v0.18.3...v0.18.4) (2022-02-21)
+
+
+### Bug Fixes
+
+* removing tag hard-coding and use tag_name for docker container ([#749](https://www.github.com/bioconda/bioconda-utils/issues/749)) ([a8e750c](https://www.github.com/bioconda/bioconda-utils/commit/a8e750c72a70e63f26f6ed2cb83f1cc9478338d9))
+
 ### [0.18.3](https://www.github.com/bioconda/bioconda-utils/compare/v0.18.2...v0.18.3) (2022-02-21)
 
 
