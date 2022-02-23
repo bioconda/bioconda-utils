@@ -59,10 +59,15 @@ def build(recipes, config, blacklist=None, restrict=True):
     #
     # Note that this may change once we support conda-build 3.
     name2recipe = defaultdict(set)
+    subpackage2parent = dict()
     for meta, recipe in metadata:
         name = meta["package"]["name"]
         if name not in blacklist:
             name2recipe[name].update([recipe])
+        if "outputs" in meta:
+            for output in meta["outputs"]:
+                subpackage2parent[output["name"]] = name
+
 
     def get_deps(meta, sec):
         reqs = meta.get("requirements")
@@ -78,10 +83,15 @@ def build(recipes, config, blacklist=None, restrict=True):
         for dep in dependencies:
             if dep in name2recipe or not restrict:
                 yield dep
+            else:
+                parentdep = subpackage2parent.get(dep)
+                if parentdep is not None:
+                    yield parentdep
 
     dag = nx.DiGraph()
     dag.add_nodes_from(meta["package"]["name"]
                        for meta, recipe in metadata)
+    dag.add_nodes_from(subpackage2parent.keys)
     for meta, recipe in metadata:
         name = meta["package"]["name"]
         dag.add_edges_from(
