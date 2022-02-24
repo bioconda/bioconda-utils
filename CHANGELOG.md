@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.18.5](https://www.github.com/bioconda/bioconda-utils/compare/v0.18.4...v0.18.5) (2022-02-24)
+
+
+### Bug Fixes
+
+* Update to the most recent conda-build so git_url works again ([#753](https://www.github.com/bioconda/bioconda-utils/issues/753)) ([4eb01c5](https://www.github.com/bioconda/bioconda-utils/commit/4eb01c569999e1bdafb02ebbd7a3677910da0596))
+
 ### [0.18.4](https://www.github.com/bioconda/bioconda-utils/compare/v0.18.3...v0.18.4) (2022-02-21)
 
 
