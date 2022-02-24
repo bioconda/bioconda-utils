@@ -91,7 +91,6 @@ def build(recipes, config, blacklist=None, restrict=True):
     dag = nx.DiGraph()
     dag.add_nodes_from(meta["package"]["name"]
                        for meta, recipe in metadata)
-    dag.add_nodes_from(subpackage2parent.keys)
     for meta, recipe in metadata:
         name = meta["package"]["name"]
         dag.add_edges_from(
