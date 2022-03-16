@@ -87,7 +87,7 @@ def build(recipe: str, pkg_paths: List[str] = None,
 
     logger.info("BUILD START %s", recipe)
 
-    args = ['--override-channels', '--experimental-solver=libmamba']
+    args = ['--override-channels']
     if testonly:
         args += ["--test"]
     else:
@@ -123,7 +123,7 @@ def build(recipe: str, pkg_paths: List[str] = None,
                         "cannot be found", pkg_path)
                     return BuildResult(False, None)
         else:
-            conda_build_cmd = [utils.bin_for('conda'), 'build']
+            conda_build_cmd = [utils.bin_for('conda'), 'mambabuild']
             # - Temporarily reset os.environ to avoid leaking env vars
             # - Also pass filtered env to run()
             # - Point conda-build to meta.yaml, to avoid building subdirs

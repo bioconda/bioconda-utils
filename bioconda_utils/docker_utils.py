@@ -102,7 +102,7 @@ conda config --add channels file://{self.container_staging} 2> >(
 # The actual building...
 # we explicitly point to the meta.yaml, in order to keep
 # conda-build from building all subdirectories
-conda build {self.conda_build_args} {self.container_recipe}/meta.yaml 2>&1
+conda mambabuild {self.conda_build_args} {self.container_recipe}/meta.yaml 2>&1
 
 # copy all built packages to the staging area
 cp `conda build {self.conda_build_args} {self.container_recipe}/meta.yaml --output` {self.container_staging}/{arch}
