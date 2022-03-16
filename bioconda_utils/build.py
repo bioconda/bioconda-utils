@@ -87,7 +87,7 @@ def build(recipe: str, pkg_paths: List[str] = None,
 
     logger.info("BUILD START %s", recipe)
 
-    args = ['--override-channels', '--experimental-solver']
+    args = ['--override-channels', '--experimental-solver=libmamba']
     if testonly:
         args += ["--test"]
     else:
