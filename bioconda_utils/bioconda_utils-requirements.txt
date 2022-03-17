@@ -13,7 +13,7 @@ colorlog=3.1.*       # Logging
 tqdm>=4.26           # Progress monitor
 ruamel_yaml=0.15.*   # Recipe YAML parsing
 pyaml=17.12.*        # Faster YAML parser (deprecate?)
-networkx=1.11        # needs urgent updating!
+networkx=2.7.*
 pandas=0.23.*
 numpy=1.19.*         # Avoid breaking pandas on OSX
 libblas=*=*openblas  # Avoid large mkl package (pulled in by pandas)
