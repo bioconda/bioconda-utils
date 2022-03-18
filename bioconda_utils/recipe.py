@@ -767,6 +767,14 @@ class Recipe():
                 raise SystemExit(args)
             sys.exit = new_exit
 
+        def use_mambabuild():
+            """Will inject mamba solver to conda build API to speed up resolves"""
+            # only importing this module will do the job.
+            from boa.cli.mambabuild import prepare
+            prepare()
+
+        use_mambabuild()
+
         try:
             with open("/dev/null", "w") as devnull:
                 with redirect_stdout(devnull), redirect_stderr(devnull):
