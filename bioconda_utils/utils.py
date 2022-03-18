@@ -21,7 +21,7 @@ import warnings
 from threading import Event, Thread
 from pathlib import PurePath
 from collections import Counter, defaultdict, namedtuple
-from collections.abs import Iterable
+from collections.abc import Iterable
 from itertools import product, chain, groupby, zip_longest
 from functools import partial
 from typing import Sequence, Collection, List, Dict, Any, Union
