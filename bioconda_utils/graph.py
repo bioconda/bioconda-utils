@@ -89,6 +89,7 @@ def build(recipes, config, blacklist=None, restrict=True):
             for dep in set(chain(
                 get_inner_deps(get_deps(meta, "build")),
                 get_inner_deps(get_deps(meta, "host")),
+                get_inner_deps(get_deps(meta, "run")),
             ))
         )
 
