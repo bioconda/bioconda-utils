@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.18.6](https://www.github.com/bioconda/bioconda-utils/compare/v0.18.5...v0.18.6) (2022-03-20)
+
+
+### Bug Fixes
+
+* The dependency graph should use the run-time requirements too! ([#756](https://www.github.com/bioconda/bioconda-utils/issues/756)) ([c49b638](https://www.github.com/bioconda/bioconda-utils/commit/c49b6384356f525b4f93a668fc9cd198004ce1bc))
+
 ### [0.18.5](https://www.github.com/bioconda/bioconda-utils/compare/v0.18.4...v0.18.5) (2022-02-24)
 
 
