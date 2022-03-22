@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Sequence, Tuple, Optional, Pattern
 
 import conda_build.api
 from conda_build.metadata import MetaData
+from boa.cli.mambabuild import prepare as insert_mambabuild
 
 import jinja2
 
@@ -767,13 +768,7 @@ class Recipe():
                 raise SystemExit(args)
             sys.exit = new_exit
 
-        def use_mambabuild():
-            """Will inject mamba solver to conda build API to speed up resolves"""
-            # only importing this module will do the job.
-            from boa.cli.mambabuild import prepare
-            prepare()
-
-        use_mambabuild()
+        insert_mambabuild()
 
         try:
             with open("/dev/null", "w") as devnull:

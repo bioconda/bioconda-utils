@@ -45,6 +45,7 @@ conda.gateways.logging.initialize_logging = lambda: None
 
 from conda_build import api
 from conda.exports import VersionOrder
+from boa.cli.mambabuild import prepare as insert_mambabuild
 
 from jsonschema import validate
 from colorlog import ColoredFormatter
@@ -415,13 +416,8 @@ def load_all_meta(recipe, config=None, finalize=True):
         via conda and also download of those packages (to inspect possible
         run_exports). For fast-running tasks like linting, set to False.
     """
-    def use_mambabuild():
-        """Will inject mamba solver to conda build API to speed up resolves"""
-        # only importing this module will do the job.
-        from boa.cli.mambabuild import prepare
-        prepare()
+    insert_mambabuild()
 
-    use_mambabuild()
     if config is None:
         config = load_conda_build_config()
     # `bypass_env_check=True` prevents evaluating (=environment solving) the
