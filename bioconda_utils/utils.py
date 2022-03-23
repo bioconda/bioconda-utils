@@ -20,7 +20,8 @@ import warnings
 
 from threading import Event, Thread
 from pathlib import PurePath
-from collections import Counter, Iterable, defaultdict, namedtuple
+from collections import Counter, defaultdict, namedtuple
+from collections.abc import Iterable
 from itertools import product, chain, groupby, zip_longest
 from functools import partial
 from typing import Sequence, Collection, List, Dict, Any, Union
@@ -44,6 +45,7 @@ conda.gateways.logging.initialize_logging = lambda: None
 
 from conda_build import api
 from conda.exports import VersionOrder
+from boa.cli.mambabuild import prepare as insert_mambabuild
 
 from jsonschema import validate
 from colorlog import ColoredFormatter
@@ -414,6 +416,8 @@ def load_all_meta(recipe, config=None, finalize=True):
         via conda and also download of those packages (to inspect possible
         run_exports). For fast-running tasks like linting, set to False.
     """
+    insert_mambabuild()
+
     if config is None:
         config = load_conda_build_config()
     # `bypass_env_check=True` prevents evaluating (=environment solving) the

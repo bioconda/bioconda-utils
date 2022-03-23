@@ -4,7 +4,8 @@
 
 # basics
 python>=3.7
-conda=4.11.0
+conda=4.12.0
+boa=0.9.*
 conda-build=3.21.8
 conda-verify=3.1.*
 argh=0.26.*          # CLI
@@ -12,7 +13,7 @@ colorlog=3.1.*       # Logging
 tqdm>=4.26           # Progress monitor
 ruamel_yaml=0.15.*   # Recipe YAML parsing
 pyaml=17.12.*        # Faster YAML parser (deprecate?)
-networkx=1.11
+networkx=2.*
 pandas=0.23.*
 numpy=1.19.*         # Avoid breaking pandas on OSX
 libblas=*=*openblas  # Avoid large mkl package (pulled in by pandas)
@@ -32,8 +33,8 @@ git=2.*                # well - git
 regex=2018.08.29
 
 # asyncio
-aiohttp=3.4.*      # HTTP lib
-aiofiles=0.4.*     # async open
+aiohttp=3.8.*      # HTTP lib
+aiofiles=0.8.*     # async open
 aioftp=0.12.*      # FTP lib
 backoff=1.6.*      # retrying of failed API calls
 cachetools=3.0.*   # request caching (NEEDED?)

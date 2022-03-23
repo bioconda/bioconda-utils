@@ -484,7 +484,7 @@ class Linter:
         self.checks_dag = dag
 
         try:
-            self.checks_ordered = nx.topological_sort(dag, reverse=True)
+            self.checks_ordered = reversed(list(nx.topological_sort(dag)))
         except nx.NetworkXUnfeasible:
             raise RunTimeError("Cycle in LintCheck requirements!")
         self.reload_checks()
