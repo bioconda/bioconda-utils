@@ -5,7 +5,7 @@
 
 ### Features
 
-* update dependencies and switch to conda boa/mambabuild ([#755](https://www.github.com/bioconda/bioconda-utils/issues/755)) ([81a5292](https://www.github.com/bioconda/bioconda-utils/commit/81a529263e8f51f279b6f48d212b4720a7ed3b73))
+* update dependencies and switch to boa/mambabuild ([#755](https://www.github.com/bioconda/bioconda-utils/issues/755)) ([81a5292](https://www.github.com/bioconda/bioconda-utils/commit/81a529263e8f51f279b6f48d212b4720a7ed3b73))
 
 ### [0.18.6](https://www.github.com/bioconda/bioconda-utils/compare/v0.18.5...v0.18.6) (2022-03-20)
 
