@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.19.1](https://www.github.com/bioconda/bioconda-utils/compare/v0.19.0...v0.19.1) (2022-03-25)
+
+
+### Bug Fixes
+
+* loosen jinja2 requirements to enable installation on OSX ([#759](https://www.github.com/bioconda/bioconda-utils/issues/759)) ([7ebe4ae](https://www.github.com/bioconda/bioconda-utils/commit/7ebe4aec07ba0577c9b7726255f09866880b698c))
+
 ## [0.19.0](https://www.github.com/bioconda/bioconda-utils/compare/v0.18.6...v0.19.0) (2022-03-23)
 
 
