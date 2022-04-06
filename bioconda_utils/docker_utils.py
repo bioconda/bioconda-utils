@@ -106,7 +106,7 @@ conda mambabuild {self.conda_build_args} {self.container_recipe}/meta.yaml 2>&1
 
 # copy all built packages to the staging area
 # Use conda mambabuild for consistency and speed
-cp `conda mambabuild {self.conda_build_args} {self.container_recipe}/meta.yaml --output` {self.container_staging}/{arch}
+cp `conda mambabuild {self.conda_build_args} {self.container_recipe}/meta.yaml --output | grep tar.bz2` {self.container_staging}/{arch}
 conda index {self.container_staging}
 # Ensure permissions are correct on the host.
 HOST_USER={self.user_info[uid]}
