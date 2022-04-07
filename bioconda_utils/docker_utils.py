@@ -105,7 +105,8 @@ conda config --add channels file://{self.container_staging} 2> >(
 conda mambabuild {self.conda_build_args} {self.container_recipe}/meta.yaml 2>&1
 
 # copy all built packages to the staging area
-cp `conda mambabuild {self.conda_build_args} {self.container_recipe}/meta.yaml --output` {self.container_staging}/{arch}
+# Use conda mambabuild for consistency and speed
+cp `conda mambabuild {self.conda_build_args} {self.container_recipe}/meta.yaml --output | grep tar.bz2` {self.container_staging}/{arch}
 conda index {self.container_staging}
 # Ensure permissions are correct on the host.
 HOST_USER={self.user_info[uid]}
