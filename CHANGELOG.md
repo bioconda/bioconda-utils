@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.19.4](https://www.github.com/bioconda/bioconda-utils/compare/v0.19.3...v0.19.4) (2022-04-30)
+
+
+### Bug Fixes
+
+* fix problematic docs ([#769](https://www.github.com/bioconda/bioconda-utils/issues/769)) ([44d6d2d](https://www.github.com/bioconda/bioconda-utils/commit/44d6d2d36df13b450684668bc86ce2a85f44a63a))
+
 ### [0.19.3](https://www.github.com/bioconda/bioconda-utils/compare/v0.19.2...v0.19.3) (2022-04-12)
 
 
