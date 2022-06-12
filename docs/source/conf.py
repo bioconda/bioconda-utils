@@ -55,7 +55,7 @@ master_doc = 'index'
 project = 'Bioconda'
 copyright = '2016-{}, The Bioconda Team'.format(datetime.datetime.now().year)
 author = 'The Bioconda Team'
-language = None
+language = "en"
 
 # There are two options for replacing |today|: either, you set today to some
 # non-false value, then it is used:
@@ -323,7 +323,7 @@ autosummary_generate = True
 autoclass_content = "both"
 
 # keep order from file (options: alphabetical, groupwise (by type), source)
-autodoc_member_order = "source"
+autodoc_member_order = "bysource"
 
 # default flags for autodoc statements
 autodoc_default_flags = ['members', 'show-inheritance']

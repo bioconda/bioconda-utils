@@ -47,7 +47,7 @@ News
 * Nov 2017: Bioconda has been acknowledged by NATURE in their `technology blog`_.
 
 Stats
-====
+=====
 
 .. raw:: html
     :file: templates/dashboard.html

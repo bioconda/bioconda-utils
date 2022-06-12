@@ -162,8 +162,9 @@ Conda environments
 
 
 ..
-   Conda environments
-   ------------------
+
+Conda environments
+------------------
 
 - Linking is relative to packages!
 - No more conflicting dependencies between versions!
@@ -184,7 +185,9 @@ Conda environments -- common commands
 -------------------------------------
 
 - ``conda info --envs`` (or ``conda env list``)
+
    - Lists available environments
+
    .. code-block:: sh
 
       $ conda info --envs
@@ -205,7 +208,9 @@ Conda environments -- common commands
    -------------------------------------
 
 - ``conda create``/``conda env remove``
+
    - Create/remove environments
+
    .. code-block:: sh
 
       $ conda create --name=myenv python=3.8 numpy 'pysam>=0.16'
@@ -221,6 +226,7 @@ Conda environments -- common commands
 
 - ``conda activate``/``conda deactivate``
    - Activates/deactivates an environment
+
    .. code-block:: sh
 
       $ command -v samtools
@@ -239,6 +245,7 @@ Conda environments -- common commands
 
 - ``conda install``/``conda remove``
 - ``conda list``
+
    .. code-block:: sh
 
       $ conda activate myenv
@@ -613,6 +620,7 @@ Common problems
 - Library dependencies are in ``$PREFIX/lib``
 
 .. code-block:: sh
+
    $ cat build.sh
    #! /usr/bin/env bash
    make install \
