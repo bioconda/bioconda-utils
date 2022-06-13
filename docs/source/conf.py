@@ -11,6 +11,7 @@ import sphinx_autodoc_typehints
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 sys.path.insert(0, os.path.abspath('.'))
+sys.path.insert(0, os.path.abspath('./_ext'))
 
 def setup(app):
     app.add_css_file("style.css")
@@ -22,8 +23,7 @@ def setup(app):
 #needs_sphinx = '1.0'
 
 extensions = [
-    'bioconda_utils.sphinxext',
-
+    'bioconda_sphinx_ext',
     'details_ext',
     'sphinx.ext.intersphinx',
     'sphinx.ext.todo',
