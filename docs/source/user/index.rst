@@ -6,3 +6,4 @@ User Docs
 
    install
    versions
+   recommendations
