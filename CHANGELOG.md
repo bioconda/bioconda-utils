@@ -1,5 +1,28 @@
 # Changelog
 
+### [0.19.4](https://www.github.com/bioconda/bioconda-utils/compare/v0.19.3...v0.19.4) (2022-04-30)
+
+
+### Bug Fixes
+
+* fix problematic docs ([#769](https://www.github.com/bioconda/bioconda-utils/issues/769)) ([44d6d2d](https://www.github.com/bioconda/bioconda-utils/commit/44d6d2d36df13b450684668bc86ce2a85f44a63a))
+
+### [0.19.3](https://www.github.com/bioconda/bioconda-utils/compare/v0.19.2...v0.19.3) (2022-04-12)
+
+
+### Bug Fixes
+
+* Don't use conda build --output for finding output file names in the docker container ([#766](https://www.github.com/bioconda/bioconda-utils/issues/766)) ([bdb6c67](https://www.github.com/bioconda/bioconda-utils/commit/bdb6c672f1f2ddd5c423e2448f74cb49283daf86))
+* https prompts to password, ssh to the rescue ([#762](https://www.github.com/bioconda/bioconda-utils/issues/762)) ([6282f2d](https://www.github.com/bioconda/bioconda-utils/commit/6282f2dc2a2ef5c8f0929674a1bcf397af13ca53))
+
+### [0.19.2](https://www.github.com/bioconda/bioconda-utils/compare/v0.19.1...v0.19.2) (2022-04-07)
+
+
+### Bug Fixes
+
+* don't use conda build to get the output file list ([#764](https://www.github.com/bioconda/bioconda-utils/issues/764)) ([f6c7b6f](https://www.github.com/bioconda/bioconda-utils/commit/f6c7b6f2e469bfa6c12e072b3b2f1aa7efa0cc72))
+* Use mambabuild for generating the output file list ([43c22aa](https://www.github.com/bioconda/bioconda-utils/commit/43c22aa5c970b3627c0815d50190d51e5aa161e0))
+
 ### [0.19.1](https://www.github.com/bioconda/bioconda-utils/compare/v0.19.0...v0.19.1) (2022-03-25)
 
 

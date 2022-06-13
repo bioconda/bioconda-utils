@@ -319,6 +319,9 @@ autosectionlabel_prefix_document = True
 
 # autogenerate autodoc stubs via autosummary
 autosummary_generate = True
+autosummary_mock_imports = [
+    'bioconda_utils.bot.config',
+]
 
 # combine docstrings for __init__ and class:
 autoclass_content = "both"
