@@ -12,6 +12,7 @@ commands::
     conda config --add channels defaults
     conda config --add channels bioconda
     conda config --add channels conda-forge
+    conda config --set channel_priority strict
 
 .. _`Install conda`: https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html
 
@@ -24,6 +25,12 @@ commands::
     The order of these commands is
     important: *conda-forge* gets the highest priority, followed by
     *bioconda*, and *defaults* gets the lowest priority.
+
+    Running `conda config --set channel_priority strict` ensures that the
+    configured channel priority is respected when solving dependencies. You can
+    read more about this on `this page of the conda-forge docs
+    <https://conda-forge.org/docs/user/tipsandtricks.html>`_.
+
 
 Now you can use `conda install` to install and use any of the `available
 packages <conda-package_index.html>`_.
