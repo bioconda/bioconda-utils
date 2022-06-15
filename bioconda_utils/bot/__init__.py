@@ -6,7 +6,6 @@ Bioconda Bot & Github App
 
    chat
    commands
-   config
    events
    tasks
    views

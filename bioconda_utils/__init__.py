@@ -6,7 +6,6 @@ Bioconda Utilities Package
 .. autosummary::
    :toctree:
 
-   bioconda_utils.bot
    bioconda_utils.lint
 
 .. rubric:: Submodules
@@ -36,5 +35,6 @@ Bioconda Utilities Package
 """
 
 from ._version import get_versions
+
 __version__ = get_versions()["version"]
 del get_versions
