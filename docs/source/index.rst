@@ -181,7 +181,7 @@ Table of contents
 .. toctree::
    :includehidden:/p
 
-   user/index
+   faqs
    contributor/index
    developer/index
    tutorials/index
