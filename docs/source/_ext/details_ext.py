@@ -18,7 +18,7 @@ The resulting HTML has the structure:
     <summary>
         label goes here
     </summary>
-    <div>
+    <div class="details">
         (rest of content goes here)
     </div>
 </details>
@@ -72,7 +72,7 @@ class DetailsDirective(rst.Directive):
 def visit_details(self, node):
     heading = node["heading"]
     self.body.append(
-        f"<details><summary>{heading}</summary><div>"
+        f'<details><summary>{heading}</summary><div class="details">'
     )
 
 

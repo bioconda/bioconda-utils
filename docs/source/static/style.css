@@ -133,7 +133,7 @@ details summary {
 }
 
 /* The contents of a <details> block after expanding */
-details div {
+details div.details {
     border: 1px solid black;
     font-size: 85%;
     padding: 1em;
