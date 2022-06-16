@@ -2,6 +2,7 @@ name: PR Tests
 on: [pull_request]
 jobs:
   test-linux:
+    if: ${{ false }}  # temporarily disable
     name: Linux tests
     runs-on: ubuntu-latest
     strategy:
@@ -31,6 +32,7 @@ jobs:
             echo "Skipping pytest - only docs modified"
         fi
   test-macosx:
+    if: ${{ false }}  # temporarily disable
     name: OSX tests
     runs-on: macOS-latest
     steps:
@@ -48,6 +50,7 @@ jobs:
             echo "Skipping pytest - only docs modified"
         fi
   autobump-test:
+    if: ${{ false }}  # temporarily disable
     name: autobump test
     runs-on: ubuntu-latest
     steps:

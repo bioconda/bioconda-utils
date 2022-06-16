@@ -8,6 +8,7 @@ on:
 
 jobs:
   build:
+    if: ${{ false }}  # temporarily disable
     name: Build image
     runs-on: ubuntu-20.04
 
