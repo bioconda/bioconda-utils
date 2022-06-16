@@ -4,7 +4,6 @@ jobs:
   test-linux:
     if: ${{ false }}  # temporarily disable
     name: Linux tests
-    if: ${{ false }}  # temporarily disable
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -14,8 +13,10 @@ jobs:
           - long_running_2
     steps:
     - uses: actions/checkout@v1
+      if: ${{ false }}  # temporarily disable
     - name: Setup
       uses: bioconda/bioconda-actions/bioconda_utils_setup_conda/@master
+      if: ${{ false }}  # temporarily disable
     - name: Install bioconda-utils
       run: |
         python setup.py install
