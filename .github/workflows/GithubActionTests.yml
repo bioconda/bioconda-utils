@@ -4,6 +4,7 @@ jobs:
   test-linux:
     if: ${{ false }}  # temporarily disable
     name: Linux tests
+    if: ${{ false }}  # temporarily disable
     runs-on: ubuntu-latest
     strategy:
       matrix:
