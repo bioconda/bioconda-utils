@@ -1,0 +1,64 @@
+name: docs
+on: [push]
+jobs:
+  build-and-test:
+    runs-on: "ubuntu-latest"
+    steps:
+    - uses: actions/checkout@v2
+    - name: build env
+      run: |
+        eval "$(conda shell.bash hook)"
+        conda create -p ./env \
+          --file bioconda-utils/bioconda-utils_requirements.txt \
+          --channel conda-forge \
+          --channel bioconda
+
+    - name: run doctests
+      run: |
+        eval "$(conda shell.bash hook)"
+        conda activate ./env
+        (cd docs && make doctest)
+
+    # Build docs here, and copy them over to a temp directory that is a clone
+    # of the gh-pages branch.
+    - name: build docs
+      run: |
+        eval "$(conda shell.bash hook)"
+        conda activate ./env
+        (cd docs && make html)
+
+        git clone \
+          --single-branch \
+          --branch gh-pages "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/$GITHUB_REPOSITORY" \
+          /tmp/doc
+
+        # Clean out that temp dir because we're about to move our just-built
+        # docs there
+        rm -rf /tmp/doc/*
+        cp -r doc/build/html/* /tmp/doc
+        touch /tmp/doc/.nojekyll
+
+    # Upload the built docs as an artifact for inspection (even on PRs). This
+    # will show up in the Actions web interface.
+    - name: push artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: doc
+        path: /tmp/doc
+
+    # Push docs to gh-pages but ONLY if this test is running on master branch
+    - name: push docs to gh-pages branch
+      if: ${{ (github.ref == 'refs/heads/main') }}
+      run: |
+        cd /tmp/doc
+        git config --global user.email "action@github.com"
+        git config --global user.name "GitHub Action"
+        git add .
+
+        # git commit exits nonzero if nothing to commit, but we don't want to
+        # consider that an error so we ignore it.
+        git commit -m 'update docs' -a || true
+
+        # Push the gh-pages branch. Once this happens, changes will be live
+        # (though could take a couple mins to show up)
+        git push "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/$GITHUB_REPOSITORY" gh-pages
