@@ -11,7 +11,10 @@ jobs:
         conda create -p ./env \
           --file bioconda_utils/bioconda_utils-requirements.txt \
           --channel conda-forge \
-          --channel bioconda
+          --channel bioconda \
+          --strict-channel-priorities
+
+        python setup.py install
 
     - name: run doctests
       run: |
@@ -55,10 +58,7 @@ jobs:
         git config --global user.name "GitHub Action"
         git add .
 
-        # git commit exits nonzero if nothing to commit, but we don't want to
-        # consider that an error so we ignore it.
+        # Don't consider it an error if there's nothing to commit
         git commit -m 'update docs' -a || true
 
-        # Push the gh-pages branch. Once this happens, changes will be live
-        # (though could take a couple mins to show up)
         git push "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/$GITHUB_REPOSITORY" gh-pages
