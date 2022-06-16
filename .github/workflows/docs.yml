@@ -14,6 +14,7 @@ jobs:
           --channel bioconda \
           --strict-channel-priority
 
+        conda activate ./env 
         python setup.py install
 
     - name: run doctests
