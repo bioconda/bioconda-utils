@@ -12,7 +12,7 @@ jobs:
           --file bioconda_utils/bioconda_utils-requirements.txt \
           --channel conda-forge \
           --channel bioconda \
-          --strict-channel-priorities
+          --strict-channel-priority
 
         python setup.py install
 
