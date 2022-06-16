@@ -17,12 +17,6 @@ jobs:
         conda activate ./env 
         python setup.py install
 
-    - name: run doctests
-      run: |
-        eval "$(conda shell.bash hook)"
-        conda activate ./env
-        (cd docs && make doctest)
-
     # Build docs here, and copy them over to a temp directory that is a clone
     # of the gh-pages branch.
     - name: build docs
