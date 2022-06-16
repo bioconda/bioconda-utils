@@ -9,7 +9,7 @@ jobs:
       run: |
         eval "$(conda shell.bash hook)"
         conda create -p ./env \
-          --file bioconda-utils/bioconda-utils_requirements.txt \
+          --file bioconda_utils/bioconda-utils_requirements.txt \
           --channel conda-forge \
           --channel bioconda
 
