@@ -297,6 +297,8 @@ class RecipeBuilder(object):
         # visible in the container
         for i, config_file in enumerate(utils.get_conda_build_config_files()):
             dst_file = self._get_config_path(self.pkg_dir, i, config_file)
+            if not os.path.exists(self.pkg_dir):
+                os.makedirs(self.pkg_dir)
             shutil.copyfile(config_file.path, dst_file)
         if self.build_image:
             self._build_image()
