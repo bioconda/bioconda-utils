@@ -17,7 +17,7 @@ Use ``mamba``
 
     conda install mamba -n base -c conda-forge
 
-Then use `mamba install` instead of `conda install`; `mamba create`
+Then use `mamba install` instead of `conda install`; use `mamba create`
 instead of `conda create`, and so on.
 
 Use environments strategically
@@ -37,7 +37,7 @@ Use environments strategically
    incrementally adding packages to an existing environment.
 
 5. Ensure that you've run ``conda config --set channel_priority strict`` to
-   respect the configure channel order.
+   respect the configured channel order.
 
 Naming environments
 -------------------
@@ -65,18 +65,27 @@ maintain) the same environment.
 What's the difference between Anaconda, conda, Miniconda, and mamba?
 --------------------------------------------------------------------
 
+- conda is the name of the package manager, which is what runs when you call,
+  e.g., ``conda install``.
+- mamba is a drop-in replacement for conda (see above for details)
+- Anaconda is a large installation including Python, conda, and a large number
+  of packages.
+- Miniconda just has conda and its dependencies (in contrast to the larger
+  Anaconda distribution).
+
+
 The `Anaconda Python distribution <https://www.continuum.io/downloads>`_
 started out as a bundle of scientific Python packages that were otherwise
 difficult to install. It was created by `ContinuumIO
 <https://www.continuum.io/>`_ and remains the easiest way to install the full
 scientific Python stack.
 
-Many packaging problems had to be solved in order to provide a cross-platform
-bundle, and one of the tools that came out of that work was the conda package
-manager. So conda is part of th Anaconda Python distribution. But conda ended
-up being very useful on its own and for things other than Python, so
-ContinuumIO spun it out into its own separate `open-source package
-<https://github.com/conda/conda>`_.
+Many packaging problems had to be solved in order to provide all of that
+software in Anaconda in a cross-platform bundle, and one of the tools that came
+out of that work was the conda package manager. So conda is part of th Anaconda
+Python distribution. But conda ended up being very useful on its own and for
+things other than Python, so ContinuumIO spun it out into its own separate
+`open-source package <https://github.com/conda/conda>`_.
 
 Conda became very useful for setting up lightweight environments for testing
 code or running individual steps of a workflow. To avoid needing to install the
@@ -136,8 +145,8 @@ specific builds, such as `pysam`, and so do not meet this criteria.
 Pinned packages
 ~~~~~~~~~~~~~~~
 
-Some packages require
-[ABI](https://en.wikipedia.org/wiki/Application_binary_interface) compatibility
+Some packages require `ABI
+<https://en.wikipedia.org/wiki/Application_binary_interface>`_ compatibility
 with underlying libraries. To ensure that packages can work together, there are
 some libraries that need to be *pinned*, or fixed to a particular version.
 Other packages are then built with that specific version (and therefore that
