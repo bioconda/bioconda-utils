@@ -35,7 +35,7 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: doc
-        path: /tmp/doc
+        path: docs/build/html
 
     # Start the SSH agent so that subsequent steps don't need additional SSH
     # setup. The private key has been added as a secret to this repo (the one
