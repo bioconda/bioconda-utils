@@ -970,6 +970,7 @@ class GitHubHandler:
         """Create a new project card
 
         In addition to **column_id**, you must provide *either*:
+
         - The **note** parameter for a free text note card
         - The **content_type** specifying whether the card references a PR or an Issue,
           *and* the **content_id** with the **id** field from the PR or Issue. Note that

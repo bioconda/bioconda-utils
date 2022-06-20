@@ -1,0 +1,79 @@
+name: docs
+on: [push]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: "ubuntu-latest"
+    steps:
+    - uses: actions/checkout@v2
+    - name: build env
+      run: |
+        eval "$(conda shell.bash hook)"
+        conda create -p ./env \
+          --file bioconda_utils/bioconda_utils-requirements.txt \
+          --channel conda-forge \
+          --channel bioconda \
+          --strict-channel-priority
+
+        conda activate ./env 
+        python setup.py install
+
+    # Build docs here
+    - name: build docs
+      run: |
+        eval "$(conda shell.bash hook)"
+        conda activate ./env
+        (cd docs && make html)
+        touch docs/build/html/.nojekyll
+
+    # Upload the built docs as an artifact for inspection (even on PRs). This
+    # will show up in the Actions web interface.
+    - name: push artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: doc
+        path: docs/build/html
+
+    # Start the SSH agent so that subsequent steps don't need additional SSH
+    # setup. The private key has been added as a secret to this repo (the one
+    # running these tests), and the public key has been added as an allowed
+    # deploy key for the bioconda.github.io repo (the one accepting pushes from
+    # this test). Note that this method ensures that the key is never saved to
+    # disk, and GitHub Actions automatically protects the secrets from being
+    # echoed.
+    - name: ssh setup
+      if: ${{ (github.ref == 'refs/heads/master') }}
+      env:
+        SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+      run: |
+        mkdir -p ~/.ssh
+        ssh-keyscan github.com >> ~/.ssh/known_hosts
+        ssh-agent -a $SSH_AUTH_SOCK > /dev/null
+        ssh-add - <<< "${{ secrets.SSH_PRIVATE_KEY }}"  
+
+    # Clone the bioconda.github.io repo, clean it out completely, then copy the
+    # docs just built above into the repo and commit. Uses SSH as set up above.
+    - name: push docs to bioconda.github.io repo
+      if: ${{ (github.ref == 'refs/heads/master') }}
+      env:
+        SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+      run: |
+        here=$(pwd)
+        REPODIR=/tmp/bioconda.github.io
+        git clone git@github.com:bioconda/bioconda.github.io $REPODIR
+        git rm -rf $REPODIR/*
+        cp -r $here/build/html/* $REPODIR
+
+        cd $REPODIR
+        git add -f .
+        # Only push if there are changes.
+        if git diff origin/master --quiet; then
+            echo "no changes to push to docs repo";
+        else
+          echo "Diffs will be pushed to bioconda.github.io"
+          git commit -m "Updated docs to commit ${GITHUB_SHA}"
+          git push origin master --force
+        fi

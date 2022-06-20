@@ -19,6 +19,7 @@ numpy=1.19.*         # Avoid breaking pandas on OSX
 libblas=*=*openblas  # Avoid large mkl package (pulled in by pandas)
 boltons=18.*
 jsonschema=2.6.*     # JSON schema verification
+simplejson           # Used by bioconda bot worker (NEEDED?)
 
 # pinnings
 conda-forge-pinning=2022.02.18.13.24.38
@@ -34,6 +35,9 @@ regex=2018.08.29
 
 # asyncio
 aiohttp=3.8.*      # HTTP lib
+aiohttp-jinja2     # jinja2 renderer for aiohttp.web
+aiohttp-session
+aiohttp-security
 aiofiles=0.8.*     # async open
 aioftp=0.12.*      # FTP lib
 backoff=1.6.*      # retrying of failed API calls
@@ -57,6 +61,8 @@ celery
 sphinx-autodoc-typehints
 alabaster=0.7.*
 docutils
+markdown
+graphviz
 
 # The bioconductor skeleton needs this
 requests=2.22.*

@@ -130,8 +130,10 @@ class Renderer:
     - Loads and caches templates from paths configured in conf.py
     - Makes additional jinja filters available:
       - underline -- turn text into a RSt level 1 headline
-      - escape -- escape RST special characters
+      - rst_escape -- escape RST special characters
       - as_extlink -- convert (list of) identifiers to extlink references
+      - prefixes -- convert paths into components of the path
+      - rst_link -- convert text, link to ReST-formatted link
     """
     def __init__(self, app, extra_context):
         template_loader = BuiltinTemplateLoader()

@@ -88,13 +88,13 @@ class long_summary(LintCheck):
 
     Consider using the description field for longer text::
 
-    about:
-      summary: Fancy Read Simulator (makes drinks)
-      description: |
-        XYZ is a very fancy read simulator that will not just make coffee
-        while you are waiting but prepare all kinds of exquisite caffeeinated
-        beverages from freshly roasted, single source beans ground to match
-        ambient humidity.
+        about:
+          summary: Fancy Read Simulator (makes drinks)
+          description: |
+            XYZ is a very fancy read simulator that will not just make coffee
+            while you are waiting but prepare all kinds of exquisite caffeeinated
+            beverages from freshly roasted, single source beans ground to match
+            ambient humidity.
 
     This will fit better into the templates listing and describing
     recipes, which assume the summary to be a title and the

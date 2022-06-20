@@ -11,6 +11,7 @@ import sphinx_autodoc_typehints
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 sys.path.insert(0, os.path.abspath("."))
+sys.path.insert(0, os.path.abspath("./_ext"))
 
 
 def setup(app):
@@ -23,7 +24,8 @@ def setup(app):
 # needs_sphinx = '1.0'
 
 extensions = [
-    "bioconda_utils.sphinxext",
+    "bioconda_sphinx_ext",
+    "details_ext",
     "sphinx.ext.intersphinx",
     "sphinx.ext.todo",
     "sphinx.ext.mathjax",
@@ -133,7 +135,7 @@ html_js_files = ["vega.min.js", "vega-lite.min.js", "vega-embed.min.js"]
 # Add any extra paths that contain custom files (such as robots.txt or
 # .htaccess) here, relative to this directory. These files are copied
 # directly to the root of the documentation.
-# html_extra_path = []
+html_extra_path = ['README.md']
 
 # If not '', a 'Last updated on:' timestamp is inserted at every page bottom,
 # using the given strftime format.
@@ -149,15 +151,16 @@ html_sidebars = {
         "about.html",
         "navigation.html",
         "index.html",
-        "searchbox.html",
+        "searchbox2.html",
     ]
 }
 
 html_context = {
     "extra_nav_items": {
-        "Bioconda @ Github": "https://github.com/bioconda/bioconda-recipes",
-        "Package Index": "conda-package_index",
-        '<img alt="Gitter" src="https://img.shields.io/gitter/room/bioconda/Lobby.svg">': "https://gitter.im/bioconda/Lobby",
+        "Browse packages": "conda-package_index",
+        "Bioconda @ Github" : "https://github.com/bioconda/bioconda-recipes",
+        '<img alt="Gitter" src="https://img.shields.io/gitter/room/bioconda/Lobby.svg">':
+        "https://gitter.im/bioconda/Lobby"
     }
 }
 
