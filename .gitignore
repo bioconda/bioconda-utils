@@ -10,6 +10,8 @@ docs/recipes/
 .pytest_cache
 .mypy_cache
 *~
+_bioconda_recipes
+docs/source/developer/_autosummary
 
 # Mac OS Files
 .DS_Store
