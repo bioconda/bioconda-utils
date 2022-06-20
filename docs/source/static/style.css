@@ -121,3 +121,45 @@ table.tutorial th {
 table.tutorial td {
     border: none;
 }
+
+
+/* The label of a <details> block when collapsed */
+details summary {
+
+    cursor: pointer;  /* to make it obvious it can be interacted with */
+    font-size: 85%;
+    color: #888;
+    font-style: italic;
+}
+
+/* The contents of a <details> block after expanding */
+details div.details {
+    border: 1px solid black;
+    font-size: 85%;
+    padding: 1em;
+
+}
+
+/* The heading for the search bar in the left-hand nav */
+#searchlabel {
+    line-height: 10px;
+    padding-top: 25px;
+}
+
+/* The sub-heading for the search bar in the left-hand nav */
+#searchdesc {
+    margin: 0px;
+    font-style: italic;
+}
+
+.circlednumber {
+    font-size: 150%;
+    font-weight: bold;
+    color: #3eb049;
+}
+
+/* in the overview section, move the details up close to the previous
+ * paragraph*/
+#overview details {
+    margin-top: -15px;
+}
