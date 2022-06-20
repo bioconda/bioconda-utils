@@ -86,7 +86,7 @@ async def jinja_defaults(request):
     """Provides all web views using aiohttp-jinja2 with default values
 
     Values are:
-      - **user**: The `AiohttpGitHubHandler for the user if a user is logged in.
+      - **user**: The `AiohttpGitHubHandler` for the user if a user is logged in.
       - **version**: The version of the bot running
       - **navigation_bar**: List of 3-tuples for building nav bar. Each tuple
         comprises the location, ID and natural name for the page to be added
