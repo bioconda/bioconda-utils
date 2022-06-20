@@ -97,7 +97,7 @@ def test_meta_contents(tmpdir, bioc_fetch):
 
 def test_find_best_bioc_version():
 
-    assert bioconductor_skeleton.find_best_bioc_version('DESeq2', '1.14.1') == '3.4'
+    assert bioconductor_skeleton.find_best_bioc_version('DESeq2', '1.36.0') == '3.15'
 
     # Non-existent version:
     with pytest.raises(bioconductor_skeleton.PackageNotFoundError):
