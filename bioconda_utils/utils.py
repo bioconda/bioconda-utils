@@ -215,6 +215,8 @@ def setup_logger(name: str = 'bioconda_utils', loglevel: Union[str, int] = loggi
     """
     new_logger = logging.getLogger(name)
     root_logger = logging.getLogger()
+    if root_logger.hasHandlers():
+        root_logger.handlers.clear()
 
     if logfile:
         if isinstance(logfile_level, str):
