@@ -68,7 +68,7 @@ jobs:
         cd $REPODIR
         git checkout master
         git rm -rf $REPODIR/*
-        cp -r $here/build/html/* $REPODIR
+        cp -r $here/docs/build/html/* $REPODIR
         git add -f .
         # Only push if there are changes.
         if git diff origin/master --quiet; then
