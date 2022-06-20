@@ -151,15 +151,16 @@ html_sidebars = {
         "about.html",
         "navigation.html",
         "index.html",
-        "searchbox.html",
+        "searchbox2.html",
     ]
 }
 
 html_context = {
     "extra_nav_items": {
-        "Bioconda @ Github": "https://github.com/bioconda/bioconda-recipes",
-        "Package Index": "conda-package_index",
-        '<img alt="Gitter" src="https://img.shields.io/gitter/room/bioconda/Lobby.svg">': "https://gitter.im/bioconda/Lobby",
+        "Browse packages": "conda-package_index",
+        "Bioconda @ Github" : "https://github.com/bioconda/bioconda-recipes",
+        '<img alt="Gitter" src="https://img.shields.io/gitter/room/bioconda/Lobby.svg">':
+        "https://gitter.im/bioconda/Lobby"
     }
 }
 
