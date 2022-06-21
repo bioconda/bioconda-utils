@@ -1,5 +1,20 @@
 # Changelog
 
+### [0.19.5](https://www.github.com/bioconda/bioconda-utils/compare/v0.19.4...v0.19.5) (2022-06-21)
+
+
+### Bug Fixes
+
+* create missing config dir ([#777](https://www.github.com/bioconda/bioconda-utils/issues/777)) ([da0a3e4](https://www.github.com/bioconda/bioconda-utils/commit/da0a3e419b765f50f18fd1d6fce58dd2b83e85f1))
+* duplicate logging ([#778](https://www.github.com/bioconda/bioconda-utils/issues/778)) ([cf36bf4](https://www.github.com/bioconda/bioconda-utils/commit/cf36bf4e1b097bdefc59aee316e32e7853ba9f18))
+* find_best_bioc_version test ([#779](https://www.github.com/bioconda/bioconda-utils/issues/779)) ([c132758](https://www.github.com/bioconda/bioconda-utils/commit/c132758bf9bf43e5ef12636108b8c339652863dd))
+
+
+### Documentation
+
+* overhaul front page ([#781](https://www.github.com/bioconda/bioconda-utils/issues/781)) ([5640a66](https://www.github.com/bioconda/bioconda-utils/commit/5640a660f714ca8dd29f4c0e62270519eeaacf25))
+* remove bot from api docs ([#774](https://www.github.com/bioconda/bioconda-utils/issues/774)) ([e940def](https://www.github.com/bioconda/bioconda-utils/commit/e940defb21d8fcf997792c1538e063f7d3b69a49))
+
 ### [0.19.4](https://www.github.com/bioconda/bioconda-utils/compare/v0.19.3...v0.19.4) (2022-04-30)
 
 
