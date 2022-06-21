@@ -194,7 +194,7 @@ a command-line tool, in which case that should be tested as well.
 
 .. note::
    
-   ``conda skeleton pypi`` and ```grayskull pypi``` only work with packages that have a source
+   ``conda skeleton pypi`` and ``grayskull pypi`` only work with packages that have a source
    distribution produced with ``python setup.py sdist``. Packages on PyPI
    which only have a wheel will not work.
    Packages containing only "built source" distributions produced with 
