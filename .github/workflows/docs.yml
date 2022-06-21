@@ -70,11 +70,14 @@ jobs:
         git rm -rf $REPODIR/*
         cp -r $here/docs/build/html/* $REPODIR
         git add -f .
-        # Only push if there are changes.
+
+        # Only commit and push if there are changes.
         if git diff origin/master --quiet; then
             echo "no changes to push to docs repo";
         else
           echo "Diffs will be pushed to bioconda.github.io"
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action"
           git commit -m "Updated docs to commit ${GITHUB_SHA}"
           git push origin master --force
         fi
