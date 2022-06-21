@@ -47,7 +47,7 @@ cachetools=3.0.*   # request caching (NEEDED?)
 gitpython>=3.0.8,3.0.*    # githandler
                           # needs >=3.0.8 due to https://github.com/conda-forge/staged-recipes/issues/10874
 gidgethub=3.0.*           # githubhandler
-pyjwt=1.7.*               # githubhandler (JWT signing)
+pyjwt>=2.4.0              # githubhandler (JWT signing), needs >=2.4.0, CVE-2022-29217
 
 # unknown
 beautifulsoup4=4.6.*
