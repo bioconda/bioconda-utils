@@ -185,16 +185,18 @@ upstream changes.
 Python
 ------
 If a Python package is available on PyPI, use ``conda skeleton pypi
-<packagename>`` to create a recipe, then remove the ``bld.bat`` and any extra
-comments in ``meta.yaml`` and ``build.sh``. The test that is automatically
+<packagename>`` , or the `more recent alternative 
+<https://github.com/conda-incubator/grayskull>`_ ``grayskull pypi <packagename>`` 
+to create a recipe, then remove the ``bld.bat`` and any extra comments 
+in ``meta.yaml`` and ``build.sh``. The test that is automatically
 added is probably sufficient. The exception is when the package also installs
 a command-line tool, in which case that should be tested as well.
 
 .. note::
    
-   ``conda skeleton pypi`` only works with packages that have a source
+   ``conda skeleton pypi`` and ``grayskull pypi`` only work with packages that have a source
    distribution produced with ``python setup.py sdist``. Packages on PyPI
-   which only have a wheel will not work with ``conda skeleton pypi``.
+   which only have a wheel will not work.
    Packages containing only "built source" distributions produced with 
    ``python setup.py bdist`` on UNIX will likewise not work. 
 
