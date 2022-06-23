@@ -46,6 +46,8 @@ variables:
         docker history quay.io/bioconda/bioconda-utils-build-env-cos7:latest
         docker run --rm -t quay.io/bioconda/bioconda-utils-build-env-cos7:latest sh -lec 'type -t conda && conda info -a && conda list'
         docker build -t quay.io/bioconda/bioconda-utils-test-env-cos7:latest -f ./Dockerfile.test ./
+
+  # TODO: migrate to GitHub Actions
   autobump_run: &autobump_run
     name: Check recipes for new upstream releases
     command: |
