@@ -64,12 +64,8 @@ cd ${DOCSOURCE}
 make clean html SPHINXOPTS="-T -j1" 2>&1 | grep -v "WARNING: nonlocal image URL found:"
 cp -r ${DOCHTML}/* $STAGING
 
-# add README.md
-cp $DOCSOURCE/README.md $STAGING
-
 # add .nojekyll
 touch $STAGING/.nojekyll
-
 
 # committing with no changes results in exit 1, so check for that case first.
 cd $STAGING
