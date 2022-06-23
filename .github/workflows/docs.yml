@@ -26,7 +26,7 @@ jobs:
       run: |
         eval "$(conda shell.bash hook)"
         conda activate ./env
-        (cd docs && make html)
+        (cd docs && make clean html SPHINXOPTS="-T -j1" 2>&1 | grep -v "WARNING nonlocal image URL found:")
         touch docs/build/html/.nojekyll
         tar -czf docs.tar.gz docs/build/html
 
