@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.20.0](https://www.github.com/bioconda/bioconda-utils/compare/v0.19.4...v0.20.0) (2022-06-23)
+
+
+### Features
+
+* update mulled-test conda to 4.12 ([#780](https://www.github.com/bioconda/bioconda-utils/issues/780)) ([1934fcb](https://www.github.com/bioconda/bioconda-utils/commit/1934fcb8259b9d33b885b3c9031938f67ac4d1b9))
+
+
+### Bug Fixes
+
+* create missing config dir ([#777](https://www.github.com/bioconda/bioconda-utils/issues/777)) ([da0a3e4](https://www.github.com/bioconda/bioconda-utils/commit/da0a3e419b765f50f18fd1d6fce58dd2b83e85f1))
+* duplicate logging ([#778](https://www.github.com/bioconda/bioconda-utils/issues/778)) ([cf36bf4](https://www.github.com/bioconda/bioconda-utils/commit/cf36bf4e1b097bdefc59aee316e32e7853ba9f18))
+* find_best_bioc_version test ([#779](https://www.github.com/bioconda/bioconda-utils/issues/779)) ([c132758](https://www.github.com/bioconda/bioconda-utils/commit/c132758bf9bf43e5ef12636108b8c339652863dd))
+* wrong usage of lstrip in ellipsize_recipes ([#737](https://www.github.com/bioconda/bioconda-utils/issues/737)) ([afb4006](https://www.github.com/bioconda/bioconda-utils/commit/afb4006310dc668ba1f14101cceb45bebb054efb))
+
+
+### Documentation
+
+* minor comment ([#785](https://www.github.com/bioconda/bioconda-utils/issues/785)) ([dadf9ac](https://www.github.com/bioconda/bioconda-utils/commit/dadf9ac2e1ed1339c638ad73210f464c49093a45))
+* overhaul front page ([#781](https://www.github.com/bioconda/bioconda-utils/issues/781)) ([5640a66](https://www.github.com/bioconda/bioconda-utils/commit/5640a660f714ca8dd29f4c0e62270519eeaacf25))
+* remove bot from api docs ([#774](https://www.github.com/bioconda/bioconda-utils/issues/774)) ([e940def](https://www.github.com/bioconda/bioconda-utils/commit/e940defb21d8fcf997792c1538e063f7d3b69a49))
+* update guidelines.rst to mention grayskull ([#771](https://www.github.com/bioconda/bioconda-utils/issues/771)) ([cdc818e](https://www.github.com/bioconda/bioconda-utils/commit/cdc818e509fe71d9fd5158e6b5397121a9a9a0fc))
+
 ### [0.19.4](https://www.github.com/bioconda/bioconda-utils/compare/v0.19.3...v0.19.4) (2022-04-30)
 
 
