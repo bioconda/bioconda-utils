@@ -44,7 +44,7 @@ following commands::
 
         conda config --set channel_priority strict
 
-    avoids cryptic erros when tryng to install. It ensures that the channel
+    avoids cryptic errors when tryng to install. It ensures that the channel
     priority configured above is respected when solving dependencies. See `this
     section of the conda-forge docs
     <https://conda-forge.org/docs/user/tipsandtricks.html>`_ for more info.
