@@ -51,22 +51,27 @@ following commands::
 
 .. details:: What if I don't want to modify my condarc?
 
-    In some cases you might not want to use ``conda config`` to modify the
-    ``.condarc`` file as described above.
+    Sometimes you might want to specify the channel priority directly in the
+    ``conda`` command-line call when installing a package or creating an
+    environment, and not edit the condarc file with the suggested ``conda
+    config`` commands above.
 
-    Here are the arguments that need to be specified on the command line when
-    running ``conda`` commands (like ``conda install`` in this example that
-    installs the ``samtools`` package) to emulate the commands described
-    above::
+    In that case, you would need to add the following arguments to ``conda`` calls::
 
-        conda install samtools \
+        --channel conda-forge --channel bioconda --strict-channel-priority
+
+    For example, if you were creating an environment with bwa and samtools in
+    it, you would use:
+
+        conda create -n myenv samtools bwa \
           --channel conda-forge \
           --channel bioconda \
+          --channel defaults \
           --strict-channel-priority
 
-    Note that conda interprets channels on the command like like this in order
-    of *decreasing* priority, and the ``defaults`` channel will be the lowest
-    priority.
+    Note that conda interprets channels on the command line in order
+    of *decreasing* priority (in contrast to ``conda config``, where they are
+    listed in increasing priority).
 
 .. _`Install conda`: https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html
 
