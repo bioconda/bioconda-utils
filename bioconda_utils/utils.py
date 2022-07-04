@@ -290,7 +290,7 @@ def ellipsize_recipes(recipes: Collection[str], recipe_folder: str,
         append = ", ..."
     else:
         append = ""
-    return ' ('+', '.join(recipe.lstrip(recipe_folder).lstrip('/')
+    return ' ('+', '.join(recipe.replace(recipe_folder,'').lstrip('/')
                      for recipe in recipes) + append + ')'
 
 
