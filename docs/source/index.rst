@@ -3,46 +3,80 @@
 **Bioconda** lets you install thousands of software packages related to
 biomedical research using the `conda <https://conda.io>`_ package manager.
 
+**NOTE**: *Bioconda supports only 64-bit Linux and macOS*
+
 Usage
 =====
 
-**NOTE**: *Bioconda supports only 64-bit Linux and macOS*
 
-`Install conda`_, then perform a one-time set up of Bioconda with the following
-commands::
+First, `install conda`_. Then perform a one-time set up of Bioconda with the
+following commands::
 
     conda config --add channels defaults
     conda config --add channels bioconda
     conda config --add channels conda-forge
     conda config --set channel_priority strict
 
-.. _`Install conda`: https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html
-
-Now you can use `conda install` to install and use any of the `available
-packages <conda-package_index.html>`_.
-
 .. details:: What did these commands do?
 
-    `conda config` modifies your condarc file which is
-    `~/.condarc` by default.
+    In general, running `conda config` modifies your condarc file which can be
+    found at `~/.condarc` by default.
 
-    The first three commands set the channel priority, where later channels
-    have higher priority. The *bioconda* channel depends on the *conda-forge*
-    channel, and the *defaults* channel is the fallback.
+    The first three commands add channels, from lowest to highest priority.
+    **The order is important** to avoid problems with solving dependencies::
 
-    Running `conda config --set channel_priority strict` ensures that the
-    configured channel priority is respected when solving dependencies. You can
-    read more about this on `this page of the conda-forge docs
-    <https://conda-forge.org/docs/user/tipsandtricks.html>`_.
+        conda config --add channels defaults
+        conda config --add channels bioconda
+        conda config --add channels conda-forge
 
-    .. note::
+    - The ``defaults`` channel is the one set by default in a new installation of
+      conda. It should be set to the lowest priority.
 
-        If you use the ``--channel`` argument instead of modifying
-        ``~/.condarc``, remember that higher-priority channels come first in
-        the command-line interface. So you should use, for example::
+    - The ``bioconda`` channel enables installation of packages related to
+      biomedical research.
 
-            conda install samtools --channel conda-forge --channel bioconda
+    - The ``conda-forge`` channel (see `docs
+      <https://conda-forge.org/docs/index.html>`_) enables installation of
+      general-purpose packages. Since ``bioconda`` heavily depends on the
+      ``conda-forge`` channel, it is set to highest priority.
 
+    This command::
+
+        conda config --set channel_priority strict
+
+    avoids cryptic errors when tryng to install. It ensures that the channel
+    priority configured above is respected when solving dependencies. See `this
+    section of the conda-forge docs
+    <https://conda-forge.org/docs/user/tipsandtricks.html>`_ for more info.
+
+.. details:: What if I don't want to modify my condarc?
+
+    Sometimes you might want to specify the channel priority directly in the
+    ``conda`` command-line call when installing a package or creating an
+    environment, and not edit the condarc file with the suggested ``conda
+    config`` commands above.
+
+    In that case, you would need to add the following arguments to ``conda`` calls::
+
+        --channel conda-forge --channel bioconda --strict-channel-priority
+
+    For example, if you were creating an environment with bwa and samtools in
+    it, you would use:
+
+        conda create -n myenv samtools bwa \
+          --channel conda-forge \
+          --channel bioconda \
+          --channel defaults \
+          --strict-channel-priority
+
+    Note that conda interprets channels on the command line in order
+    of *decreasing* priority (in contrast to ``conda config``, where they are
+    listed in increasing priority).
+
+.. _`Install conda`: https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html
+
+Now you can use ``conda`` to install and use any of the `packages available in
+bioconda <conda-package_index.html>`_.
 
 .. details:: How do I speed up package installation?
 
@@ -57,6 +91,8 @@ packages <conda-package_index.html>`_.
     <https://biocontainers.pro/#/registry>`_. For example::
 
         docker pull quay.io/biocontainers/samtools:1.15.1--h1170115_0
+
+    If you have docker installed, you do not need any additional configuration.
 
 Overview
 ========
@@ -162,16 +198,25 @@ channel.
 Acknowledgments
 ===============
 
-Bioconda is a derivative mark of Anaconda :sup:`®`, a trademark of Anaconda,
-Inc registered in the U.S. and other countries. Anaconda, Inc.
-grants permission of the derivative use but is not associated with Bioconda.
+The Bioconda channel could not exist without support from:
 
-The Bioconda channel is sponsored by `Anaconda, Inc
-<https://www.anaconda.com/>`_ in the form of providing unlimited (in time and
-space) storage. Bioconda is supported by `Circle CI <https://circleci.com/>`_
-via an open source plan including free Linux and MacOS builds. Bioconda is also
-supported by Amazon Web Services in the form of storage for BioContainers as
-well as compute credits.
+- `Anaconda, Inc <https://www.anaconda.com/>`_ in the form of providing
+  unlimited (in time and space) storage for packages in the channel.
+
+- `Circle CI <https://circleci.com/>`_ via an open source plan including free
+  Linux and MacOS builds.
+
+- Amazon Web Services in the form of storage for BioContainers as well as
+  compute credits.
+
+- `Azure DevOps
+  <https://azure.microsoft.com/en-us/services/devops/pipelines/>`_ open source plan
+
+- `GitHub Actions <https://docs.github.com/en/actions>`_ open source plan
+
+The Bioconda logo is a derivative mark of Anaconda :sup:`®`, a trademark of
+Anaconda, Inc registered in the U.S. and other countries. Anaconda, Inc. grants
+permission of the derivative use but is not associated with Bioconda.
 
 Citing Bioconda
 ---------------
@@ -180,8 +225,8 @@ When using Bioconda please **cite our article**:
 
   Grüning, Björn, Ryan Dale, Andreas Sjödin, Brad A. Chapman, Jillian
   Rowe, Christopher H. Tomkins-Tinch, Renan Valieris, the Bioconda
-  Team, and Johannes Köster. 2018. "Bioconda: Sustainable and
-  Comprehensive Software Distribution for the Life Sciences". Nature
+  Team, and Johannes Köster. 2018. *Bioconda: Sustainable and
+  Comprehensive Software Distribution for the Life Sciences*. Nature
   Methods, 2018 doi::doi:`10.1038/s41592-018-0046-7`.
 
 Contributors
