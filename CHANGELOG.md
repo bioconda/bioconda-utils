@@ -1,5 +1,13 @@
 # Changelog
 
+### [0.20.1](https://www.github.com/bioconda/bioconda-utils/compare/v0.20.0...v0.20.1) (2022-07-05)
+
+
+### Documentation
+
+* index and faqs update ([#786](https://www.github.com/bioconda/bioconda-utils/issues/786)) ([1c2714c](https://www.github.com/bioconda/bioconda-utils/commit/1c2714ca1174ae715af85504784eac54f974bbb2))
+* notes on updating bioconda-utils ([#788](https://www.github.com/bioconda/bioconda-utils/issues/788)) ([9078ae3](https://www.github.com/bioconda/bioconda-utils/commit/9078ae38ddec83e5afe908cd67cd5cf0fa2f960b))
+
 ## [0.20.0](https://www.github.com/bioconda/bioconda-utils/compare/v0.19.4...v0.20.0) (2022-06-23)
 
 
