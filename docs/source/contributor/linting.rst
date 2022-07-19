@@ -534,6 +534,15 @@ Build helpers
    compiled. You almost certainly want to have a C compiler in your
    recipe.
 
+.. lint-check:: superfluous_run_dep
+
+   A dependency is specified both in the host and the run section.
+   This is not needed, as the host section gets automatically propagated
+   to the run section. Also, it can even lead to problems, if the dependency
+   in the run section also specifies a version constraint, because this would
+   overwrite conda's automatic pinning mechanism.
+   The dependency can safely be removed from the run section.
+
 
 Linter Errors
 ~~~~~~~~~~~~~

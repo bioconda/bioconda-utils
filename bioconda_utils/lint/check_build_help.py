@@ -29,8 +29,8 @@ class should_use_compilers(LintCheck):
     conda-build itself.
 
     """
-    compilers = ('gcc', 'llvm', 'libgfortran', 'libgcc', 'go', 'cgo',
-                 'toolchain')
+
+    compilers = ("gcc", "llvm", "libgfortran", "libgcc", "go", "cgo", "toolchain")
 
     def check_deps(self, deps):
         for compiler in self.compilers:
@@ -45,13 +45,13 @@ class compilers_must_be_in_build(LintCheck):
     ``requirements: build:`` section.
 
     """
+
     def check_deps(self, deps):
         for dep in deps:
-            if dep.startswith('compiler_'):
+            if dep.startswith("compiler_"):
                 for location in deps[dep]:
-                    if 'run' in location or 'host' in location:
+                    if "run" in location or "host" in location:
                         self.message(section=location)
-
 
 
 class uses_setuptools(LintCheck):
@@ -62,11 +62,26 @@ class uses_setuptools(LintCheck):
     pkg_resources or setuptools console scripts).
 
     """
+
     severity = INFO
 
     def check_recipe(self, recipe):
-        if 'setuptools' in recipe.get_deps('run'):
+        if "setuptools" in recipe.get_deps("run"):
             self.message()
+
+
+class superfluous_run_dep(LintCheck):
+    """The recipe specifies a dependency in both host and run.
+
+    Dependencies specified in host are automatically added to run.
+    Please remove the superfluous dependency from the run section.
+
+    """
+
+    def check_deps(self, recipe):
+        for dep in recipe.get_deps("run"):
+            if dep in recipe.get_deps("host"):
+                self.message()
 
 
 class setup_py_install_args(LintCheck):
@@ -81,27 +96,28 @@ class setup_py_install_args(LintCheck):
     requires defines entrypoints in its ``setup.py``.
 
     """
+
     @staticmethod
     def _check_line(line: str) -> bool:
         """Check a line for a broken call to setup.py"""
-        if 'setup.py install' not in line:
+        if "setup.py install" not in line:
             return True
-        if '--single-version-externally-managed' in line:
+        if "--single-version-externally-managed" in line:
             return True
         return False
 
     def check_deps(self, deps):
-        if 'setuptools' not in deps:
+        if "setuptools" not in deps:
             return  # no setuptools, no problem
 
-        if not self._check_line(self.recipe.get('build/script', '')):
-            self.message(section='build/script')
+        if not self._check_line(self.recipe.get("build/script", "")):
+            self.message(section="build/script")
 
         try:
-            with open(os.path.join(self.recipe.dir, 'build.sh')) as buildsh:
+            with open(os.path.join(self.recipe.dir, "build.sh")) as buildsh:
                 for num, line in enumerate(buildsh):
                     if not self._check_line(line):
-                        self.message(fname='build.sh', line=num)
+                        self.message(fname="build.sh", line=num)
         except FileNotFoundError:
             pass
 
@@ -115,10 +131,10 @@ class cython_must_be_in_host(LintCheck):
         host:
           - cython
     """
+
     def check_deps(self, deps):
-        if 'cython' in deps:
-            if any('host' not in location
-                   for location in deps['cython']):
+        if "cython" in deps:
+            if any("host" not in location for location in deps["cython"]):
                 self.message()
 
 
@@ -132,7 +148,9 @@ class cython_needs_compiler(LintCheck):
           - {{ compiler('c') }}
 
     """
+
     severity = WARNING
+
     def check_deps(self, deps):
-        if 'cython' in deps and 'compiler_c' not in deps:
+        if "cython" in deps and "compiler_c" not in deps:
             self.message()
