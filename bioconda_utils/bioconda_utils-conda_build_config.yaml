@@ -46,6 +46,7 @@ python_impl:
   - cpython
   - cpython
   - cpython
+  - cpython
 numpy:
   - 1.19.*
   - 1.17.*
