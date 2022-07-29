@@ -11,6 +11,22 @@ working on Azure DevOps and building packages.
 and versioning. This works in a specific way, so the steps below walk through
 the process if you're not already familiar.
 
+Prefix the PR title, as well as at least one commit in the PR, with one of the
+following change types. Some special types will change the bioconda-utils
+version number, as noted below.
+
+- `<type>!` (that is, any of the types below ending an exclamation point) indicates
+  a breaking change. *PRs with this title will result in a new* **MAJOR VERSION**
+- `feat:` a new feature. *PRs with this title will result in a new* **MINOR VERSION**
+- `fix:` fixes a bug. *PRs with this title will result in a new* **PATCH VERSION**
+- `test:` changes related to tests
+- `chore:` for maintenance changes. E.g. dependency version changes (should use
+  a `!` to indicate breaking change in this case)
+- `ci:` for changes related to CI *of bioconda-utils*
+- `docs:` a change that only affects documentation (ReST, comments, docstrings)
+- `refactor:` a change in code that neither fixes a bug nor adds a feature
+- `style:` whitespace, formatting, etc
+
 
 The general workflow is:
 
