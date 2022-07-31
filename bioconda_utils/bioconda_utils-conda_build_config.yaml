@@ -34,6 +34,7 @@ r_base:
 
 python:
   - 3.9.*  *_cpython
+  - 3.9.*  *_cpython
   - 3.8.*  *_cpython
   - 3.7.*  *_cpython
   - 3.6.*  *_cpython
@@ -45,7 +46,10 @@ python_impl:
   - cpython
   - cpython
   - cpython
+  - cpython
+# Warning! This needs to both match the length of python and python_impl but ALSO match what conda-forge is using/has used!
 numpy:
+  - 1.21.*
   - 1.19.*
   - 1.17.*
   - 1.17.*
