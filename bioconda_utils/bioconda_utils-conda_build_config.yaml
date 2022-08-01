@@ -33,7 +33,7 @@ r_base:
   - 4.1.*
 
 python:
-  - 3.9.*  *_cpython
+  - 3.10.*  *_cpython
   - 3.9.*  *_cpython
   - 3.8.*  *_cpython
   - 3.7.*  *_cpython
