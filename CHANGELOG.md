@@ -1,5 +1,12 @@
 # Changelog
 
+### [1.0.1](https://www.github.com/bioconda/bioconda-utils/compare/v1.0.0...v1.0.1) (2022-08-01)
+
+
+### Bug Fixes
+
+* Fix pinning and networkx in_degree syntax ([#793](https://www.github.com/bioconda/bioconda-utils/issues/793)) ([208d970](https://www.github.com/bioconda/bioconda-utils/commit/208d9709310776fedda719f1eb8911b7e4b05df8))
+
 ## [1.0.0](https://www.github.com/bioconda/bioconda-utils/compare/v0.20.0...v1.0.0) (2022-07-31)
 
 
