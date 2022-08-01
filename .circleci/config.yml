@@ -177,21 +177,6 @@ jobs:
 
 workflows:
   version: 2
-  # workflow for testing pushes and PRs
-  bioconda-utils-test:
-    jobs:
-      # - test-linux:
-      #     context: org-global
-      # - test-linux (long_running_1):
-      #     context: org-global
-      # - test-linux (long_running_2):
-      #     context: org-global
-      #- test-macos:
-      #    context: org-global
-      - build-docs:
-          context: org-global
-      #- autobump-test:
-      #    context: org-global
   # regular runs of build-docs
   bioconda-utils-build-docs:
      triggers:
