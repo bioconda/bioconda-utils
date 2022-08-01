@@ -187,7 +187,7 @@ def get_subdags(dag, n_workers, worker_offset):
 
     # Get connected subdags and sort by nodes
     if n_workers > 1:
-        root_nodes = sorted([k for k, v in dag.in_degree().items() if v == 0])
+        root_nodes = sorted([k for (k, v) in dag.in_degree() if v == 0])
         nodes = set()
         found = set()
         for idx, root_node in enumerate(root_nodes):
