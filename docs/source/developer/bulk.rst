@@ -95,3 +95,9 @@ Some unordered notes on working with the bulk branch:
   can also look for the broad structure of the log: recipes with nothing to do
   will be reported in a short stanza, so you can use those as structural
   markers to indicate where there's no useful log info.
+
+- Instead of using the search functionality in the CI logs, download the raw
+  log (from gear menu at top right) to use your browser search functionality,
+  which is often much easier to use (for example, Chrome shows occurrences of
+  search term throughout the document in the scrollbar, which makes digging for
+  the actual error a lot easier).
