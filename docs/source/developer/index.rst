@@ -130,6 +130,13 @@ installation of the version of bioconda-utils specified in that file.
     "Install bioconda-utils" step to ensure it installed the version you
     expect.
 
+Bulk branch
+~~~~~~~~~~~
+
+.. toctree::
+
+    bulk
+
 API docs
 ~~~~~~~~
 
@@ -144,3 +151,4 @@ considered stable.
    :toctree: _autosummary
 
    bioconda_utils
+
