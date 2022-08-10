@@ -101,3 +101,10 @@ Some unordered notes on working with the bulk branch:
   which is often much easier to use (for example, Chrome shows occurrences of
   search term throughout the document in the scrollbar, which makes digging for
   the actual error a lot easier).
+
+- You may see a lot of output for Python packages in particular. This is because for
+  bioconda-utils to figure out whether it needs to build the package, it needs
+  to know what the hash is for the package. This in turn requires figuring out
+  all the dependencies to see which of them are pinned and then using those to
+  calculate a hash. So it may appear that it's doing a lot of work for packages
+  that don't need to be rebuilt, but this is expected.
