@@ -149,6 +149,11 @@ anything essential.
    The build number should be ``0`` for any new version and
    incremented with each revised build published.
 
+.. lint-check:: version_constraints_missing_whitespace
+
+   Version constraints in the meta.yaml must have spaces between the package
+   name and the constraint. E.g., not `python>=3.8` but instead `python >=3.8`.
+
 
 Noarch or not noarch
 ~~~~~~~~~~~~~~~~~~~~
