@@ -28,7 +28,6 @@ jobs:
     # Build docs here
     - name: build docs
       run: |
-        set -euo pipefail
         eval "$(conda shell.bash hook)"
         conda activate ./env
         (cd docs && make clean html SPHINXOPTS="-T -j1"
