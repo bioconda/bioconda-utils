@@ -2,7 +2,7 @@ name: docs
 on:
   push:
   schedule:
-    - cron: '05 14 * * *'
+    - cron: '05 19 * * *'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -31,7 +31,7 @@ jobs:
         set -euo pipefail
         eval "$(conda shell.bash hook)"
         conda activate ./env
-        (cd docs && make clean html SPHINXOPTS="-T -j1" 2>&1 | grep -v "WARNING nonlocal image URL found:")
+        (cd docs && make clean html SPHINXOPTS="-T -j1"
         touch docs/build/html/.nojekyll
         tar -czf docs.tar.gz docs/build/html
 
