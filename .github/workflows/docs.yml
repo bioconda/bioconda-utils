@@ -22,7 +22,7 @@ jobs:
           --channel bioconda \
           --strict-channel-priority
 
-        conda activate ./env 
+        conda activate ./env
         python setup.py install
 
     # Build docs here
@@ -30,7 +30,7 @@ jobs:
       run: |
         eval "$(conda shell.bash hook)"
         conda activate ./env
-        (cd docs && make clean html SPHINXOPTS="-T -j1")
+        (cd docs && BIOCONDA_FILTER_RECIPES=5 make clean html SPHINXOPTS="-T -j1")
         touch docs/build/html/.nojekyll
         tar -czf docs.tar.gz docs/build/html
 
