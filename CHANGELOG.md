@@ -1,5 +1,29 @@
 # Changelog
 
+### [1.0.1](https://www.github.com/bioconda/bioconda-utils/compare/v1.0.0...v1.0.1) (2022-08-01)
+
+
+### Bug Fixes
+
+* Fix pinning and networkx in_degree syntax ([#793](https://www.github.com/bioconda/bioconda-utils/issues/793)) ([208d970](https://www.github.com/bioconda/bioconda-utils/commit/208d9709310776fedda719f1eb8911b7e4b05df8))
+
+## [1.0.0](https://www.github.com/bioconda/bioconda-utils/compare/v0.20.0...v1.0.0) (2022-07-31)
+
+
+### ⚠ BREAKING CHANGES
+
+* update pinnings to python 3.10 (#790)
+
+### Documentation
+
+* index and faqs update ([#786](https://www.github.com/bioconda/bioconda-utils/issues/786)) ([1c2714c](https://www.github.com/bioconda/bioconda-utils/commit/1c2714ca1174ae715af85504784eac54f974bbb2))
+* notes on updating bioconda-utils ([#788](https://www.github.com/bioconda/bioconda-utils/issues/788)) ([9078ae3](https://www.github.com/bioconda/bioconda-utils/commit/9078ae38ddec83e5afe908cd67cd5cf0fa2f960b))
+
+
+### Miscellaneous Chores
+
+* update pinnings to python 3.10 ([#790](https://www.github.com/bioconda/bioconda-utils/issues/790)) ([e4998a9](https://www.github.com/bioconda/bioconda-utils/commit/e4998a95ccabb5cdc83a58793b645509339ae650))
+
 ## [0.20.0](https://www.github.com/bioconda/bioconda-utils/compare/v0.19.4...v0.20.0) (2022-06-23)
 
 
