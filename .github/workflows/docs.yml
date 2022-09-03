@@ -1,5 +1,9 @@
 name: docs
-on: [push]
+on
+ - push
+ - schedule:
+    - cron: '05 14 * * *'
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
