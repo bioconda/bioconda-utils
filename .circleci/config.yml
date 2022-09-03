@@ -178,17 +178,17 @@ jobs:
 workflows:
   version: 2
   # regular runs of build-docs
-  bioconda-utils-build-docs:
-     triggers:
-       - schedule:
-           cron: "0 0,6 * * *"
-           filters:
-             branches:
-               only:
-                 - master
-     jobs:
-       - build-docs:
-           context: org-global
+  # bioconda-utils-build-docs:
+  #    triggers:
+  #      - schedule:
+  #          cron: "0 0,6 * * *"
+  #          filters:
+  #            branches:
+  #              only:
+  #                - master
+  #    jobs:
+  #      - build-docs:
+  #          context: org-global
   # regular runs of autobump
   bioconda-utils-autobump:
      triggers:
