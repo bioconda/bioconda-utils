@@ -47,7 +47,9 @@ variables:
         docker run --rm -t quay.io/bioconda/bioconda-utils-build-env-cos7:latest sh -lec 'type -t conda && conda info -a && conda list'
         docker build -t quay.io/bioconda/bioconda-utils-test-env-cos7:latest -f ./Dockerfile.test ./
 
-  # TODO: migrate to GitHub Actions
+  # NOTE: We want this to stay on CircleCI (rather than run on Azure Pipelines
+  # or GitHub Actions) so that we avoid additional workload on those other
+  # services (which currently take care of PRs and bulk branch respectively)
   autobump_run: &autobump_run
     name: Check recipes for new upstream releases
     command: |

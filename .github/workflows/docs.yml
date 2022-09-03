@@ -1,7 +1,7 @@
 name: docs
-on
- - push
- - schedule:
+on:
+  push:
+  schedule:
     - cron: '05 14 * * *'
 
 concurrency:
