@@ -77,6 +77,14 @@ example is updating pinnings to support Python 3.10.
    recipes they're used with, and bump the recipes' build numbers
    appropriately. Then push to bulk to rebuild all of those.
 
+Merging back to master
+----------------------
+
+The goal on the bulk branch is to get all workers successfully passing, such
+that there is nothing to do in the PR where bulk is merged into master. This
+may require adding recipes to the ``build-fail-blacklist`` to skip building
+them.
+
 Notes on working with bulk branch
 ---------------------------------
 
@@ -87,14 +95,18 @@ Some unordered notes on working with the bulk branch:
 - You may want to coordinate the timing of fixes and pushes (say, via gitter).
   This is because the bulk branch has ``fail-fast: false`` set to allow
   parallel jobs to progress as much as possible. Multiple people pushing to
-  bulk runs the risk of trying to build the same recipes multiple times.
+  bulk means that there is a risk of trying to build the same recipes multiple
+  times. In such a case, only the first package will be actually uploaded and
+  subsequent packages will a failure on the upload step. So there is no danger
+  to the channel, it's just poor use of CI resources.
 
 - The logs are awkward to read and hard to find exactly where failures occur.
   One way to do this is to go to the bottom where there is a report of which
-  packages failed. Then search for that package backwards through the log. You
-  can also look for the broad structure of the log: recipes with nothing to do
-  will be reported in a short stanza, so you can use those as structural
-  markers to indicate where there's no useful log info.
+  packages failed. This report is shown when a bulk job goes to completion
+  (rather than timing out). Then search for that package backwards through the
+  log. You can also look for the broad structure of the log: recipes with
+  nothing to do will be reported in a short stanza, so you can use those as
+  structural markers to indicate where there's no useful log info.
 
 - Instead of using the search functionality in the CI logs, download the raw
   log (from gear menu at top right) to use your browser search functionality,
@@ -107,4 +119,8 @@ Some unordered notes on working with the bulk branch:
   to know what the hash is for the package. This in turn requires figuring out
   all the dependencies to see which of them are pinned and then using those to
   calculate a hash. So it may appear that it's doing a lot of work for packages
-  that don't need to be rebuilt, but this is expected.
+  that don't need to be rebuilt, but that work needs to be done simply to
+  figure out if a rebuild is needed, and so this is expected.
+
+- The bulk runs take place on GitHub Actions, and the configuration is in
+  :file:`.github/workflows/Bulk.yml`.
