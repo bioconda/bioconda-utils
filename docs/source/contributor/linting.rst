@@ -150,6 +150,7 @@ anything essential.
    incremented with each revised build published.
 
 
+
 Noarch or not noarch
 ~~~~~~~~~~~~~~~~~~~~
 
@@ -324,6 +325,10 @@ These checks ensure that the ``extra`` section conforms to our
    The recipe is trying to skip a lint with an unknown name. Check
    the list here for the correct name.
 
+.. lint-check:: version_constraints_missing_whitespace
+
+   Version constraints in the meta.yaml must have spaces between the package
+   name and the constraint.
 
 Recipe Parsing
 ~~~~~~~~~~~~~~

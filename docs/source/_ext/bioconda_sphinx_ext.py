@@ -218,7 +218,7 @@ class RequirementsField(GroupedField):
             backrefs.add((env.docname, source))
 
         fieldbody = nodes.field_body('', listnode)
-        fieldbody.set_class('field-list-wrapped')
+        fieldbody['classes'].append('field-list-wrapped')
         return nodes.field('', fieldname, fieldbody)
 
 
@@ -264,7 +264,7 @@ def resolve_required_by_xrefs(app, env, node, contnode):
                                       classes=['xref', 'backref'])
             refnode = make_refnode(app.builder, docname,
                                    back_docname, back_target, name_node)
-            refnode.set_class('conda-package')
+            refnode['classes'].append('conda-package')
             par += refnode
             listnode += nodes.list_item('', par)
         return listnode
@@ -468,7 +468,7 @@ class CondaDomain(Domain):
                     self.data['objects'][objtype, target][0],
                     self.data['objects'][objtype, target][1],
                     contnode, target + ' ' + objtype)
-                node.set_class('conda-package')
+                node['classes'].append('conda-package')
                 return node
 
             if objtype == "package":

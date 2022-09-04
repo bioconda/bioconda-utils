@@ -27,7 +27,6 @@ Bioconda Utilities Package
    hosters
    pkg_test
    recipe
-   sphinxext
    autobump
    update_pinnings
    upload
