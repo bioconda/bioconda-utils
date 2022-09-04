@@ -1248,7 +1248,7 @@ def write_recipe(package, recipe_dir, config, force=False, bioc_version=None,
 
             SUCCESS=0
             for URL in ${URLS[@]}; do
-              curl $URL > $TARBALL
+              curl -L $URL > $TARBALL
               [[ $? == 0 ]] || continue
 
               # Platform-specific md5sum checks.
