@@ -203,6 +203,22 @@ with ``conda install``.
     what a package contains and how it is installed into an
     environment.
 
+What's the difference between miniconda, miniforge, mambaforge, micromamba?
+---------------------------------------------------------------------------
+
+**Miniconda** is the slimmed-down version of the Anaconda distribution;
+miniconda only has conda and its dependencies.
+
+**Miniforge** is like miniconda, but with the conda-forge channel preconfigures
+and all packages coming from the conda-forge and *not* the ``defaults``
+channel.
+
+**Mambaforge** is like miniforge, but has mamba installed into the base environment.
+
+**Micromamba** is not a conda distribution. Rather, it is a minimal binary that
+has roughly the same commands as mamba, so that a single executable (rather
+than an entire Python installation required for conda itself) can be used to
+create environments. Micromamba is currently still experimental.
 
 Why are Bioconductor data packages failing to install?
 ------------------------------------------------------
