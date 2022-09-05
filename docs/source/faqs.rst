@@ -203,3 +203,82 @@ with ``conda install``.
     what a package contains and how it is installed into an
     environment.
 
+
+Why are Bioconductor data packages failing to install?
+------------------------------------------------------
+
+When creating an environment containing Bioconductor data packages, you may get
+errors like this::
+
+    ValueError: unsupported format character 'T' (0x54) at index 648
+
+The actual error will be somewhere above that, with something like this (here,
+it's for the ``bioconductor-org.hs.eg.db=3.14.0=r41hdfd78af_0`` package)::
+
+    message:
+    post-link script failed for package bioconda::bioconductor-org.hs.eg.db-3.14.0-r41hdfd78af_0
+    location of failed script: /Users/dalerr/env/bin/.bioconductor-org.hs.eg.db-post-link.sh
+    ==> script messages <==
+    <None>
+    ==> script output <==
+    stdout: ERROR: post-link.sh was unable to download any of the following URLs with the md5sum ef7fc0096ec579f564a33f0f4869324a:
+    https://bioconductor.org/packages/3.14/data/annotation/src/contrib/org.Hs.eg.db_3.14.0.tar.gz
+    https://bioarchive.galaxyproject.org/org.Hs.eg.db_3.14.0.tar.gz
+    https://depot.galaxyproject.org/software/bioconductor-org.hs.eg.db/bioconductor-org.hs.eg.db_3.14.0_src_all.tar.gz
+
+**To fix it**, you need to adjust the requirements. If you had this as a requirement::
+
+    bioconductor-org.hs.eg.db=3.14.0=r41hdfd78af_0
+
+then increase the build number on the end, here from ``_0`` to ``_1``::
+
+    bioconductor-org.hs.eg.db=3.14.0=r41hdfd78af_1
+
+or, relax the exact build constraint while keeping the package version the same::
+
+    bioconductor-org.hs.eg.db=3.14.0
+
+and then re-build your environment.
+
+**The reason this is happening** is a combination of factors. Early on in
+Bioconda's history we made the decision that pure data packages -- like
+Bioconductor data packages, which can be multiple GB in size -- would not be
+directly converted into conda packages. That way, we could avoid additional
+storage load on Anaconda's servers since the data were already available from
+Bioconductor, and we could provide a mechanism to use the data packages within
+an R environment living in a conda environment. This mechanism is
+a `post-link.sh
+<https://docs.conda.io/projects/conda-build/en/latest/resources/link-scripts.html>`_
+script for the recipe.
+
+When a user installs the package via conda, the GB of data aren't in the
+package. Rather, the URL pointing to the tarball is in the post-link script,
+and the script uses ``curl`` to download the package from Bioconductor and
+install into the conda environment's R library. We also set up separate
+infrastructure to archive data packages to other servers, and these archive
+URLs were also stored in the post-link scripts as backups.
+
+*The problem is that back then, we assumed that URLs would be stable and we did
+not use the* ``-L`` *argument for curl in post-link scripts*.
+
+Recently Bioconductor packages have moved to a different server (XSEDE/ACCESS).
+The old URL, the one hard-coded in the post-link scripts, is correctly now
+a redirect to the new location. But without ``-L``, the existing recipes and
+their post-link scripts cannot follow the redirect! Compounding this, the
+archive URLs stopped being generated, so the backup strategy also failed.
+
+The fix was to re-build all Bioconductor data packages and include the ``-L``
+argument, allowing them to follow the redirect and correctly install the
+package. Conda packages have the idea of a "build number", which allows us to
+still provide the same version of the package (3.14.0 in the example above) but
+packaged differently (in this case, with a post-link script that works in
+Bioconductor's current server environment).
+
+**Reproducibility is hard.** We are trying our best, and conda is an amazing
+resource. But the fact that a single entity does not (and should not!) control
+all code, data, packages, distribution mechanisms, and installation mechanisms,
+means that we will always be at risk of similar situtations in the future.
+Hopefully we are guarding better against this particular issue, but see
+`Grüning et al 2018 <http://dx.doi.org/10.1016/j.cels.2018.03.014>`_
+(especially Fig 1) for advice on more reproducible strategies you can use for
+your own work.
