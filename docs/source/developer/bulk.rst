@@ -77,13 +77,29 @@ example is updating pinnings to support Python 3.10.
    recipes they're used with, and bump the recipes' build numbers
    appropriately. Then push to bulk to rebuild all of those.
 
+See :ref:`merge-bulk` for next steps.
+
+.. _merge-bulk:
+
 Merging back to master
 ----------------------
 
-The goal on the bulk branch is to get all workers successfully passing, such
-that there is nothing to do in the PR where bulk is merged into master. This
-may require adding recipes to the ``build-fail-blacklist`` to skip building
-them.
+1. The goal on the bulk branch is to get all workers successfully passing, such
+   that there is nothing to do in the PR where bulk is merged into master. This
+   may require adding recipes to the ``build-fail-blacklist`` to skip building
+   them.
+
+2. Merge the master branch into the bulk branch, dealing with any conflicts as
+   needed.
+
+3. Merge the bulk branch into the master branch.
+
+4. Ensure that ``bioconda-common/common.sh`` points to the same version of
+   bioconda-utils that the ``bulk`` branch has been using.
+
+5. Compile a list of packages that have been skipped or blacklisted during the
+   bulk migration, and open a new issue to ask for help from the community.
+
 
 Notes on working with bulk branch
 ---------------------------------
