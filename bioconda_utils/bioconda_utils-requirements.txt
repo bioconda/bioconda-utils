@@ -22,7 +22,7 @@ jsonschema=2.6.*     # JSON schema verification
 simplejson           # Used by bioconda bot worker (NEEDED?)
 
 # pinnings
-conda-forge-pinning=2022.02.18.13.24.38
+conda-forge-pinning=2022.08.25.15.20.42
 
 # tools
 anaconda-client=1.6.*  # anaconda_upload
