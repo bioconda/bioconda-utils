@@ -20,7 +20,7 @@ jobs:
       uses: bioconda/bioconda-actions/bioconda_utils_setup_conda/@master
     - name: Install bioconda-utils
       run: |
-        python setup.py install
+        python setup.py install -r test-requirements.txt
     - name: Build docker container
       run: |
         docker build -t quay.io/bioconda/bioconda-utils-build-env-cos7:latest ./
