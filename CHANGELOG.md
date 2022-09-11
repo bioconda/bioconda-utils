@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.0](https://www.github.com/bioconda/bioconda-utils/compare/v1.0.1...v1.1.0) (2022-09-11)
+
+
+### Features
+
+* linter for missing space in dependency version contraints ([#795](https://www.github.com/bioconda/bioconda-utils/issues/795)) ([85ccb23](https://www.github.com/bioconda/bioconda-utils/commit/85ccb2382066f2b7a6faf3911e52ebe1623dfcc7))
+* schedule docs on GitHub actions ([#800](https://www.github.com/bioconda/bioconda-utils/issues/800)) ([dde65d0](https://www.github.com/bioconda/bioconda-utils/commit/dde65d000b6fc978158e49ff875f50996a1bed11))
+* Update htslib and conda-forge pinnings ([#797](https://www.github.com/bioconda/bioconda-utils/issues/797)) ([162d597](https://www.github.com/bioconda/bioconda-utils/commit/162d5977eb5acec4c378e1831e6e59c0f4872801))
+
+
+### Documentation
+
+* developer documentation updates ([#792](https://www.github.com/bioconda/bioconda-utils/issues/792)) ([87c16fe](https://www.github.com/bioconda/bioconda-utils/commit/87c16fe334b2aa5ffbe647d3941b3dfc6ebd53df))
+
 ### [1.0.1](https://www.github.com/bioconda/bioconda-utils/compare/v1.0.0...v1.0.1) (2022-08-01)
 
 
