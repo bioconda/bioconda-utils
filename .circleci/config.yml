@@ -1,197 +1,79 @@
+# The autobump bot runs on CircleCI (rather than run on Azure Pipelines or
+# GitHub Actions) so that we avoid additional workload on those other services
+# which currently take care of PRs and bulk branch, respectively.
+
 version: 2
 
-variables:
-  restore_cache: &restore_cache
-    restore_cache:
-      keys:
-        - bioconda-utils-{{
-            checksum ".circleci/common.sh" }}-{{
-            checksum ".circleci/setup.sh" }}-{{
-            checksum ".circleci/config.yml" }}-{{
-            checksum "bioconda_utils/bioconda_utils-requirements.txt" }}-{{
-            arch }}
-  save_cache: &save_cache
-    save_cache:
-      key: bioconda-utils-{{
+jobs:
+  autobump:
+    machine:
+      image: ubuntu-2004:202201-02
+    steps:
+      - add_ssh_keys:
+        fingerprints:
+          - db:1a:ec:46:59:8f:a8:ad:25:e7:7a:57:76:59:ba:24
+      - checkout
+      - common:
+        run:
+          name: Download common definitions
+          command: curl -s https://raw.githubusercontent.com/bioconda/bioconda-common/master/common.sh > .circleci/common.sh
+
+      - restore_cache:
+        keys:
+          - bioconda-utils-{{
+              checksum ".circleci/common.sh" }}-{{
+              checksum ".circleci/setup.sh" }}-{{
+              checksum ".circleci/config.yml" }}-{{
+              checksum "bioconda_utils/bioconda_utils-requirements.txt" }}
+
+      - setup:
+        - run:
+          name: Setup dependencies
+          command: .circleci/setup.sh
+
+      - save_cache:
+        key: bioconda-utils-{{
              checksum ".circleci/common.sh" }}-{{
              checksum ".circleci/setup.sh" }}-{{
              checksum ".circleci/config.yml" }}-{{
-             checksum "bioconda_utils/bioconda_utils-requirements.txt" }}-{{
-             arch }}
-      paths:
-        - miniconda
-  common: &common
-    run:
-      name: Download common definitions
-      command: curl -s https://raw.githubusercontent.com/bioconda/bioconda-common/master/common.sh > .circleci/common.sh
-  setup: &setup
-    run:
-      name: Setup dependencies
-      command: .circleci/setup.sh
-  macos: &macos
-    macos:
-      xcode: "9.4.1"
-  linux: &linux
-    machine:
-      image: ubuntu-2004:202201-02
-  install_bioconda_utils: &install_bioconda_utils
-    run:
-      name: Install bioconda-utils
-      command: python setup.py install
-  build_docker_container: &build_docker_container
-    run:
-      name: Build the updated docker container
-      command: |
-        docker build -t quay.io/bioconda/bioconda-utils-build-env-cos7:latest ./
-        docker history quay.io/bioconda/bioconda-utils-build-env-cos7:latest
-        docker run --rm -t quay.io/bioconda/bioconda-utils-build-env-cos7:latest sh -lec 'type -t conda && conda info -a && conda list'
-        docker build -t quay.io/bioconda/bioconda-utils-test-env-cos7:latest -f ./Dockerfile.test ./
+             checksum "bioconda_utils/bioconda_utils-requirements.txt" }}
+        paths:
+          - miniconda
 
-  # NOTE: We want this to stay on CircleCI (rather than run on Azure Pipelines
-  # or GitHub Actions) so that we avoid additional workload on those other
-  # services (which currently take care of PRs and bulk branch respectively)
-  autobump_run: &autobump_run
-    name: Check recipes for new upstream releases
-    command: |
-      git clone git@github.com:bioconda/bioconda-recipes
-      cd bioconda-recipes
-      git config user.name "Autobump"
-      git config user.email "bioconda@users.noreply.github.com"
-      mkdir -p /tmp/artifacts
-      bioconda-utils autobump \
-        --unparsed-urls /tmp/artifacts/unparsed_urls.txt \
-        --failed-urls /tmp/artifacts/failed_urls.txt \
-        --recipe-status /tmp/artifacts/status.txt \
-        --create-pr \
-        --no-check-pinnings \
-        --no-check-pending-deps \
-        --no-follow-graph \
-        --exclude 'bioconductor-*' \
-        --commit-as BiocondaBot 47040946+BiocondaBot@users.noreply.github.com \
-        $AUTOBUMP_OPTS
-  test_linux: &test_linux
-    <<: *linux
-    steps:
-      - checkout
-      - *common
-      - *restore_cache
-      - *setup
-      - *save_cache
-      - *install_bioconda_utils
-      - *build_docker_container
-      - run:
-          name: Testing
+      - install_bioconda_utils:
+          - run:
+            name: Install bioconda-utils
+            command: |
+              VERSION=$(grep BIOCONDA_UTILS_TAG .circleci/common.sh | cut -f2 -d "=")
+              git checkout ${VERSION}
+              python setup.py install
+
+          - store_artifacts:
+            path: /tmp/artifacts
+
+      - autobump_run: &autobump_run
+        - run:
+          name: Check recipes for new upstream releases
           command: |
-            if git diff --name-only origin/master...$CIRCLE_SHA1 | grep -vE ^docs; then
-              py.test --durations=0 test/ -v --log-level=DEBUG --tb=native -m "${PY_TEST_MARKER}"
-            else
-              echo "Skipping pytest - only docs modified"
-            fi
-          no_output_timeout: 1200
-
-
-jobs:
-  test-linux:
-    <<: *test_linux
-    environment:
-      PY_TEST_MARKER: not long_running_1 and not long_running_2
-  test-linux (long_running_1):
-    <<: *test_linux
-    environment:
-      PY_TEST_MARKER: long_running_1
-  test-linux (long_running_2):
-    <<: *test_linux
-    environment:
-      PY_TEST_MARKER: long_running_2
-  test-macos:
-    <<: *macos
-    steps:
-      - checkout
-      - *common
-      - *restore_cache
-      - *setup
-      - *save_cache
-      - *install_bioconda_utils
-      - run:
-          name: Testing
-          command: |
-            if git diff --name-only origin/master...$CIRCLE_SHA1 | grep -vE ^docs; then
-              py.test --durations=0 test/ -v --log-level=DEBUG -k "not docker" --tb=native
-            else
-              echo "Skipping pytest - only docs modified"
-            fi
-
-          no_output_timeout: 1200
-  build-docs:
-    <<: *linux
-    steps:
-      - add_ssh_keys:
-          fingerprints:
-            - f8:26:86:86:f8:d3:a5:66:ea:7d:f6:42:2e:5c:7a:82
-      - checkout
-      - *common
-      - *restore_cache
-      - *setup
-      - *save_cache
-      - *install_bioconda_utils
-      - run:
-          # TODO: This could go into bioconda_utils-requirements.txt.
-          #       But actually, it would make sense to create a separate
-          #       requirements file with all the docs/sphinx-related deps.
-          #       (Need to check if Bot uses those first.)
-          name: Install Graphviz for tutorial page
-          command: conda install -y graphviz fonts-conda-ecosystem
-      - run:
-          name: Build and upload docs
-          command: .circleci/build-docs.sh
-  autobump-test:
-    <<: *linux
-    steps:
-      - checkout
-      - *common
-      - *restore_cache
-      - *setup
-      - *save_cache
-      - *install_bioconda_utils
-      - run:
-          <<: *autobump_run
-          environment:
-            AUTOBUMP_OPTS: --dry-run
-      - store_artifacts:
-          path: /tmp/artifacts
-  autobump:
-    <<: *linux
-    steps:
-      - add_ssh_keys:
-          fingerprints:
-            - db:1a:ec:46:59:8f:a8:ad:25:e7:7a:57:76:59:ba:24
-      - checkout
-      - *common
-      - *restore_cache
-      - *setup
-      - *save_cache
-      - *install_bioconda_utils
-      - run:
-          <<: *autobump_run
-      - store_artifacts:
-          path: /tmp/artifacts
-
+            git clone git@github.com:bioconda/bioconda-recipes
+            cd bioconda-recipes
+            git config user.name "Autobump"
+            git config user.email "bioconda@users.noreply.github.com"
+            mkdir -p /tmp/artifacts
+            bioconda-utils autobump \
+              --unparsed-urls /tmp/artifacts/unparsed_urls.txt \
+              --failed-urls /tmp/artifacts/failed_urls.txt \
+              --recipe-status /tmp/artifacts/status.txt \
+              --create-pr \
+              --no-check-pinnings \
+              --no-check-pending-deps \
+              --no-follow-graph \
+              --exclude 'bioconductor-*' \
+              --commit-as BiocondaBot 47040946+BiocondaBot@users.noreply.github.com \
+              $AUTOBUMP_OPTS
 
 workflows:
   version: 2
-  # regular runs of build-docs
-  # bioconda-utils-build-docs:
-  #    triggers:
-  #      - schedule:
-  #          cron: "0 0,6 * * *"
-  #          filters:
-  #            branches:
-  #              only:
-  #                - master
-  #    jobs:
-  #      - build-docs:
-  #          context: org-global
-  # regular runs of autobump
   bioconda-utils-autobump:
      triggers:
        - schedule:
@@ -201,6 +83,4 @@ workflows:
                only:
                  - master
      jobs:
-       - autobump:
-           context: org-global
-
+       - autobump
