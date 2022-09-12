@@ -37,7 +37,10 @@ variables:
   install_bioconda_utils: &install_bioconda_utils
     run:
       name: Install bioconda-utils
-      command: python setup.py install
+      command: |
+        VERSION=$(grep BIOCONDA_UTILS_TAG .circleci/common.sh | cut -f2 -d "=")
+        git checkout $VERSION
+        python setup.py install
   build_docker_container: &build_docker_container
     run:
       name: Build the updated docker container
@@ -47,9 +50,7 @@ variables:
         docker run --rm -t quay.io/bioconda/bioconda-utils-build-env-cos7:latest sh -lec 'type -t conda && conda info -a && conda list'
         docker build -t quay.io/bioconda/bioconda-utils-test-env-cos7:latest -f ./Dockerfile.test ./
 
-  # NOTE: We want this to stay on CircleCI (rather than run on Azure Pipelines
-  # or GitHub Actions) so that we avoid additional workload on those other
-  # services (which currently take care of PRs and bulk branch respectively)
+  # TODO: migrate to GitHub Actions
   autobump_run: &autobump_run
     name: Check recipes for new upstream releases
     command: |
@@ -180,17 +181,17 @@ jobs:
 workflows:
   version: 2
   # regular runs of build-docs
-  # bioconda-utils-build-docs:
-  #    triggers:
-  #      - schedule:
-  #          cron: "0 0,6 * * *"
-  #          filters:
-  #            branches:
-  #              only:
-  #                - master
-  #    jobs:
-  #      - build-docs:
-  #          context: org-global
+  bioconda-utils-build-docs:
+     triggers:
+       - schedule:
+           cron: "0 0,6 * * *"
+           filters:
+             branches:
+               only:
+                 - master
+     jobs:
+       - build-docs:
+           context: org-global
   # regular runs of autobump
   bioconda-utils-autobump:
      triggers:
