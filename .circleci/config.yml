@@ -10,26 +10,26 @@ jobs:
       image: ubuntu-2004:202201-02
     steps:
       - add_ssh_keys:
-        fingerprints:
-          - db:1a:ec:46:59:8f:a8:ad:25:e7:7a:57:76:59:ba:24
+          fingerprints:
+            - db:1a:ec:46:59:8f:a8:ad:25:e7:7a:57:76:59:ba:24
       - checkout
       - common:
-        run:
-          name: Download common definitions
-          command: curl -s https://raw.githubusercontent.com/bioconda/bioconda-common/master/common.sh > .circleci/common.sh
+          run:
+            name: Download common definitions
+            command: curl -s https://raw.githubusercontent.com/bioconda/bioconda-common/master/common.sh > .circleci/common.sh
 
       - restore_cache:
-        keys:
-          - bioconda-utils-{{
+          keys:
+            - bioconda-utils-{{
               checksum ".circleci/common.sh" }}-{{
               checksum ".circleci/setup.sh" }}-{{
               checksum ".circleci/config.yml" }}-{{
               checksum "bioconda_utils/bioconda_utils-requirements.txt" }}
 
       - setup:
-        - run:
-          name: Setup dependencies
-          command: .circleci/setup.sh
+          - run:
+              name: Setup dependencies
+              command: .circleci/setup.sh
 
       - save_cache:
         key: bioconda-utils-{{
@@ -42,45 +42,45 @@ jobs:
 
       - install_bioconda_utils:
           - run:
-            name: Install bioconda-utils
-            command: |
-              VERSION=$(grep BIOCONDA_UTILS_TAG .circleci/common.sh | cut -f2 -d "=")
-              git checkout ${VERSION}
-              python setup.py install
+              name: Install bioconda-utils
+              command: |
+                VERSION=$(grep BIOCONDA_UTILS_TAG .circleci/common.sh | cut -f2 -d "=")
+                git checkout ${VERSION}
+                python setup.py install
 
           - store_artifacts:
-            path: /tmp/artifacts
+              path: /tmp/artifacts
 
       - autobump_run: &autobump_run
-        - run:
-          name: Check recipes for new upstream releases
-          command: |
-            git clone git@github.com:bioconda/bioconda-recipes
-            cd bioconda-recipes
-            git config user.name "Autobump"
-            git config user.email "bioconda@users.noreply.github.com"
-            mkdir -p /tmp/artifacts
-            bioconda-utils autobump \
-              --unparsed-urls /tmp/artifacts/unparsed_urls.txt \
-              --failed-urls /tmp/artifacts/failed_urls.txt \
-              --recipe-status /tmp/artifacts/status.txt \
-              --create-pr \
-              --no-check-pinnings \
-              --no-check-pending-deps \
-              --no-follow-graph \
-              --exclude 'bioconductor-*' \
-              --commit-as BiocondaBot 47040946+BiocondaBot@users.noreply.github.com \
-              $AUTOBUMP_OPTS
+          - run:
+            name: Check recipes for new upstream releases
+            command: |
+              git clone git@github.com:bioconda/bioconda-recipes
+              cd bioconda-recipes
+              git config user.name "Autobump"
+              git config user.email "bioconda@users.noreply.github.com"
+              mkdir -p /tmp/artifacts
+              bioconda-utils autobump \
+                --unparsed-urls /tmp/artifacts/unparsed_urls.txt \
+                --failed-urls /tmp/artifacts/failed_urls.txt \
+                --recipe-status /tmp/artifacts/status.txt \
+                --create-pr \
+                --no-check-pinnings \
+                --no-check-pending-deps \
+                --no-follow-graph \
+                --exclude 'bioconductor-*' \
+                --commit-as BiocondaBot 47040946+BiocondaBot@users.noreply.github.com \
+                $AUTOBUMP_OPTS
 
 workflows:
   version: 2
   bioconda-utils-autobump:
-     triggers:
-       - schedule:
-           cron: "0 * * * *"
-           filters:
-            branches:
-               only:
-                 - master
+    #triggers:
+    #  - schedule:
+    #      cron: "0 * * * *"
+    #      filters:
+    #       branches:
+    #          only:
+    #            - master
      jobs:
        - autobump
