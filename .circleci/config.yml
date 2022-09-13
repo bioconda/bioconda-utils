@@ -10,49 +10,53 @@ jobs:
       image: ubuntu-2004:202201-02
     steps:
       - add_ssh_keys:
-        fingerprints:
-          - db:1a:ec:46:59:8f:a8:ad:25:e7:7a:57:76:59:ba:24
+          fingerprints:
+            - db:1a:ec:46:59:8f:a8:ad:25:e7:7a:57:76:59:ba:24
+
       - checkout
-      - common:
-        run:
+
+      - run:
           name: Download common definitions
           command: curl -s https://raw.githubusercontent.com/bioconda/bioconda-common/master/common.sh > .circleci/common.sh
 
+      - run:
+          name: set up env vars
+          command: echo "export PATH=$(pwd)/miniconda/bin:$PATH" >> "$BASH_ENV"
+
       - restore_cache:
-        keys:
-          - bioconda-utils-{{
+          keys:
+            - bioconda-utils-{{
               checksum ".circleci/common.sh" }}-{{
-              checksum ".circleci/setup.sh" }}-{{
               checksum ".circleci/config.yml" }}-{{
               checksum "bioconda_utils/bioconda_utils-requirements.txt" }}
 
-      - setup:
-        - run:
+      - run:
           name: Setup dependencies
-          command: .circleci/setup.sh
+          command: |
+            source .circleci/common.sh
+            git checkout ${BIOCONDA_UTILS_TAG}
+            curl -L -o miniconda.sh https://repo.continuum.io/miniconda/Miniconda3-${MINICONDA_VER}-Linux-x86_64.sh
+            bash miniconda.sh -b -p ./miniconda
+            conda config --system --add channels defaults
+            conda config --system --add channels bioconda
+            conda config --system --add channels conda-forge
+            conda install -y mamba
+            mamba install -y --file bioconda_utils/bioconda_utils-requirements.txt --file test-requirements.txt
+            conda clean -y --all
+            python setup.py install
 
       - save_cache:
-        key: bioconda-utils-{{
+          key: bioconda-utils-{{
              checksum ".circleci/common.sh" }}-{{
-             checksum ".circleci/setup.sh" }}-{{
              checksum ".circleci/config.yml" }}-{{
              checksum "bioconda_utils/bioconda_utils-requirements.txt" }}
-        paths:
-          - miniconda
+          paths:
+            - miniconda
 
-      - install_bioconda_utils:
-          - run:
-            name: Install bioconda-utils
-            command: |
-              VERSION=$(grep BIOCONDA_UTILS_TAG .circleci/common.sh | cut -f2 -d "=")
-              git checkout ${VERSION}
-              python setup.py install
+      - store_artifacts:
+          path: /tmp/artifacts
 
-          - store_artifacts:
-            path: /tmp/artifacts
-
-      - autobump_run: &autobump_run
-        - run:
+      - run:
           name: Check recipes for new upstream releases
           command: |
             git clone git@github.com:bioconda/bioconda-recipes
