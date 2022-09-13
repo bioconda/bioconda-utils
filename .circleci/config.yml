@@ -29,7 +29,10 @@ jobs:
 
       - run:
           name: Setup dependencies
-          command: .circleci/setup.sh
+          command: |
+            VERSION=$(grep BIOCONDA_UTILS_TAG .circleci/common.sh | cut -f2 -d "=")
+            git checkout ${VERSION}
+            .circleci/setup.sh
 
       - save_cache:
           key: bioconda-utils-{{
@@ -43,6 +46,7 @@ jobs:
       - run:
           name: Install bioconda-utils
           command: |
+            git branch
             VERSION=$(grep BIOCONDA_UTILS_TAG .circleci/common.sh | cut -f2 -d "=")
             git checkout ${VERSION}
             python setup.py install
