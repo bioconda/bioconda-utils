@@ -30,9 +30,16 @@ jobs:
       - run:
           name: Setup dependencies
           command: |
-            VERSION=$(grep BIOCONDA_UTILS_TAG .circleci/common.sh | cut -f2 -d "=")
-            git checkout ${VERSION}
-            .circleci/setup.sh
+            source .circleci/common.sh
+            git checkout ${BIOCONDA_UTILS_TAG}
+            curl -L -o miniconda.sh https://repo.continuum.io/miniconda/Miniconda3-${MINICONDA_VER}-Linux-x86_64.sh
+            bash miniconda.sh -b -p ./miniconda
+            conda config --system --add channels defaults
+            conda config --system --add channels bioconda
+            conda config --system --add channels conda-forge
+            conda install -y --file bioconda_utils/bioconda_utils-requirements.txt --file test-requirements.txt
+            conda clean -y --all
+            python setup.py install
 
       - save_cache:
           key: bioconda-utils-{{
@@ -42,14 +49,6 @@ jobs:
              checksum "bioconda_utils/bioconda_utils-requirements.txt" }}
           paths:
             - miniconda
-
-      - run:
-          name: Install bioconda-utils
-          command: |
-            git branch
-            VERSION=$(grep BIOCONDA_UTILS_TAG .circleci/common.sh | cut -f2 -d "=")
-            git checkout ${VERSION}
-            python setup.py install
 
       - store_artifacts:
           path: /tmp/artifacts
