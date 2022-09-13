@@ -1,5 +1,13 @@
 # Changelog
 
+### [1.1.1](https://www.github.com/bioconda/bioconda-utils/compare/v1.1.0...v1.1.1) (2022-09-13)
+
+
+### Bug Fixes
+
+* autobump uses correct version from common.sh ([#803](https://www.github.com/bioconda/bioconda-utils/issues/803)) ([81ba442](https://www.github.com/bioconda/bioconda-utils/commit/81ba4425dcd85c495518a2071d14e694e393d123))
+* circleci yaml syntax ([#806](https://www.github.com/bioconda/bioconda-utils/issues/806)) ([3315057](https://www.github.com/bioconda/bioconda-utils/commit/33150577a97e16ab9e9b4c6443fff37fd456f22f))
+
 ## [1.1.0](https://www.github.com/bioconda/bioconda-utils/compare/v1.0.1...v1.1.0) (2022-09-11)
 
 
