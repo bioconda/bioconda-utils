@@ -23,7 +23,6 @@ jobs:
           keys:
             - bioconda-utils-{{
               checksum ".circleci/common.sh" }}-{{
-              checksum ".circleci/setup.sh" }}-{{
               checksum ".circleci/config.yml" }}-{{
               checksum "bioconda_utils/bioconda_utils-requirements.txt" }}
 
@@ -44,7 +43,6 @@ jobs:
       - save_cache:
           key: bioconda-utils-{{
              checksum ".circleci/common.sh" }}-{{
-             checksum ".circleci/setup.sh" }}-{{
              checksum ".circleci/config.yml" }}-{{
              checksum "bioconda_utils/bioconda_utils-requirements.txt" }}
           paths:
