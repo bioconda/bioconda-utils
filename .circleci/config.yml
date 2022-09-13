@@ -32,13 +32,13 @@ jobs:
               command: .circleci/setup.sh
 
       - save_cache:
-        key: bioconda-utils-{{
+          key: bioconda-utils-{{
              checksum ".circleci/common.sh" }}-{{
              checksum ".circleci/setup.sh" }}-{{
              checksum ".circleci/config.yml" }}-{{
              checksum "bioconda_utils/bioconda_utils-requirements.txt" }}
-        paths:
-          - miniconda
+          paths:
+            - miniconda
 
       - install_bioconda_utils:
           - run:
