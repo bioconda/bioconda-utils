@@ -40,7 +40,8 @@ jobs:
             conda config --system --add channels defaults
             conda config --system --add channels bioconda
             conda config --system --add channels conda-forge
-            conda install -y --file bioconda_utils/bioconda_utils-requirements.txt --file test-requirements.txt
+            conda install -y mamba
+            mamba install -y --file bioconda_utils/bioconda_utils-requirements.txt --file test-requirements.txt
             conda clean -y --all
             python setup.py install
 
