@@ -241,10 +241,16 @@ Core
 * `Chris Tomkins-Tinch <https://github.com/tomkinsc>`_
 * `Björn Grüning <https://github.com/bgruening>`_
 * `Andreas Sjödin <https://github.com/druvus>`_
-* `Jillian Rowe <https://github.com/jerowe>`_
 * `Devon Ryan <https://github.com/dpryan79>`_
 * `Elmar Pruesse <https://github.com/epruesse>`_
 * `Robert A. Petit III <https://github.com/rpetit3>`_
+
+Former core members
+~~~~~~~~~~~~~~~~~~~
+
+* `Jillian Rowe <https://github.com/jerowe>`_
+* `Marcel Bargull <https://github.com/mbargull>`_
+* `Renan Valieris <https://github.com/rvalieris>`_
 
 Team
 ~~~~
