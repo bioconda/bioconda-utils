@@ -209,7 +209,7 @@ What's the difference between miniconda, miniforge, mambaforge, micromamba?
 **Miniconda** is the slimmed-down version of the Anaconda distribution;
 miniconda only has conda and its dependencies.
 
-**Miniforge** is like miniconda, but with the conda-forge channel preconfigures
+**Miniforge** is like miniconda, but with the conda-forge channel preconfigured
 and all packages coming from the conda-forge and *not* the ``defaults``
 channel.
 
