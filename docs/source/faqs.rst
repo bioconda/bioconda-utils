@@ -293,7 +293,7 @@ Bioconductor's current server environment).
 **Reproducibility is hard.** We are trying our best, and conda is an amazing
 resource. But the fact that a single entity does not (and should not!) control
 all code, data, packages, distribution mechanisms, and installation mechanisms,
-means that we will always be at risk of similar situtations in the future.
+means that we will always be at risk of similar situations in the future.
 Hopefully we are guarding better against this particular issue, but see
 `Grüning et al 2018 <http://dx.doi.org/10.1016/j.cels.2018.03.014>`_
 (especially Fig 1) for advice on more reproducible strategies you can use for
