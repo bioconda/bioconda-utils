@@ -5,7 +5,7 @@
 
 ### Bug Fixes
 
-* use mambaforge for autobump jobs ([#809](https://www.github.com/bioconda/bioconda-utils/issues/809)) ([adaebdc](https://www.github.com/bioconda/bioconda-utils/commit/adaebdc2448698efeccff746f4b76307124f20c4))
+* require a more recent pyopenssl ([#809](https://www.github.com/bioconda/bioconda-utils/issues/809)) ([adaebdc](https://www.github.com/bioconda/bioconda-utils/commit/adaebdc2448698efeccff746f4b76307124f20c4))
 
 
 ### Documentation
