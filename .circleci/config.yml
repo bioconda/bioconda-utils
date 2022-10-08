@@ -35,14 +35,13 @@ jobs:
           command: |
             source .circleci/common.sh
             git checkout ${BIOCONDA_UTILS_TAG}
-            curl -L -o miniconda.sh https://repo.continuum.io/miniconda/Miniconda3-${MINICONDA_VER}-Linux-x86_64.sh
-            bash miniconda.sh -b -p ./miniconda
-            conda config --system --add channels defaults
-            conda config --system --add channels bioconda
-            conda config --system --add channels conda-forge
-            conda install -y mamba
+            curl -L -o mambaforge.sh https://github.com/conda-forge/miniforge/releases/download/${MAMBAFORGE_VER}/Mambaforge-${MAMBAFORGE_VER}-Linux-x86_64.sh
+            bash mambaforge.sh -b -p ./mambaforge
+            mamba config --system --add channels defaults
+            mamba config --system --add channels bioconda
+            mamba config --system --add channels conda-forge
             mamba install -y --file bioconda_utils/bioconda_utils-requirements.txt --file test-requirements.txt
-            conda clean -y --all
+            mamba clean -y --all
             python setup.py install
 
       - save_cache:
