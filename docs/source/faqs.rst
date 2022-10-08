@@ -203,3 +203,167 @@ with ``conda install``.
     what a package contains and how it is installed into an
     environment.
 
+What's the difference between miniconda, miniforge, mambaforge, micromamba?
+---------------------------------------------------------------------------
+
+**Miniconda** is the slimmed-down version of the Anaconda distribution;
+miniconda only has conda and its dependencies.
+
+**Miniforge** is like miniconda, but with the conda-forge channel preconfigured
+and all packages coming from the conda-forge and *not* the ``defaults``
+channel.
+
+**Mambaforge** is like miniforge, but has mamba installed into the base environment.
+
+**Micromamba** is not a conda distribution. Rather, it is a minimal binary that
+has roughly the same commands as mamba, so that a single executable (rather
+than an entire Python installation required for conda itself) can be used to
+create environments. Micromamba is currently still experimental.
+
+Why are Bioconductor data packages failing to install?
+------------------------------------------------------
+
+When creating an environment containing Bioconductor data packages, you may get
+errors like this::
+
+    ValueError: unsupported format character 'T' (0x54) at index 648
+
+The actual error will be somewhere above that, with something like this (here,
+it's for the ``bioconductor-org.hs.eg.db=3.14.0=r41hdfd78af_0`` package)::
+
+    message:
+    post-link script failed for package bioconda::bioconductor-org.hs.eg.db-3.14.0-r41hdfd78af_0
+    location of failed script: /Users/dalerr/env/bin/.bioconductor-org.hs.eg.db-post-link.sh
+    ==> script messages <==
+    <None>
+    ==> script output <==
+    stdout: ERROR: post-link.sh was unable to download any of the following URLs with the md5sum ef7fc0096ec579f564a33f0f4869324a:
+    https://bioconductor.org/packages/3.14/data/annotation/src/contrib/org.Hs.eg.db_3.14.0.tar.gz
+    https://bioarchive.galaxyproject.org/org.Hs.eg.db_3.14.0.tar.gz
+    https://depot.galaxyproject.org/software/bioconductor-org.hs.eg.db/bioconductor-org.hs.eg.db_3.14.0_src_all.tar.gz
+
+**To fix it**, you need to adjust the requirements. If you had this as a requirement::
+
+    bioconductor-org.hs.eg.db=3.14.0=r41hdfd78af_0
+
+then increase the build number on the end, here from ``_0`` to ``_1``::
+
+    bioconductor-org.hs.eg.db=3.14.0=r41hdfd78af_1
+
+or, relax the exact build constraint while keeping the package version the same::
+
+    bioconductor-org.hs.eg.db=3.14.0
+
+and then re-build your environment.
+
+**The reason this is happening** is a combination of factors. Early on in
+Bioconda's history we made the decision that pure data packages -- like
+Bioconductor data packages, which can be multiple GB in size -- would not be
+directly converted into conda packages. That way, we could avoid additional
+storage load on Anaconda's servers since the data were already available from
+Bioconductor, and we could provide a mechanism to use the data packages within
+an R environment living in a conda environment. This mechanism is
+a `post-link.sh
+<https://docs.conda.io/projects/conda-build/en/latest/resources/link-scripts.html>`_
+script for the recipe.
+
+When a user installs the package via conda, the GB of data aren't in the
+package. Rather, the URL pointing to the tarball is in the post-link script,
+and the script uses ``curl`` to download the package from Bioconductor and
+install into the conda environment's R library. We also set up separate
+infrastructure to archive data packages to other servers, and these archive
+URLs were also stored in the post-link scripts as backups.
+
+*The problem is that back then, we assumed that URLs would be stable and we did
+not use the* ``-L`` *argument for curl in post-link scripts*.
+
+Recently Bioconductor packages have moved to a different server (XSEDE/ACCESS).
+The old URL, the one hard-coded in the post-link scripts, is correctly now
+a redirect to the new location. But without ``-L``, the existing recipes and
+their post-link scripts cannot follow the redirect! Compounding this, the
+archive URLs stopped being generated, so the backup strategy also failed.
+
+The fix was to re-build all Bioconductor data packages and include the ``-L``
+argument, allowing them to follow the redirect and correctly install the
+package. Conda packages have the idea of a "build number", which allows us to
+still provide the same version of the package (3.14.0 in the example above) but
+packaged differently (in this case, with a post-link script that works in
+Bioconductor's current server environment).
+
+**Reproducibility is hard.** We are trying our best, and conda is an amazing
+resource. But the fact that a single entity does not (and should not!) control
+all code, data, packages, distribution mechanisms, and installation mechanisms,
+means that we will always be at risk of similar situations in the future.
+Hopefully we are guarding better against this particular issue, but see
+`Grüning et al 2018 <http://dx.doi.org/10.1016/j.cels.2018.03.014>`_
+(especially Fig 1) for advice on more reproducible strategies you can use for
+your own work.
+
+.. _version-vs-build:
+
+What's the difference between a build number and a package version?
+-------------------------------------------------------------------
+A *package version* is the version of the tool. A tool can possibly be packaged
+multiple times, even though the underlying tool doesn't change. In such a case,
+the package version remains unchanged, but the *build number* chances.
+
+The Bioconductor data packages described above are one example of what would
+cause a change in build number (i.e., adding a single argument to
+a post-installation script). Other times, a package might have omitted an
+executable that should have been included, so a new build for the same version
+is created that fixes that packaging issue, without changing anything in the
+package itself. In rare cases, packages are completely broken, and are moved to
+a "broken" label in the conda channel, effectively removing them from being
+installed by default.
+
+More often, build numbers change due to underlying dependencies across the
+entire Bioconda and conda-forge ecosystem. These build numbers include a hash.
+That hash is generated by concatenating all of the pinned versions of packages
+that are dependencies of that package.
+
+For example, ``samtools==1.15.1=h1170115_0`` refers to version 1.15.1 of
+``samtools``. The build number is ``h1170115_0``.  The hash part is the
+``h1170115``, and the ``_0`` refers to the first (zero-indexing) build of this
+samtools version and this hash.
+
+The hash, in turn is calculated by looking at the dependencies of samtools. The
+dependencies happen to include things like a C compiler (gcc), the zlib and htslib
+libraries and make. Some of these dependencies are "pinned". That is, they are
+fixed to a particular version or versions, and those versions are used
+everywhere in conda-forge and Bioconda to maintain ABI compatibility
+(basically, to let packages co-exist in the same environment). You can find the
+conda-forge pinnings `here
+<https://github.com/conda-forge/conda-forge-pinning-feedstock/blob/main/recipe/conda_build_config.yaml>`_,
+and the bioconda-specific ones `here
+<https://github.com/bioconda/bioconda-utils/blob/master/bioconda_utils/bioconda_utils-conda_build_config.yaml>`_. 
+
+In the case of samtools, that hash ``h1170115`` incorporates the packages and
+versions of all of its dependencies that are pinned. That includes gcc, zlib,
+and htslib. But it doesn't include make in that hash, because make is not
+pinned in those files.
+
+The build number is likely to change, and you probably should avoid including
+the build number in your environment specifications -- see :ref:`no-builds` for
+more information on this.
+
+.. _no-builds:
+
+Why shouldn't I include build numbers in my environment YAMLs?
+--------------------------------------------------------------
+
+As described at :ref:`version-vs-build`, build numbers may change over time,
+independently of the actual package version. This means that when you are
+recording the packages installed in an environment, it is not useful to record
+the build number, as this is effectively over-specifying and may cause
+difficulty when trying to re-create the environment.
+
+To record the installed packages in an environment, we recommend the
+``--no-builds`` argument to ``conda env export``. For example, with an
+environment activated::
+
+    conda env export --no-builds
+
+The ``--no-builds`` argument completely removes the build number from the
+output, avoiding future errors when trying to rebuild the environment, and
+allowing the conda solver to identify the packages that can co-exist in the
+same environment.
