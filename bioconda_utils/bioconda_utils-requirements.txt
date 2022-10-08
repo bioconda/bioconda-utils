@@ -20,7 +20,7 @@ libblas=*=*openblas  # Avoid large mkl package (pulled in by pandas)
 boltons=18.*
 jsonschema=2.6.*     # JSON schema verification
 simplejson           # Used by bioconda bot worker (NEEDED?)
-pyopenssl=22.0.*     # avoid this bug https://askubuntu.com/questions/1428181/module-lib-has-no-attribute-x509-v-flag-cb-issuer-check
+pyopenssl>=22        # avoid this bug https://askubuntu.com/questions/1428181/module-lib-has-no-attribute-x509-v-flag-cb-issuer-check
 
 # pinnings
 conda-forge-pinning=2022.08.25.15.20.42
