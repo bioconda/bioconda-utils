@@ -1,5 +1,18 @@
 # Changelog
 
+### [1.1.2](https://www.github.com/bioconda/bioconda-utils/compare/v1.1.1...v1.1.2) (2022-10-08)
+
+
+### Bug Fixes
+
+* use mambaforge for autobump jobs ([#809](https://www.github.com/bioconda/bioconda-utils/issues/809)) ([adaebdc](https://www.github.com/bioconda/bioconda-utils/commit/adaebdc2448698efeccff746f4b76307124f20c4))
+
+
+### Documentation
+
+* Bioconductor data packages ([#802](https://www.github.com/bioconda/bioconda-utils/issues/802)) ([bb84df2](https://www.github.com/bioconda/bioconda-utils/commit/bb84df2d7c1a282a0a42a7cea81e6b20e077650d))
+* reflect Jillians leave of the core team in the docs ([#807](https://www.github.com/bioconda/bioconda-utils/issues/807)) ([3e7c12b](https://www.github.com/bioconda/bioconda-utils/commit/3e7c12bd7dae5ff8b4d7b42efc1551f7397dfbec))
+
 ### [1.1.1](https://www.github.com/bioconda/bioconda-utils/compare/v1.1.0...v1.1.1) (2022-09-13)
 
 
