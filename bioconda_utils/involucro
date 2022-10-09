@@ -2,4 +2,5 @@
 
 exec involucro \
     -set POSTINSTALL='create-env --conda=: /usr/local' \
+    -set PREINSTALL='conda() { mamba "${@}" ; }' \
     "${@}"
