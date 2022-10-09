@@ -244,6 +244,7 @@ Core
 * `Devon Ryan <https://github.com/dpryan79>`_
 * `Elmar Pruesse <https://github.com/epruesse>`_
 * `Robert A. Petit III <https://github.com/rpetit3>`_
+* `Christian Brueffer <https://github.com/cbrueffer>`_
 
 Former core members
 ~~~~~~~~~~~~~~~~~~~
