@@ -1,5 +1,18 @@
 # Changelog
 
+### [1.1.3](https://www.github.com/bioconda/bioconda-utils/compare/v1.1.2...v1.1.3) (2022-10-11)
+
+
+### Bug Fixes
+
+* Update pyopenssl pinning ([#814](https://www.github.com/bioconda/bioconda-utils/issues/814)) ([e4950b0](https://www.github.com/bioconda/bioconda-utils/commit/e4950b0bb08c298df6d63dda9eafefabdafdc339))
+* Use mamba in mulled-build ([#810](https://www.github.com/bioconda/bioconda-utils/issues/810)) ([554e15b](https://www.github.com/bioconda/bioconda-utils/commit/554e15bba587a4f58ff967934a84d6117832cf2d))
+
+
+### Documentation
+
+* add cbrueffer to core. ([#811](https://www.github.com/bioconda/bioconda-utils/issues/811)) ([cecf50c](https://www.github.com/bioconda/bioconda-utils/commit/cecf50c2388bea487a6ff4b335067a6d11467358))
+
 ### [1.1.2](https://www.github.com/bioconda/bioconda-utils/compare/v1.1.1...v1.1.2) (2022-10-08)
 
 
