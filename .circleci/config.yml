@@ -33,6 +33,11 @@ jobs:
       - run:
           name: Setup dependencies
           command: |
+            if test -f miniconda
+            then
+                echo "Restored from cache"
+                exit 0
+            fi
             source .circleci/common.sh
             git checkout ${BIOCONDA_UTILS_TAG}
             curl -L -o miniconda.sh https://repo.continuum.io/miniconda/Miniconda3-${MINICONDA_VER}-Linux-x86_64.sh
