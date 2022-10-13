@@ -1,5 +1,13 @@
 # Changelog
 
+### [1.1.4](https://www.github.com/bioconda/bioconda-utils/compare/v1.1.3...v1.1.4) (2022-10-13)
+
+
+### Bug Fixes
+
+* restore from cache on circleci ([#815](https://www.github.com/bioconda/bioconda-utils/issues/815)) ([001d4f8](https://www.github.com/bioconda/bioconda-utils/commit/001d4f8d5e21b30024b3f62566c112570219ed3c))
+* update mamba when performing mulled tests ([#818](https://www.github.com/bioconda/bioconda-utils/issues/818)) ([e39cc48](https://www.github.com/bioconda/bioconda-utils/commit/e39cc4893f58785ba63bc455fe082fe9467898d6))
+
 ### [1.1.3](https://www.github.com/bioconda/bioconda-utils/compare/v1.1.2...v1.1.3) (2022-10-11)
 
 
