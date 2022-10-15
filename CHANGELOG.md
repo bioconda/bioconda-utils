@@ -1,5 +1,12 @@
 # Changelog
 
+### [1.1.5](https://www.github.com/bioconda/bioconda-utils/compare/v1.1.4...v1.1.5) (2022-10-15)
+
+
+### Bug Fixes
+
+* Use newer mulled conda image ([#819](https://www.github.com/bioconda/bioconda-utils/issues/819)) ([1464d18](https://www.github.com/bioconda/bioconda-utils/commit/1464d180e21b59781bb54c8fe49fa78ffa029430))
+
 ### [1.1.4](https://www.github.com/bioconda/bioconda-utils/compare/v1.1.3...v1.1.4) (2022-10-13)
 
 
