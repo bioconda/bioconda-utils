@@ -1,5 +1,12 @@
 # Changelog
 
+### [1.1.6](https://www.github.com/bioconda/bioconda-utils/compare/v1.1.5...v1.1.6) (2022-10-17)
+
+
+### Bug Fixes
+
+* autobump cache checking on circleci ([954708e](https://www.github.com/bioconda/bioconda-utils/commit/954708ea0bb06b1b076f0b60f32f21f21644c20a))
+
 ### [1.1.5](https://www.github.com/bioconda/bioconda-utils/compare/v1.1.4...v1.1.5) (2022-10-15)
 
 
