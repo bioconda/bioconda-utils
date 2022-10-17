@@ -33,7 +33,7 @@ jobs:
       - run:
           name: Setup dependencies
           command: |
-            if test -f miniconda
+            if [ -d miniconda ]
             then
                 echo "Restored from cache"
                 exit 0
