@@ -738,7 +738,7 @@ def bioconductor_skeleton(
         for k, v in packages.items():
             try:
                 _bioconductor_skeleton.write_recipe(
-                    k, recipe_folder, config, bioc_data_packages, force=True, bioc_version=bioc_version,
+                    k, recipe_folder, config, bioc_data_packages=bioc_data_packages, force=True, bioc_version=bioc_version,
                     pkg_version=v['Version'], versioned=versioned, packages=packages,
                     skip_if_in_channels=skip_if_in_channels, needs_x = k in needs_x)
             except:

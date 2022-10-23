@@ -1102,7 +1102,7 @@ def updateDataPackages(bioc_data_packages, pkg, urls, md5, tarball):
     json.dump(jsContent, open(jsPath, "w"))
 
 
-def write_recipe(package, recipe_dir, config, bioc_data_packages, force=False, bioc_version=None,
+def write_recipe(package, recipe_dir, config, bioc_data_packages=None, force=False, bioc_version=None,
                  pkg_version=None, versioned=False, recursive=False, seen_dependencies=None,
                  packages=None, skip_if_in_channels=None, needs_x=None):
     """
@@ -1161,6 +1161,9 @@ def write_recipe(package, recipe_dir, config, bioc_data_packages, force=False, b
     config = utils.load_config(config)
     proj = BioCProjectPage(package, bioc_version, pkg_version, packages=packages)
     logger.info('Making recipe for: {}'.format(package))
+
+    if bioc_data_packages is None:
+        bioc_data_packages = os.path.join(recipe_dir, "bioconductor-data-packages")
 
     if seen_dependencies is None:
         seen_dependencies = set()
