@@ -11,6 +11,7 @@ import os
 import re
 from collections import OrderedDict
 import logging
+import json
 
 import bs4
 import pyaml
@@ -907,6 +908,7 @@ class BioCProjectPage(object):
         additional_run_deps = []
         if self.is_data_package:
             additional_run_deps.append('curl')
+            additional_run_deps.append('bioconductor-data-packages')
 
         d = OrderedDict((
             (
@@ -1023,7 +1025,7 @@ class BioCProjectPage(object):
         return fout.name
 
 
-def write_recipe_recursive(proj, seen_dependencies, recipe_dir, config, force,
+def write_recipe_recursive(proj, seen_dependencies, recipe_dir, config, bioc_data_packages, force,
                            bioc_version, pkg_version, versioned, recursive):
     """
     Parameters
@@ -1039,6 +1041,10 @@ def write_recipe_recursive(proj, seen_dependencies, recipe_dir, config, force,
 
     config : str
         Path to recipes config file
+
+    bioc_data_packages : str
+        Path to the bioc_data_packages recipe, which stores the URL and MD5 of
+        all bioconductor packages across versions
 
     force : bool
         If True, any recipes that already exist will be overwritten.
@@ -1061,13 +1067,15 @@ def write_recipe_recursive(proj, seen_dependencies, recipe_dir, config, force,
         seen_dependencies.update([conda_name_without_version])
 
         if conda_name_without_version.startswith('r-'):
-            writer = cran_skeleton.write_recipe
+            #writer = cran_skeleton.write_recipe  # We should only create bioconductor dependencies, otherwise we duplicate what's on conda-forge!
+            continue
         else:
             writer = write_recipe
         writer(
             package=cran_or_bioc_name,
             recipe_dir=recipe_dir,
             config=config,
+            bioc_data_packages=bioc_data_packages,
             force=force,
             bioc_version=bioc_version,
             pkg_version=pkg_version,
@@ -1077,14 +1085,31 @@ def write_recipe_recursive(proj, seen_dependencies, recipe_dir, config, force,
         )
 
 
-def write_recipe(package, recipe_dir, config, force=False, bioc_version=None,
+def updateDataPackages(bioc_data_packages, pkg, urls, md5, tarball):
+    """
+    Update the bioc_data_packages json file, adding/updating:
+    pkg: {
+        urls: [urls],
+        md5: md5,
+        fn: tarball
+    }
+    """
+    jsPath = os.path.join(bioc_data_packages, "dataURLs.json")
+    jsContent = dict()
+    if os.path.exists(jsPath):
+        jsContent = json.load(open(jsPath))
+    jsContent[pkg] = {'urls': urls, 'md5': md5, 'fn': tarball}
+    json.dump(jsContent, open(jsPath, "w"))
+
+
+def write_recipe(package, recipe_dir, config, bioc_data_packages, force=False, bioc_version=None,
                  pkg_version=None, versioned=False, recursive=False, seen_dependencies=None,
                  packages=None, skip_if_in_channels=None, needs_x=None):
     """
     Write the meta.yaml and build.sh files. If the package is detected to be
     a data package (bsed on the detected URL from Bioconductor), then also
     create a post-link.sh and pre-unlink.sh script that will download and
-    install the package.
+    install the package. In that case also update bioconductor-data-packages.
 
     Parameters
     ----------
@@ -1095,6 +1120,10 @@ def write_recipe(package, recipe_dir, config, force=False, bioc_version=None,
     recipe_dir : str
 
     config : str or dict
+
+    bioc_data_packages : str
+        Path to the bioc_data_packages recipe, which stores the URL and MD5 of
+        all bioconductor packages across versions
 
     force : bool
         If True, then recipes will get overwritten. If **recursive** is also
@@ -1149,7 +1178,7 @@ def write_recipe(package, recipe_dir, config, force=False, bioc_version=None,
                     seen_dependencies.add(name)
 
         write_recipe_recursive(proj, seen_dependencies, recipe_dir, config,
-                               force, bioc_version, pkg_version, versioned,
+                               bioc_data_packages, force, bioc_version, pkg_version, versioned,
                                recursive)
 
     logger.debug('%s==%s, BioC==%s', proj.package, proj.version, proj.bioc_version)
@@ -1215,7 +1244,7 @@ def write_recipe(package, recipe_dir, config, force=False, bioc_version=None,
 
     else:
         urls = [
-            '"{0}"'.format(u) for u in [
+            '{0}'.format(u) for u in [
                 proj.bioconductor_tarball_url,
                 bioarchive_url(proj.package, proj.version, proj.bioc_version),
                 cargoport_url(proj.package, proj.version, proj.bioc_version),
@@ -1223,64 +1252,18 @@ def write_recipe(package, recipe_dir, config, force=False, bioc_version=None,
             ]
             if u is not None
         ]
-        urls = '  ' + '\n  '.join(urls)
+        recipeName = '{}-{}'.format(proj.package.lower(), proj.version)
         post_link_template = dedent(
             '''\
             #!/bin/bash
-            FN="{proj.tarball_basename}"
-            URLS=(
-            '''.format(proj=proj))
+            installBiocDataPackage.sh "{recipeName}"
+            '''.format(recipeName=recipeName))
 
-        post_link_template += urls
-        post_link_template += dedent(
-            '''
-            )
-            MD5="{proj.md5}"
-            '''.format(proj=proj, urls=urls))
-        post_link_template += dedent(
-            """
-            # Use a staging area in the conda dir rather than temp dirs, both to avoid
-            # permission issues as well as to have things downloaded in a predictable
-            # manner.
-            STAGING=$PREFIX/share/$PKG_NAME-$PKG_VERSION-$PKG_BUILDNUM
-            mkdir -p $STAGING
-            TARBALL=$STAGING/$FN
-
-            SUCCESS=0
-            for URL in ${URLS[@]}; do
-              curl -L $URL > $TARBALL
-              [[ $? == 0 ]] || continue
-
-              # Platform-specific md5sum checks.
-              if [[ $(uname -s) == "Linux" ]]; then
-                if md5sum -c <<<"$MD5  $TARBALL"; then
-                  SUCCESS=1
-                  break
-                fi
-              else if [[ $(uname -s) == "Darwin" ]]; then
-                if [[ $(md5 $TARBALL | cut -f4 -d " ") == "$MD5" ]]; then
-                  SUCCESS=1
-                  break
-                fi
-              fi
-            fi
-            done
-
-            if [[ $SUCCESS != 1 ]]; then
-              echo "ERROR: post-link.sh was unable to download any of the following URLs with the md5sum $MD5:"
-              printf '%s\\n' "${URLS[@]}"
-              exit 1
-            fi
-
-            # Install and clean up
-            R CMD INSTALL --library=$PREFIX/lib/R/library $TARBALL
-            rm $TARBALL
-            rmdir $STAGING
-            """)  # noqa: E501: line too long
         with open(os.path.join(recipe_dir, 'post-link.sh'), 'w') as fout:
             fout.write(dedent(post_link_template))
         pre_unlink_template = "R CMD REMOVE --library=$PREFIX/lib/R/library/ {0}\n".format(package)
         with open(os.path.join(recipe_dir, 'pre-unlink.sh'), 'w') as fout:
             fout.write(pre_unlink_template)
+        updateDataPackages(bioc_data_packages, recipeName, urls, proj.md5, proj.tarball_basename)
 
     logger.info('Wrote recipe in %s', recipe_dir)
