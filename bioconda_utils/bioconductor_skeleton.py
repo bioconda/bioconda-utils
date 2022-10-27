@@ -12,6 +12,7 @@ import re
 from collections import OrderedDict
 import logging
 import json
+from datetime import date
 
 import bs4
 import pyaml
