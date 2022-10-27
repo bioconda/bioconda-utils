@@ -908,7 +908,7 @@ class BioCProjectPage(object):
         additional_run_deps = []
         if self.is_data_package:
             additional_run_deps.append('curl')
-            additional_run_deps.append('bioconductor-data-packages')
+            additional_run_deps.append('bioconductor-data-packages>={}'.format(date.today().strftime('%Y%m%d')))
 
         d = OrderedDict((
             (
