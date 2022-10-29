@@ -682,6 +682,9 @@ def dependent(recipe_folder, config, restrict=False,
      is specified, then all packages in a given bioconductor release will be
      created/updated (--force is then implied).''')
 @recipe_folder_and_config()
+@arg('bioc_data_packages', nargs='?',
+     help='''Path to folder containing the recipe for the bioconductor-data-packages
+     (default: recipes/bioconductor-data-packages)''')
 @arg('--versioned', action='store_true', help='''If specified, recipe will be
      created in RECIPES/<package>/<version>''')
 @arg('--force', action='store_true', help='''Overwrite the contents of an
@@ -701,7 +704,7 @@ def dependent(recipe_folder, config, restrict=False,
      that already exist in the packages listed here.""")
 @enable_logging('debug')
 def bioconductor_skeleton(
-    recipe_folder, config, package, versioned=False, force=False,
+    recipe_folder, config, package, bioc_data_packages, versioned=False, force=False,
     pkg_version=None, bioc_version=None, recursive=False,
     skip_if_in_channels=['conda-forge', 'bioconda']):
     """
@@ -723,6 +726,8 @@ def bioconductor_skeleton(
 
     """
     seen_dependencies = set()
+    if bioc_data_packages is None:
+        bioc_data_packages = os.path.join(recipe_folder, "bioconductor-data-packages")
 
     if package == "update-all-packages":
         if not bioc_version:
@@ -733,7 +738,7 @@ def bioconductor_skeleton(
         for k, v in packages.items():
             try:
                 _bioconductor_skeleton.write_recipe(
-                    k, recipe_folder, config, force=True, bioc_version=bioc_version,
+                    k, recipe_folder, config, bioc_data_packages=bioc_data_packages, force=True, bioc_version=bioc_version,
                     pkg_version=v['Version'], versioned=versioned, packages=packages,
                     skip_if_in_channels=skip_if_in_channels, needs_x = k in needs_x)
             except:
@@ -742,10 +747,11 @@ def bioconductor_skeleton(
             sys.exit("The following recipes had problems and were not finished: {}".format(", ".join(problems)))
     else:
         _bioconductor_skeleton.write_recipe(
-            package, recipe_folder, config, force=force, bioc_version=bioc_version,
+            package, recipe_folder, config, bioc_data_packages, force=force, bioc_version=bioc_version,
             pkg_version=pkg_version, versioned=versioned, recursive=recursive,
             seen_dependencies=seen_dependencies,
             skip_if_in_channels=skip_if_in_channels)
+    sys.stderr.write("Warning! Make sure to bump bioconductor-data-packages if needed!\n")
 
 
 @arg('recipe', help='''Path to recipe to be cleaned''')
