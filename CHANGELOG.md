@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.0](https://www.github.com/bioconda/bioconda-utils/compare/v1.1.5...v1.2.0) (2022-11-02)
+
+
+### Features
+
+* switch data packages to bioconductor-data-packages ([#822](https://www.github.com/bioconda/bioconda-utils/issues/822)) ([5abba86](https://www.github.com/bioconda/bioconda-utils/commit/5abba8609629145cf9f577cd3773f0b58922594f))
+* Update bioconda_utils-conda_build_config.yaml ([#824](https://www.github.com/bioconda/bioconda-utils/issues/824)) ([f8c609a](https://www.github.com/bioconda/bioconda-utils/commit/f8c609a4da02ce24870d01bc47ea74de9021e969))
+
+
+### Bug Fixes
+
+* autobump cache checking on circleci ([954708e](https://www.github.com/bioconda/bioconda-utils/commit/954708ea0bb06b1b076f0b60f32f21f21644c20a))
+
 ### [1.1.5](https://www.github.com/bioconda/bioconda-utils/compare/v1.1.4...v1.1.5) (2022-10-15)
 
 
