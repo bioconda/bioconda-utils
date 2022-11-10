@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://www.github.com/bioconda/bioconda-utils/compare/v1.2.0...v1.3.0) (2022-11-10)
+
+
+### Features
+
+* Update GLPK pin for BioC 3.16 bulk rebuild ([#825](https://www.github.com/bioconda/bioconda-utils/issues/825)) ([28a4dda](https://www.github.com/bioconda/bioconda-utils/commit/28a4dda0257b436d881da7717a88d75d6bf3067e))
+
 ## [1.2.0](https://www.github.com/bioconda/bioconda-utils/compare/v1.1.5...v1.2.0) (2022-11-02)
 
 
