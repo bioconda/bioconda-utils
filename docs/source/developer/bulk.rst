@@ -126,7 +126,15 @@ pinnings updates and with some Bioconductor-specific helper scripts.
    There may be a few remaining conflicts to fix; in all cases you should
    prefer what's on the master branch.
 
-2. *(this is step 5 from the above section on updating pinnings)* Start
+
+2. Identify the latest BioConductor version, and update all BioConductor
+   recipes with:
+
+    .. code-block:: bash
+
+        bioconda-utils bioconductor-skeleton update-all-packages --bioc-version $BIOC_VERSION
+
+3. *(this is step 5 from the above section on updating pinnings)* Start
    a preliminary bulk run to build the cache. In
    :file:`.github/workflows/Bulk.yml`, set the number of workers to 1 (so,
    ``jobs:build-linux:strategy:matrix:runner:[0]``) and also set
@@ -134,7 +142,7 @@ pinnings updates and with some Bioconductor-specific helper scripts.
    the cache which will be used in subsequent (parallel) runs. Make sure you do
    this for both the Linux and MacOS sections.
 
-3. Use the
+4. Use the
    [rootNodes.py](https://github.com/bioconda/bioconda-recipes/blob/master/scripts/bioconductor/rootNodes.py)
    from the bioconda-recipes repo to help figure out what the primary root
    nodes are for the currently-remaining packages to be built. This looks at
@@ -143,10 +151,10 @@ pinnings updates and with some Bioconductor-specific helper scripts.
    used to strategically edit the ``build-fail-blacklist`` file to prioritize
    the building of those root nodes.
 
-4. Once builds seem to be stabilizing, remove the temporary edits to the
+5. Once builds seem to be stabilizing, remove the temporary edits to the
    ``build-fail-blacklist``.
 
-5. Follow the :ref:`merge-bulk` instructions for merging bulk back into the
+6. Follow the :ref:`merge-bulk` instructions for merging bulk back into the
    master branch.
 
 
