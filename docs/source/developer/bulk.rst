@@ -101,6 +101,55 @@ Merging back to master
    bulk migration, and open a new issue to ask for help from the community.
 
 
+Updating Bioconductor
+---------------------
+
+Bioconductor gets updated twice a year (spring and fall), where all BioC
+packages get released with updated versions at the same time. This in turn
+requires updating the packages on Bioconda. This is a perfect use-case for the
+bulk branch. The process is generally the same as above but without the
+pinnings updates and with some Bioconductor-specific helper scripts.
+
+1. *(this is step 4 from the above section on updating pinnings)* In
+   bioconda-recipes, merge master into bulk to start with a clean slate. Since
+   bulk is infrequently updated, there may be substantial conflicts caused by
+   running the default ``git checkout bulk && git merge master``. This tends to
+   happen most with build numbers. But since we want to prefer using whatever
+   is in the master branch, we can merge master into bulk, while preferring
+   master version in any conflicts, with:
+
+   .. code-block:: bash
+
+     git checkout bulk
+     git merge master -s recursive -X theirs
+
+   There may be a few remaining conflicts to fix; in all cases you should
+   prefer what's on the master branch.
+
+2. *(this is step 5 from the above section on updating pinnings)* Start
+   a preliminary bulk run to build the cache. In
+   :file:`.github/workflows/Bulk.yml`, set the number of workers to 1 (so,
+   ``jobs:build-linux:strategy:matrix:runner:[0]``) and also set
+   ``--n-workers=1`` in the ``bioconda-utils`` call. This will allow building
+   the cache which will be used in subsequent (parallel) runs. Make sure you do
+   this for both the Linux and MacOS sections.
+
+3. Use the
+   [rootNodes.py](https://github.com/bioconda/bioconda-recipes/blob/master/scripts/bioconductor/rootNodes.py)
+   from the bioconda-recipes repo to help figure out what the primary root
+   nodes are for the currently-remaining packages to be built. This looks at
+   recently-built packages, removes them from the DAG of recipes to be built,
+   and then reports to stdout the remaining root nodes. This information can be
+   used to strategically edit the ``build-fail-blacklist`` file to prioritize
+   the building of those root nodes.
+
+4. Once builds seem to be stabilizing, remove the temporary edits to the
+   ``build-fail-blacklist``.
+
+5. Follow the :ref:`merge-bulk` instructions for merging bulk back into the
+   master branch.
+
+
 Notes on working with bulk branch
 ---------------------------------
 
