@@ -20,10 +20,13 @@ If you have used Bioconda in the past, note that the recommended configuration
 has changed over the years. Just run the above commands to ensure your
 settings follow the current recommendation.
 
-In most cases, this is all you need to do to start using Bioconda.
+.. _`Install conda`: https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html
 
-See also: `What do do when you do not want to modify your Conda configuration
-file <usage-without-condarc>`_.
+Now you can use ``conda`` to install and use any of the `packages available in
+Bioconda <conda-package_index.html>`_.
+
+See also: :ref:`What do do when you do not want to modify your Conda configuration
+file <usage-without-condarc>`.
 
 .. details:: What did these commands do?
 
@@ -85,27 +88,24 @@ Note that conda interprets channels on the command line in order
 of *decreasing* priority (in contrast to ``conda config``, where they are
 listed in increasing priority).
 
+Speeding up package installation
+--------------------------------
 
-.. _`Install conda`: https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html
+Sometimes conda can spend a lot of time trying to solve dependencies for an
+environment. See :ref:`speedup` in the FAQs for some options to improve this.
 
-Now you can use ``conda`` to install and use any of the `packages available in
-bioconda <conda-package_index.html>`_.
+Getting Docker containers of packages
+-------------------------------------
 
-.. details:: How do I speed up package installation?
+Every conda package in Bioconda has a corresponding Docker `BioContainer`_
+automatically created and uploaded to `Quay.io`_. A list of these and other
+containers can be found at the `BioContainers Registry
+<https://biocontainers.pro/#/registry>`_. For example::
 
-    Sometimes conda can spend a lot of time trying to solve dependencies for an
-    environment. See :ref:`speedup` in the FAQs for some options to improve this.
+    docker pull quay.io/biocontainers/samtools:1.15.1--h1170115_0
 
-.. details:: How do I get Docker containers of packages?
+If you have Docker installed, you do not need any additional configuration.
 
-    Every conda package in Bioconda has a corresponding Docker `BioContainer`_
-    automatically created and uploaded to `Quay.io`_. A list of these and other
-    containers can be found at the `BioContainers Registry
-    <https://biocontainers.pro/#/registry>`_. For example::
-
-        docker pull quay.io/biocontainers/samtools:1.15.1--h1170115_0
-
-    If you have docker installed, you do not need any additional configuration.
 
 Overview
 ========
