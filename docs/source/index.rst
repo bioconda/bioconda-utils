@@ -20,10 +20,15 @@ If you have used Bioconda in the past, note that the recommended configuration
 has changed over the years. Just run the above commands to ensure your
 settings follow the current recommendation.
 
+In most cases, this is all you need to do to start using Bioconda.
+
+See also: `What do do when you do not want to modify your Conda configuration
+file <usage-without-condarc>`_.
+
 .. details:: What did these commands do?
 
-    In general, running `conda config` modifies your condarc file which can be
-    found at `~/.condarc` by default.
+    In general, running ``conda config`` modifies your condarc file which can be
+    found at ``~/.condarc`` by default.
 
     The first three commands add channels, from lowest to highest priority.
     **The order is important** to avoid problems with solving dependencies::
@@ -52,29 +57,34 @@ settings follow the current recommendation.
     section of the conda-forge docs
     <https://conda-forge.org/docs/user/tipsandtricks.html>`_ for more info.
 
-.. details:: What if I don't want to modify my condarc?
 
-    Sometimes you might want to specify the channel priority directly in the
-    ``conda`` command-line call when installing a package or creating an
-    environment, and not edit the condarc file with the suggested ``conda
-    config`` commands above.
+.. _usage-without-condarc:
 
-    In that case, you would need to add the following arguments to ``conda`` calls::
+Usage without modifying the Conda configuration
+-----------------------------------------------
 
-        --channel conda-forge --channel bioconda --strict-channel-priority
+Sometimes you might want to specify the channel priority directly in the
+``conda`` command-line call when installing a package or creating an
+environment, and not edit the ``~/.condarc`` file with the suggested ``conda
+config`` commands above.
 
-    For example, if you were creating an environment with bwa and samtools in
-    it, you would use:
+In that case, you would need to add the following arguments to ``conda`` calls::
 
-        conda create -n myenv samtools bwa \
-          --channel conda-forge \
-          --channel bioconda \
-          --channel defaults \
-          --strict-channel-priority
+    --channel conda-forge --channel bioconda --strict-channel-priority
 
-    Note that conda interprets channels on the command line in order
-    of *decreasing* priority (in contrast to ``conda config``, where they are
-    listed in increasing priority).
+For example, if you were creating an environment with bwa and samtools in
+it, you would use:
+
+    conda create -n myenv samtools bwa \
+      --channel conda-forge \
+      --channel bioconda \
+      --channel defaults \
+      --strict-channel-priority
+
+Note that conda interprets channels on the command line in order
+of *decreasing* priority (in contrast to ``conda config``, where they are
+listed in increasing priority).
+
 
 .. _`Install conda`: https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html
 
