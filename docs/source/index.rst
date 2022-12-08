@@ -8,7 +8,6 @@ biomedical research using the `conda <https://conda.io>`_ package manager.
 Usage
 =====
 
-
 First, `install conda`_. Then perform a one-time set up of Bioconda with the
 following commands::
 
@@ -16,6 +15,10 @@ following commands::
     conda config --add channels bioconda
     conda config --add channels conda-forge
     conda config --set channel_priority strict
+
+If you have used Bioconda in the past, note that the recommended configuration
+has changed over the years. Just run the above commands to ensure your
+settings follow the current recommendation.
 
 .. details:: What did these commands do?
 
