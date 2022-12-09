@@ -23,9 +23,10 @@ biomedical research using the `conda <https://conda.io>`_ package manager.
 Usage
 =====
 
+First, `install conda`_.
 
-First, `install conda`_. Then perform a one-time set up of Bioconda with the
-following commands::
+Then perform a one-time set up of Bioconda with the following commands. This
+will modify your :file:`~/.condarc` file::
 
     conda config --add channels defaults
     conda config --add channels bioconda
@@ -33,6 +34,7 @@ following commands::
     conda config --set channel_priority strict
 
 .. details:: What did these commands do?
+   :anchor:
 
     In general, running `conda config` modifies your condarc file which can be
     found at `~/.condarc` by default.
@@ -65,6 +67,7 @@ following commands::
     <https://conda-forge.org/docs/user/tipsandtricks.html>`_ for more info.
 
 .. details:: What if I don't want to modify my condarc?
+   :anchor: do-not-modify-condarc
 
     Sometimes you might want to specify the channel priority directly in the
     ``conda`` command-line call when installing a package or creating an
@@ -99,6 +102,7 @@ bioconda <conda-package_index.html>`_.
     environment. See :ref:`speedup` in the FAQs for some options to improve this.
 
 .. details:: How do I get Docker containers of packages?
+   :anchor: how-do-i-get-containers
 
     Every conda package in Bioconda has a corresponding Docker `BioContainer`_
     automatically created and uploaded to `Quay.io`_. A list of these and other
