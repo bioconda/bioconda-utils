@@ -607,7 +607,7 @@ including any kind of test data in the repository.
 
 Note that a test must return an exit code of 0. The test can be in the ``test``
 field of ``meta.yaml``, or can be a separate script (see the `relevant conda
-docs <http://conda.pydata.org/docs/building/meta-yaml.html#test-section>`_ for
+docs <https://docs.conda.io/projects/conda-build/en/stable/resources/define-metadata.html?highlight=test-section#test-section>`_ for
 testing).
 
 It is recommended to pipe unneeded stdout/stderr to /dev/null to avoid
