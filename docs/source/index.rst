@@ -37,8 +37,15 @@ If you have used Bioconda in the past, note that the recommended configuration
 has changed over the years. You should run the above commands to ensure your
 settings follow the current recommendations.
 
+.. details:: How have the recommendations changed?
+    :anchor: recommendation-changes
+
+    In June 2022, the additional command ``conda config --set
+    channel_priority_strict`` was added; see the `explanation of commands below
+    <#explain-commands>`_ for details.
+
 .. details:: What did these commands do?
-   :anchor:
+    :anchor: explain-commands
 
     In general, running ``conda config`` modifies your condarc file which can be
     found at ``~/.condarc`` by default.
@@ -73,17 +80,18 @@ settings follow the current recommendations.
 .. details:: What if I don't want to modify my condarc?
    :anchor: do-not-modify-condarc
 
-    Sometimes you might want to specify the channel priority directly in the
-    ``conda`` command-line call when installing a package or creating an
-    environment, and not edit the condarc file with the suggested ``conda
-    config`` commands above.
+    Sometimes you want to specify the channel priority directly in the
+    ``conda`` command-line call, and do not want to change the condarc file
+    with the suggested ``conda config`` commands above.
 
-    In that case, you would need to add the following arguments to ``conda`` calls::
+    To match the above recommendations, you need to append the following
+    arguments to any ``conda`` calls::
 
         --channel conda-forge --channel bioconda --strict-channel-priority
 
-    For example, if you were creating an environment with bwa and samtools in
-    it, you would use:
+    For example, to create an environment containing bwa and
+    samtools without running the ``conda config`` commands above, then you
+    would use::
 
         conda create -n myenv samtools bwa \
           --channel conda-forge \
@@ -94,6 +102,9 @@ settings follow the current recommendations.
     Note that conda interprets channels on the command line in order
     of *decreasing* priority (in contrast to ``conda config``, where they are
     listed in increasing priority).
+
+    See the `explanation of commands <#explain-commands>`_ for details on what
+    these arguments do.
 
 .. _`Install conda`: https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html
 
@@ -122,7 +133,7 @@ Overview
 
 .. role:: circlednumber
 
-The Bioconda channel is the primary output for users, but it takes a team of
+While Bioconda channel is the primary output for users, it takes a team of
 contributors and additional infrastructure to make it all happen. The entire
 system consists of the components illustrated in the diagram below.
 
