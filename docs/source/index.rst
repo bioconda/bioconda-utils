@@ -33,11 +33,15 @@ will modify your :file:`~/.condarc` file::
     conda config --add channels conda-forge
     conda config --set channel_priority strict
 
+If you have used Bioconda in the past, note that the recommended configuration
+has changed over the years. You should run the above commands to ensure your
+settings follow the current recommendations.
+
 .. details:: What did these commands do?
    :anchor:
 
-    In general, running `conda config` modifies your condarc file which can be
-    found at `~/.condarc` by default.
+    In general, running ``conda config`` modifies your condarc file which can be
+    found at ``~/.condarc`` by default.
 
     The first three commands add channels, from lowest to highest priority.
     **The order is important** to avoid problems with solving dependencies::
