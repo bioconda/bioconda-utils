@@ -23,19 +23,24 @@ The resulting HTML has the structure:
     </div>
 </details>
 
-That is, you can style the part that expanded with CSS like:
+That is, you can style the part that expanded with CSS like::
 
-.. code-block:: css
+    details div { }
 
-    details div {
-    }
+And the label (when collapsed) with::
 
-And the label (when collapsed) with:
+    details summary { }
 
-.. code-block:: css
+You can also add anchors, which when visited (and when paired with the proper
+javascript) will unfold the details such that the anchors can be used as
+permalinks, like this:
 
-    details summary {
-    }
+.. details: Label here
+    :anchor: label-here
+
+    Arbitrary content
+
+Then you can link back to it with `see here <#label-here>`_.
 """
 
 

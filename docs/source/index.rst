@@ -1,3 +1,18 @@
+.. Notes to documentation editors:
+
+   To build the documentation locally, first create an environment using
+   bioconda_utils/bioconda_utils-requirements.txt.
+
+   Then activate the env and run:
+
+     make -C docs/ BIOCONDA_FILTER_RECIPES=2 SPHINXOPTS="-E" html
+
+   This will only build 2 of the recipes pages, dramatically speeding up the
+   build process.
+
+   For more information on the ".. details::" directive, see
+   _ext/details_ext.py.
+
 .. image:: images/bioconda.png
 
 **Bioconda** lets you install thousands of software packages related to
