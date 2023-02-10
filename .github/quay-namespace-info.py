@@ -117,7 +117,7 @@ if __name__ == "__main__":
                 repo_status[repo]['is_public'] = "True (changed by script)"
                 # Again, be nice to Quay
                 time.sleep(0.3)
-                fh.write(f'Changed visibility of {args.namespace}/{repo} to public')
+                fh.write(f'Changed visibility of {args.namespace}/{repo} to public\n')
 
     # Print status
     with open(f'{args.namespace}-status.txt', 'w') as fh:
