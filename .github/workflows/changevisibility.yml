@@ -1,4 +1,4 @@
-name: Make Biocontainers Public 
+name: Change Container Visibility 
 on: workflow_dispatch
 jobs:
   changevisibility:
