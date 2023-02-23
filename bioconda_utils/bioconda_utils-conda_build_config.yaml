@@ -27,7 +27,7 @@ glpk:
   - 5
 
 htslib:
-  - 1.16
+  - 1.17
 
 bamtools:
   - 2.5.1
