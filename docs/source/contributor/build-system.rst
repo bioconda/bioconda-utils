@@ -95,7 +95,7 @@ N.B., due to transitioning to Azure, the remainder of this section is no longer 
 
 - Upon successfully building and testing via ``conda-build``, the built package
   is added to a minimal BusyBox container using ``mulled-build`` (maintained in
-  `galaxy-lib <https://github.com/galaxyproject/galaxy-lib>`_). This acts as
+  `galaxy <https://github.com/galaxyproject/galaxy>`_). This acts as
   a more stringent test than ``conda-build`` alone. The BusyBox container
   purposefully is missing many system libraries (like libgcc) that may be
   present in the CentOS 7 container. Note that it is common for a package to
