@@ -124,7 +124,7 @@ def build(recipe: str, pkg_paths: List[str] = None,
                     elif platform == "linux-gnu":
                         platform = "linux"
 
-                    config = load_conda_build_config(platform=platform)
+                    config = utils.load_conda_build_config(platform=platform)
                     pkg_paths = [p.replace(config.output_folder, docker_builder.pkg_dir) for p in pkg_paths]
             
             for pkg_path in pkg_paths:
