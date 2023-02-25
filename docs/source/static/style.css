@@ -163,3 +163,8 @@ details div.details {
 #overview details {
     margin-top: -15px;
 }
+
+details a.headerlink {
+    color: #ccc;
+    visibility: visible;
+}

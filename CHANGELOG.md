@@ -1,5 +1,88 @@
 # Changelog
 
+## [1.3.0](https://www.github.com/bioconda/bioconda-utils/compare/v1.2.0...v1.3.0) (2022-11-10)
+
+
+### Features
+
+* Update GLPK pin for BioC 3.16 bulk rebuild ([#825](https://www.github.com/bioconda/bioconda-utils/issues/825)) ([28a4dda](https://www.github.com/bioconda/bioconda-utils/commit/28a4dda0257b436d881da7717a88d75d6bf3067e))
+
+## [1.2.0](https://www.github.com/bioconda/bioconda-utils/compare/v1.1.5...v1.2.0) (2022-11-02)
+
+
+### Features
+
+* switch data packages to bioconductor-data-packages ([#822](https://www.github.com/bioconda/bioconda-utils/issues/822)) ([5abba86](https://www.github.com/bioconda/bioconda-utils/commit/5abba8609629145cf9f577cd3773f0b58922594f))
+* Update bioconda_utils-conda_build_config.yaml ([#824](https://www.github.com/bioconda/bioconda-utils/issues/824)) ([f8c609a](https://www.github.com/bioconda/bioconda-utils/commit/f8c609a4da02ce24870d01bc47ea74de9021e969))
+
+
+### Bug Fixes
+
+* autobump cache checking on circleci ([954708e](https://www.github.com/bioconda/bioconda-utils/commit/954708ea0bb06b1b076f0b60f32f21f21644c20a))
+
+### [1.1.5](https://www.github.com/bioconda/bioconda-utils/compare/v1.1.4...v1.1.5) (2022-10-15)
+
+
+### Bug Fixes
+
+* Use newer mulled conda image ([#819](https://www.github.com/bioconda/bioconda-utils/issues/819)) ([1464d18](https://www.github.com/bioconda/bioconda-utils/commit/1464d180e21b59781bb54c8fe49fa78ffa029430))
+
+### [1.1.4](https://www.github.com/bioconda/bioconda-utils/compare/v1.1.3...v1.1.4) (2022-10-13)
+
+
+### Bug Fixes
+
+* restore from cache on circleci ([#815](https://www.github.com/bioconda/bioconda-utils/issues/815)) ([001d4f8](https://www.github.com/bioconda/bioconda-utils/commit/001d4f8d5e21b30024b3f62566c112570219ed3c))
+* update mamba when performing mulled tests ([#818](https://www.github.com/bioconda/bioconda-utils/issues/818)) ([e39cc48](https://www.github.com/bioconda/bioconda-utils/commit/e39cc4893f58785ba63bc455fe082fe9467898d6))
+
+### [1.1.3](https://www.github.com/bioconda/bioconda-utils/compare/v1.1.2...v1.1.3) (2022-10-11)
+
+
+### Bug Fixes
+
+* Update pyopenssl pinning ([#814](https://www.github.com/bioconda/bioconda-utils/issues/814)) ([e4950b0](https://www.github.com/bioconda/bioconda-utils/commit/e4950b0bb08c298df6d63dda9eafefabdafdc339))
+* Use mamba in mulled-build ([#810](https://www.github.com/bioconda/bioconda-utils/issues/810)) ([554e15b](https://www.github.com/bioconda/bioconda-utils/commit/554e15bba587a4f58ff967934a84d6117832cf2d))
+
+
+### Documentation
+
+* add cbrueffer to core. ([#811](https://www.github.com/bioconda/bioconda-utils/issues/811)) ([cecf50c](https://www.github.com/bioconda/bioconda-utils/commit/cecf50c2388bea487a6ff4b335067a6d11467358))
+
+### [1.1.2](https://www.github.com/bioconda/bioconda-utils/compare/v1.1.1...v1.1.2) (2022-10-08)
+
+
+### Bug Fixes
+
+* require a more recent pyopenssl ([#809](https://www.github.com/bioconda/bioconda-utils/issues/809)) ([adaebdc](https://www.github.com/bioconda/bioconda-utils/commit/adaebdc2448698efeccff746f4b76307124f20c4))
+
+
+### Documentation
+
+* Bioconductor data packages ([#802](https://www.github.com/bioconda/bioconda-utils/issues/802)) ([bb84df2](https://www.github.com/bioconda/bioconda-utils/commit/bb84df2d7c1a282a0a42a7cea81e6b20e077650d))
+* reflect Jillians leave of the core team in the docs ([#807](https://www.github.com/bioconda/bioconda-utils/issues/807)) ([3e7c12b](https://www.github.com/bioconda/bioconda-utils/commit/3e7c12bd7dae5ff8b4d7b42efc1551f7397dfbec))
+
+### [1.1.1](https://www.github.com/bioconda/bioconda-utils/compare/v1.1.0...v1.1.1) (2022-09-13)
+
+
+### Bug Fixes
+
+* autobump uses correct version from common.sh ([#803](https://www.github.com/bioconda/bioconda-utils/issues/803)) ([81ba442](https://www.github.com/bioconda/bioconda-utils/commit/81ba4425dcd85c495518a2071d14e694e393d123))
+* circleci yaml syntax ([#806](https://www.github.com/bioconda/bioconda-utils/issues/806)) ([3315057](https://www.github.com/bioconda/bioconda-utils/commit/33150577a97e16ab9e9b4c6443fff37fd456f22f))
+
+## [1.1.0](https://www.github.com/bioconda/bioconda-utils/compare/v1.0.1...v1.1.0) (2022-09-11)
+
+
+### Features
+
+* linter for missing space in dependency version contraints ([#795](https://www.github.com/bioconda/bioconda-utils/issues/795)) ([85ccb23](https://www.github.com/bioconda/bioconda-utils/commit/85ccb2382066f2b7a6faf3911e52ebe1623dfcc7))
+* schedule docs on GitHub actions ([#800](https://www.github.com/bioconda/bioconda-utils/issues/800)) ([dde65d0](https://www.github.com/bioconda/bioconda-utils/commit/dde65d000b6fc978158e49ff875f50996a1bed11))
+* Update htslib and conda-forge pinnings ([#797](https://www.github.com/bioconda/bioconda-utils/issues/797)) ([162d597](https://www.github.com/bioconda/bioconda-utils/commit/162d5977eb5acec4c378e1831e6e59c0f4872801))
+
+
+### Documentation
+
+* developer documentation updates ([#792](https://www.github.com/bioconda/bioconda-utils/issues/792)) ([87c16fe](https://www.github.com/bioconda/bioconda-utils/commit/87c16fe334b2aa5ffbe647d3941b3dfc6ebd53df))
+
 ### [1.0.1](https://www.github.com/bioconda/bioconda-utils/compare/v1.0.0...v1.0.1) (2022-08-01)
 
 

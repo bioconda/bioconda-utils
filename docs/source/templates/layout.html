@@ -19,6 +19,23 @@
     <meta name="msapplication-TileColor" content="#ffffff">
     <meta name="msapplication-TileImage" content="{{pathto('_static/ms-icon-144x144.png', 1)}}">
 
+    <script>
+        const openDetailsIfAnchorHidden = evt => {
+          const targetDiv = document.querySelector(evt.target.getAttribute("href"));
+
+          // Detect if the target is hidden, in which case do nothing
+          const props = window.getComputedStyle(targetDiv);
+          if (props.display === 'none' || props.visibility === 'hidden') return;
+
+          // otherwise, find the closest <details> element and open it
+          targetDiv.closest("details").open = true;
+        }
+
+        [...document.querySelectorAll("[href^='#']")].forEach( 
+           el => el.addEventListener("click", openDetailsIfAnchorHidden )
+        );
+    </script>
+
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#ffffff">
 {{ super() }}

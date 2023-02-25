@@ -9,6 +9,9 @@ from bioconda_utils import pkg_test
 from bioconda_utils import utils
 from bioconda_utils import build
 
+from conda import __version__ as conda_version
+from mamba import __version__ as mamba_version
+
 # TODO:
 # need tests for channel order and extra channels (see
 # https://github.com/bioconda/bioconda-utils/issues/31)
@@ -96,28 +99,33 @@ def test_pkg_test_custom_base_image():
 @pytest.mark.skipif(SKIP_OSX, reason="skipping on osx")
 def test_pkg_test_conda_image():
     """
-    Running a mulled-build test with a non-default conda image.
+    Check mulled-build test image has conda/mamba not older than outside build.
     """
-    # Inspects the installing conda version by writing $PREFIX/conda-version as
-    # a post-link step -- but only if we are actually doing mulled tests, i.e.,
-    # when $PREFIX == /usr/local.
-    conda_version = '4.9.2'
+    # Require versions at least at high as those used by bioconda-utils itself.
     recipe = dedent(f"""
         one:
           meta.yaml: |
             package:
-              name: one
+              name: test_pkg_test_conda_image
               version: 0.1
+            requirements:
+              run:
+                - python
+                - setuptools
             test:
               commands:
-                - '[[ "${{PREFIX}}" != /usr/local ]] || cat /usr/local/conda-version'
-                - '[[ "${{PREFIX}}" != /usr/local ]] || grep -F ''conda {conda_version}'' /usr/local/conda-version'
+                - |
+                  python -c '
+                  import sys, os
+                  from pathlib import Path
+                  from pkg_resources import parse_version as v
+                  assert v("{conda_version}") <= v(Path(os.environ["CONDA_PREFIX"], "conda-version").read_text())
+                  assert v("{mamba_version}") <= v(Path(os.environ["CONDA_PREFIX"], "mamba-version").read_text())
+                  '
           post-link.sh: |
-            #!/bin/bash
-            if [[ "${{PREFIX}}" == /usr/local ]] ; then
-                /opt/*/bin/conda --version > /usr/local/conda-version
-            fi
+            conda --version | sed -n 's/^conda //p' > "${{PREFIX}}/conda-version"
+            mamba --version | sed -n 's/^mamba //p' > "${{PREFIX}}/mamba-version"
     """)  # noqa: E501: line too long
     built_packages = _build_pkg(recipe)
     for pkg in built_packages:
-        pkg_test.test_package(pkg, conda_image=f"quay.io/bioconda/create-env:1.0.1-{conda_version}")
+        pkg_test.test_package(pkg)

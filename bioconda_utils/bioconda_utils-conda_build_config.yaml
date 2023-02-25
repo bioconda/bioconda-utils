@@ -21,8 +21,13 @@ pin_run_as_build:
     max_pin: x.x
     min_pin: x.x
 
+# Update GLPK ahead of general pinnings for the Bioconductor 3.16 bulk update.
+# TODO: Remove this once we update to conda-forge-pinning>=2022.10.04.12.34.07.
+glpk:
+  - 5
+
 htslib:
-  - 1.15
+  - 1.17
 
 bamtools:
   - 2.5.1
@@ -30,7 +35,7 @@ bamtools:
 # NOTE: Workaround https://github.com/conda/conda-build/issues/3974 we slightly alter the values
 #       from conda-forge-pinnings here (inserting '.*' or ' ' which should be ignored later on).
 r_base:
-  - 4.1.*
+  - 4.2.*
 
 python:
   - 3.10.*  *_cpython
