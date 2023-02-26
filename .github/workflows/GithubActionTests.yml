@@ -46,6 +46,9 @@ jobs:
       run: |
         which python
         which conda
+        echo $PATH
+        ls /miniconda
+        /miniconda/bin/conda --version
         python setup.py install
     - name: Run tests
       run: |
