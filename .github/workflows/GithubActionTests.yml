@@ -68,7 +68,7 @@ jobs:
         which conda
         echo $PATH
         python setup.py install
-        conda install -y -f test-requirements.txt
+        conda install -y --file test-requirements.txt
 
     - name: Run tests
       run: |
