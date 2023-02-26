@@ -74,6 +74,8 @@ jobs:
 
     - name: Run tests
       run: |
+
+        export PATH="${HOME}/miniconda/bin:${PATH}"
         if git diff --name-only origin/master...HEAD | grep -vE ^docs; then
             py.test --durations=0 test/ -v --log-level=DEBUG -k "not docker" --tb=native
         else
