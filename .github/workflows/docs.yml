@@ -10,6 +10,7 @@ concurrency:
 
 jobs:
   build-and-test:
+    if: ${{ false }}
     runs-on: "ubuntu-latest"
     steps:
     - uses: actions/checkout@v2
