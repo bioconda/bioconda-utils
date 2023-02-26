@@ -41,41 +41,17 @@ jobs:
     steps:
     - uses: actions/checkout@v1
 
-    - name: Fetch common.sh
-      run: |
-        wget https://raw.githubusercontent.com/bioconda/bioconda-common/bulk/common.sh
+    - name: set path
+      echo "${HOME}/miniconda/bin" >> $GITHUB_PATH
 
     - name: Install bioconda-utils
       run: |
-        # Remove existing installation on macOS runners
-        sudo rm -rf /usr/local/miniconda
-        sudo rm -rf ${HOME}/miniconda
-
-        MINICONDA_VER=$(grep "^MINICONDA_VER=" common.sh | cut -f2 -d "=")
-
-        # Basic miniconda installation with bioconda channels configured
-        curl "https://repo.anaconda.com/miniconda/Miniconda3-${MINICONDA_VER}-MacOSX-x86_64.sh" > miniconda.sh
-        bash miniconda.sh -b -p "${HOME}/miniconda"
-        export PATH="${HOME}/miniconda/bin:${PATH}"
-        conda config --set always_yes yes
-        conda config --system --add channels defaults
-        conda config --system --add channels bioconda
-        conda config --system --add channels conda-forge
-        conda config --system --set channel_priority strict
-        conda info
-
-        conda install mamba -y
-
-        which python
-        which conda
-        echo $PATH
+        curl -L "https://raw.githubusercontent.com/bioconda/bioconda-common/add-macos-setup/macos-github-runner.sh" | bash
+        mamba install -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirementst.txt
         python setup.py install
-        mamba install -y --file test-requirements.txt
 
     - name: Run tests
       run: |
-
-        export PATH="${HOME}/miniconda/bin:${PATH}"
         if git diff --name-only origin/master...HEAD | grep -vE ^docs; then
             py.test --durations=0 test/ -v --log-level=DEBUG -k "not docker" --tb=native
         else
