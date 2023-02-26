@@ -46,6 +46,7 @@ jobs:
 
     - name: Install bioconda-utils
       run: |
+        export BIOCONDA_PREP_MACOS_FOR_BUILDING=0
         curl -L "https://raw.githubusercontent.com/bioconda/bioconda-common/add-macos-setup/macos-github-runner.sh" | bash
         mamba install -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirementst.txt
         python setup.py install
