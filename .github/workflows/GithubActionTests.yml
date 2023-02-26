@@ -64,11 +64,13 @@ jobs:
         conda config --system --set channel_priority strict
         conda info
 
+        conda install mamba -y
+
         which python
         which conda
         echo $PATH
         python setup.py install
-        conda install -y --file test-requirements.txt
+        mamba install -y --file test-requirements.txt
 
     - name: Run tests
       run: |
