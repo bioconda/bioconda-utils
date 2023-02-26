@@ -6,7 +6,6 @@ concurrency:
 
 jobs:
   test-linux:
-    if: ${{ false }}
     name: Linux tests
     runs-on: ubuntu-latest
     strategy:
@@ -47,7 +46,7 @@ jobs:
     - name: Install bioconda-utils
       run: |
         export BIOCONDA_PREP_MACOS_FOR_BUILDING=0
-        curl -L "https://raw.githubusercontent.com/bioconda/bioconda-common/add-macos-setup/macos-github-runner.sh" | bash
+        curl -L "https://raw.githubusercontent.com/bioconda/bioconda-common/master/macos-github-runner.sh" | bash
         mamba install -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
         python setup.py install
 
@@ -59,7 +58,6 @@ jobs:
             echo "Skipping pytest - only docs modified"
         fi
   autobump-test:
-    if: ${{ false }}
     name: autobump test
     runs-on: ubuntu-latest
     steps:
