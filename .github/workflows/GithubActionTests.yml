@@ -45,10 +45,8 @@ jobs:
     - name: Install bioconda-utils
       run: |
         which python
-        which conda
+        conda activate
         echo $PATH
-        ls /miniconda
-        /miniconda/bin/conda --version
         python setup.py install
     - name: Run tests
       run: |
