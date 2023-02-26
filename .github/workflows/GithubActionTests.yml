@@ -42,7 +42,7 @@ jobs:
     - uses: actions/checkout@v1
 
     - name: set path
-      echo "${HOME}/miniconda/bin" >> $GITHUB_PATH
+      run: echo "${HOME}/miniconda/bin" >> $GITHUB_PATH
 
     - name: Install bioconda-utils
       run: |
