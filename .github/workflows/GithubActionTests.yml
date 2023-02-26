@@ -68,6 +68,8 @@ jobs:
         which conda
         echo $PATH
         python setup.py install
+        conda install -y -f test-requirements.txt
+
     - name: Run tests
       run: |
         if git diff --name-only origin/master...HEAD | grep -vE ^docs; then
