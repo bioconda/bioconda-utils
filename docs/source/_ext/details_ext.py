@@ -23,19 +23,24 @@ The resulting HTML has the structure:
     </div>
 </details>
 
-That is, you can style the part that expanded with CSS like:
+That is, you can style the part that expanded with CSS like::
 
-.. code-block:: css
+    details div { }
 
-    details div {
-    }
+And the label (when collapsed) with::
 
-And the label (when collapsed) with:
+    details summary { }
 
-.. code-block:: css
+You can also add anchors, which when visited (and when paired with the proper
+javascript) will unfold the details such that the anchors can be used as
+permalinks, like this:
 
-    details summary {
-    }
+.. details: Label here
+    :anchor: label-here
+
+    Arbitrary content
+
+Then you can link back to it with `see here <#label-here>`_.
 """
 
 
@@ -53,11 +58,13 @@ class summary(nodes.TextElement, nodes.General):
 
 class DetailsDirective(rst.Directive):
     has_content = True
-    required_arguments = 1
+    required_arguments = 0
+    optional_arguments = 1
     final_argument_whitespace = True
     option_spec = {
         "class": rst.directives.class_option,
         "name": rst.directives.unchanged,
+        "anchor": rst.directives.unchanged,
     }
 
     def run(self):
@@ -65,15 +72,27 @@ class DetailsDirective(rst.Directive):
 
         # Pass along the first argument of the directive to the node
         details_node["heading"] = self.arguments[0]
+        details_node["anchor"] = self.options.get("anchor", None)
         self.state.nested_parse(self.content, self.content_offset, details_node)
         return [details_node]
 
 
 def visit_details(self, node):
     heading = node["heading"]
-    self.body.append(
-        f'<details><summary>{heading}</summary><div class="details">'
-    )
+    anchor = node["anchor"]
+    if anchor:
+        self.body.append(
+            f"<details><summary>{heading}</summary>"
+            f'<div id={anchor} class="details">'
+            f"<p><i>{heading}</i>"
+            f'<a class="headerlink" title="Permalink" href="#{anchor}">¶</a></p>'
+        )
+    else:
+        self.body.append(
+            f"<details><summary>{heading}</summary>"
+            f'<div class="details">'
+            f"<p><i>{heading}</i></p>"
+        )
 
 
 def depart_details(self, node):
