@@ -136,7 +136,7 @@ def single_build_pkg_dir(request, recipes_fixture):
     logger.error("Making recipe builder")
     docker_builder = docker_utils.RecipeBuilder(
         use_host_conda_bld=True,
-        pkg_dir=os.getcwd() + "/output"
+        pkg_dir=os.getcwd() + "/output",
         docker_base_image=DOCKER_BASE_IMAGE)
     mulled_test = True
     logger.error("DONE")
