@@ -126,6 +126,31 @@ def single_build(request, recipes_fixture):
     yield recipes_fixture.pkgs['one']
     for pkg in recipes_fixture.pkgs['one']:
         ensure_missing(pkg)
+        
+
+@pytest.fixture(scope='module', ids=IDS)
+def single_build_pkg_dir(request, recipes_fixture):
+    """
+    Builds the "one" recipe with pkg_dir.
+    """
+    logger.error("Making recipe builder")
+    docker_builder = docker_utils.RecipeBuilder(
+        use_host_conda_bld=True,
+        pkg_dir=os.getcwd() + "/output"
+        docker_base_image=DOCKER_BASE_IMAGE)
+    mulled_test = True
+    logger.error("DONE")
+    logger.error("Fixture: Building 'one' within docker with pkg_dir")
+    build.build(
+        recipe=recipes_fixture.recipe_dirs['one'],
+        pkg_paths=recipes_fixture.pkgs['one'],
+        docker_builder=docker_builder,
+        mulled_test=mulled_test,
+    )
+    logger.error("Fixture: Building 'one' within docker and pkg_dir -- DONE")
+    yield recipes_fixture.pkgs['one']
+    for pkg in recipes_fixture.pkgs['one']:
+        ensure_missing(pkg)
 
 
 @pytest.fixture(scope='module', params=PARAMS, ids=IDS)
