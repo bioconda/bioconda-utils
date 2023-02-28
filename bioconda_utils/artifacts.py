@@ -8,7 +8,6 @@ import zipfile
 
 import requests
 from bioconda_utils import utils
-from bioconda_utils.cli import get_recipes
 from bioconda_utils.upload import anaconda_upload, mulled_upload
 
 
