@@ -9,10 +9,10 @@ import zipfile
 import requests
 from bioconda_utils import utils
 from bioconda_utils.cli import get_recipes
-from bioconda_utils.upload import anaconda_upload
+from bioconda_utils.upload import anaconda_upload, mulled_upload
 
 
-def upload_pr_artifacts(repo, git_sha) -> bool:
+def upload_pr_artifacts(repo, git_sha, dryrun=False, mulled_upload_target=None) -> bool:
     gh = utils.get_github_client()
 
     repo = gh.get_repo(repo)
@@ -34,10 +34,20 @@ def upload_pr_artifacts(repo, git_sha) -> bool:
                 artifact_path = os.path.join(tmpdir, os.path.basename(artifact))
                 requests.get(artifact, stream=True, allow_redirects=True).raw.save(artifact_path)
                 zipfile.ZipFile(artifact_path).extractall(tmpdir)
-                # get all the contained packages
+                # get all the contained packages and images
                 for pkg in glob.glob("*/packages/*/*.tar.bz2"):
-                    # upload the artifact
-                    anaconda_upload(pkg)
+                    if dryrun:
+                        print(f"Would upload {pkg} to anaconda.org.")
+                    else:
+                        # upload the artifact
+                        anaconda_upload(pkg)
+                if mulled_upload_target:
+                    for img in glob.glob("*/images/*.tag.gz"):
+                        if dryrun:
+                            print(f"Would upload {img} to quay.io/{mulled_upload_target}.")
+                        else:
+                            # upload the artifact
+                            mulled_upload(img, mulled_upload_target)
         return True
 
 
