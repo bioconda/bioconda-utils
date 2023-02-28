@@ -478,6 +478,20 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
 
 
 @recipe_folder_and_config()
+@arg('--repo', help='Name of the github repository to check (e.g. bioconda/bioconda-recipes).')
+@arg('--git-range', nargs='+',
+     help='''Git range (e.g. commits or something like
+     "master HEAD" to check commits in HEAD vs master, or just "HEAD" to
+     include uncommitted changes). All recipes modified within this range will
+     be built if not present in the channel.''')
+@enable_logging()
+def handle_merged_pr(recipe_folder, config, repo, git_range=None):
+    success = handle_merged_pr(repo, git_range[1])
+    if not success:
+        success = build(recipe_folder, config, git_range=git_range)
+    exit(0 if success else 1)
+
+@recipe_folder_and_config()
 @arg('--packages',
      nargs="+",
      help='Glob for package[s] to show in DAG. Default is to show all '

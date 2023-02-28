@@ -8,30 +8,25 @@ import zipfile
 
 import requests
 from bioconda_utils import utils
+from bioconda_utils.cli import get_recipes
 from bioconda_utils.upload import anaconda_upload
 
 
-def handle_merged_pr():
-    sha = os.environ["GITHUB_SHA"]
-
+def handle_merged_pr(repo, git_sha) -> bool:
     gh = utils.get_github_client()
 
-    repo = gh.get_repo(os.environ["GITHUB_REPOSITORY"])
-    
-    assert repo is not None, (
-        "No github repository found in $GITHUB_REPOSITORY. "
-        "The current action is meant to be run from within a github action job!"
-    )
+    repo = gh.get_repo(repo)
 
-    commit = repo.get_commit(sha)
+    commit = repo.get_commit(git_sha)
     prs = commit.get_pulls()
     if not prs:
         # no PR found for the commit
-        return
+        return True
     pr = prs[0]
     artifacts = list(fetch_artifacts(pr))
     if not artifacts:
-        raise ValueError("No artifacts found!")
+        # no artifacts found, fail and rebuild packages
+        return False
     else:
         for artifact in artifacts:
             with tempfile.TemporaryDirectory() as tmpdir:
@@ -43,6 +38,7 @@ def handle_merged_pr():
                 for pkg in glob.glob("*/packages/*/*.tar.bz2"):
                     # upload the artifact
                     anaconda_upload(pkg)
+        return True
 
 
 def fetch_artifacts(pr):
