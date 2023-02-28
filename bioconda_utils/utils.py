@@ -28,6 +28,8 @@ from typing import Sequence, Collection, List, Dict, Any, Union
 from multiprocessing import Pool
 from multiprocessing.pool import ThreadPool
 
+from github import Github
+
 import pkg_resources
 import pandas as pd
 import tqdm as _tqdm
@@ -1610,3 +1612,14 @@ class RepoData:
         if isinstance(key, str):
             return list(df[key])
         return df[key].itertuples(index=False)
+
+
+def get_github_client():
+    """Get a Github client with a robust retry policy.
+    """
+    return Github(
+        os.environ["GITHUB_TOKEN"],
+        retry=Retry(
+            total=10, status_forcelist=(500, 502, 504), backoff_factor=0.3
+        ),
+    )

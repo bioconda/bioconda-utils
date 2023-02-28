@@ -67,3 +67,6 @@ graphviz
 
 # The bioconductor skeleton needs this
 requests=2.22.*
+
+# merge handling
+pygithub
