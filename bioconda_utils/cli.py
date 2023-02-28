@@ -7,6 +7,8 @@ Bioconda Utils Command Line Interface
 # ".../importlib/_bootstrap.py:219: RuntimeWarning: numpy.dtype size \
 # changed, may indicate binary incompatibility. Expected 96, got 88"
 import warnings
+
+from bioconda_utils.artifacts import upload_pr_artifacts
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 
 import sys
@@ -486,7 +488,7 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
      be built if not present in the channel.''')
 @enable_logging()
 def handle_merged_pr(recipe_folder, config, repo, git_range=None):
-    success = handle_merged_pr(repo, git_range[1])
+    success = upload_pr_artifacts(repo, git_range[1])
     if not success:
         success = build(recipe_folder, config, git_range=git_range)
     exit(0 if success else 1)

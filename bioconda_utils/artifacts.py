@@ -12,7 +12,7 @@ from bioconda_utils.cli import get_recipes
 from bioconda_utils.upload import anaconda_upload
 
 
-def handle_merged_pr(repo, git_sha) -> bool:
+def upload_pr_artifacts(repo, git_sha) -> bool:
     gh = utils.get_github_client()
 
     repo = gh.get_repo(repo)
