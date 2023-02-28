@@ -30,11 +30,18 @@ class GitterListener:
       api: Gitter API object
       rooms: Map containing rooms and their respective github user/repo
     """
-    def __init__(self, app: aiohttp.web.Application, token: str, rooms: Dict[str, str],
-                 session: aiohttp.ClientSession, ghappapi) -> None:
+
+    def __init__(
+        self,
+        app: aiohttp.web.Application,
+        token: str,
+        rooms: Dict[str, str],
+        session: aiohttp.ClientSession,
+        ghappapi,
+    ) -> None:
         self.rooms = rooms
         self._ghappapi = ghappapi
-        self._api = AioGitterAPI(app['client_session'], token)
+        self._api = AioGitterAPI(app["client_session"], token)
         self._user: gitter.User = None
         self._tasks: List[Any] = []
         self._session = session
@@ -53,8 +60,7 @@ class GitterListener:
             logger.debug("%s: Room Info: %s", self, room)
         logger.debug("%s: Groups Info: %s", self, await self._api.list_groups())
 
-        self._tasks = [app.loop.create_task(self.listen(room))
-                       for room in self.rooms]
+        self._tasks = [app.loop.create_task(self.listen(room)) for room in self.rooms]
 
     async def shutdown(self, _app: aiohttp.web.Application) -> None:
         """Send cancel signal to listener"""
@@ -68,7 +74,7 @@ class GitterListener:
     async def listen(self, room_name: str) -> None:
         """Main run loop"""
         try:
-            user, repo = self.rooms[room_name].split('/')
+            user, repo = self.rooms[room_name].split("/")
             logger.error("Listening in %s for repo %s/%s", room_name, user, repo)
             message = None
             while True:
@@ -89,16 +95,21 @@ class GitterListener:
 
                 # http errors just get logged
                 except aiohttp.ClientResponseError as exc:
-                    logger.exception("HTTP Error Code %s while listening to room %s",
-                                     exc.code, room_name)
+                    logger.exception(
+                        "HTTP Error Code %s while listening to room %s",
+                        exc.code,
+                        room_name,
+                    )
 
                 # asyncio cancellation needs to be passed up
-                except asyncio.CancelledError: # pylint: disable=try-except-raise
+                except asyncio.CancelledError:  # pylint: disable=try-except-raise
                     raise
 
                 # the rest, we just log so that we remain online after an error
                 except Exception:  # pylint: disable=broad-except
-                    logger.exception("Unexpected exception caught. Last message: '%s'", message)
+                    logger.exception(
+                        "Unexpected exception caught. Last message: '%s'", message
+                    )
 
                 await asyncio.sleep(1)
         except asyncio.CancelledError:
@@ -111,31 +122,42 @@ class GitterListener:
                 await self._api.leave_room(self._user, room)
                 logger.error("%s: left room %s", self, room_name)
 
-    async def handle_msg(self, room: gitter.Room, message: gitter.Message, ghapi) -> None:
+    async def handle_msg(
+        self, room: gitter.Room, message: gitter.Message, ghapi
+    ) -> None:
         """Parse Gitter message and dispatch via command_routes"""
         await self._api.mark_as_read(self._user, room, [message.id])
         if self._user.id not in (m.userId for m in message.mentions):
-            if self._user.username.lower() in (m.screenName.lower() for m in message.mentions):
-                await self._api.send_message(room, "@%s - are you talking to me?",
-                                             message.fromUser.username)
+            if self._user.username.lower() in (
+                m.screenName.lower() for m in message.mentions
+            ):
+                await self._api.send_message(
+                    room, "@%s - are you talking to me?", message.fromUser.username
+                )
             return
-        command = message.text.strip().lstrip('@'+self._user.username).strip()
+        command = message.text.strip().lstrip("@" + self._user.username).strip()
         if command == message.text.strip():
-            await self._api.send_message(room, "Hmm? Someone talking about me?",
-                                         message.fromUser.username)
+            await self._api.send_message(
+                room, "Hmm? Someone talking about me?", message.fromUser.username
+            )
             return
         cmd, *args = command.split()
         issue_number = None
         try:
-            if args[-1][0] == '#':
+            if args[-1][0] == "#":
                 issue_number = int(args[-1][1:])
                 args.pop()
         except (ValueError, IndexError):
             pass
 
-        response = await command_routes.dispatch(cmd.lower(), ghapi, issue_number,
-                                                 message.fromUser.username, *args)
+        response = await command_routes.dispatch(
+            cmd.lower(), ghapi, issue_number, message.fromUser.username, *args
+        )
         if response:
-            await self._api.send_message(room, "@%s: %s", message.fromUser.username, response)
+            await self._api.send_message(
+                room, "@%s: %s", message.fromUser.username, response
+            )
         else:
-            await self._api.send_message(room, "@%s: command failed", message.fromUser.username)
+            await self._api.send_message(
+                room, "@%s: command failed", message.fromUser.username
+            )

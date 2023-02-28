@@ -20,15 +20,20 @@ class CommandDispatch:
     >>> def command_hello(event, ghapi, *args):
     >>>     logger.info("Got command 'hello %s'", " ".join(args))
     """
+
     def __init__(self):
         self.mapping: Dict[str, Callable] = {}
 
-    def register(self, cmd: str, description: str = None) -> Callable[[Callable], Callable]:
+    def register(
+        self, cmd: str, description: str = None
+    ) -> Callable[[Callable], Callable]:
         """Decorator adding decorated function to dispatcher"""
+
         def decorator(func):
             desc = description or getdoc(func)
             self.mapping[cmd] = (func, desc)
             return func
+
         return decorator
 
     async def dispatch(self, cmd, *args, **kwargs):
@@ -46,9 +51,11 @@ class CommandDispatch:
 command_routes = CommandDispatch()  # pylint: disable=invalid-name
 
 
-def permissions(member: Optional[bool] = None,
-                author: Optional[bool] = None,
-                team: Optional[str] = None):
+def permissions(
+    member: Optional[bool] = None,
+    author: Optional[bool] = None,
+    team: Optional[str] = None,
+):
     """Decorator for commands checking for permissions
 
     Permissions are OR combined. Repeat the decorator to get AND.
@@ -57,6 +64,7 @@ def permissions(member: Optional[bool] = None,
       member: if true, user must be organization member
       author: if true, user must be author, if false user must not be author
     """
+
     def decorator(func):
         @functools.wraps(func)
         async def wrapper(ghapi, issue_number, user, *args):
@@ -71,7 +79,7 @@ def permissions(member: Optional[bool] = None,
                     err += [f"a member of {ghapi.user.capitalize()}"]
             if not okmsg and author is not None:
                 prq = await ghapi.get_prs(number=issue_number)
-                pr_author = prq['user']['login']
+                pr_author = prq["user"]["login"]
                 negate = "" if author else "not "
                 if (pr_author == user) == author:
                     okmsg = f"User is {negate}PR author"
@@ -85,13 +93,21 @@ def permissions(member: Optional[bool] = None,
 
             msg = okmsg or f"Permission denied. You need to be {' or '.join(err)}."
 
-            logger.warning("Access %s: %s wants to run %s on %s#%s ('%s')",
-                           "GRANTED" if okmsg else "DENIED",
-                           user, func.__name__, ghapi, issue_number, msg)
+            logger.warning(
+                "Access %s: %s wants to run %s on %s#%s ('%s')",
+                "GRANTED" if okmsg else "DENIED",
+                user,
+                func.__name__,
+                ghapi,
+                issue_number,
+                msg,
+            )
             if okmsg:
                 return await func(ghapi, issue_number, user, *args)
             return msg
+
         return wrapper
+
     return decorator
 
 
@@ -111,7 +127,7 @@ async def command_hello(ghapi, issue_number, user, *_args):
 @command_routes.register("bump")
 @permissions(member=True, author=True)
 async def command_bump(ghapi, issue_number, _user, *_args):
-    """Bump the build number of a recipe    """
+    """Bump the build number of a recipe"""
     tasks.bump.apply_async((issue_number, ghapi))
     return f"Scheduled bump of build number for #{issue_number}"
 
@@ -120,8 +136,8 @@ async def command_bump(ghapi, issue_number, _user, *_args):
 async def command_lint(ghapi, issue_number, _user, *_args):
     """Lint the current recipe"""
     (
-        tasks.get_latest_pr_commit.s(issue_number, ghapi) |
-        tasks.create_check_run.s(ghapi)
+        tasks.get_latest_pr_commit.s(issue_number, ghapi)
+        | tasks.create_check_run.s(ghapi)
     ).apply_async()
     return f"Scheduled creation of new check run for latest commit in #{issue_number}"
 
@@ -133,8 +149,8 @@ async def command_recheck(ghapi, issue_number, _user, *_args):
     tasks.check_circle_artifacts.s(issue_number, ghapi).apply_async()
     # queue lint check
     (
-        tasks.get_latest_pr_commit.s(issue_number, ghapi) |
-        tasks.create_check_run.s(ghapi)
+        tasks.get_latest_pr_commit.s(issue_number, ghapi)
+        | tasks.create_check_run.s(ghapi)
     ).apply_async()
     return f"Scheduled check run and circle artificats verification on #{issue_number}"
 
@@ -153,8 +169,8 @@ async def command_merge(ghapi, issue_number, user, *_args):
     """Merge PR"""
     comment_id = await ghapi.create_comment(issue_number, "Scheduled Upload & Merge")
     (
-        tasks.merge_pr.si(issue_number, comment_id, ghapi) |
-        tasks.post_result.s(issue_number, comment_id, "merge", user, ghapi)
+        tasks.merge_pr.si(issue_number, comment_id, ghapi)
+        | tasks.post_result.s(issue_number, comment_id, "merge", user, ghapi)
     ).apply_async()
     return f"Scheduled merge of #{issue_number}"
 
@@ -163,7 +179,7 @@ async def command_merge(ghapi, issue_number, user, *_args):
 @permissions(member=True)
 async def command_autobump(ghapi, _issue_number, _user, *args):
     """Run immediate Autobump on recipes"""
-    if any('*' in arg for arg in args):
+    if any("*" in arg for arg in args):
         return f"Wildcards in autobump not allowed"
     if len(args) > 5:
         return f"Please don't schedule more than 5 updates at once"
@@ -190,27 +206,29 @@ async def command_schedule(ghapi, issue_number, user, *args):
                     max_updates = int(args[1])
                 else:
                     max_updates = 5
-                params = {'AUTOBUMP_OPTS': f'--max-updates {max_updates}'}
+                params = {"AUTOBUMP_OPTS": f"--max-updates {max_updates}"}
 
                 from .config import CIRCLE_TOKEN
                 from ..circleci import AsyncCircleAPI
+
                 capi = AsyncCircleAPI(ghapi.session, token=CIRCLE_TOKEN)
-                res = await capi.trigger_job(project='bioconda-utils', job='autobump',
-                                             params=params)
+                res = await capi.trigger_job(
+                    project="bioconda-utils", job="autobump", params=params
+                )
                 return "Scheduled Autobump: " + res
         else:
             err = "Unknown command"
-    return err + (" Options are:\n"
-                  " - `autobump [n=5]`: schedule *n* updates of autobump")
+    return err + (
+        " Options are:\n" " - `autobump [n=5]`: schedule *n* updates of autobump"
+    )
+
 
 @command_routes.register("update")
 @permissions(member=True, author=True)
 async def command_update(ghapi, issue_number, user, *args):
-    """Update PR branch with it's target branch ("base")
-    """
+    """Update PR branch with it's target branch ("base")"""
     if await ghapi.pr_update_branch(issue_number):
         msg = "Ok. Branch update triggered."
     else:
         msg = "Sorry, I was unable to trigger branch update."
     await ghapi.create_comment(issue_number, msg)
-

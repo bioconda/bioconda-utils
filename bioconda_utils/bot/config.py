@@ -6,6 +6,7 @@ import os
 import re
 import sys
 
+
 def get_secret(name):
     """Load a secret from file or env
 
@@ -19,12 +20,13 @@ def get_secret(name):
         try:
             return os.environ[name]
         except KeyError:
-            if os.path.basename(sys.argv[0]) == 'sphinx-build':
+            if os.path.basename(sys.argv[0]) == "sphinx-build":
                 # We won't have nor need secrets when building docs
                 return None
             raise ValueError(
                 f"Missing secrets: configure {name} or {name}_FILE to contain or point at secret"
             ) from None
+
 
 #: PEM signing key for APP requests
 APP_KEY = get_secret("APP_KEY")
@@ -58,18 +60,18 @@ GITTER_TOKEN = get_secret("GITTER_TOKEN")
 
 #: Gitter Channels
 GITTER_CHANNELS = {
-    'bioconda/Lobby': 'bioconda/bioconda-recipes',
-    'bioconda/bot': 'bioconda/bioconda-recipes'
+    "bioconda/Lobby": "bioconda/bioconda-recipes",
+    "bioconda/bot": "bioconda/bioconda-recipes",
 }
-#GITTER_CHANNELS = {
+# GITTER_CHANNELS = {
 #    'bioconda/bot_test': 'epruesse/bioconda-recipes'
-#}
+# }
 
 #: Name of bot
 BOT_NAME = "BiocondaBot"
 
 #: Bot alias regex - this is what it'll react to in comments
-BOT_ALIAS_RE = re.compile(r'@bioconda[- ]?bot', re.IGNORECASE)
+BOT_ALIAS_RE = re.compile(r"@bioconda[- ]?bot", re.IGNORECASE)
 
 #: Email address used in commits. Needs to match the account under
 #: which the CODE_SIGNING_KEY was registered.
@@ -83,5 +85,5 @@ REPODATA_TIMEOUT = 300
 
 #: Assign PRs to project columns by label
 PROJECT_COLUMN_LABEL_MAP = {
-     5706816: set(('please review & merge',)),
+    5706816: set(("please review & merge",)),
 }

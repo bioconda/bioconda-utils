@@ -6,7 +6,13 @@ import logging
 
 from aiohttp import web
 from aiohttp_session import get_session
-from aiohttp_security import check_authorized, forget, permits, remember, authorized_userid
+from aiohttp_security import (
+    check_authorized,
+    forget,
+    permits,
+    remember,
+    authorized_userid,
+)
 from aiohttp_jinja2 import template, render_template
 
 from .events import event_routes
@@ -35,10 +41,12 @@ def add_to_navbar(title):
              and the name in the navbar.
 
     """
+
     def wrapper(func):
         route = web_routes[-1]
-        navigation_bar.append((route.path, route.kwargs['name'], title))
+        navigation_bar.append((route.path, route.kwargs["name"], title))
         return func
+
     return wrapper
 
 
@@ -56,11 +64,11 @@ async def check_permission(request, permission, context=None):
     await check_authorized(request)
     allowed = await permits(request, permission, context)
     if not allowed:
-        request['permission_required'] = permission
+        request["permission_required"] = permission
         raise web.HTTPForbidden()
 
 
-@web_routes.post('/_gh')
+@web_routes.post("/_gh")
 async def github_webhook_dispatch(request):
     """View for incoming webhooks from Github
 
@@ -86,31 +94,38 @@ async def github_webhook_dispatch(request):
             return web.Response(status=200)
 
         # Log Event
-        installation = event.get('installation/id')
-        to_user = event.get('repository/owner/login', None)
-        to_repo = event.get('repository/name', None)
-        action = event.get('action', None)
-        action_msg = '/' + action if action else ''
-        logger.info("Received GH Event '%s%s' (%s) for %s (%s/%s)",
-                    event.event, action_msg,
-                    event.delivery_id,
-                    installation, to_user, to_repo)
+        installation = event.get("installation/id")
+        to_user = event.get("repository/owner/login", None)
+        to_repo = event.get("repository/name", None)
+        action = event.get("action", None)
+        action_msg = "/" + action if action else ""
+        logger.info(
+            "Received GH Event '%s%s' (%s) for %s (%s/%s)",
+            event.event,
+            action_msg,
+            event.delivery_id,
+            installation,
+            to_user,
+            to_repo,
+        )
 
         # Get GithubAPI object for this installation
-        ghapi = await request.app['ghappapi'].get_github_api(
+        ghapi = await request.app["ghappapi"].get_github_api(
             dry_run=False, installation=installation, to_user=to_user, to_repo=to_repo
         )
 
         # Dispatch the Event
         try:
             await event_routes.dispatch(event, ghapi)
-            logger.info("Event '%s%s' (%s) done", event.event, action_msg, event.delivery_id)
+            logger.info(
+                "Event '%s%s' (%s) done", event.event, action_msg, event.delivery_id
+            )
         except Exception:  # pylint: disable=broad-except
             logger.exception("Failed to dispatch %s", event.delivery_id)
 
         # Remember the rate limit
         # FIXME: remove this, we have many tokens in many places, this no longer works sensibly.
-        request.app['gh_rate_limit'] = ghapi.rate_limit
+        request.app["gh_rate_limit"] = ghapi.rate_limit
 
         return web.Response(status=200)
     except Exception:  # pylint: disable=broad-except
@@ -118,7 +133,7 @@ async def github_webhook_dispatch(request):
         return web.Response(status=500)
 
 
-@web_routes.post('/hooks/circleci')
+@web_routes.post("/hooks/circleci")
 async def generic_circleci_dispatch(request):
     """View for incoming webhooks from CircleCI
 
@@ -136,7 +151,7 @@ async def generic_circleci_dispatch(request):
         return web.Response(status=500)
 
 
-@web_routes.post('/hooks/{source}')
+@web_routes.post("/hooks/{source}")
 async def generic_webhook_dispatch(request):
     """View for all other incoming webhooks
 
@@ -145,19 +160,19 @@ async def generic_webhook_dispatch(request):
 
     """
     try:
-        source = request.match_info['source']
+        source = request.match_info["source"]
         body = await request.read()
         logger.error("Got generic webhook for %s", source)
         logger.error("   Data: %s", body)
         return web.Response(status=200)
-    except Exception: # pylint: disable=broad-except
+    except Exception:  # pylint: disable=broad-except
         logger.exception("Failure in generic webhook dispatch")
         return web.Response(status=500)
 
 
 @add_to_navbar(title="Home")
 @web_routes.get("/", name="home")
-@template('bot_index.html')
+@template("bot_index.html")
 async def show_index(_request):
     """View for the Bot's home page.
 
@@ -178,30 +193,26 @@ async def show_status(request):
     within that time.
 
     """
-    await check_permission(request, 'bioconda')
+    await check_permission(request, "bioconda")
     worker_status = capp.control.inspect(timeout=0.1)
     if not worker_status:
-        return {
-            'error': 'Could not get worker status'
-        }
+        return {"error": "Could not get worker status"}
     alive = worker_status.ping()
     if not alive:
-        return {
-            'error': 'No workers found'
-        }
+        return {"error": "No workers found"}
 
     return {
-        'workers': {
+        "workers": {
             worker: {
-                'active': worker_status.active(worker),
-                'reserved': worker_status.reserved(worker),
+                "active": worker_status.active(worker),
+                "reserved": worker_status.reserved(worker),
             }
             for worker in sorted(alive.keys())
         }
     }
 
 
-@web_routes.get('/logout', name="logout")
+@web_routes.get("/logout", name="logout")
 async def logout(request):
     """View for logging out user
 
@@ -210,13 +221,13 @@ async def logout(request):
 
     """
     await check_authorized(request)
-    nexturl = request.query.get('next', '/')
+    nexturl = request.query.get("next", "/")
     response = web.HTTPFound(nexturl)
     await forget(request, response)
     return response
 
 
-@web_routes.get('/login')
+@web_routes.get("/login")
 async def login(request):
     """View for login page
 
@@ -224,10 +235,10 @@ async def login(request):
     methods supported.
 
     """
-    return web.HTTPFound('/auth/github')
+    return web.HTTPFound("/auth/github")
 
 
-@web_routes.get('/auth/github', name="login")
+@web_routes.get("/auth/github", name="login")
 async def auth_github(request):
     """View for signing in with Github
 
@@ -237,15 +248,15 @@ async def auth_github(request):
     necessary.
 
     """
-    if 'error' in request.query:
+    if "error" in request.query:
         logger.error(request.query)
         web.HTTPUnauthorized(body="Encountered an error. ")
 
     session = await get_session(request)
-    nexturl = request.query.get('next') or '/'
+    nexturl = request.query.get("next") or "/"
     baseurl = BOT_BASEURL + "/auth/github?next=" + nexturl
     try:
-        ghappapi = request.app['ghappapi']
+        ghappapi = request.app["ghappapi"]
         ghapi = await ghappapi.oauth_github_user(baseurl, session, request.query)
         if ghapi.username:
             await remember(request, web.HTTPFound(nexturl), ghapi.token)
@@ -258,13 +269,13 @@ async def auth_github(request):
 
 
 @add_to_navbar(title="Commands")
-@web_routes.get('/commands', name="commands")
-@template('bot_commands.html')
+@web_routes.get("/commands", name="commands")
+@template("bot_commands.html")
 async def list_commands(request):
     """Self documents available commands"""
     return {
-        'commands': [
-            {'name': name, 'description': desc}
+        "commands": [
+            {"name": name, "description": desc}
             for name, (func, desc) in command_routes.mapping.items()
         ]
     }
