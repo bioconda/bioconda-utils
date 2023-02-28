@@ -241,7 +241,11 @@ def test_upload(single_upload):
 def test_single_build_only(single_build):
     for pkg in single_build:
         assert os.path.exists(pkg)
-
+        
+@pytest.mark.long_running_2
+def test_single_build_pkg_dir(single_build):
+    for pkg in single_build:
+        assert os.path.exists(pkg)
 
 @pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
 def test_single_build_with_post_test(single_build):
