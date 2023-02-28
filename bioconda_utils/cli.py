@@ -489,12 +489,11 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
 @arg('--dryrun', action='store_true', help='''Do not actually upload anything.''')
 @arg('--fallback', choices=['build', 'ignore'], default='build', help="What to do if no artifacts are found in the PR.")
 @arg('--mulled-upload-target', help="Provide a quay.io target to push mulled docker images to.")
-@arg()
 @enable_logging()
 def handle_merged_pr(
     recipe_folder,
     config,
-    repo,
+    repo=None,
     git_range=None,
     dryrun=False,
     fallback='build',
@@ -1009,5 +1008,6 @@ def main():
         sys.exit(0)
     argh.dispatch_commands([
         build, dag, dependent, do_lint, duplicates, update_pinning,
-        bioconductor_skeleton, clean_cran_skeleton, autobump, bot
+        bioconductor_skeleton, clean_cran_skeleton, autobump, bot,
+        handle_merged_pr,
     ])

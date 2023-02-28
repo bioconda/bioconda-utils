@@ -28,6 +28,8 @@ from typing import Sequence, Collection, List, Dict, Any, Union
 from multiprocessing import Pool
 from multiprocessing.pool import ThreadPool
 
+from urllib3 import Retry
+
 from github import Github
 
 import pkg_resources
