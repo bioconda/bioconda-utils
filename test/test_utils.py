@@ -217,7 +217,8 @@ def test_single_build_only(single_build):
     for pkg in single_build:
         assert os.path.exists(pkg)
 
-        
+
+@pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
 @pytest.mark.long_running_2
 def test_single_build_pkg_dir(recipes_fixture):
     """
