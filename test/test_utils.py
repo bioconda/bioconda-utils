@@ -219,7 +219,7 @@ def test_single_build_only(single_build):
 
         
 @pytest.mark.long_running_2
-def test_single_build_pkg_dir():
+def test_single_build_pkg_dir(recipes_fixture):
     """
     Builds the "one" recipe with pkg_dir.
     """
