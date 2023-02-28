@@ -18,10 +18,11 @@ class version_constraints_missing_whitespace(LintCheck):
             python >=3
 
     """
+
     def check_recipe(self, recipe):
         check_paths = []
-        for section in ('build', 'run', 'host'):
-            check_paths.append(f'requirements/{section}')
+        for section in ("build", "run", "host"):
+            check_paths.append(f"requirements/{section}")
 
         constraints = re.compile("(.*?)([<=>].*)")
         for path in check_paths:
@@ -34,8 +35,8 @@ class version_constraints_missing_whitespace(LintCheck):
 
     def fix(self, _message, _data):
         check_paths = []
-        for section in ('build', 'run', 'host'):
-            check_paths.append(f'requirements/{section}')
+        for section in ("build", "run", "host"):
+            check_paths.append(f"requirements/{section}")
 
         constraints = re.compile("(.*?)([<=>].*)")
         for path in check_paths:
@@ -45,7 +46,7 @@ class version_constraints_missing_whitespace(LintCheck):
                     space_separated = has_constraints[1].endswith(" ")
                     if not space_separated:
                         dep, ver = has_constraints.groups()
-                        self.recipe.replace(spec, f"{dep} {ver}", within='requirements')
+                        self.recipe.replace(spec, f"{dep} {ver}", within="requirements")
         return True
 
 
@@ -59,10 +60,11 @@ class extra_identifiers_not_list(LintCheck):
               - doi:123
 
     """
+
     def check_recipe(self, recipe):
-        identifiers = recipe.get('extra/identifiers', None)
+        identifiers = recipe.get("extra/identifiers", None)
         if identifiers and not isinstance(identifiers, list):
-            self.message(section='extra/identifiers')
+            self.message(section="extra/identifiers")
 
 
 class extra_identifiers_not_string(LintCheck):
@@ -77,13 +79,14 @@ class extra_identifiers_not_string(LintCheck):
     Note that there is no space around the colon
 
     """
+
     requires = [extra_identifiers_not_list]
 
     def check_recipe(self, recipe):
-        identifiers = recipe.get('extra/identifiers', [])
+        identifiers = recipe.get("extra/identifiers", [])
         for n, identifier in enumerate(identifiers):
             if not isinstance(identifier, str):
-                self.message(section=f'extra/identifiers/{n}')
+                self.message(section=f"extra/identifiers/{n}")
 
 
 class extra_identifiers_missing_colon(LintCheck):
@@ -96,13 +99,14 @@ class extra_identifiers_missing_colon(LintCheck):
               - doi:123
 
     """
+
     requires = [extra_identifiers_not_string]
 
     def check_recipe(self, recipe):
-        identifiers = recipe.get('extra/identifiers', [])
+        identifiers = recipe.get("extra/identifiers", [])
         for n, identifier in enumerate(identifiers):
-            if ':' not in identifier:
-                self.message(section=f'extra/identifiers/{n}')
+            if ":" not in identifier:
+                self.message(section=f"extra/identifiers/{n}")
 
 
 class extra_skip_lints_not_list(LintCheck):
@@ -115,7 +119,7 @@ class extra_skip_lints_not_list(LintCheck):
               - should_use_compilers
 
     """
-    def check_recipe(self, recipe):
-        if not isinstance(recipe.get('extra/skip-lints', []), list):
-            self.message(section='extra/skip-lints')
 
+    def check_recipe(self, recipe):
+        if not isinstance(recipe.get("extra/skip-lints", []), list):
+            self.message(section="extra/skip-lints")

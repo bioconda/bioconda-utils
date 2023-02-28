@@ -41,16 +41,21 @@ def conda_build_purge() -> None:
     if free_mb < 300:
         logger.info("CLEANING UP PACKAGE CACHE (free space: %iMB).", free_mb)
         utils.run(["conda", "clean", "--all"], mask=False)
-        logger.info("CLEANED UP PACKAGE CACHE (free space: %iMB).",
-                    utils.get_free_space())
+        logger.info(
+            "CLEANED UP PACKAGE CACHE (free space: %iMB).", utils.get_free_space()
+        )
 
 
-def build(recipe: str, pkg_paths: List[str] = None,
-          testonly: bool = False, mulled_test: bool = True,
-          channels: List[str] = None,
-          docker_builder: docker_utils.RecipeBuilder = None,
-          raise_error: bool = False,
-          linter=None) -> BuildResult:
+def build(
+    recipe: str,
+    pkg_paths: List[str] = None,
+    testonly: bool = False,
+    mulled_test: bool = True,
+    channels: List[str] = None,
+    docker_builder: docker_utils.RecipeBuilder = None,
+    raise_error: bool = False,
+    linter=None,
+) -> BuildResult:
     """
     Build a single recipe for a single env
 
@@ -69,12 +74,15 @@ def build(recipe: str, pkg_paths: List[str] = None,
       linter: Linter to use for checking recipes
     """
     if linter:
-        logger.info('Linting recipe %s', recipe)
+        logger.info("Linting recipe %s", recipe)
         linter.clear_messages()
         if linter.lint([recipe]):
-            logger.error('\n\nThe recipe %s failed linting. See '
-                         'https://bioconda.github.io/contributor/linting.html for details:\n\n%s\n',
-                         recipe, linter.get_report())
+            logger.error(
+                "\n\nThe recipe %s failed linting. See "
+                "https://bioconda.github.io/contributor/linting.html for details:\n\n%s\n",
+                recipe,
+                linter.get_report(),
+            )
             return BuildResult(False, None)
         logger.info("Lint checks passed")
 
@@ -87,43 +95,46 @@ def build(recipe: str, pkg_paths: List[str] = None,
 
     logger.info("BUILD START %s", recipe)
 
-    args = ['--override-channels']
+    args = ["--override-channels"]
     if testonly:
         args += ["--test"]
     else:
         args += ["--no-anaconda-upload"]
 
-    for channel in channels or ['local']:
-        args += ['-c', channel]
+    for channel in channels or ["local"]:
+        args += ["-c", channel]
 
-    logger.debug('Build and Channel Args: %s', args)
+    logger.debug("Build and Channel Args: %s", args)
 
     # Even though there may be variants of the recipe that will be built, we
     # will only be checking attributes that are independent of variants (pkg
     # name, version, noarch, whether or not an extended container was used)
     meta = utils.load_first_metadata(recipe, finalize=False)
-    is_noarch = bool(meta.get_value('build/noarch', default=False))
-    use_base_image = meta.get_value('extra/container', {}).get('extended-base', False)
+    is_noarch = bool(meta.get_value("build/noarch", default=False))
+    use_base_image = meta.get_value("extra/container", {}).get("extended-base", False)
     if use_base_image:
-        base_image = 'quay.io/bioconda/base-glibc-debian-bash:2.1.0'
+        base_image = "quay.io/bioconda/base-glibc-debian-bash:2.1.0"
     else:
-        base_image = 'quay.io/bioconda/base-glibc-busybox-bash:2.1.0'
+        base_image = "quay.io/bioconda/base-glibc-busybox-bash:2.1.0"
 
     try:
         if docker_builder is not None:
-            docker_builder.build_recipe(recipe_dir=os.path.abspath(recipe),
-                                        build_args=' '.join(args),
-                                        env=whitelisted_env,
-                                        noarch=is_noarch)
+            docker_builder.build_recipe(
+                recipe_dir=os.path.abspath(recipe),
+                build_args=" ".join(args),
+                env=whitelisted_env,
+                noarch=is_noarch,
+            )
             # Use presence of expected packages to check for success
             for pkg_path in pkg_paths:
                 if not os.path.exists(pkg_path):
                     logger.error(
-                        "BUILD FAILED: the built package %s "
-                        "cannot be found", pkg_path)
+                        "BUILD FAILED: the built package %s " "cannot be found",
+                        pkg_path,
+                    )
                     return BuildResult(False, None)
         else:
-            conda_build_cmd = [utils.bin_for('conda'), 'mambabuild']
+            conda_build_cmd = [utils.bin_for("conda"), "mambabuild"]
             # - Temporarily reset os.environ to avoid leaking env vars
             # - Also pass filtered env to run()
             # - Point conda-build to meta.yaml, to avoid building subdirs
@@ -131,27 +142,28 @@ def build(recipe: str, pkg_paths: List[str] = None,
                 cmd = conda_build_cmd + args
                 for config_file in utils.get_conda_build_config_files():
                     cmd += [config_file.arg, config_file.path]
-                cmd += [os.path.join(recipe, 'meta.yaml')]
+                cmd += [os.path.join(recipe, "meta.yaml")]
                 with utils.Progress():
                     utils.run(cmd, env=os.environ, mask=False)
 
-        logger.info('BUILD SUCCESS %s',
-                    ' '.join(os.path.basename(p) for p in pkg_paths))
+        logger.info(
+            "BUILD SUCCESS %s", " ".join(os.path.basename(p) for p in pkg_paths)
+        )
 
     except (docker_utils.DockerCalledProcessError, sp.CalledProcessError) as exc:
-        logger.error('BUILD FAILED %s', recipe)
+        logger.error("BUILD FAILED %s", recipe)
         if raise_error:
             raise exc
         return BuildResult(False, None)
 
     if mulled_test:
-        logger.info('TEST START via mulled-build %s', recipe)
+        logger.info("TEST START via mulled-build %s", recipe)
         mulled_images = []
         for pkg_path in pkg_paths:
             try:
                 pkg_test.test_package(pkg_path, base_image=base_image)
             except sp.CalledProcessError:
-                logger.error('TEST FAILED: %s', recipe)
+                logger.error("TEST FAILED: %s", recipe)
                 return BuildResult(False, None)
             logger.info("TEST SUCCESS %s", recipe)
             mulled_images.append(pkg_test.get_image_name(pkg_path))
@@ -163,15 +175,18 @@ def build(recipe: str, pkg_paths: List[str] = None,
 def remove_cycles(dag, name2recipes, failed, skip_dependent):
     nodes_in_cycles = set()
     for cycle in list(nx.simple_cycles(dag)):
-        logger.error('BUILD ERROR: dependency cycle found: %s', cycle)
+        logger.error("BUILD ERROR: dependency cycle found: %s", cycle)
         nodes_in_cycles.update(cycle)
 
     for name in sorted(nodes_in_cycles):
         cycle_fail_recipes = sorted(name2recipes[name])
-        logger.error('BUILD ERROR: cannot build recipes for %s since '
-                     'it cyclically depends on other packages in the '
-                     'current build job. Failed recipes: %s',
-                     name, cycle_fail_recipes)
+        logger.error(
+            "BUILD ERROR: cannot build recipes for %s since "
+            "it cyclically depends on other packages in the "
+            "current build job. Failed recipes: %s",
+            name,
+            cycle_fail_recipes,
+        )
         failed.extend(cycle_fail_recipes)
         for node in nx.algorithms.descendants(dag, name):
             if node not in nodes_in_cycles:
@@ -183,7 +198,8 @@ def get_subdags(dag, n_workers, worker_offset):
     if n_workers > 1 and worker_offset >= n_workers:
         raise ValueError(
             "n-workers is less than the worker-offset given! "
-            "Either decrease --n-workers or decrease --worker-offset!")
+            "Either decrease --n-workers or decrease --worker-offset!"
+        )
 
     # Get connected subdags and sort by nodes
     if n_workers > 1:
@@ -206,26 +222,36 @@ def get_subdags(dag, n_workers, worker_offset):
                 for child in children:
                     found.add(child)
         subdags = dag.subgraph(list(nodes))
-        logger.info("Building and testing sub-DAGs %i in each group of %i, which is %i packages", worker_offset, n_workers, len(subdags.nodes()))
+        logger.info(
+            "Building and testing sub-DAGs %i in each group of %i, which is %i packages",
+            worker_offset,
+            n_workers,
+            len(subdags.nodes()),
+        )
     else:
         subdags = dag
 
     return subdags
 
 
-def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
-                  mulled_test: bool = True, testonly: bool = False,
-                  force: bool = False,
-                  docker_builder: docker_utils.RecipeBuilder = None,
-                  label: str = None,
-                  anaconda_upload: bool = False,
-                  mulled_upload_target=None,
-                  check_channels: List[str] = None,
-                  do_lint: bool = None,
-                  lint_exclude: List[str] = None,
-                  n_workers: int = 1,
-                  worker_offset: int = 0,
-                  keep_old_work: bool = False):
+def build_recipes(
+    recipe_folder: str,
+    config_path: str,
+    recipes: List[str],
+    mulled_test: bool = True,
+    testonly: bool = False,
+    force: bool = False,
+    docker_builder: docker_utils.RecipeBuilder = None,
+    label: str = None,
+    anaconda_upload: bool = False,
+    mulled_upload_target=None,
+    check_channels: List[str] = None,
+    do_lint: bool = None,
+    lint_exclude: List[str] = None,
+    n_workers: int = 1,
+    worker_offset: int = 0,
+    keep_old_work: bool = False,
+):
     """
     Build one or many bioconda packages.
 
@@ -262,14 +288,14 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
 
     # get channels to check
     if check_channels is None:
-        if config['channels']:
-            check_channels = [c for c in config['channels'] if c != "defaults"]
+        if config["channels"]:
+            check_channels = [c for c in config["channels"] if c != "defaults"]
         else:
             check_channels = []
 
     # setup linting
     if do_lint:
-        always_exclude = ('build_number_needs_bump',)
+        always_exclude = ("build_number_needs_bump",)
         if not lint_exclude:
             lint_exclude = always_exclude
         else:
@@ -291,17 +317,20 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
     if not subdag:
         logger.info("Nothing to be done.")
         return True
-    logger.info("%i recipes to build and test: \n%s", len(subdag), "\n".join(subdag.nodes()))
+    logger.info(
+        "%i recipes to build and test: \n%s", len(subdag), "\n".join(subdag.nodes())
+    )
 
     recipe2name = {}
     for name, recipe_list in name2recipes.items():
         for recipe in recipe_list:
             recipe2name[recipe] = name
 
-    recipes = [(recipe, recipe2name[recipe])
-               for package in nx.topological_sort(subdag)
-               for recipe in name2recipes[package]]
-
+    recipes = [
+        (recipe, recipe2name[recipe])
+        for package in nx.topological_sort(subdag)
+        for recipe in name2recipes[package]
+    ]
 
     built_recipes = []
     skipped_recipes = []
@@ -309,26 +338,35 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
 
     for recipe, name in recipes:
         if name in skip_dependent:
-            logger.info('BUILD SKIP: skipping %s because it depends on %s '
-                        'which had a failed build.',
-                        recipe, skip_dependent[name])
+            logger.info(
+                "BUILD SKIP: skipping %s because it depends on %s "
+                "which had a failed build.",
+                recipe,
+                skip_dependent[name],
+            )
             skipped_recipes.append(recipe)
             continue
 
-        logger.info('Determining expected packages for %s', recipe)
+        logger.info("Determining expected packages for %s", recipe)
         try:
             pkg_paths = utils.get_package_paths(recipe, check_channels, force=force)
         except utils.DivergentBuildsError as exc:
-            logger.error('BUILD ERROR: packages with divergent build strings in repository '
-                         'for recipe %s. A build number bump is likely needed: %s',
-                         recipe, exc)
+            logger.error(
+                "BUILD ERROR: packages with divergent build strings in repository "
+                "for recipe %s. A build number bump is likely needed: %s",
+                recipe,
+                exc,
+            )
             failed.append(recipe)
             for pkg in nx.algorithms.descendants(subdag, name):
                 skip_dependent[pkg].append(recipe)
             continue
         except (UnsatisfiableError, DependencyNeedsBuildingError) as exc:
-            logger.error('BUILD ERROR: could not determine dependencies for recipe %s: %s',
-                         recipe, exc)
+            logger.error(
+                "BUILD ERROR: could not determine dependencies for recipe %s: %s",
+                recipe,
+                exc,
+            )
             failed.append(recipe)
             for pkg in nx.algorithms.descendants(subdag, name):
                 skip_dependent[pkg].append(recipe)
@@ -337,13 +375,15 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
             logger.info("Nothing to be done for recipe %s", recipe)
             continue
 
-        res = build(recipe=recipe,
-                    pkg_paths=pkg_paths,
-                    testonly=testonly,
-                    mulled_test=mulled_test,
-                    channels=config['channels'],
-                    docker_builder=docker_builder,
-                    linter=linter)
+        res = build(
+            recipe=recipe,
+            pkg_paths=pkg_paths,
+            testonly=testonly,
+            mulled_test=mulled_test,
+            channels=config["channels"],
+            docker_builder=docker_builder,
+            linter=linter,
+        )
 
         if not res.success:
             failed.append(recipe)
@@ -366,24 +406,38 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
             conda_build_purge()
 
     if failed or failed_uploads:
-        logger.error('BUILD SUMMARY: of %s recipes, '
-                     '%s failed and %s were skipped. '
-                     'Details of recipes and environments follow.',
-                     len(recipes), len(failed), len(skipped_recipes))
+        logger.error(
+            "BUILD SUMMARY: of %s recipes, "
+            "%s failed and %s were skipped. "
+            "Details of recipes and environments follow.",
+            len(recipes),
+            len(failed),
+            len(skipped_recipes),
+        )
         if built_recipes:
-            logger.error('BUILD SUMMARY: while the entire build failed, '
-                         'the following recipes were built successfully:\n%s',
-                         '\n'.join(built_recipes))
+            logger.error(
+                "BUILD SUMMARY: while the entire build failed, "
+                "the following recipes were built successfully:\n%s",
+                "\n".join(built_recipes),
+            )
         for recipe in failed:
-            logger.error('BUILD SUMMARY: FAILED recipe %s', recipe)
+            logger.error("BUILD SUMMARY: FAILED recipe %s", recipe)
         for name, dep in skip_dependent.items():
-            logger.error('BUILD SUMMARY: SKIPPED recipe %s '
-                         'due to failed dependencies %s', name, dep)
+            logger.error(
+                "BUILD SUMMARY: SKIPPED recipe %s " "due to failed dependencies %s",
+                name,
+                dep,
+            )
         if failed_uploads:
-            logger.error('UPLOAD SUMMARY: the following packages failed to upload:\n%s',
-                         '\n'.join(failed_uploads))
+            logger.error(
+                "UPLOAD SUMMARY: the following packages failed to upload:\n%s",
+                "\n".join(failed_uploads),
+            )
         return False
 
-    logger.info("BUILD SUMMARY: successfully built %s of %s recipes",
-                len(built_recipes), len(recipes))
+    logger.info(
+        "BUILD SUMMARY: successfully built %s of %s recipes",
+        len(built_recipes),
+        len(recipes),
+    )
     return True

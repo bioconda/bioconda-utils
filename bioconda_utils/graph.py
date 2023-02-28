@@ -46,7 +46,9 @@ def build(recipes, config, blacklist=None, restrict=True):
     """
     logger.info("Generating DAG")
     recipes = list(recipes)
-    metadata = list(utils.parallel_iter(utils.load_meta_fast, recipes, "Loading Recipes"))
+    metadata = list(
+        utils.parallel_iter(utils.load_meta_fast, recipes, "Loading Recipes")
+    )
 
     if blacklist is None:
         blacklist = set()
@@ -80,17 +82,18 @@ def build(recipes, config, blacklist=None, restrict=True):
                 yield dep
 
     dag = nx.DiGraph()
-    dag.add_nodes_from(meta["package"]["name"]
-                       for meta, recipe in metadata)
+    dag.add_nodes_from(meta["package"]["name"] for meta, recipe in metadata)
     for meta, recipe in metadata:
         name = meta["package"]["name"]
         dag.add_edges_from(
             (dep, name)
-            for dep in set(chain(
-                get_inner_deps(get_deps(meta, "build")),
-                get_inner_deps(get_deps(meta, "host")),
-                get_inner_deps(get_deps(meta, "run")),
-            ))
+            for dep in set(
+                chain(
+                    get_inner_deps(get_deps(meta, "build")),
+                    get_inner_deps(get_deps(meta, "host")),
+                    get_inner_deps(get_deps(meta, "run")),
+                )
+            )
         )
 
     return dag, name2recipe
@@ -115,7 +118,9 @@ def build_from_recipes(recipes):
         for recipe2 in package2recipes.get(dep, [])
     )
 
-    logger.info("Building Recipe DAG: done (%i nodes, %i edges)", len(dag), len(dag.edges()))
+    logger.info(
+        "Building Recipe DAG: done (%i nodes, %i edges)", len(dag), len(dag.edges())
+    )
     return dag
 
 
@@ -123,9 +128,11 @@ def filter_recipe_dag(dag, include, exclude):
     """Reduces **dag** to packages in **names** and their requirements"""
     nodes = set()
     for recipe in dag:
-        if (recipe not in nodes
+        if (
+            recipe not in nodes
             and any(fnmatch(recipe.reldir, p) for p in include)
-            and not any(fnmatch(recipe.reldir, p) for p in exclude)):
+            and not any(fnmatch(recipe.reldir, p) for p in exclude)
+        ):
             nodes.add(recipe)
             nodes |= nx.ancestors(dag, recipe)
     return nx.subgraph(dag, nodes)

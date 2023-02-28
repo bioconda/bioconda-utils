@@ -23,8 +23,13 @@ from ..githubhandler import GitHubAppHandler, GitHubHandler
 from ..githandler import install_gpg_key
 from ..utils import RepoData, setup_logger
 from .config import (
-    APP_ID, APP_KEY, CODE_SIGNING_KEY, BOT_NAME, REPODATA_TIMEOUT,
-    APP_CLIENT_ID, APP_CLIENT_SECRET
+    APP_ID,
+    APP_KEY,
+    CODE_SIGNING_KEY,
+    BOT_NAME,
+    REPODATA_TIMEOUT,
+    APP_CLIENT_ID,
+    APP_CLIENT_SECRET,
 )
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -59,6 +64,7 @@ class AsyncTask(Task):
       is so that spawned tasks can survive a shutdown of the app.
 
     """
+
     #: Our tasks should be re-run if they don't finish
     acks_late = True
 
@@ -79,6 +85,7 @@ class AsyncTask(Task):
         executes the original method inside the asyncio loop.
         """
         if asyncio.iscoroutinefunction(self.run):  # only for async funcs
+
             @wraps(self.run)
             def sync_run(*args, **kwargs):
                 largs = list(args)  # need list so that pre-run can modify
@@ -98,10 +105,14 @@ class AsyncTask(Task):
         This happens during binding -> on load.
         """
         if not self.ghappapi:
-            self.ghappapi = GitHubAppHandler(aiohttp.ClientSession(), BOT_NAME,
-                                             APP_KEY, APP_ID,
-                                             APP_CLIENT_ID, APP_CLIENT_SECRET)
-
+            self.ghappapi = GitHubAppHandler(
+                aiohttp.ClientSession(),
+                BOT_NAME,
+                APP_KEY,
+                APP_ID,
+                APP_CLIENT_ID,
+                APP_CLIENT_SECRET,
+            )
 
     async def async_pre_run(self, args, _kwargs):
         """Per-call async initialization
@@ -113,8 +124,8 @@ class AsyncTask(Task):
         for num, arg in enumerate(args):
             if isinstance(arg, GitHubHandler):
                 args[num] = await self.ghappapi.get_github_api(
-                    False, arg.user, arg.repo,
-                    arg.installation)
+                    False, arg.user, arg.repo, arg.installation
+                )
 
     @abc.abstractmethod
     def run(self, *_args, **_kwargs):
@@ -144,31 +155,36 @@ def custom_loads(string):
     the type, passing the result dict from obj.for_json() to
     __init__().
     """
+
     def decode(obj):
         if isinstance(obj, dict):
             try:
-                typ = obj.pop('__type__')
-                mod = import_module(obj.pop('__module__'))
+                typ = obj.pop("__type__")
+                mod = import_module(obj.pop("__module__"))
                 klass = getattr(mod, typ)
                 return klass(**obj)
             except KeyError:
                 pass
         return obj
+
     return simplejson.loads(string, object_hook=decode)
+
 
 # Register a custom serializer. We do this so we can conveniently
 # transfer objects without resorting to pickling.
-serialization.register('custom_json',
-                       custom_dumps, custom_loads,
-                       content_type='application/x-bioconda-json',
-                       content_encoding='utf8')
+serialization.register(
+    "custom_json",
+    custom_dumps,
+    custom_loads,
+    content_type="application/x-bioconda-json",
+    content_encoding="utf8",
+)
 
 
 # Instantiate Celery app, setting our AsyncTask as default
 # task class and loading the tasks from tasks.py
 capp = Celery(  # pylint: disable=invalid-name
-    task_cls=AsyncTask,
-    include=['bioconda_utils.bot.tasks']
+    task_cls=AsyncTask, include=["bioconda_utils.bot.tasks"]
 )
 
 
@@ -176,25 +192,22 @@ capp = Celery(  # pylint: disable=invalid-name
 # Settings are suggestions from CloudAMPQ
 capp.conf.update(
     # Set the URL to the AMQP broker using environment variable
-    broker_url=os.environ.get('CLOUDAMQP_URL'),
-
+    broker_url=os.environ.get("CLOUDAMQP_URL"),
     # Limit the number of connections to the pool. This should
     # be 2 when running on Heroku to avoid running out of free
     # connections on CloudAMPQ.
     #
     # broker_pool_limit=2,  # need two so we can inspect
-
     broker_heartbeat=None,
     broker_connection_timeout=30,
-
     # We don't feed back our tasks results
-    result_backend='rpc://',
+    result_backend="rpc://",
     event_queue_expires=60,
     worker_prefetch_multiplier=1,
     worker_concurrency=1,
-    task_serializer='custom_json',
-    accept_content=['custom_json', 'json']
-    #task_acks_late=true
+    task_serializer="custom_json",
+    accept_content=["custom_json", "json"]
+    # task_acks_late=true
 )
 
 

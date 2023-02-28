@@ -30,21 +30,23 @@ def install_gpg_key(key) -> str:
     Raises:
       ValueError if importing the key failed
     """
-    proc = subprocess.run(['gpg', '--import'],
-                          input=key, stderr=subprocess.PIPE,
-                          encoding='ascii')
+    proc = subprocess.run(
+        ["gpg", "--import"], input=key, stderr=subprocess.PIPE, encoding="ascii"
+    )
     for line in proc.stderr.splitlines():
-        match = re.match(r'gpg: key ([\dA-F]{8,16}): '
-                         r'(secret key imported|already in secret keyring)',
-                         line)
+        match = re.match(
+            r"gpg: key ([\dA-F]{8,16}): "
+            r"(secret key imported|already in secret keyring)",
+            line,
+        )
         if match:
             keyid = match.group(1)
             break
     else:
         # If the key has escaped newlines (\n literally), replace those
         # and try again
-        if r'\n' in key:
-            return install_gpg_key(key.replace(r'\n', '\n'))
+        if r"\n" in key:
+            return install_gpg_key(key.replace(r"\n", "\n"))
         raise ValueError(f"Unable to import GPG key: {proc.stderr}")
     return keyid
 
@@ -53,7 +55,7 @@ class GitHandlerFailure(Exception):
     """Something went wrong interacting with git"""
 
 
-class GitHandlerBase():
+class GitHandlerBase:
     """GitPython abstraction
 
     We have to work with three git repositories, the local checkout,
@@ -68,11 +70,15 @@ class GitHandlerBase():
       fork: string occurring in remote url marking forked repo
       allow_dirty: don't bail out if repo is dirty
     """
-    def __init__(self, repo: git.Repo,
-                 dry_run: bool,
-                 home='bioconda/bioconda-recipes',
-                 fork=None,
-                 allow_dirty=False) -> None:
+
+    def __init__(
+        self,
+        repo: git.Repo,
+        dry_run: bool,
+        home="bioconda/bioconda-recipes",
+        fork=None,
+        allow_dirty=False,
+    ) -> None:
         #: GitPython Repo object representing our repository
         self.repo: git.Repo = repo
         if not allow_dirty and self.repo.is_dirty():
@@ -103,7 +109,8 @@ class GitHandlerBase():
     def __str__(self):
         def get_name(remote):
             url = next(remote.urls)
-            return url[url.rfind('/', 0, url.rfind('/'))+1:]
+            return url[url.rfind("/", 0, url.rfind("/")) + 1 :]
+
         name = get_name(self.home_remote)
         if self.fork_remote != self.home_remote:
             name = f"{name} <- {get_name(self.fork_remote)}"
@@ -131,13 +138,14 @@ class GitHandlerBase():
                 if section.startswith("url "):
                     new = section.lstrip("url ").strip('"')
                     try:
-                        old = reader.get(section, 'insteadOf')
+                        old = reader.get(section, "insteadOf")
                         desc = desc.replace(old, new)
                     except KeyError:
                         pass
         # now try if any remote matches the url
-        remotes = [r for r in self.repo.remotes
-                   if any(filter(lambda x: desc in x, r.urls))]
+        remotes = [
+            r for r in self.repo.remotes if any(filter(lambda x: desc in x, r.urls))
+        ]
 
         if not remotes:
             raise KeyError(f"No remote matching '{desc}' found")
@@ -150,11 +158,18 @@ class GitHandlerBase():
         """Checks if **branch** has the most recent commit modifying **path**
         as compared to **master**"""
         proc = await asyncio.create_subprocess_exec(
-            'git', 'log', '-1', '--oneline', '--decorate',
-            f'{master}...{branch.name}', '--', path,
-            stdout=asyncio.subprocess.PIPE)
+            "git",
+            "log",
+            "-1",
+            "--oneline",
+            "--decorate",
+            f"{master}...{branch.name}",
+            "--",
+            path,
+            stdout=asyncio.subprocess.PIPE,
+        )
         stdout, _ = await proc.communicate()
-        return branch.name in stdout.decode('ascii')
+        return branch.name in stdout.decode("ascii")
 
     def delete_local_branch(self, branch) -> None:
         """Deletes **branch** locally"""
@@ -221,24 +236,23 @@ class GitHandlerBase():
                 return remote_ref.ref
 
     def get_latest_master(self):
-        return self.home_remote.fetch('master')[0].commit
+        return self.home_remote.fetch("master")[0].commit
 
     def read_from_branch(self, branch, file_name: str) -> str:
         """Reads contents of file **file_name** from git branch **branch**"""
         abs_file_name = os.path.abspath(file_name)
         abs_repo_root = os.path.abspath(self.repo.working_dir)
         if not abs_file_name.startswith(abs_repo_root):
-            raise RuntimeError(
-                f"File {abs_file_name} not inside {abs_repo_root}"
-            )
-        rel_file_name = abs_file_name[len(abs_repo_root):].lstrip("/")
-        commit = getattr(branch, 'commit', branch)
+            raise RuntimeError(f"File {abs_file_name} not inside {abs_repo_root}")
+        rel_file_name = abs_file_name[len(abs_repo_root) :].lstrip("/")
+        commit = getattr(branch, "commit", branch)
         blob = commit.tree / rel_file_name
         if blob:
             return blob.data_stream.read().decode("utf-8")
 
-        logger.error("File %s not found on branch %s commit %s",
-                     rel_file_name, branch, commit)
+        logger.error(
+            "File %s not found on branch %s commit %s", rel_file_name, branch, commit
+        )
         return None
 
     def create_local_branch(self, branch_name: str, remote_branch: str = None):
@@ -281,17 +295,20 @@ class GitHandlerBase():
         for depth in depths:
             if depth:
                 self.fork_remote.fetch(ref, depth=depth)
-                self.home_remote.fetch('master', depth=depth)
+                self.home_remote.fetch("master", depth=depth)
             merge_bases = self.repo.merge_base(other, ref)
             if merge_bases:
                 break
-            logger.debug("No merge base found for %s and master at depth %i", ref, depth)
+            logger.debug(
+                "No merge base found for %s and master at depth %i", ref, depth
+            )
         else:
             logger.error("No merge base found for %s and master", ref)
-            return None   # FIXME: This should raise
+            return None  # FIXME: This should raise
         if len(merge_bases) > 1:
-            logger.error("Multiple merge bases found for %s and master: %s",
-                         ref, merge_bases)
+            logger.error(
+                "Multiple merge bases found for %s and master: %s", ref, merge_bases
+            )
         return merge_bases[0]
 
     def list_changed_files(self, ref=None, other=None):
@@ -332,8 +349,9 @@ class GitHandlerBase():
         branch = self.repo.heads[branch_name]
         branch.checkout()
 
-    def commit_and_push_changes(self, files: List[str], branch_name: str,
-                                msg: str, sign=False) -> bool:
+    def commit_and_push_changes(
+        self, files: List[str], branch_name: str, msg: str, sign=False
+    ) -> bool:
         """Create recipe commit and pushes to upstream remote
 
         Returns:
@@ -352,11 +370,12 @@ class GitHandlerBase():
         if sign:
             # Gitpyhon does not support signing, so we use the command line client here
             args = [
-                '-S' + sign if isinstance(sign, str) else '-S',
-                '-m', msg,
+                "-S" + sign if isinstance(sign, str) else "-S",
+                "-m",
+                msg,
             ]
             if self.actor:
-                args += ['--author', f'{self.actor.name} <{self.actor.email}>']
+                args += ["--author", f"{self.actor.name} <{self.actor.email}>"]
             self.repo.index.write()
             self.repo.git.commit(*args)
         else:
@@ -369,7 +388,9 @@ class GitHandlerBase():
             logger.info("Pushing branch %s", branch_name)
             try:
                 res = self.fork_remote.push(branch_name)
-                failed = res[0].flags & ~(git.PushInfo.FAST_FORWARD | git.PushInfo.NEW_HEAD)
+                failed = res[0].flags & ~(
+                    git.PushInfo.FAST_FORWARD | git.PushInfo.NEW_HEAD
+                )
                 text = res[0].summary
             except git.GitCommandError as exc:
                 failed = True
@@ -409,7 +430,7 @@ class BiocondaRepoMixin(GitHandlerBase):
           ``recipes_folder`` are ignored.
         """
         if files is None:
-            files = ['meta.yaml', 'build.sh']
+            files = ["meta.yaml", "build.sh"]
         changed = set()
         for path in self.list_changed_files(ref, other):
             if not path.startswith(self.recipes_folder):
@@ -436,7 +457,7 @@ class BiocondaRepoMixin(GitHandlerBase):
             branch = ref
         config_data = self.read_from_branch(branch, self.config_file)
         config = yaml.safe_load(config_data)
-        blacklists = config['blacklists']
+        blacklists = config["blacklists"]
         blacklisted = set()
         for blacklist in blacklists:
             blacklist_data = self.read_from_branch(branch, blacklist)
@@ -472,10 +493,13 @@ class BiocondaRepoMixin(GitHandlerBase):
           `list` of recipes that should be built
         """
         tobuild = set(self.get_changed_recipes(ref, other))
-        tobuild.update([recipe
-                        for recipe in self.get_unblacklisted(ref, other)
-                        if recipe.startswith(self.recipes_folder)
-                        and os.path.exists(recipe)])
+        tobuild.update(
+            [
+                recipe
+                for recipe in self.get_unblacklisted(ref, other)
+                if recipe.startswith(self.recipes_folder) and os.path.exists(recipe)
+            ]
+        )
         return list(tobuild)
 
 
@@ -484,12 +508,16 @@ class GitHandler(GitHandlerBase):
 
     Restores the branch active when created upon calling `close()`.
     """
-    def __init__(self, folder: str=".",
-                 dry_run=False,
-                 home='bioconda/bioconda-recipes',
-                 fork=None,
-                 allow_dirty=True,
-                 depth=1) -> None:
+
+    def __init__(
+        self,
+        folder: str = ".",
+        dry_run=False,
+        home="bioconda/bioconda-recipes",
+        fork=None,
+        allow_dirty=True,
+        depth=1,
+    ) -> None:
         if os.path.exists(folder):
             repo = git.Repo(folder, search_parent_directories=True)
         else:
@@ -507,7 +535,9 @@ class GitHandler(GitHandlerBase):
             self.prev_active_branch = self.repo.active_branch
         except:
             # This will fail on CI nodes from forks, but we don't need to switch back and forth between branches there
-            logger.warning("Couldn't get the active branch name, we must be on detached HEAD")
+            logger.warning(
+                "Couldn't get the active branch name, we must be on detached HEAD"
+            )
             pass
 
     def checkout_master(self):
@@ -574,8 +604,8 @@ class TempGitHandler(GitHandlerBase):
             atexit.register(cls._local_mirror_tmpdir.cleanup)
 
         # Make location of repo in tmpdir from url
-        _, _, fname = url.rpartition('@')
-        tmpname = getattr(cls._local_mirror_tmpdir, 'name', cls._local_mirror_tmpdir)
+        _, _, fname = url.rpartition("@")
+        tmpname = getattr(cls._local_mirror_tmpdir, "name", cls._local_mirror_tmpdir)
         mirror_name = os.path.join(tmpname, fname)
 
         # Re-use or create mirror of remote repo
@@ -588,35 +618,37 @@ class TempGitHandler(GitHandlerBase):
 
         # Update the remote url, in case password changed
         logger.info("Updating Bare Mirror %s", fname)
-        m_origin = mirror.remote('origin')
+        m_origin = mirror.remote("origin")
         m_origin.set_url(url, next(m_origin.urls))
         logger.info("Updating Bare Mirror %s -- DONE", fname)
 
         # Update the remote repo
-        mirror.remote('origin').update()
+        mirror.remote("origin").update()
         return mirror
 
     @classmethod
     def _clone_with_mirror(cls, home_url, todir):
         """Prepares a clone of **home_url** in **todir** using mirror cache"""
         repo = cls._get_local_mirror(home_url).clone(todir)
-        r_origin = repo.remote('origin')
+        r_origin = repo.remote("origin")
         r_origin.set_url(home_url, next(r_origin.urls))
-        _, _, fname = home_url.rpartition('@')
+        _, _, fname = home_url.rpartition("@")
         logger.info("Fetching %s", fname)
         r_origin.fetch()
         logger.info("Fetching %s - DONE", fname)
         return repo
 
-    def __init__(self,
-                 username: str = None,
-                 password: str = None,
-                 url_format="https://{userpass}github.com/{user}/{repo}.git",
-                 home_user="bioconda",
-                 home_repo="bioconda-recipes",
-                 fork_user=None,
-                 fork_repo=None,
-                 dry_run=False) -> None:
+    def __init__(
+        self,
+        username: str = None,
+        password: str = None,
+        url_format="https://{userpass}github.com/{user}/{repo}.git",
+        home_user="bioconda",
+        home_repo="bioconda-recipes",
+        fork_user=None,
+        fork_repo=None,
+        dry_run=False,
+    ) -> None:
         userpass = ""
         if password is not None and username is None:
             username = "x-access-token"
@@ -633,14 +665,15 @@ class TempGitHandler(GitHandlerBase):
                 return string
             return string.replace(password, "******")
 
-        home_url = url_format.format(userpass=userpass,
-                                     user=home_user, repo=home_repo)
+        home_url = url_format.format(userpass=userpass, user=home_user, repo=home_repo)
 
         logger.info("Cloning %s to %s", censor(home_url), self.tempdir.name)
         repo = self._clone_with_mirror(home_url, self.tempdir.name)
 
         if fork_repo is not None:
-            fork_url = url_format.format(userpass=userpass, user=fork_user, repo=fork_repo)
+            fork_url = url_format.format(
+                userpass=userpass, user=fork_user, repo=fork_repo
+            )
             if fork_url != home_url:
                 logger.warning("Adding remote fork %s", censor(fork_url))
                 fork_remote = repo.create_remote("fork", fork_url)
@@ -649,7 +682,6 @@ class TempGitHandler(GitHandlerBase):
             fork_url = None
         logger.info("Finished setting up repo in %s", self.tempdir)
         super().__init__(repo, dry_run, home_url, fork_url)
-
 
     def close(self) -> None:
         """Remove temporary clone and cleanup resources"""
@@ -660,6 +692,7 @@ class TempGitHandler(GitHandlerBase):
 
 class BiocondaRepo(GitHandler, BiocondaRepoMixin):
     pass
+
 
 class TempBiocondaRepo(TempGitHandler, BiocondaRepoMixin):
     pass
