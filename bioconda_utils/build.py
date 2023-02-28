@@ -4,10 +4,10 @@ Package Builder
 
 import subprocess as sp
 from collections import defaultdict, namedtuple
+import itertools
+import logging
 import os
 import sys
-import logging
-import itertools
 
 from typing import List
 
