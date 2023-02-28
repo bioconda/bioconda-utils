@@ -149,9 +149,11 @@ class GitHandlerBase():
     async def branch_is_current(self, branch, path: str, master="master") -> bool:
         """Checks if **branch** has the most recent commit modifying **path**
         as compared to **master**"""
+        #proc = await asyncio.create_subprocess_exec(
+        #    'git', 'log', '-1', '--oneline', '--decorate',
+        #    f'{master}...{branch.name}', '--', path,
         proc = await asyncio.create_subprocess_exec(
-            'git', 'log', '-1', '--oneline', '--decorate',
-            f'{master}...{branch.name}', '--', path,
+            'git', 'log', f'{branch.name}..{master}', '--', path,
             stdout=asyncio.subprocess.PIPE)
         stdout, _ = await proc.communicate()
         return branch.name in stdout.decode('ascii')
