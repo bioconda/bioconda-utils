@@ -1,5 +1,19 @@
 # Changelog
 
+### [1.3.1](https://www.github.com/bioconda/bioconda-utils/compare/v1.3.0...v1.3.1) (2023-03-01)
+
+
+### Bug Fixes
+
+* Change logic for checking if there are missing commits in a branch vs… ([#843](https://www.github.com/bioconda/bioconda-utils/issues/843)) ([836ecee](https://www.github.com/bioconda/bioconda-utils/commit/836ecee662aaf7fd0e3c89a3354fd93712aa6924))
+
+
+### Documentation
+
+* remove docs ([#839](https://www.github.com/bioconda/bioconda-utils/issues/839)) ([d52810c](https://www.github.com/bioconda/bioconda-utils/commit/d52810c137013e14985c1e7d460cb38e5a49faad))
+* support anchors in <details> ([#832](https://www.github.com/bioconda/bioconda-utils/issues/832)) ([2ad8b61](https://www.github.com/bioconda/bioconda-utils/commit/2ad8b61b36a797a289dbc989e2a4d4eae0d95df0))
+* update bulk docs to include BioC updates ([#828](https://www.github.com/bioconda/bioconda-utils/issues/828)) ([1301a6c](https://www.github.com/bioconda/bioconda-utils/commit/1301a6c933de8e5db9cdaaf634efb968e3f69175))
+
 ## [1.3.0](https://www.github.com/bioconda/bioconda-utils/compare/v1.2.0...v1.3.0) (2022-11-10)
 
 
