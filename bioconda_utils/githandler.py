@@ -147,14 +147,16 @@ class GitHandlerBase():
         return remotes[0]
 
     async def branch_is_current(self, branch, path: str, master="master") -> bool:
-        """Checks if **branch** has the most recent commit modifying **path**
+        """Checks if **branch** is missing any commits to **path**
         as compared to **master**"""
+        #proc = await asyncio.create_subprocess_exec(
+        #    'git', 'log', '-1', '--oneline', '--decorate',
+        #    f'{master}...{branch.name}', '--', path,
         proc = await asyncio.create_subprocess_exec(
-            'git', 'log', '-1', '--oneline', '--decorate',
-            f'{master}...{branch.name}', '--', path,
+            'git', 'log', f'{branch.name}..{master}', '--', path,
             stdout=asyncio.subprocess.PIPE)
         stdout, _ = await proc.communicate()
-        return branch.name in stdout.decode('ascii')
+        return len(stdout) == 0
 
     def delete_local_branch(self, branch) -> None:
         """Deletes **branch** locally"""
