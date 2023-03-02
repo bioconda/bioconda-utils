@@ -1,7 +1,6 @@
 
 
 import glob
-import json
 import os
 import re
 import tempfile
@@ -9,8 +8,7 @@ import zipfile
 
 import requests
 from bioconda_utils import utils
-from bioconda_utils.bot.config import QUAY_LOGIN
-from bioconda_utils.upload import anaconda_upload, mulled_upload, skopeo_upload
+from bioconda_utils.upload import anaconda_upload, skopeo_upload
 
 
 IMAGE_RE = re.compile(r"(.+)(?::|%3A)(.+)\.tar\.gz$")
