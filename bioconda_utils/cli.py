@@ -7,6 +7,8 @@ Bioconda Utils Command Line Interface
 # ".../importlib/_bootstrap.py:219: RuntimeWarning: numpy.dtype size \
 # changed, may indicate binary incompatibility. Expected 96, got 88"
 import warnings
+
+from bioconda_utils.artifacts import upload_pr_artifacts
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 
 import sys
@@ -476,6 +478,38 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
                             keep_old_work=keep_old_work)
     exit(0 if success else 1)
 
+
+@recipe_folder_and_config()
+@arg('--repo', help='Name of the github repository to check (e.g. bioconda/bioconda-recipes).')
+@arg('--git-range', nargs='+',
+     help='''Git range (e.g. commits or something like
+     "master HEAD" to check commits in HEAD vs master, or just "HEAD" to
+     include uncommitted changes). All recipes modified within this range will
+     be built if not present in the channel.''')
+@arg('--dryrun', action='store_true', help='''Do not actually upload anything.''')
+@arg('--fallback', choices=['build', 'ignore'], default='build', help="What to do if no artifacts are found in the PR.")
+@arg('--mulled-upload-target', help="Provide a quay.io target to push mulled docker images to.")
+@enable_logging()
+def handle_merged_pr(
+    recipe_folder,
+    config,
+    repo=None,
+    git_range=None,
+    dryrun=False,
+    fallback='build',
+    mulled_upload_target=None
+):
+    success = upload_pr_artifacts(repo, git_range[1], dryrun=dryrun, mulled_upload_target=mulled_upload_target)
+    if not success and fallback == 'build':
+        success = build(
+            recipe_folder, 
+            config, 
+            git_range=git_range, 
+            anaconda_upload=not dryrun, 
+            mulled_upload_target=mulled_upload_target if not dryrun else None, 
+            mulled_test=True
+        )
+    exit(0 if success else 1)
 
 @recipe_folder_and_config()
 @arg('--packages',
@@ -974,5 +1008,6 @@ def main():
         sys.exit(0)
     argh.dispatch_commands([
         build, dag, dependent, do_lint, duplicates, update_pinning,
-        bioconductor_skeleton, clean_cran_skeleton, autobump, bot
+        bioconductor_skeleton, clean_cran_skeleton, autobump, bot,
+        handle_merged_pr,
     ])
