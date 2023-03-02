@@ -12,7 +12,7 @@ from bioconda_utils import utils
 from bioconda_utils.upload import anaconda_upload, mulled_upload
 
 
-def upload_pr_artifacts(repo, git_sha, dryrun=False, mulled_upload_target=None) -> bool:
+def upload_pr_artifacts(repo, git_sha, dryrun=False, mulled_upload_target=None, label=None) -> bool:
     gh = utils.get_github_client()
 
     repo = gh.get_repo(repo)
@@ -45,7 +45,7 @@ def upload_pr_artifacts(repo, git_sha, dryrun=False, mulled_upload_target=None) 
                         print(f"Would upload {pkg} to anaconda.org.")
                     else:
                         # upload the artifact
-                        anaconda_upload(pkg)
+                        anaconda_upload(pkg, label=label)
                 if mulled_upload_target:
                     for img in glob.glob(f"{tmpdir}/*/images/*.tar.gz"):
                         if dryrun:

@@ -499,15 +499,20 @@ def handle_merged_pr(
     fallback='build',
     mulled_upload_target=None
 ):
-    success = upload_pr_artifacts(repo, git_range[1], dryrun=dryrun, mulled_upload_target=mulled_upload_target)
+    label = os.getenv('BIOCONDA_LABEL', None) or None
+
+    success = upload_pr_artifacts(
+        repo, git_range[1], dryrun=dryrun, mulled_upload_target=mulled_upload_target, label=label
+    )
     if not success and fallback == 'build':
         success = build(
-            recipe_folder, 
-            config, 
-            git_range=git_range, 
-            anaconda_upload=not dryrun, 
-            mulled_upload_target=mulled_upload_target if not dryrun else None, 
-            mulled_test=True
+            recipe_folder,
+            config,
+            git_range=git_range,
+            anaconda_upload=not dryrun,
+            mulled_upload_target=mulled_upload_target if not dryrun else None,
+            mulled_test=True,
+            label=label,
         )
     exit(0 if success else 1)
 
