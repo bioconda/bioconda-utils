@@ -488,7 +488,7 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
      be built if not present in the channel.''')
 @arg('--dryrun', action='store_true', help='''Do not actually upload anything.''')
 @arg('--fallback', choices=['build', 'ignore'], default='build', help="What to do if no artifacts are found in the PR.")
-@arg('--mulled-upload-target', help="Provide a quay.io target to push mulled docker images to.")
+@arg('--quay-upload-target', help="Provide a quay.io target to push docker images to.")
 @enable_logging()
 def handle_merged_pr(
     recipe_folder,
@@ -497,17 +497,22 @@ def handle_merged_pr(
     git_range=None,
     dryrun=False,
     fallback='build',
-    mulled_upload_target=None
+    quay_upload_target=None
 ):
-    success = upload_pr_artifacts(repo, git_range[1], dryrun=dryrun, mulled_upload_target=mulled_upload_target)
+    label = os.getenv('BIOCONDA_LABEL', None) or None
+
+    success = upload_pr_artifacts(
+        repo, git_range[1], dryrun=dryrun, mulled_upload_target=quay_upload_target, label=label
+    )
     if not success and fallback == 'build':
         success = build(
-            recipe_folder, 
-            config, 
-            git_range=git_range, 
-            anaconda_upload=not dryrun, 
-            mulled_upload_target=mulled_upload_target if not dryrun else None, 
-            mulled_test=True
+            recipe_folder,
+            config,
+            git_range=git_range,
+            anaconda_upload=not dryrun,
+            mulled_upload_target=quay_upload_target if not dryrun else None,
+            mulled_test=True,
+            label=label,
         )
     exit(0 if success else 1)
 
