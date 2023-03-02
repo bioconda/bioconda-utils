@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://www.github.com/bioconda/bioconda-utils/compare/v1.3.1...v1.4.0) (2023-03-02)
+
+
+### Features
+
+* bot-free merge handling ([#841](https://www.github.com/bioconda/bioconda-utils/issues/841)) ([1122dd3](https://www.github.com/bioconda/bioconda-utils/commit/1122dd34b5169c6a61d9da00c1af63a5976f2cf0))
+
 ### [1.3.1](https://www.github.com/bioconda/bioconda-utils/compare/v1.3.0...v1.3.1) (2023-03-01)
 
 
