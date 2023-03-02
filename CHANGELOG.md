@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://www.github.com/bioconda/bioconda-utils/compare/v1.4.0...v1.5.0) (2023-03-02)
+
+
+### Features
+
+* make use of BIOCONDA_LABEL if specified when calling handle-merged-pr ([#845](https://www.github.com/bioconda/bioconda-utils/issues/845)) ([bc30cb5](https://www.github.com/bioconda/bioconda-utils/commit/bc30cb582cd6aad5062eae770697a32ea4706d81))
+
 ## [1.4.0](https://www.github.com/bioconda/bioconda-utils/compare/v1.3.1...v1.4.0) (2023-03-02)
 
 
