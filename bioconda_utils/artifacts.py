@@ -9,10 +9,15 @@ import zipfile
 
 import requests
 from bioconda_utils import utils
-from bioconda_utils.upload import anaconda_upload, mulled_upload
+from bioconda_utils.bot.config import QUAY_LOGIN
+from bioconda_utils.upload import anaconda_upload, mulled_upload, skopeo_upload
+
+
+IMAGE_RE = re.compile(r"(.+)(?::|%3A)(.+)\.tar\.gz$")
 
 
 def upload_pr_artifacts(repo, git_sha, dryrun=False, mulled_upload_target=None, label=None) -> bool:
+    quay_token = os.environ['QUAY_OAUTH_TOKEN']
     gh = utils.get_github_client()
 
     repo = gh.get_repo(repo)
@@ -44,15 +49,22 @@ def upload_pr_artifacts(repo, git_sha, dryrun=False, mulled_upload_target=None, 
                     if dryrun:
                         print(f"Would upload {pkg} to anaconda.org.")
                     else:
-                        # upload the artifact
+                        # upload the package
                         anaconda_upload(pkg, label=label)
                 if mulled_upload_target:
                     for img in glob.glob(f"{tmpdir}/*/images/*.tar.gz"):
                         if dryrun:
                             print(f"Would upload {img} to quay.io/{mulled_upload_target}.")
                         else:
-                            # upload the artifact
-                            mulled_upload(img, mulled_upload_target)
+                            # upload the image
+                            m = IMAGE_RE.match(os.path.basename(img))
+                            assert m, f"Could not parse image name from {img}"
+                            name, tag = m.groups()
+                            if label:
+                                # add label to tag
+                                tag = f"{tag}-{label}"
+                            target = f"{mulled_upload_target}/{name}:{tag}"
+                            skopeo_upload(img, target, creds=quay_token)
         return True
 
 
