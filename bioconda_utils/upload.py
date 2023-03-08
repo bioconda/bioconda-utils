@@ -94,7 +94,7 @@ def skopeo_upload(image_file: str, target: str,
     The image name and tag are read from the archive.
 
     Args:
-      image_file: path to the file to be uploaded (may be gzip'ed)
+      image_file: path to the file to be uploaded (may be gzip'ed). NOTE: may not contain a colon!
       target: namespace/repo for the image
       creds: login credentials (``USER:PASS``)
       registry: url of the registry. defaults to "quay.io"

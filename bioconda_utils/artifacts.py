@@ -62,6 +62,8 @@ def upload_pr_artifacts(repo, git_sha, dryrun=False, mulled_upload_target=None, 
                                 # add label to tag
                                 tag = f"{tag}-{label}"
                             target = f"{mulled_upload_target}/{name}:{tag}"
+                            # Skopeo can't handle a : in the file name
+                            os.rename(img, img.replace(":", "_"))
                             skopeo_upload(img, target, creds=quay_token)
         return True
 
