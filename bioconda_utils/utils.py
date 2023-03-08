@@ -1059,7 +1059,7 @@ def check_recipe_skippable(recipe, check_channels):
         first_meta = metas[0]
         if first_meta.get_value('build/noarch'):
             if platform != 'linux':
-                logger.debug('FILTER: only building %s on '
+                logger.info('FILTER: only building %s on '
                              'linux because it defines noarch.',
                              recipe)
                 return True
