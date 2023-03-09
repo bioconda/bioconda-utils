@@ -502,7 +502,7 @@ def handle_merged_pr(
     label = os.getenv('BIOCONDA_LABEL', None) or None
 
     success = upload_pr_artifacts(
-        repo, git_range[1], dryrun=dryrun, mulled_upload_target=quay_upload_target, label=label
+        config, repo, git_range[1], dryrun=dryrun, mulled_upload_target=quay_upload_target, label=label
     )
     if not success and fallback == 'build':
         success = build(

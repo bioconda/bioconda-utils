@@ -14,7 +14,8 @@ from bioconda_utils.upload import anaconda_upload, skopeo_upload
 IMAGE_RE = re.compile(r"(.+)(?::|%3A)(.+)\.tar\.gz$")
 
 
-def upload_pr_artifacts(repo, git_sha, dryrun=False, mulled_upload_target=None, label=None) -> bool:
+def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_target=None, label=None) -> bool:
+    _config = utils.load_config(config)
     repodata = utils.RepoData()
 
     quay_token = os.environ['QUAY_OAUTH_TOKEN']
