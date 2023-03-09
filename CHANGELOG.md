@@ -1,5 +1,12 @@
 # Changelog
 
+### [1.5.3](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.2...v1.5.3) (2023-03-09)
+
+
+### Bug Fixes
+
+* load config before instantiating repodata in artifact upload ([#853](https://www.github.com/bioconda/bioconda-utils/issues/853)) ([946442f](https://www.github.com/bioconda/bioconda-utils/commit/946442fd6386f5e8fd61df125c7bbc8d95837e9a))
+
 ### [1.5.2](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.1...v1.5.2) (2023-03-09)
 
 
