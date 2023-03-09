@@ -15,6 +15,8 @@ IMAGE_RE = re.compile(r"(.+)(?::|%3A)(.+)\.tar\.gz$")
 
 
 def upload_pr_artifacts(repo, git_sha, dryrun=False, mulled_upload_target=None, label=None) -> bool:
+    repodata = utils.RepoData()
+
     quay_token = os.environ['QUAY_OAUTH_TOKEN']
     gh = utils.get_github_client()
 
@@ -42,13 +44,20 @@ def upload_pr_artifacts(repo, git_sha, dryrun=False, mulled_upload_target=None, 
                         if chunk:
                             f.write(chunk)
                 zipfile.ZipFile(artifact_path).extractall(tmpdir)
-                # get all the contained packages and images
-                for pkg in glob.glob(f"{tmpdir}/*/packages/*/*.tar.bz2"):
-                    if dryrun:
-                        print(f"Would upload {pkg} to anaconda.org.")
-                    else:
-                        # upload the package
-                        anaconda_upload(pkg, label=label)
+
+                # get all the contained packages and images and upload them
+                platform_patterns = repodata.platform2subdir(repodata.native_platform())
+                if repodata.native_platform() == "linux-64":
+                    platform_patterns.append("noarch")
+
+                for platform_pattern in platform_patterns:
+                    for pkg in glob.glob(f"{tmpdir}/*/packages/{platform_pattern}/*.tar.bz2"):
+                        if dryrun:
+                            print(f"Would upload {pkg} to anaconda.org.")
+                        else:
+                            # upload the package
+                            anaconda_upload(pkg, label=label)
+
                 if mulled_upload_target:
                     for img in glob.glob(f"{tmpdir}/*/images/*.tar.gz"):
                         if dryrun:
@@ -63,8 +72,9 @@ def upload_pr_artifacts(repo, git_sha, dryrun=False, mulled_upload_target=None, 
                                 tag = f"{tag}-{label}"
                             target = f"{mulled_upload_target}/{name}:{tag}"
                             # Skopeo can't handle a : in the file name
-                            os.rename(img, img.replace(":", "_"))
-                            skopeo_upload(img, target, creds=quay_token)
+                            fixed_img_name = img.replace(":", "_")
+                            os.rename(img, fixed_img_name)
+                            skopeo_upload(fixed_img_name, target, creds=quay_token)
         return True
 
 
