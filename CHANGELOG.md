@@ -1,5 +1,12 @@
 # Changelog
 
+### [1.5.1](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.0...v1.5.1) (2023-03-08)
+
+
+### Bug Fixes
+
+* fix skopeo based upload of container images from build artifacts by removing colons in filenames ([#849](https://www.github.com/bioconda/bioconda-utils/issues/849)) ([4f2eec5](https://www.github.com/bioconda/bioconda-utils/commit/4f2eec5fbc3a44738b25ae601684a29646feacf9))
+
 ## [1.5.0](https://www.github.com/bioconda/bioconda-utils/compare/v1.4.0...v1.5.0) (2023-03-02)
 
 
