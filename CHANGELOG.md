@@ -1,5 +1,12 @@
 # Changelog
 
+### [1.5.2](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.1...v1.5.2) (2023-03-09)
+
+
+### Bug Fixes
+
+* platform specific artifact upload and fixed file renaming for container image upload ([#851](https://www.github.com/bioconda/bioconda-utils/issues/851)) ([b56e1a4](https://www.github.com/bioconda/bioconda-utils/commit/b56e1a44ab8b10721fd5c530aaa7a8e8b56a8e21))
+
 ### [1.5.1](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.0...v1.5.1) (2023-03-08)
 
 
