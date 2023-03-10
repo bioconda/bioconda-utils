@@ -1,5 +1,12 @@
 # Changelog
 
+### [1.5.4](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.3...v1.5.4) (2023-03-10)
+
+
+### Bug Fixes
+
+* use correct ssl certs for skopeo upload ([#856](https://www.github.com/bioconda/bioconda-utils/issues/856)) ([a48dcf3](https://www.github.com/bioconda/bioconda-utils/commit/a48dcf3ef5b72829ea2787847e1ec4d24ba04893))
+
 ### [1.5.3](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.2...v1.5.3) (2023-03-09)
 
 
