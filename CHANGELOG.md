@@ -1,5 +1,12 @@
 # Changelog
 
+### [1.5.5](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.4...v1.5.5) (2023-03-23)
+
+
+### Bug Fixes
+
+* improved logging for artifact upload, use QUAY_LOGIN env var ([6b7a56d](https://www.github.com/bioconda/bioconda-utils/commit/6b7a56d5fb861dc81c1b48fdc5343d97d50d0725))
+
 ### [1.5.4](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.3...v1.5.4) (2023-03-10)
 
 
