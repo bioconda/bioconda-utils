@@ -1,5 +1,12 @@
 # Changelog
 
+### [1.5.6](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.5...v1.5.6) (2023-03-23)
+
+
+### Bug Fixes
+
+* properly handle platforms as list ([0b2cf30](https://www.github.com/bioconda/bioconda-utils/commit/0b2cf301d5a6344541c43e9e333105c5d7c55c12))
+
 ### [1.5.5](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.4...v1.5.5) (2023-03-23)
 
 
