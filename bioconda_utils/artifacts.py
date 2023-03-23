@@ -18,7 +18,7 @@ def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_targe
     _config = utils.load_config(config)
     repodata = utils.RepoData()
 
-    quay_token = os.environ['QUAY_OAUTH_TOKEN']
+    quay_login = os.environ['QUAY_LOGIN']
     gh = utils.get_github_client()
 
     repo = gh.get_repo(repo)
@@ -56,6 +56,7 @@ def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_targe
                         if dryrun:
                             print(f"Would upload {pkg} to anaconda.org.")
                         else:
+                            print(f"Uploading {pkg} to anaconda.org.")
                             # upload the package
                             anaconda_upload(pkg, label=label)
 
@@ -75,7 +76,8 @@ def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_targe
                             # Skopeo can't handle a : in the file name
                             fixed_img_name = img.replace(":", "_")
                             os.rename(img, fixed_img_name)
-                            skopeo_upload(fixed_img_name, target, creds=quay_token)
+                            print(f"Uploading {img} to quay.io/{mulled_upload_target}.")
+                            skopeo_upload(fixed_img_name, target, creds=quay_login)
         return True
 
 
