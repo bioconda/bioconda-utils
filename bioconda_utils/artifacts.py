@@ -47,7 +47,7 @@ def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_targe
                 zipfile.ZipFile(artifact_path).extractall(tmpdir)
 
                 # get all the contained packages and images and upload them
-                platform_patterns = repodata.platform2subdir(repodata.native_platform())
+                platform_patterns = [repodata.platform2subdir(repodata.native_platform())]
                 if repodata.native_platform() == "linux-64":
                     platform_patterns.append("noarch")
 
