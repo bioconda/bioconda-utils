@@ -22,7 +22,6 @@ def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_targe
     _config = utils.load_config(config)
     repodata = utils.RepoData()
 
-    quay_login = os.environ['QUAY_LOGIN']
     gh = utils.get_github_client()
 
     repo = gh.get_repo(repo)
@@ -62,6 +61,8 @@ def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_targe
                             anaconda_upload(pkg, label=label)
 
                 if mulled_upload_target:
+                    quay_login = os.environ['QUAY_LOGIN']
+
                     pattern = f"{tmpdir}/*/images/*.tar.gz"
                     logger.info(f"Checking for images at {pattern}.")
                     for img in glob.glob(pattern):
