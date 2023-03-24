@@ -35,6 +35,7 @@ def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_targe
     artifacts = set(fetch_artifacts(pr))
     if not artifacts:
         # no artifacts found, fail and rebuild packages
+        logger.info("No artifacts found.")
         return False
     else:
         for artifact in artifacts:
@@ -117,7 +118,6 @@ def fetch_artifacts(pr):
     check_runs = commit.get_check_runs()
     repodata = utils.RepoData()
     platform = repodata.native_platform()
-    # get the artifact with the name "artifacts"
     for check_run in check_runs:
         if check_run.name.startswith(f"bioconda.bioconda-recipes (test_{platform}"):
             # azure builds
