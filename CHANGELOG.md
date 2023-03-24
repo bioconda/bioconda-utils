@@ -1,5 +1,12 @@
 # Changelog
 
+### [1.5.7](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.6...v1.5.7) (2023-03-24)
+
+
+### Bug Fixes
+
+* uploading of noarch artifacts and other small improvements to artifact uploading ([#860](https://www.github.com/bioconda/bioconda-utils/issues/860)) ([da41c36](https://www.github.com/bioconda/bioconda-utils/commit/da41c365350aaacca0b779ef62068515f1c3c19e))
+
 ### [1.5.6](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.5...v1.5.6) (2023-03-23)
 
 
