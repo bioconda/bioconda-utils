@@ -118,14 +118,10 @@ def build(recipe: str, pkg_paths: List[str] = None,
                                         noarch=is_noarch)
             # Use presence of expected packages to check for success
             if (docker_builder.pkg_dir is not None):
-                    platform = os.environ.get('OSTYPE', sys.platform)
-                    if platform.startswith("darwin"):
-                        platform = 'osx'
-                    elif platform == "linux-gnu":
-                        platform = "linux"
-
-                    config = utils.load_conda_build_config(platform=platform)
-                    pkg_paths = [p.replace(config.output_folder, docker_builder.pkg_dir) for p in pkg_paths]
+                platform = utils.RepoData().native_platform()
+                subfolder = utils.RepoData().platform2subdir(platform)
+                config = utils.load_conda_build_config(platform=subfolder)
+                pkg_paths = [p.replace(config.output_folder, docker_builder.pkg_dir) for p in pkg_paths]
             
             for pkg_path in pkg_paths:
                 if not os.path.exists(pkg_path):
