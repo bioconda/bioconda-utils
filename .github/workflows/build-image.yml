@@ -23,7 +23,10 @@ jobs:
     - id: get-tag
       run: |
         tag=${{ github.event.release && github.event.release.tag_name || github.sha }}
-        printf %s "::set-output name=tag::${tag#v}"
+
+        # https://github.blog/changelog/2022-10-11-github-actions-deprecating-save-state-and-set-output-commands/
+        # printf %s "::set-output name=tag::${tag#v}"
+        printf %s "tag=${tag#v}" >> $GITHUB_OUTPUT
 
     - name: Build image
       id: buildah-build
