@@ -1,6 +1,10 @@
 # The autobump bot runs on CircleCI (rather than run on Azure Pipelines or
 # GitHub Actions) so that we avoid additional workload on those other services
 # which currently take care of PRs and bulk branch, respectively.
+#
+# Note that this runs the version of bioconda-utils configured in
+# bioconda-common/common.sh (via the installation script), rather than the
+# latest commit on the branch where this is running.
 
 version: 2
 
@@ -16,47 +20,30 @@ jobs:
       - checkout
 
       - run:
-          name: Download common definitions
-          command: curl -s https://raw.githubusercontent.com/bioconda/bioconda-common/master/common.sh > .circleci/common.sh
+          name: Download bioconda install script
+          command: curl -s https://raw.githubusercontent.com/bioconda/bioconda-common/fix/install-and-set-up-conda.sh > install-and-set-up-conda.sh
 
       - run:
           name: set up env vars
-          command: echo "export PATH=$(pwd)/miniconda/bin:$PATH" >> "$BASH_ENV"
-
-      - restore_cache:
-          keys:
-            - bioconda-utils-{{
-              checksum ".circleci/common.sh" }}-{{
-              checksum ".circleci/config.yml" }}-{{
-              checksum "bioconda_utils/bioconda_utils-requirements.txt" }}
+          command: echo "export PATH=/opt/miniconda/bin:$PATH" >> "$BASH_ENV"
 
       - run:
-          name: Setup dependencies
+          name: Ensure cache has path to restore to
           command: |
-            if [ -d miniconda ]
-            then
-                echo "Restored from cache"
-                exit 0
-            fi
-            source .circleci/common.sh
-            git checkout ${BIOCONDA_UTILS_TAG}
-            curl -L -o miniconda.sh https://repo.continuum.io/miniconda/Miniconda3-${MINICONDA_VER}-Linux-x86_64.sh
-            bash miniconda.sh -b -p ./miniconda
-            conda config --system --add channels defaults
-            conda config --system --add channels bioconda
-            conda config --system --add channels conda-forge
-            conda install -y mamba
-            mamba install -y --file bioconda_utils/bioconda_utils-requirements.txt --file test-requirements.txt
-            conda clean -y --all
-            python setup.py install
+            sudo mkdir -p /opt
+            sudo chown -R $USER /opt
+
+      - restore_cache:
+          key: bioconda-utils-{{ checksum "install-and-set-up-conda.sh" }}-{{ checksum ".circleci/config.yml" }}
+
+      - run:
+          name: Install bioconda-utils
+          command: bash install-and-set-up-conda.sh
 
       - save_cache:
-          key: bioconda-utils-{{
-             checksum ".circleci/common.sh" }}-{{
-             checksum ".circleci/config.yml" }}-{{
-             checksum "bioconda_utils/bioconda_utils-requirements.txt" }}
+          key: bioconda-utils-{{ checksum "install-and-set-up-conda.sh" }}-{{ checksum ".circleci/config.yml" }}
           paths:
-            - miniconda
+            - /opt/miniconda
 
       - store_artifacts:
           path: /tmp/artifacts
@@ -69,6 +56,8 @@ jobs:
             git config user.name "Autobump"
             git config user.email "bioconda@users.noreply.github.com"
             mkdir -p /tmp/artifacts
+            eval "$(conda shell.bash hook)"
+            conda activate bioconda
             bioconda-utils autobump \
               --unparsed-urls /tmp/artifacts/unparsed_urls.txt \
               --failed-urls /tmp/artifacts/failed_urls.txt \
