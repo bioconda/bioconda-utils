@@ -21,6 +21,7 @@ jobs:
       run: |
         export BIOCONDA_PREP_MACOS_FOR_BUILDING=0
         curl -L "https://raw.githubusercontent.com/bioconda/bioconda-common/master/install-and-set-up-conda.sh" > install-and-set-up-conda.sh
+        bash install-and-set-up-conda.sh
         eval "$(conda shell.bash hook)"
         conda activate bioconda
         mamba install -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
@@ -55,6 +56,7 @@ jobs:
       run: |
         export BIOCONDA_PREP_MACOS_FOR_BUILDING=0
         curl -L "https://raw.githubusercontent.com/bioconda/bioconda-common/master/install-and-set-up-conda.sh" > install-and-set-up-conda.sh
+        bash install-and-set-up-conda.sh
         eval "$(conda shell.bash hook)"
         conda activate bioconda
         mamba install -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
