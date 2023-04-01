@@ -23,7 +23,7 @@ jobs:
 
     - name: Install bioconda-utils
       run: |
-        export BIOCONDA_PREP_MACOS_FOR_BUILDING=0
+        export BIOCONDA_DISABLE_BUILD_PREP=1
         curl -L "https://raw.githubusercontent.com/bioconda/bioconda-common/master/install-and-set-up-conda.sh" > install-and-set-up-conda.sh
         bash install-and-set-up-conda.sh
         eval "$(conda shell.bash hook)"
@@ -58,7 +58,7 @@ jobs:
 
     - name: Install bioconda-utils
       run: |
-        export BIOCONDA_PREP_MACOS_FOR_BUILDING=0
+        export BIOCONDA_DISABLE_BUILD_PREP=1
         curl -L "https://raw.githubusercontent.com/bioconda/bioconda-common/master/install-and-set-up-conda.sh" > install-and-set-up-conda.sh
         bash install-and-set-up-conda.sh
         eval "$(conda shell.bash hook)"
