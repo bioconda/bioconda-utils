@@ -14,21 +14,34 @@ jobs:
           - not long_running_1 and not long_running_2
           - long_running_1
           - long_running_2
+
     steps:
     - uses: actions/checkout@v1
-    - name: Setup
-      uses: bioconda/bioconda-actions/bioconda_utils_setup_conda/@master
+
+    - name: set path
+      run: echo "/opt/miniconda/bin" >> $GITHUB_PATH
+
     - name: Install bioconda-utils
       run: |
+        export BIOCONDA_DISABLE_BUILD_PREP=1
+        curl -L "https://raw.githubusercontent.com/bioconda/bioconda-common/master/install-and-set-up-conda.sh" > install-and-set-up-conda.sh
+        bash install-and-set-up-conda.sh
+        eval "$(conda shell.bash hook)"
+        mamba create -n bioconda -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
+        conda activate bioconda
         python setup.py install
+
     - name: Build docker container
       run: |
         docker build -t quay.io/bioconda/bioconda-utils-build-env-cos7:latest ./
         docker history quay.io/bioconda/bioconda-utils-build-env-cos7:latest
         docker run --rm -t quay.io/bioconda/bioconda-utils-build-env-cos7:latest sh -lec 'type -t conda && conda info -a && conda list'
         docker build -t quay.io/bioconda/bioconda-utils-test-env-cos7:latest -f ./Dockerfile.test ./
+
     - name: Run tests '${{ matrix.py_test_marker }}'
       run: |
+        eval "$(conda shell.bash hook)"
+        conda activate bioconda
         if git diff --name-only origin/master...HEAD | grep -vE ^docs; then
             py.test --durations=0 test/ -v --log-level=DEBUG --tb=native -m '${{ matrix.py_test_marker }}'
         else
@@ -41,22 +54,28 @@ jobs:
     - uses: actions/checkout@v1
 
     - name: set path
-      run: echo "${HOME}/miniconda/bin" >> $GITHUB_PATH
+      run: echo "/opt/miniconda/bin" >> $GITHUB_PATH
 
     - name: Install bioconda-utils
       run: |
-        export BIOCONDA_PREP_MACOS_FOR_BUILDING=0
-        curl -L "https://raw.githubusercontent.com/bioconda/bioconda-common/master/macos-github-runner.sh" | bash
-        mamba install -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
+        export BIOCONDA_DISABLE_BUILD_PREP=1
+        curl -L "https://raw.githubusercontent.com/bioconda/bioconda-common/master/install-and-set-up-conda.sh" > install-and-set-up-conda.sh
+        bash install-and-set-up-conda.sh
+        eval "$(conda shell.bash hook)"
+        mamba create -n bioconda -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
+        conda activate bioconda
         python setup.py install
 
     - name: Run tests
       run: |
+        eval "$(conda shell.bash hook)"
+        conda activate bioconda
         if git diff --name-only origin/master...HEAD | grep -vE ^docs; then
             py.test --durations=0 test/ -v --log-level=DEBUG -k "not docker" --tb=native
         else
             echo "Skipping pytest - only docs modified"
         fi
+
   autobump-test:
     name: autobump test
     runs-on: ubuntu-latest
