@@ -154,12 +154,12 @@ def get_recipes_to_build(git_range: Tuple[str], recipe_folder: str) -> List[str]
     return repo.get_recipes_to_build(ref, other)
 
 
-def get_recipes(config, recipe_folder, packages, git_range) -> List[str]:
+def get_recipes(config, recipe_folder, packages, git_range, include_blacklisted=False) -> List[str]:
     """Gets list of paths to recipe folders to be built
 
     Considers all recipes matching globs in packages, constrains to
     recipes modified or unblacklisted in the git_range if given, then
-    removes blacklisted recipes.
+    removes blacklisted recipes (unless include_blacklisted=True).
 
     """
     recipes = list(utils.get_recipes(recipe_folder, packages))
@@ -175,15 +175,16 @@ def get_recipes(config, recipe_folder, packages, git_range) -> List[str]:
             logger.info("Overlap was %s recipes%s.", len(recipes),
                         utils.ellipsize_recipes(recipes, recipe_folder))
 
-    blacklist = utils.get_blacklist(config, recipe_folder)
-    blacklisted = []
-    for recipe in recipes:
-        if os.path.relpath(recipe, recipe_folder) in blacklist:
-            blacklisted.append(recipe)
-    if blacklisted:
-        logger.info("Ignoring %s blacklisted recipes%s.", len(blacklisted),
-                    utils.ellipsize_recipes(blacklisted, recipe_folder))
-        recipes = [recipe for recipe in recipes if recipe not in set(blacklisted)]
+    if not include_blacklisted:
+        blacklist = utils.get_blacklist(config, recipe_folder)
+        blacklisted = []
+        for recipe in recipes:
+            if os.path.relpath(recipe, recipe_folder) in blacklist:
+                blacklisted.append(recipe)
+        if blacklisted:
+            logger.info("Ignoring %s blacklisted recipes%s.", len(blacklisted),
+                        utils.ellipsize_recipes(blacklisted, recipe_folder))
+            recipes = [recipe for recipe in recipes if recipe not in set(blacklisted)]
     logger.info("Processing %s recipes%s.", len(recipes),
                 utils.ellipsize_recipes(recipes, recipe_folder))
     return recipes
@@ -344,7 +345,7 @@ def do_lint(recipe_folder, config, packages="*", cache=None, list_checks=False,
     if cache is not None:
         utils.RepoData().set_cache(cache)
 
-    recipes = get_recipes(config, recipe_folder, packages, git_range)
+    recipes = get_recipes(config, recipe_folder, packages, git_range, include_blacklisted=True)
     linter = lint.Linter(config, recipe_folder, exclude)
     result = linter.lint(recipes, fix=try_fix)
     messages = linter.get_messages()
