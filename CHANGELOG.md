@@ -1,5 +1,13 @@
 # Changelog
 
+### [1.5.8](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.7...v1.5.8) (2023-04-04)
+
+
+### Bug Fixes
+
+* allow lint for blacklist to see blacklisted recipes ([#863](https://www.github.com/bioconda/bioconda-utils/issues/863)) ([0e63e73](https://www.github.com/bioconda/bioconda-utils/commit/0e63e73c22e3c1160eb5c8ad3f35c34ac4ea6f27))
+* fix autobump ([#865](https://www.github.com/bioconda/bioconda-utils/issues/865)) ([b6b674c](https://www.github.com/bioconda/bioconda-utils/commit/b6b674ca81326a6bd6700cb9802b3d7440c08762))
+
 ### [1.5.7](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.6...v1.5.7) (2023-03-24)
 
 
