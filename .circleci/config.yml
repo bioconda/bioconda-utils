@@ -38,7 +38,11 @@ jobs:
 
       - run:
           name: Install bioconda-utils
-          command: bash install-and-set-up-conda.sh
+          command: |
+            source $BASH_ENV
+            if [ ! -e /opt/miniconda ]; then
+              bash install-and-set-up-conda.sh
+            fi
 
       - save_cache:
           key: bioconda-utils-{{ checksum "install-and-set-up-conda.sh" }}-{{ checksum ".circleci/config.yml" }}
