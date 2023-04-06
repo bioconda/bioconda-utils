@@ -426,13 +426,16 @@ def do_lint(recipe_folder, config, packages="*", cache=None, list_checks=False,
      than one worker, then make sure to give each a different offset!''')
 @arg('--keep-old-work', action='store_true', help='''Do not remove anything
 from environment, even after successful build and test.''')
+@arg('--docker-base-image', help='''Name of base image that can be used in
+     Dockerfile template.''')
 @enable_logging()
 def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
           force=False, docker=None, mulled_test=False, build_script_template=None,
           pkg_dir=None, anaconda_upload=False, mulled_upload_target=None,
           build_image=False, keep_image=False, lint=False, lint_exclude=None,
           check_channels=None, n_workers=1, worker_offset=0, keep_old_work=False,
-          mulled_conda_image=pkg_test.MULLED_CONDA_IMAGE):
+          mulled_conda_image=pkg_test.MULLED_CONDA_IMAGE,
+          docker_base_image='quay.io/bioconda/bioconda-utils-build-env-cos7:{}'.format(VERSION.replace('+', '_'))):
     cfg = utils.load_config(config)
     setup = cfg.get('setup', None)
     if setup:
@@ -458,6 +461,7 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
             use_host_conda_bld=use_host_conda_bld,
             keep_image=keep_image,
             build_image=build_image,
+            docker_base_image=docker_base_image
         )
     else:
         docker_builder = None
