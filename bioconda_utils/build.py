@@ -50,7 +50,8 @@ def build(recipe: str, pkg_paths: List[str] = None,
           channels: List[str] = None,
           docker_builder: docker_utils.RecipeBuilder = None,
           raise_error: bool = False,
-          linter=None) -> BuildResult:
+          linter=None,
+          mulled_conda_image: str = pkg_test.MULLED_CONDA_IMAGE) -> BuildResult:
     """
     Build a single recipe for a single env
 
@@ -149,7 +150,8 @@ def build(recipe: str, pkg_paths: List[str] = None,
         mulled_images = []
         for pkg_path in pkg_paths:
             try:
-                pkg_test.test_package(pkg_path, base_image=base_image)
+                pkg_test.test_package(pkg_path, base_image=base_image,
+                                      conda_image=mulled_conda_image)
             except sp.CalledProcessError:
                 logger.error('TEST FAILED: %s', recipe)
                 return BuildResult(False, None)
@@ -225,7 +227,8 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
                   lint_exclude: List[str] = None,
                   n_workers: int = 1,
                   worker_offset: int = 0,
-                  keep_old_work: bool = False):
+                  keep_old_work: bool = False,
+                  mulled_conda_image: str = pkg_test.MULLED_CONDA_IMAGE):
     """
     Build one or many bioconda packages.
 
@@ -343,7 +346,8 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
                     mulled_test=mulled_test,
                     channels=config['channels'],
                     docker_builder=docker_builder,
-                    linter=linter)
+                    linter=linter,
+                    mulled_conda_image=mulled_conda_image)
 
         if not res.success:
             failed.append(recipe)
