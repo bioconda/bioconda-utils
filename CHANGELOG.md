@@ -1,5 +1,54 @@
 # Changelog
 
+### [1.5.7](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.6...v1.5.7) (2023-03-24)
+
+
+### Bug Fixes
+
+* uploading of noarch artifacts and other small improvements to artifact uploading ([#860](https://www.github.com/bioconda/bioconda-utils/issues/860)) ([da41c36](https://www.github.com/bioconda/bioconda-utils/commit/da41c365350aaacca0b779ef62068515f1c3c19e))
+
+### [1.5.6](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.5...v1.5.6) (2023-03-23)
+
+
+### Bug Fixes
+
+* properly handle platforms as list ([0b2cf30](https://www.github.com/bioconda/bioconda-utils/commit/0b2cf301d5a6344541c43e9e333105c5d7c55c12))
+
+### [1.5.5](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.4...v1.5.5) (2023-03-23)
+
+
+### Bug Fixes
+
+* improved logging for artifact upload, use QUAY_LOGIN env var ([6b7a56d](https://www.github.com/bioconda/bioconda-utils/commit/6b7a56d5fb861dc81c1b48fdc5343d97d50d0725))
+
+### [1.5.4](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.3...v1.5.4) (2023-03-10)
+
+
+### Bug Fixes
+
+* use correct ssl certs for skopeo upload ([#856](https://www.github.com/bioconda/bioconda-utils/issues/856)) ([a48dcf3](https://www.github.com/bioconda/bioconda-utils/commit/a48dcf3ef5b72829ea2787847e1ec4d24ba04893))
+
+### [1.5.3](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.2...v1.5.3) (2023-03-09)
+
+
+### Bug Fixes
+
+* load config before instantiating repodata in artifact upload ([#853](https://www.github.com/bioconda/bioconda-utils/issues/853)) ([946442f](https://www.github.com/bioconda/bioconda-utils/commit/946442fd6386f5e8fd61df125c7bbc8d95837e9a))
+
+### [1.5.2](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.1...v1.5.2) (2023-03-09)
+
+
+### Bug Fixes
+
+* platform specific artifact upload and fixed file renaming for container image upload ([#851](https://www.github.com/bioconda/bioconda-utils/issues/851)) ([b56e1a4](https://www.github.com/bioconda/bioconda-utils/commit/b56e1a44ab8b10721fd5c530aaa7a8e8b56a8e21))
+
+### [1.5.1](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.0...v1.5.1) (2023-03-08)
+
+
+### Bug Fixes
+
+* fix skopeo based upload of container images from build artifacts by removing colons in filenames ([#849](https://www.github.com/bioconda/bioconda-utils/issues/849)) ([4f2eec5](https://www.github.com/bioconda/bioconda-utils/commit/4f2eec5fbc3a44738b25ae601684a29646feacf9))
+
 ## [1.5.0](https://www.github.com/bioconda/bioconda-utils/compare/v1.4.0...v1.5.0) (2023-03-02)
 
 
