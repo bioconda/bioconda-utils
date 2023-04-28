@@ -8,6 +8,15 @@ name: release-please
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: arm64
+            image: bioconda-utils-build-env-cos7-aarch64
+            base_image: quay.io/condaforge/linux-anvil-aarch64
+          - arch: amd64
+            image: bioconda-utils-build-env-cos7
+            base_image: quay.io/condaforge/linux-anvil-cos7-x86_64
     steps:
 
       - uses: GoogleCloudPlatform/release-please-action@v2
@@ -28,12 +37,20 @@ jobs:
           tag=${{ steps.release.outputs.tag_name }}
           printf %s "::set-output name=tag::${tag#v}"
 
+      - name: Install qemu dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static
+
       - name: Build Image
         if: ${{ steps.release.outputs.release_created }}
         id: buildah-build
         uses: redhat-actions/buildah-build@v2
         with:
-          image: bioconda-utils-build-env-cos7
+          image: ${{ matrix.image }}
+          arch: ${{ matrix.arch }}
+          build-args: |
+            BASE_IMAGE=${{ matrix.base_image }}
           tags: >-
             latest
             ${{ steps.get-tag.outputs.tag }}
