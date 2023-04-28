@@ -132,10 +132,7 @@ DOCKERFILE_TEMPLATE = \
 r"""
 FROM {docker_base_image}
 {proxies}
-RUN \
-    /opt/conda/bin/conda install -y conda={conda_ver} conda-build={conda_build_ver} \
-    && \
-    find /opt/conda \
+RUN find /opt/conda \
       \! -group lucky \
       -exec chgrp --no-dereference lucky {{}} + \
       \! -type l \
@@ -355,10 +352,8 @@ class RecipeBuilder(object):
         with open(os.path.join(build_dir, "Dockerfile"), 'w') as fout:
             fout.write(self.dockerfile_template.format(
                 docker_base_image=self.docker_base_image,
-                proxies=proxies,
-                conda_ver=conda.__version__,
-                conda_build_ver=conda_build.__version__)
-            )
+                proxies=proxies
+            ))
 
         logger.debug('Dockerfile:\n' + open(fout.name).read())
 
