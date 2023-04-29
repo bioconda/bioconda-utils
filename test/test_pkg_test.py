@@ -119,8 +119,10 @@ def test_pkg_test_conda_image():
                   import sys, os
                   from pathlib import Path
                   from pkg_resources import parse_version as v
-                  assert v("{conda_version}") <= v(Path(os.environ["CONDA_PREFIX"], "conda-version").read_text())
-                  assert v("{mamba_version}") <= v(Path(os.environ["CONDA_PREFIX"], "mamba-version").read_text())
+                  conda_version = Path(os.environ["CONDA_PREFIX"], "conda-version").read_text()
+                  mamba_version = Path(os.environ["CONDA_PREFIX"], "mamba-version").read_text()
+                  assert v("{conda_version}") <= v(conda_version), conda_version 
+                  assert v("{mamba_version}") <= v(mamba_version), mamba_version
                   '
           post-link.sh: |
             conda --version | sed -n 's/^conda //p' > "${{PREFIX}}/conda-version"
