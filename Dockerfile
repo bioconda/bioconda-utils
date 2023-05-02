@@ -21,9 +21,9 @@ RUN yum install -y mesa-libGL-devel \
 # This changes root's .condarc which ENTRYPOINT copies to /home/conda/.condarc later.
 RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda config \
-      --prepend channels defaults \
-      --prepend channels bioconda \
-      --prepend channels conda-forge \
+    --prepend channels defaults \
+    --prepend channels bioconda \
+    --prepend channels conda-forge \
     && \
     { conda config --remove repodata_fns current_repodata.json 2> /dev/null || true ; } && \
     conda config --prepend repodata_fns repodata.json && \
@@ -38,8 +38,8 @@ RUN . /opt/conda/etc/profile.d/conda.sh  && conda activate base && \
     pip wheel . && \
     mkdir - /opt/bioconda-utils && \
     cp ./bioconda_utils-*.whl \
-        ./bioconda_utils/bioconda_utils-requirements.txt \
-        /opt/bioconda-utils/ \
+    ./bioconda_utils/bioconda_utils-requirements.txt \
+    /opt/bioconda-utils/ \
     && \
     chgrp -R lucky /opt/bioconda-utils && \
     chmod -R g=u /opt/bioconda-utils
@@ -49,15 +49,15 @@ COPY --from=build /opt/bioconda-utils /opt/bioconda-utils
 RUN . /opt/conda/etc/profile.d/conda.sh  && conda activate base && \
     # Make sure we get the (working) conda we want before installing the rest.
     sed -nE \
-        '/^conda([><!=~ ].+)?$/p' \
-        /opt/bioconda-utils/bioconda_utils-requirements.txt \
-        | xargs -r conda install --yes && \
-    conda install --yes --file /opt/bioconda-utils/bioconda_utils-requirements.txt && \
+    '/^conda([><!=~ ].+)?$/p' \
+    /opt/bioconda-utils/bioconda_utils-requirements.txt \
+    | xargs -r mamba install --yes && \
+    mamba install --yes --file /opt/bioconda-utils/bioconda_utils-requirements.txt && \
     pip install --no-deps --find-links /opt/bioconda-utils bioconda_utils && \
-    conda clean --yes --index --tarballs && \
+    mamba clean --yes --index --tarballs && \
     # Find files that are not already in group "lucky" and change their group and mode.
     find /opt/conda \
-      \! -group lucky \
-      -exec chgrp --no-dereference lucky {} + \
-      \! -type l \
-      -exec chmod g=u {} +
+    \! -group lucky \
+    -exec chgrp --no-dereference lucky {} + \
+    \! -type l \
+    -exec chmod g=u {} +
