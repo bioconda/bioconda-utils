@@ -5,7 +5,7 @@ import subprocess as sp
 import pytest
 
 from helpers import Recipes, ensure_missing
-from bioconda_utils import pkg_test
+from bioconda_utils import docker_utils, pkg_test
 from bioconda_utils import utils
 from bioconda_utils import build
 
@@ -50,7 +50,7 @@ one:
 
 
 # Skip mulled_test on default since we already run pkg_test.test_package for every test case.
-def _build_pkg(recipe, mulled_test=False):
+def _build_pkg(recipe, mulled_test=False, docker_builder=None):
     r = Recipes(recipe, from_string=True)
     r.write_recipes()
     recipe = r.recipe_dirs['one']
@@ -61,6 +61,7 @@ def _build_pkg(recipe, mulled_test=False):
         recipe=r.recipe_dirs['one'],
         pkg_paths=built_packages,
         mulled_test=mulled_test,
+        docker_builder=docker_builder,
     )
     return built_packages
 
@@ -94,3 +95,28 @@ def test_pkg_test_custom_base_image():
     built_packages = _build_pkg(RECIPE_CUSTOM_BASE)
     for pkg in built_packages:
         pkg_test.test_package(pkg, base_image='debian:latest')
+
+
+@pytest.mark.skipif(SKIP_OSX, reason="skipping on osx")
+def test_pkg_test_conda_image_channel_setup():
+    """
+    Test container build that requires bioconda channel.
+    """
+    # Require versions at least at high as those used by bioconda-utils itself.
+    recipe = dedent(f"""
+        one:
+          meta.yaml: |
+            package:
+              name: test_channel_setup
+              version: 0.1
+            requirements:
+              run:
+                - bioconda-utils
+    """)
+
+    docker_builder = docker_utils.RecipeBuilder(
+            use_host_conda_bld=True
+    )
+    built_packages = _build_pkg(recipe, docker_builder=docker_builder)
+    for pkg in built_packages:
+        pkg_test.test_package(pkg)
