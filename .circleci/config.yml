@@ -86,7 +86,7 @@ workflows:
   bioconda-utils-autobump:
     triggers:
       - schedule:
-          cron: "*/10 * * * *"
+          cron: "15 * * * *"
           filters:
             branches:
               only:
