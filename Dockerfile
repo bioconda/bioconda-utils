@@ -21,13 +21,13 @@ RUN yum install -y mesa-libGL-devel \
 # This changes root's .condarc which ENTRYPOINT copies to /home/conda/.condarc later.
 RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda config \
-    --prepend channels defaults \
-    --prepend channels bioconda \
-    --prepend channels conda-forge \
+    --add channels defaults \
+    --add channels bioconda \
+    --add channels conda-forge \
     && \
     { conda config --remove repodata_fns current_repodata.json 2> /dev/null || true ; } && \
     conda config --prepend repodata_fns repodata.json && \
-    conda config --set channel_priority flexible && \
+    conda config --set channel_priority strict && \
     conda config --set auto_update_conda False
 
 FROM base as build

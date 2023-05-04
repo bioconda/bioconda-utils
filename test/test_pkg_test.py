@@ -5,7 +5,7 @@ import subprocess as sp
 import pytest
 
 from helpers import Recipes, ensure_missing
-from bioconda_utils import pkg_test
+from bioconda_utils import docker_utils, pkg_test
 from bioconda_utils import utils
 from bioconda_utils import build
 
@@ -50,7 +50,7 @@ one:
 
 
 # Skip mulled_test on default since we already run pkg_test.test_package for every test case.
-def _build_pkg(recipe, mulled_test=False):
+def _build_pkg(recipe, mulled_test=False, docker_builder=None):
     r = Recipes(recipe, from_string=True)
     r.write_recipes()
     recipe = r.recipe_dirs['one']
@@ -61,6 +61,7 @@ def _build_pkg(recipe, mulled_test=False):
         recipe=r.recipe_dirs['one'],
         pkg_paths=built_packages,
         mulled_test=mulled_test,
+        docker_builder=docker_builder,
     )
     return built_packages
 
