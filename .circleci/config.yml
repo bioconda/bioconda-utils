@@ -25,7 +25,7 @@ jobs:
 
       - run:
           name: set up env vars
-          command: echo "export PATH=/opt/miniconda/bin:$PATH" >> "$BASH_ENV"
+          command: echo "export PATH=/opt/mambaforge/bin:$PATH" >> "$BASH_ENV"
 
       - run:
           name: Ensure cache has path to restore to
@@ -40,14 +40,14 @@ jobs:
           name: Install bioconda-utils
           command: |
             source $BASH_ENV
-            if [ ! -e /opt/miniconda ]; then
+            if [ ! -e /opt/mambaforge ]; then
               bash install-and-set-up-conda.sh
             fi
 
       - save_cache:
           key: bioconda-utils-{{ checksum "install-and-set-up-conda.sh" }}-{{ checksum ".circleci/config.yml" }}
           paths:
-            - /opt/miniconda
+            - /opt/mambaforge
 
       - store_artifacts:
           path: /tmp/artifacts
