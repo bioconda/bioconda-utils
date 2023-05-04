@@ -1,5 +1,12 @@
 # Changelog
 
+### [1.6.1](https://www.github.com/bioconda/bioconda-utils/compare/v1.6.0...v1.6.1) (2023-05-04)
+
+
+### Bug Fixes
+
+* use strict channel priorities in the right order in the container image ([#874](https://www.github.com/bioconda/bioconda-utils/issues/874)) ([6e6c91a](https://www.github.com/bioconda/bioconda-utils/commit/6e6c91a5af5d857f157eb5250f2f87ad56fbc28d))
+
 ## [1.6.0](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.7...v1.6.0) (2023-05-02)
 
 
