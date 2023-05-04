@@ -47,7 +47,7 @@ jobs:
       - save_cache:
           key: bioconda-utils-{{ checksum "install-and-set-up-conda.sh" }}-{{ checksum ".circleci/config.yml" }}
           paths:
-            - /opt/miniconda
+            - /opt/mambaforge
 
       - store_artifacts:
           path: /tmp/artifacts
@@ -60,6 +60,7 @@ jobs:
             git config user.name "Autobump"
             git config user.email "bioconda@users.noreply.github.com"
             mkdir -p /tmp/artifacts
+            source /opt/mambaforge/bin/activate
             eval "$(conda shell.bash hook)"
             conda activate bioconda
             bioconda-utils autobump \
