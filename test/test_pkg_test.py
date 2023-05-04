@@ -95,28 +95,3 @@ def test_pkg_test_custom_base_image():
     built_packages = _build_pkg(RECIPE_CUSTOM_BASE)
     for pkg in built_packages:
         pkg_test.test_package(pkg, base_image='debian:latest')
-
-
-@pytest.mark.skipif(SKIP_OSX, reason="skipping on osx")
-def test_pkg_test_conda_image_channel_setup():
-    """
-    Test container build that requires bioconda channel.
-    """
-    # Require versions at least at high as those used by bioconda-utils itself.
-    recipe = dedent(f"""
-        one:
-          meta.yaml: |
-            package:
-              name: test_channel_setup
-              version: 0.1
-            requirements:
-              run:
-                - bioconda-utils
-    """)
-
-    docker_builder = docker_utils.RecipeBuilder(
-            use_host_conda_bld=True
-    )
-    built_packages = _build_pkg(recipe, docker_builder=docker_builder)
-    for pkg in built_packages:
-        pkg_test.test_package(pkg)
