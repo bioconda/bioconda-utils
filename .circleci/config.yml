@@ -21,7 +21,7 @@ jobs:
 
       - run:
           name: Download bioconda install script
-          command: curl -s https://raw.githubusercontent.com/bioconda/bioconda-common/master/install-and-set-up-conda.sh > install-and-set-up-conda.sh
+          command: wget https://raw.githubusercontent.com/bioconda/bioconda-common/master/{install-and-set-up-conda,configure-conda}.sh
 
       - run:
           name: set up env vars
@@ -53,8 +53,15 @@ jobs:
           path: /tmp/artifacts
 
       - run:
+          name: Configure conda
+          command: |
+            source $BASH_ENV
+            bash configure-conda.sh
+
+      - run:
           name: Check recipes for new upstream releases
           command: |
+            source $BASH_ENV
             git clone git@github.com:bioconda/bioconda-recipes
             cd bioconda-recipes
             git config user.name "Autobump"
@@ -77,12 +84,12 @@ jobs:
 workflows:
   version: 2
   bioconda-utils-autobump:
-     triggers:
-       - schedule:
-           cron: "0 * * * *"
-           filters:
+    triggers:
+      - schedule:
+          cron: "0 * * * *"
+          filters:
             branches:
-               only:
-                 - master
-     jobs:
-       - autobump
+              only:
+                - master
+    jobs:
+      - autobump
