@@ -1,5 +1,12 @@
 # Changelog
 
+### [1.6.2](https://www.github.com/bioconda/bioconda-utils/compare/v1.6.1...v1.6.2) (2023-05-04)
+
+
+### Bug Fixes
+
+* fix obtaining LegacyVersion class from pkg_resources ([bceae0f](https://www.github.com/bioconda/bioconda-utils/commit/bceae0f87c5a9008e8a6dd9e9d98a3a1f8313f51))
+
 ### [1.6.1](https://www.github.com/bioconda/bioconda-utils/compare/v1.6.0...v1.6.1) (2023-05-04)
 
 
