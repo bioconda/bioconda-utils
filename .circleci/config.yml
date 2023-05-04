@@ -34,7 +34,7 @@ jobs:
             sudo chown -R $USER /opt
 
       - restore_cache:
-          key: bioconda-utils-{{ checksum "install-and-set-up-conda.sh" }}-{{ checksum ".circleci/config.yml" }}
+          key: bioconda-utils-{{ checksum "install-and-set-up-conda.sh" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "common.sh" }}
 
       - run:
           name: Install bioconda-utils
@@ -45,7 +45,7 @@ jobs:
             fi
 
       - save_cache:
-          key: bioconda-utils-{{ checksum "install-and-set-up-conda.sh" }}-{{ checksum ".circleci/config.yml" }}
+          key: bioconda-utils-{{ checksum "install-and-set-up-conda.sh" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "common.sh" }}
           paths:
             - /opt/mambaforge
 
