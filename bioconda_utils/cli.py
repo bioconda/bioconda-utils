@@ -7,6 +7,8 @@ Bioconda Utils Command Line Interface
 # ".../importlib/_bootstrap.py:219: RuntimeWarning: numpy.dtype size \
 # changed, may indicate binary incompatibility. Expected 96, got 88"
 import warnings
+
+from bioconda_utils.artifacts import upload_pr_artifacts
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 
 import sys
@@ -33,6 +35,7 @@ from . import bioconductor_skeleton as _bioconductor_skeleton
 from . import cran_skeleton
 from . import update_pinnings
 from . import graph
+from . import pkg_test
 from .githandler import BiocondaRepo, install_gpg_key
 
 logger = logging.getLogger(__name__)
@@ -152,12 +155,12 @@ def get_recipes_to_build(git_range: Tuple[str], recipe_folder: str) -> List[str]
     return repo.get_recipes_to_build(ref, other)
 
 
-def get_recipes(config, recipe_folder, packages, git_range) -> List[str]:
+def get_recipes(config, recipe_folder, packages, git_range, include_blacklisted=False) -> List[str]:
     """Gets list of paths to recipe folders to be built
 
     Considers all recipes matching globs in packages, constrains to
     recipes modified or unblacklisted in the git_range if given, then
-    removes blacklisted recipes.
+    removes blacklisted recipes (unless include_blacklisted=True).
 
     """
     recipes = list(utils.get_recipes(recipe_folder, packages))
@@ -173,15 +176,16 @@ def get_recipes(config, recipe_folder, packages, git_range) -> List[str]:
             logger.info("Overlap was %s recipes%s.", len(recipes),
                         utils.ellipsize_recipes(recipes, recipe_folder))
 
-    blacklist = utils.get_blacklist(config, recipe_folder)
-    blacklisted = []
-    for recipe in recipes:
-        if os.path.relpath(recipe, recipe_folder) in blacklist:
-            blacklisted.append(recipe)
-    if blacklisted:
-        logger.info("Ignoring %s blacklisted recipes%s.", len(blacklisted),
-                    utils.ellipsize_recipes(blacklisted, recipe_folder))
-        recipes = [recipe for recipe in recipes if recipe not in set(blacklisted)]
+    if not include_blacklisted:
+        blacklist = utils.get_blacklist(config, recipe_folder)
+        blacklisted = []
+        for recipe in recipes:
+            if os.path.relpath(recipe, recipe_folder) in blacklist:
+                blacklisted.append(recipe)
+        if blacklisted:
+            logger.info("Ignoring %s blacklisted recipes%s.", len(blacklisted),
+                        utils.ellipsize_recipes(blacklisted, recipe_folder))
+            recipes = [recipe for recipe in recipes if recipe not in set(blacklisted)]
     logger.info("Processing %s recipes%s.", len(recipes),
                 utils.ellipsize_recipes(recipes, recipe_folder))
     return recipes
@@ -342,7 +346,7 @@ def do_lint(recipe_folder, config, packages="*", cache=None, list_checks=False,
     if cache is not None:
         utils.RepoData().set_cache(cache)
 
-    recipes = get_recipes(config, recipe_folder, packages, git_range)
+    recipes = get_recipes(config, recipe_folder, packages, git_range, include_blacklisted=True)
     linter = lint.Linter(config, recipe_folder, exclude)
     result = linter.lint(recipes, fix=try_fix)
     messages = linter.get_messages()
@@ -376,6 +380,8 @@ def do_lint(recipe_folder, config, packages="*", cache=None, list_checks=False,
      help='Build packages in docker container.')
 @arg('--mulled-test', action='store_true', help="Run a mulled-build test on the built package")
 @arg('--mulled-upload-target', help="Provide a quay.io target to push mulled docker images to.")
+@arg('--mulled-conda-image', help='''Conda Docker image to install the package with during
+     the mulled based tests.''')
 @arg('--build_script_template', help='''Filename to optionally replace build
      script template used by the Docker container. By default use
      docker_utils.BUILD_SCRIPT_TEMPLATE. Only used if --docker is True.''')
@@ -420,12 +426,16 @@ def do_lint(recipe_folder, config, packages="*", cache=None, list_checks=False,
      than one worker, then make sure to give each a different offset!''')
 @arg('--keep-old-work', action='store_true', help='''Do not remove anything
 from environment, even after successful build and test.''')
+@arg('--docker-base-image', help='''Name of base image that can be used in
+     Dockerfile template.''')
 @enable_logging()
 def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
           force=False, docker=None, mulled_test=False, build_script_template=None,
           pkg_dir=None, anaconda_upload=False, mulled_upload_target=None,
           build_image=False, keep_image=False, lint=False, lint_exclude=None,
-          check_channels=None, n_workers=1, worker_offset=0, keep_old_work=False):
+          check_channels=None, n_workers=1, worker_offset=0, keep_old_work=False,
+          mulled_conda_image=pkg_test.MULLED_CONDA_IMAGE,
+          docker_base_image='quay.io/bioconda/bioconda-utils-build-env-cos7:{}'.format(VERSION.replace('+', '_'))):
     cfg = utils.load_config(config)
     setup = cfg.get('setup', None)
     if setup:
@@ -451,6 +461,7 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
             use_host_conda_bld=use_host_conda_bld,
             keep_image=keep_image,
             build_image=build_image,
+            docker_base_image=docker_base_image
         )
     else:
         docker_builder = None
@@ -473,9 +484,47 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
                             label=label,
                             n_workers=n_workers,
                             worker_offset=worker_offset,
-                            keep_old_work=keep_old_work)
+                            keep_old_work=keep_old_work,
+                            mulled_conda_image=mulled_conda_image)
     exit(0 if success else 1)
 
+
+@recipe_folder_and_config()
+@arg('--repo', help='Name of the github repository to check (e.g. bioconda/bioconda-recipes).')
+@arg('--git-range', nargs='+',
+     help='''Git range (e.g. commits or something like
+     "master HEAD" to check commits in HEAD vs master, or just "HEAD" to
+     include uncommitted changes). All recipes modified within this range will
+     be built if not present in the channel.''')
+@arg('--dryrun', action='store_true', help='''Do not actually upload anything.''')
+@arg('--fallback', choices=['build', 'ignore'], default='build', help="What to do if no artifacts are found in the PR.")
+@arg('--quay-upload-target', help="Provide a quay.io target to push docker images to.")
+@enable_logging()
+def handle_merged_pr(
+    recipe_folder,
+    config,
+    repo=None,
+    git_range=None,
+    dryrun=False,
+    fallback='build',
+    quay_upload_target=None
+):
+    label = os.getenv('BIOCONDA_LABEL', None) or None
+
+    success = upload_pr_artifacts(
+        config, repo, git_range[1], dryrun=dryrun, mulled_upload_target=quay_upload_target, label=label
+    )
+    if not success and fallback == 'build':
+        success = build(
+            recipe_folder,
+            config,
+            git_range=git_range,
+            anaconda_upload=not dryrun,
+            mulled_upload_target=quay_upload_target if not dryrun else None,
+            mulled_test=True,
+            label=label,
+        )
+    exit(0 if success else 1)
 
 @recipe_folder_and_config()
 @arg('--packages',
@@ -974,5 +1023,6 @@ def main():
         sys.exit(0)
     argh.dispatch_commands([
         build, dag, dependent, do_lint, duplicates, update_pinning,
-        bioconductor_skeleton, clean_cran_skeleton, autobump, bot
+        bioconductor_skeleton, clean_cran_skeleton, autobump, bot,
+        handle_merged_pr,
     ])

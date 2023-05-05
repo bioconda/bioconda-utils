@@ -60,6 +60,8 @@ from distutils.version import LooseVersion
 import conda
 import conda_build
 
+from conda import exports as conda_exports
+
 from . import utils
 from . import __version__
 
@@ -90,9 +92,10 @@ set -eo pipefail
 #
 # Note that if the directory didn't exist on the host, then the staging area
 # will exist in the container but will be empty.  Channels expect at least
-# a linux-64 and noarch directory within that directory, so we make sure it
-# exists before adding the channel.
+# a linux-64/linux-aarch64 and noarch directory within that directory, so we
+# make sure it exists before adding the channel.
 mkdir -p {self.container_staging}/linux-64
+mkdir -p {self.container_staging}/linux-aarch64
 mkdir -p {self.container_staging}/noarch
 touch {self.container_staging}/noarch/repodata.json
 conda config --add channels file://{self.container_staging} 2> >(
@@ -129,10 +132,7 @@ DOCKERFILE_TEMPLATE = \
 r"""
 FROM {docker_base_image}
 {proxies}
-RUN \
-    /opt/conda/bin/conda install -y conda={conda_ver} conda-build={conda_build_ver} \
-    && \
-    find /opt/conda \
+RUN find /opt/conda \
       \! -group lucky \
       -exec chgrp --no-dereference lucky {{}} + \
       \! -type l \
@@ -352,10 +352,8 @@ class RecipeBuilder(object):
         with open(os.path.join(build_dir, "Dockerfile"), 'w') as fout:
             fout.write(self.dockerfile_template.format(
                 docker_base_image=self.docker_base_image,
-                proxies=proxies,
-                conda_ver=conda.__version__,
-                conda_build_ver=conda_build.__version__)
-            )
+                proxies=proxies
+            ))
 
         logger.debug('Dockerfile:\n' + open(fout.name).read())
 
@@ -442,8 +440,9 @@ class RecipeBuilder(object):
 
         # Write build script to tempfile
         build_dir = os.path.realpath(tempfile.mkdtemp())
+        # conda_exports.subdir is {platform}-{arch} like: 'linux-64' 'linux-aarch64'
         script = self.build_script_template.format(
-            self=self, arch='noarch' if noarch else 'linux-64')
+            self=self, arch='noarch' if noarch else conda_exports.subdir)
         with open(os.path.join(build_dir, 'build_script.bash'), 'w') as fout:
             fout.write(script)
         build_script = fout.name

@@ -28,6 +28,10 @@ from typing import Sequence, Collection, List, Dict, Any, Union
 from multiprocessing import Pool
 from multiprocessing.pool import ThreadPool
 
+from urllib3 import Retry
+
+from github import Github
+
 import pkg_resources
 import pandas as pd
 import tqdm as _tqdm
@@ -45,6 +49,7 @@ conda.gateways.logging.initialize_logging = lambda: None
 
 from conda_build import api
 from conda.exports import VersionOrder
+from conda.exports import subdir as conda_subdir
 from boa.cli.mambabuild import prepare as insert_mambabuild
 
 from jsonschema import validate
@@ -1055,7 +1060,7 @@ def check_recipe_skippable(recipe, check_channels):
         first_meta = metas[0]
         if first_meta.get_value('build/noarch'):
             if platform != 'linux':
-                logger.debug('FILTER: only building %s on '
+                logger.info('FILTER: only building %s on '
                              'linux because it defines noarch.',
                              recipe)
                 return True
@@ -1112,7 +1117,16 @@ def _filter_existing_packages(metas, check_channels):
                 new_metas.append(meta)
             else:
                 existing_metas.append(meta)
-        for divergent_build in (existing_pkg_builds - set(build_meta.keys())):
+        # Filter the existing_pkg_builds according to the native CPU architecture to avoid
+        # inaccurate divergent build results.
+        #
+        # For example, when a package has only `linux-64` arch type package, if we
+        # build on aarch64 machine, the `divergent_builds` will wrongly include the linux-64
+        # one, we need to filter the non-native CPU architecture versions.
+        native_pkg_builds = {
+            x for x in existing_pkg_builds if x.subdir in (conda_subdir, 'noarch')
+        }
+        for divergent_build in (native_pkg_builds - set(build_meta.keys())):
             divergent_builds.add(
                 '-'.join((pkg_key[0], pkg_key[1], divergent_build[1])))
     return new_metas, existing_metas, divergent_builds
@@ -1610,3 +1624,14 @@ class RepoData:
         if isinstance(key, str):
             return list(df[key])
         return df[key].itertuples(index=False)
+
+
+def get_github_client():
+    """Get a Github client with a robust retry policy.
+    """
+    return Github(
+        os.environ["GITHUB_TOKEN"],
+        retry=Retry(
+            total=10, status_forcelist=(500, 502, 504), backoff_factor=0.3
+        ),
+    )

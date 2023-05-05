@@ -1,5 +1,115 @@
 # Changelog
 
+### [1.6.2](https://www.github.com/bioconda/bioconda-utils/compare/v1.6.1...v1.6.2) (2023-05-04)
+
+
+### Bug Fixes
+
+* fix obtaining LegacyVersion class from pkg_resources ([bceae0f](https://www.github.com/bioconda/bioconda-utils/commit/bceae0f87c5a9008e8a6dd9e9d98a3a1f8313f51))
+
+### [1.6.1](https://www.github.com/bioconda/bioconda-utils/compare/v1.6.0...v1.6.1) (2023-05-04)
+
+
+### Bug Fixes
+
+* use strict channel priorities in the right order in the container image ([#874](https://www.github.com/bioconda/bioconda-utils/issues/874)) ([6e6c91a](https://www.github.com/bioconda/bioconda-utils/commit/6e6c91a5af5d857f157eb5250f2f87ad56fbc28d))
+
+## [1.6.0](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.7...v1.6.0) (2023-05-02)
+
+
+### Features
+
+* Add --mulled-conda-image ([#867](https://www.github.com/bioconda/bioconda-utils/issues/867)) ([1923d24](https://www.github.com/bioconda/bioconda-utils/commit/1923d24c4f3cd38740ecfbf240b92d5eb1432e09))
+* add Linux aarch64/arm64 support for bioconda-utils ([#866](https://www.github.com/bioconda/bioconda-utils/issues/866)) ([794ec06](https://www.github.com/bioconda/bioconda-utils/commit/794ec068afd3b1eaababb79e2680cf2ad3fdc1a2))
+
+
+### Bug Fixes
+
+* allow lint for blacklist to see blacklisted recipes ([#863](https://www.github.com/bioconda/bioconda-utils/issues/863)) ([0e63e73](https://www.github.com/bioconda/bioconda-utils/commit/0e63e73c22e3c1160eb5c8ad3f35c34ac4ea6f27))
+* fix autobump ([#865](https://www.github.com/bioconda/bioconda-utils/issues/865)) ([b6b674c](https://www.github.com/bioconda/bioconda-utils/commit/b6b674ca81326a6bd6700cb9802b3d7440c08762))
+
+
+### Performance Improvements
+
+* upgrade to latest conda, conda-build, and boa versions ([#872](https://www.github.com/bioconda/bioconda-utils/issues/872)) ([21a6452](https://www.github.com/bioconda/bioconda-utils/commit/21a6452fcad99b78f976746a2b14339e094327df))
+
+### [1.5.7](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.6...v1.5.7) (2023-03-24)
+
+
+### Bug Fixes
+
+* uploading of noarch artifacts and other small improvements to artifact uploading ([#860](https://www.github.com/bioconda/bioconda-utils/issues/860)) ([da41c36](https://www.github.com/bioconda/bioconda-utils/commit/da41c365350aaacca0b779ef62068515f1c3c19e))
+
+### [1.5.6](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.5...v1.5.6) (2023-03-23)
+
+
+### Bug Fixes
+
+* properly handle platforms as list ([0b2cf30](https://www.github.com/bioconda/bioconda-utils/commit/0b2cf301d5a6344541c43e9e333105c5d7c55c12))
+
+### [1.5.5](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.4...v1.5.5) (2023-03-23)
+
+
+### Bug Fixes
+
+* improved logging for artifact upload, use QUAY_LOGIN env var ([6b7a56d](https://www.github.com/bioconda/bioconda-utils/commit/6b7a56d5fb861dc81c1b48fdc5343d97d50d0725))
+
+### [1.5.4](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.3...v1.5.4) (2023-03-10)
+
+
+### Bug Fixes
+
+* use correct ssl certs for skopeo upload ([#856](https://www.github.com/bioconda/bioconda-utils/issues/856)) ([a48dcf3](https://www.github.com/bioconda/bioconda-utils/commit/a48dcf3ef5b72829ea2787847e1ec4d24ba04893))
+
+### [1.5.3](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.2...v1.5.3) (2023-03-09)
+
+
+### Bug Fixes
+
+* load config before instantiating repodata in artifact upload ([#853](https://www.github.com/bioconda/bioconda-utils/issues/853)) ([946442f](https://www.github.com/bioconda/bioconda-utils/commit/946442fd6386f5e8fd61df125c7bbc8d95837e9a))
+
+### [1.5.2](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.1...v1.5.2) (2023-03-09)
+
+
+### Bug Fixes
+
+* platform specific artifact upload and fixed file renaming for container image upload ([#851](https://www.github.com/bioconda/bioconda-utils/issues/851)) ([b56e1a4](https://www.github.com/bioconda/bioconda-utils/commit/b56e1a44ab8b10721fd5c530aaa7a8e8b56a8e21))
+
+### [1.5.1](https://www.github.com/bioconda/bioconda-utils/compare/v1.5.0...v1.5.1) (2023-03-08)
+
+
+### Bug Fixes
+
+* fix skopeo based upload of container images from build artifacts by removing colons in filenames ([#849](https://www.github.com/bioconda/bioconda-utils/issues/849)) ([4f2eec5](https://www.github.com/bioconda/bioconda-utils/commit/4f2eec5fbc3a44738b25ae601684a29646feacf9))
+
+## [1.5.0](https://www.github.com/bioconda/bioconda-utils/compare/v1.4.0...v1.5.0) (2023-03-02)
+
+
+### Features
+
+* make use of BIOCONDA_LABEL if specified when calling handle-merged-pr ([#845](https://www.github.com/bioconda/bioconda-utils/issues/845)) ([bc30cb5](https://www.github.com/bioconda/bioconda-utils/commit/bc30cb582cd6aad5062eae770697a32ea4706d81))
+
+## [1.4.0](https://www.github.com/bioconda/bioconda-utils/compare/v1.3.1...v1.4.0) (2023-03-02)
+
+
+### Features
+
+* bot-free merge handling ([#841](https://www.github.com/bioconda/bioconda-utils/issues/841)) ([1122dd3](https://www.github.com/bioconda/bioconda-utils/commit/1122dd34b5169c6a61d9da00c1af63a5976f2cf0))
+
+### [1.3.1](https://www.github.com/bioconda/bioconda-utils/compare/v1.3.0...v1.3.1) (2023-03-01)
+
+
+### Bug Fixes
+
+* Change logic for checking if there are missing commits in a branch vs… ([#843](https://www.github.com/bioconda/bioconda-utils/issues/843)) ([836ecee](https://www.github.com/bioconda/bioconda-utils/commit/836ecee662aaf7fd0e3c89a3354fd93712aa6924))
+
+
+### Documentation
+
+* remove docs ([#839](https://www.github.com/bioconda/bioconda-utils/issues/839)) ([d52810c](https://www.github.com/bioconda/bioconda-utils/commit/d52810c137013e14985c1e7d460cb38e5a49faad))
+* support anchors in <details> ([#832](https://www.github.com/bioconda/bioconda-utils/issues/832)) ([2ad8b61](https://www.github.com/bioconda/bioconda-utils/commit/2ad8b61b36a797a289dbc989e2a4d4eae0d95df0))
+* update bulk docs to include BioC updates ([#828](https://www.github.com/bioconda/bioconda-utils/issues/828)) ([1301a6c](https://www.github.com/bioconda/bioconda-utils/commit/1301a6c933de8e5db9cdaaf634efb968e3f69175))
+
 ## [1.3.0](https://www.github.com/bioconda/bioconda-utils/compare/v1.2.0...v1.3.0) (2022-11-10)
 
 

@@ -81,7 +81,7 @@ from .githubhandler import AiohttpGitHubHandler, GitHubHandler
 # as defined in packaging.version. Since it's bundling it's own copy of
 # packaging, the class it returns is not the same as the one we can import.
 # So we cheat by having it create a LegacyVersion delibarately.
-LegacyVersion = parse_version("").__class__  # pylint: disable=invalid-name
+LegacyVersion = parse_version("1.1").__class__  # pylint: disable=invalid-name
 
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
