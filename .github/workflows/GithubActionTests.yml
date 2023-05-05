@@ -8,7 +8,6 @@ jobs:
   test-linux:
     name: Linux tests
     runs-on: ubuntu-latest
-    if: ${{ false }}
     strategy:
       matrix:
         py_test_marker:
@@ -51,7 +50,6 @@ jobs:
   test-macosx:
     name: OSX tests
     runs-on: macos-latest
-    if: ${{ false }}
     steps:
       - uses: actions/checkout@v1
 
