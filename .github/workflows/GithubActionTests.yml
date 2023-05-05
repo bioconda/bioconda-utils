@@ -81,12 +81,39 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
-      - name: Setup
-        uses: bioconda/bioconda-actions/bioconda_utils_setup_conda@master
+      - name: set path
+        run: echo "/opt/mambaforge/bin" >> $GITHUB_PATH
+
       - name: Install bioconda-utils
         run: |
+          export BIOCONDA_DISABLE_BUILD_PREP=1
+          curl -L "https://raw.githubusercontent.com/bioconda/bioconda-common/master/install-and-set-up-conda.sh" > install-and-set-up-conda.sh
+          bash install-and-set-up-conda.sh
+          eval "$(conda shell.bash hook)"
+          mamba create -n bioconda -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
+          conda activate bioconda
           python setup.py install
+
       - name: Test autobump
-        env:
-          AUTOBUMP_OPTS: --dry-run
-        uses: bioconda/bioconda-actions/bioconda_utils_autobump@master
+        run:
+          |
+          eval "$(conda shell.bash hook)"
+          conda activate bioconda
+          git clone --depth 1 https://github.com/bioconda/bioconda-recipes.git
+          cd bioconda-recipes
+          git config user.name Autobump
+          git config user.email bioconda@users.noreply.github.com
+          mkdir /tmp/artifacts
+          bioconda-utils autobump \
+            --packages "a*" \
+            --unparsed-urls /tmp/artifacts/unparsed_urls.txt \
+            --failed-urls /tmp/artifacts/failed_urls.txt \
+            --recipe-status /tmp/artifacts/status.txt \
+            --create-pr \
+            --no-check-pinnings \
+            --no-check-pending-deps \
+            --no-follow-graph \
+            --exclude bioconductor-* \
+            --commit-as BiocondaBot 47040946+BiocondaBot@users.noreply.github.com \
+            --max-updates 5 \
+            --dry-run

@@ -49,9 +49,6 @@ jobs:
           paths:
             - /opt/mambaforge
 
-      - store_artifacts:
-          path: /tmp/artifacts
-
       - run:
           name: Configure conda
           command: |
@@ -80,6 +77,10 @@ jobs:
               --exclude 'bioconductor-*' \
               --commit-as BiocondaBot 47040946+BiocondaBot@users.noreply.github.com \
               $AUTOBUMP_OPTS
+
+      - store_artifacts:
+          path: /tmp/artifacts
+
 
 workflows:
   version: 2
