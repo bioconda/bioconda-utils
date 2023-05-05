@@ -107,6 +107,7 @@ jobs:
           git config user.email bioconda@users.noreply.github.com
           mkdir /tmp/artifacts
           bioconda-utils autobump \
+            --packages "a*" \
             --unparsed-urls /tmp/artifacts/unparsed_urls.txt \
             --failed-urls /tmp/artifacts/failed_urls.txt \
             --recipe-status /tmp/artifacts/status.txt \
