@@ -116,4 +116,5 @@ jobs:
             --no-follow-graph \
             --exclude bioconductor-* \
             --commit-as BiocondaBot 47040946+BiocondaBot@users.noreply.github.com \
+            --max-updates 5 \
             --dry-run
