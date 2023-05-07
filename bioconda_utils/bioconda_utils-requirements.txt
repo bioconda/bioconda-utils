@@ -23,7 +23,7 @@ simplejson           # Used by bioconda bot worker (NEEDED?)
 pyopenssl>=22.1      # Stay compatible with cryptography
 
 # pinnings
-conda-forge-pinning=2022.08.25.15.20.42
+conda-forge-pinning=2023.05.06.13.08.41
 
 # tools
 anaconda-client=1.6.*  # anaconda_upload
