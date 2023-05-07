@@ -1,5 +1,8 @@
-name: Make Biocontainers Public 
-on: workflow_dispatch
+name: Change Container Visibility
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *' # run at 2 AM UTC
 jobs:
   changevisibility:
     runs-on: ubuntu-latest
@@ -14,7 +17,7 @@ jobs:
           python -m pip install requests
           python .github/quay-namespace-info.py --namespace biocontainers --changevisibility
         env:
-          QUAY_OAUTH_TOKEN: ${{ secrets.QUAY_OAUTH_TOKEN }}
+          QUAY_OAUTH_TOKEN: ${{ secrets.QUAY_BIOCONTAINERS_TOKEN }}
 
       - name: Upload logs
         uses: actions/upload-artifact@v3
