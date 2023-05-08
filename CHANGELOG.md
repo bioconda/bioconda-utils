@@ -1,5 +1,13 @@
 # Changelog
 
+### [1.6.3](https://www.github.com/bioconda/bioconda-utils/compare/v1.6.2...v1.6.3) (2023-05-08)
+
+
+### Performance Improvements
+
+* update to latest conda-forge pinnings and ditch building for Python 3.7 and 3.6 ([#878](https://www.github.com/bioconda/bioconda-utils/issues/878)) ([0704708](https://www.github.com/bioconda/bioconda-utils/commit/0704708238a0793b0f9d7363dc2470418952030d))
+* update to latest conda-forge pinnings and ditch building for Python 3.7 and 3.6 ([#878](https://www.github.com/bioconda/bioconda-utils/issues/878)) ([6b5e9f5](https://www.github.com/bioconda/bioconda-utils/commit/6b5e9f53bce9380ff9495dedd2abe45fb9dfcf07))
+
 ### [1.6.2](https://www.github.com/bioconda/bioconda-utils/compare/v1.6.1...v1.6.2) (2023-05-04)
 
 
