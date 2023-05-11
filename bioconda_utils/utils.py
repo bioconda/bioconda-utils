@@ -1326,7 +1326,8 @@ class AsyncRequests:
         conn = aiohttp.TCPConnector(limit_per_host=cls.CONNECTIONS_PER_HOST)
         async with aiohttp.ClientSession(
                 connector=conn,
-                headers={'User-Agent': cls.USER_AGENT}
+                headers={'User-Agent': cls.USER_AGENT},
+                trust_env=True,
         ) as session:
             coros = [
                 asyncio.ensure_future(cls._async_fetch_one(session, url, desc, cb, data, fd))
