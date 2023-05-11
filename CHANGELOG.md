@@ -1,5 +1,12 @@
 # Changelog
 
+### [1.7.1](https://www.github.com/bioconda/bioconda-utils/compare/v1.7.0...v1.7.1) (2023-05-11)
+
+
+### Bug Fixes
+
+* support proxy settings via the usual environment variables (HTTPS_PROXY, ...) ([#881](https://www.github.com/bioconda/bioconda-utils/issues/881)) ([5d21b64](https://www.github.com/bioconda/bioconda-utils/commit/5d21b64aced5f8406dfd1de72d58e4c11b98d54f))
+
 ## [1.7.0](https://www.github.com/bioconda/bioconda-utils/compare/v1.6.2...v1.7.0) (2023-05-08)
 
 
