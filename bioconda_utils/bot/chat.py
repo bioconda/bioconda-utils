@@ -106,7 +106,7 @@ class GitterListener:
 
             # we need a new session here as the one we got passed might have been
             # closed already when we get cancelled
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(trust_env=True) as session:
                 self._api._session = session
                 await self._api.leave_room(self._user, room)
                 logger.error("%s: left room %s", self, room_name)

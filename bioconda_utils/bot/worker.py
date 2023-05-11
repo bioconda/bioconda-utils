@@ -98,7 +98,7 @@ class AsyncTask(Task):
         This happens during binding -> on load.
         """
         if not self.ghappapi:
-            self.ghappapi = GitHubAppHandler(aiohttp.ClientSession(), BOT_NAME,
+            self.ghappapi = GitHubAppHandler(aiohttp.ClientSession(trust_env=True), BOT_NAME,
                                              APP_KEY, APP_ID,
                                              APP_CLIENT_ID, APP_CLIENT_SECRET)
 

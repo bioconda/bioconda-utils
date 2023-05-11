@@ -171,7 +171,7 @@ async def start():
     app.middlewares.append(handle_errors)
 
     # Prepare persistent client session
-    app['client_session'] = aiohttp.ClientSession()
+    app['client_session'] = aiohttp.ClientSession(trust_env=True)
 
     # Create Github client
     app['ghappapi'] = GitHubAppHandler(app['client_session'],
