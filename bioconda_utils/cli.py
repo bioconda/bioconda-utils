@@ -442,6 +442,7 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
         logger.debug("Running setup: %s", setup)
         for cmd in setup:
             utils.run(shlex.split(cmd), mask=False)
+    import pdb; pdb.set_trace()
 
     recipes = get_recipes(cfg, recipe_folder, packages, git_range)
 
@@ -1001,21 +1002,6 @@ def autobump(recipe_folder, config, packages='*', exclude=None, cache=None,
     if git_handler:
         git_handler.close()
 
-
-@arg('--loglevel', default='info', help='Log level')
-def bot(loglevel='info'):
-    """Locally accedd bioconda-bot command API
-
-    To run the bot locally, use:
-
-    $ gunicorn bioconda_utils.bot:init_app_internal_celery --worker-class aiohttp.worker.GunicornWebWorker
-
-    You can append --reload to have gunicorn reload if any of the python files change.
-    """
-
-    utils.setup_logger('bioconda_utils', loglevel)
-
-    logger.error("Nothing here yet")
 
 def main():
     if '--version' in sys.argv:
