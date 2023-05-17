@@ -442,7 +442,6 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
         logger.debug("Running setup: %s", setup)
         for cmd in setup:
             utils.run(shlex.split(cmd), mask=False)
-    import pdb; pdb.set_trace()
 
     recipes = get_recipes(cfg, recipe_folder, packages, git_range)
 
