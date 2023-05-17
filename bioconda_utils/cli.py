@@ -1008,6 +1008,6 @@ def main():
         sys.exit(0)
     argh.dispatch_commands([
         build, dag, dependent, do_lint, duplicates, update_pinning,
-        bioconductor_skeleton, clean_cran_skeleton, autobump, bot,
+        bioconductor_skeleton, clean_cran_skeleton, autobump,
         handle_merged_pr,
     ])

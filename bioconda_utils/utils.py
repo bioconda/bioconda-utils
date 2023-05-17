@@ -1158,7 +1158,6 @@ def get_package_paths(recipe, check_channels, force=False):
         build_metas = new_metas + existing_metas
     else:
         build_metas = new_metas
-    import pdb; pdb.set_trace()
     return list(chain.from_iterable(
         api.get_output_file_paths(meta) for meta in build_metas))
 
