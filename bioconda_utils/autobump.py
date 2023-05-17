@@ -75,7 +75,7 @@ from .recipe import load_parallel_iter as recipes_load_parallel_iter
 from .aiopipe import AsyncFilter, AsyncPipeline, AsyncRequests, EndProcessingItem, EndProcessing
 
 from .githandler import GitHandler
-from .githubhandler import AiohttpGitHubHandler, GitHubHandler
+from .githubhandler import GitHubHandler
 
 # pkg_resources.parse_version returns a Version or LegacyVersion object
 # as defined in packaging.version. Since it's bundling it's own copy of
