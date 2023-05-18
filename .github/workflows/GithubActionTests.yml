@@ -24,7 +24,7 @@ jobs:
       - name: Install bioconda-utils
         run: |
           export BIOCONDA_DISABLE_BUILD_PREP=1
-          curl -L "https://raw.githubusercontent.com/bioconda/bioconda-common/master/install-and-set-up-conda.sh" > install-and-set-up-conda.sh
+          wget https://raw.githubusercontent.com/bioconda/bioconda-common/master/{common,install-and-set-up-conda,configure-conda}.sh
           bash install-and-set-up-conda.sh
           eval "$(conda shell.bash hook)"
           mamba create -n bioconda -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
@@ -59,7 +59,7 @@ jobs:
       - name: Install bioconda-utils
         run: |
           export BIOCONDA_DISABLE_BUILD_PREP=1
-          curl -L "https://raw.githubusercontent.com/bioconda/bioconda-common/master/install-and-set-up-conda.sh" > install-and-set-up-conda.sh
+          wget https://raw.githubusercontent.com/bioconda/bioconda-common/master/{common,install-and-set-up-conda,configure-conda}.sh
           bash install-and-set-up-conda.sh
           eval "$(conda shell.bash hook)"
           mamba create -n bioconda -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
@@ -87,7 +87,7 @@ jobs:
       - name: Install bioconda-utils
         run: |
           export BIOCONDA_DISABLE_BUILD_PREP=1
-          curl -L "https://raw.githubusercontent.com/bioconda/bioconda-common/master/install-and-set-up-conda.sh" > install-and-set-up-conda.sh
+          wget https://raw.githubusercontent.com/bioconda/bioconda-common/master/{common,install-and-set-up-conda,configure-conda}.sh
           bash install-and-set-up-conda.sh
           eval "$(conda shell.bash hook)"
           mamba create -n bioconda -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
@@ -95,8 +95,7 @@ jobs:
           python setup.py install
 
       - name: Test autobump
-        run:
-          |
+        run: |
           eval "$(conda shell.bash hook)"
           conda activate bioconda
           git clone --depth 1 https://github.com/bioconda/bioconda-recipes.git
