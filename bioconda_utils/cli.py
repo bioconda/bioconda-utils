@@ -1002,27 +1002,12 @@ def autobump(recipe_folder, config, packages='*', exclude=None, cache=None,
         git_handler.close()
 
 
-@arg('--loglevel', default='info', help='Log level')
-def bot(loglevel='info'):
-    """Locally accedd bioconda-bot command API
-
-    To run the bot locally, use:
-
-    $ gunicorn bioconda_utils.bot:init_app_internal_celery --worker-class aiohttp.worker.GunicornWebWorker
-
-    You can append --reload to have gunicorn reload if any of the python files change.
-    """
-
-    utils.setup_logger('bioconda_utils', loglevel)
-
-    logger.error("Nothing here yet")
-
 def main():
     if '--version' in sys.argv:
         print("This is bioconda-utils version", VERSION)
         sys.exit(0)
     argh.dispatch_commands([
         build, dag, dependent, do_lint, duplicates, update_pinning,
-        bioconductor_skeleton, clean_cran_skeleton, autobump, bot,
+        bioconductor_skeleton, clean_cran_skeleton, autobump,
         handle_merged_pr,
     ])
