@@ -180,6 +180,30 @@ def bioconductor_tarball_url(package, pkg_version, bioc_version):
     )
 
 
+def bioconductor_archive_tarball_url(package, pkg_version, bioc_version):
+    """
+    Constructs an url for a package tarball within the bioconductor-archive.
+    Such urls don't exist for the first release of a package within a
+    bioconductor release. They appear once the first subsequent release has
+    been made.
+
+    Parameters
+    ----------
+    package : str
+        Case-sensitive Bioconductor package name
+
+    pkg_version : str
+        Bioconductor package version
+
+    bioc_version : str
+        Bioconductor release version
+    """
+    return (
+        'https://bioconductor.org/packages/{bioc_version}'
+        '/bioc/src/contrib/Archive/{package}/{package}_{pkg_version}.tar.gz'.format(**locals())
+    )
+
+
 def bioconductor_annotation_data_url(package, pkg_version, bioc_version):
     """
     Constructs a url for an annotation package tarball
@@ -888,6 +912,11 @@ class BioCProjectPage(object):
             [
                 # keep the one that was found
                 self.bioconductor_tarball_url,
+                # Add a hypothetical archive URL which can serve as a fallback whenever there
+                # was a second release of a package whithin one bioconductor release cycle.
+                # In such a case, the primary URL becomes invalid, but the archive URL will
+                # start to work.
+                bioconductor_archive_tarball_url(self.package, self.version, self.bioc_version),
                 # use the built URL, regardless of whether it was found or not.
                 # bioaRchive and cargo-port cache packages but only after the
                 # first recipe is built.
