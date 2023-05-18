@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.0](https://www.github.com/bioconda/bioconda-utils/compare/v1.7.1...v2.0.0) (2023-05-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove old unused bot code and simplejson dependency (#883)
+
+### Features
+
+* remove old unused bot code and simplejson dependency ([#883](https://www.github.com/bioconda/bioconda-utils/issues/883)) ([cab3df5](https://www.github.com/bioconda/bioconda-utils/commit/cab3df5de9ba50a181b4f64954dd513c828957d0))
+
 ### [1.7.1](https://www.github.com/bioconda/bioconda-utils/compare/v1.7.0...v1.7.1) (2023-05-11)
 
 
