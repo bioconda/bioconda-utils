@@ -7,6 +7,7 @@ from bioconda_utils.build_failure import BuildFailureRecord
 
 class Blacklist:
     def __init__(self, config: Dict[str, Any], recipe_folder: str):
+        self.recipe_folder = recipe_folder
         self.global_list = set()
         for p in config.get('blacklists', []):
             self.global_list.update(
