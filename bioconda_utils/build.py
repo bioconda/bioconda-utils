@@ -185,21 +185,14 @@ def store_build_failure(recipe, output, meta, dag, blacklist_leafs):
     pkg_name = meta["package"]["name"]
     is_leaf = dag.out_degree(pkg_name) == 0
 
-    git_handler = GitHandler()
-    # Ger last commit sha of given recipe
-    commit = git_handler.repo.head.commit
-    tree = commit.tree
-    file_blob = tree[os.path.join(recipe, "meta.yaml")]
-    commit_sha = file_blob.binsha.hex()
-
     build_failure_record = BuildFailureRecord(recipe)
-    build_failure_record.commit_sha = commit_sha
+    build_failure_record.set_commit_sha_to_current_recipe()
     # if recipe is a leaf (i.e. not used by others as dependency)
     # we can automatically blacklist it if desired
     build_failure_record.blacklist = blacklist_leafs and is_leaf
     build_failure_record.log = output.decode("utf-8")
 
-    git_handler.commit_and_push_changes([build_failure_record.path], None, f"Add build failure record for recipe {recipe}")
+    build_failure_record.git_handler.commit_and_push_changes([build_failure_record.path], None, f"Add build failure record for recipe {recipe}")
 
 
 def remove_cycles(dag, name2recipes, failed, skip_dependent):

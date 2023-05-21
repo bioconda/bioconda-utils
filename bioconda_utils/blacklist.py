@@ -30,4 +30,4 @@ class Blacklist:
             return True
 
         build_failure_record = BuildFailureRecord(recipe)
-        return build_failure_record.blacklist
+        return build_failure_record.blacklists_current_recipe()
