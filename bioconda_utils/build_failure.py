@@ -1,4 +1,5 @@
 import os
+from typing import Union
 from bioconda_utils.githandler import GitHandler
 
 from ruamel.yaml import YAML, CommentedMap
@@ -10,7 +11,7 @@ from bioconda_utils.recipe import Recipe
 class BuildFailureRecord:
     git_handler = None
 
-    def __init__(self, recipe: str | Recipe):
+    def __init__(self, recipe: Union[str, Recipe]):
         if isinstance(recipe, Recipe):
             self.recipe_path = recipe.path
         else:

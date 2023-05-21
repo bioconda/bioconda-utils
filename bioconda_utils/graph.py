@@ -7,7 +7,7 @@ import logging
 from collections import defaultdict
 from fnmatch import fnmatch
 from itertools import chain
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import networkx as nx
 
@@ -18,7 +18,7 @@ from . import utils
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
-def build(recipes, config: Dict[str, Any], blacklist: Blacklist | None=None, restrict: bool=True):
+def build(recipes, config: Dict[str, Any], blacklist: Optional[Blacklist]=None, restrict: bool=True):
     """
     Returns the DAG of recipe paths and a dictionary that maps package names to
     lists of recipe paths to all defined versions of the package.  defined

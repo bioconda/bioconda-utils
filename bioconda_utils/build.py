@@ -8,7 +8,7 @@ import os
 import logging
 import itertools
 
-from typing import List
+from typing import List, Optional
 from bioconda_utils.blacklist import Blacklist
 from bioconda_utils.build_failure import BuildFailureRecord
 from bioconda_utils.githandler import GitHandler
@@ -58,7 +58,7 @@ def build(recipe: str, pkg_paths: List[str] = None,
           linter=None,
           mulled_conda_image: str = pkg_test.MULLED_CONDA_IMAGE,
           record_build_failure: bool = False,
-          dag: nx.DiGraph | None = None,
+          dag: Optional[nx.DiGraph] = None,
           blacklist_leafs: bool = False) -> BuildResult:
     """
     Build a single recipe for a single env

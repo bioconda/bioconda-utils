@@ -426,7 +426,7 @@ def do_lint(recipe_folder, config, packages="*", cache=None, list_checks=False,
 from environment, even after successful build and test.''')
 @arg('--docker-base-image', help='''Name of base image that can be used in
      Dockerfile template.''')
-@arg("--record-build-failues", action="store_true", help="Record build failures in build_failure.yaml next to the recipe.")
+@arg("--record-build-failures", action="store_true", help="Record build failures in build_failure.yaml next to the recipe.")
 @arg("--blacklist-leafs", action="store_true", help="Blacklist leaf recipes (i.e. ones that are not depended on by any other recipes) that fail to build.")
 @enable_logging()
 def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
@@ -436,7 +436,8 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
           check_channels=None, n_workers=1, worker_offset=0, keep_old_work=False,
           mulled_conda_image=pkg_test.MULLED_CONDA_IMAGE,
           docker_base_image='quay.io/bioconda/bioconda-utils-build-env-cos7:{}'.format(VERSION.replace('+', '_')),
-          record_build_failures=False, blacklist_leafs=False):
+          record_build_failures=False,
+          blacklist_leafs=False):
     cfg = utils.load_config(config)
     setup = cfg.get('setup', None)
     if setup:

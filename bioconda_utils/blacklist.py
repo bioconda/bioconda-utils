@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Union
 from bioconda_utils.recipe import Recipe
 
 from bioconda_utils.build_failure import BuildFailureRecord
@@ -20,7 +20,7 @@ class Blacklist:
     def _get_reldir(self, recipe_path: str):
         return os.path.relpath(recipe_path, self.recipe_folder)
 
-    def is_blacklisted(self, recipe: str | Recipe) -> bool:
+    def is_blacklisted(self, recipe: Union[str, Recipe]) -> bool:
         if isinstance(recipe, Recipe):
             recipe_reldir = recipe.reldir
         else:
