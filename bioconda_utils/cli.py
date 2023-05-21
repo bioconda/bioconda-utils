@@ -427,7 +427,7 @@ from environment, even after successful build and test.''')
 @arg('--docker-base-image', help='''Name of base image that can be used in
      Dockerfile template.''')
 @arg("--record-build-failues", action="store_true", help="Record build failures in build_failure.yaml next to the recipe.")
-@arg("--blacklist-leafs", action="store_true", help="Blacklist leaf recipes that fail to build.)
+@arg("--blacklist-leafs", action="store_true", help="Blacklist leaf recipes (i.e. ones that are not depended on by any other recipes) that fail to build.")
 @enable_logging()
 def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
           force=False, docker=None, mulled_test=False, build_script_template=None,
