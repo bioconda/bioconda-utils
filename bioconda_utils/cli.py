@@ -9,6 +9,7 @@ Bioconda Utils Command Line Interface
 import warnings
 
 from bioconda_utils.artifacts import upload_pr_artifacts
+from bioconda_utils.blacklist import Blacklist
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 
 import sys
@@ -177,15 +178,12 @@ def get_recipes(config, recipe_folder, packages, git_range, include_blacklisted=
                         utils.ellipsize_recipes(recipes, recipe_folder))
 
     if not include_blacklisted:
-        blacklist = utils.get_blacklist(config, recipe_folder)
-        blacklisted = []
-        for recipe in recipes:
-            if os.path.relpath(recipe, recipe_folder) in blacklist:
-                blacklisted.append(recipe)
-        if blacklisted:
-            logger.info("Ignoring %s blacklisted recipes%s.", len(blacklisted),
-                        utils.ellipsize_recipes(blacklisted, recipe_folder))
-            recipes = [recipe for recipe in recipes if recipe not in set(blacklisted)]
+        blacklist = Blacklist(config, recipe_folder)
+        all_len = len(recipes)
+        recipes = [recipe for recipe in recipes if not blacklist.is_blacklisted(recipe)]
+        if all_len > len(recipes):
+            logger.info("Ignoring {all_len - len(recipes)} blacklisted recipes.")
+
     logger.info("Processing %s recipes%s.", len(recipes),
                 utils.ellipsize_recipes(recipes, recipe_folder))
     return recipes
@@ -428,6 +426,8 @@ def do_lint(recipe_folder, config, packages="*", cache=None, list_checks=False,
 from environment, even after successful build and test.''')
 @arg('--docker-base-image', help='''Name of base image that can be used in
      Dockerfile template.''')
+@arg("--record-build-failues", action="store_true", help="Record build failures in build_failure.yaml next to the recipe.")
+@arg("--blacklist-leafs", action="store_true", help="Blacklist leaf recipes that fail to build.)
 @enable_logging()
 def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
           force=False, docker=None, mulled_test=False, build_script_template=None,
@@ -435,7 +435,8 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
           build_image=False, keep_image=False, lint=False, lint_exclude=None,
           check_channels=None, n_workers=1, worker_offset=0, keep_old_work=False,
           mulled_conda_image=pkg_test.MULLED_CONDA_IMAGE,
-          docker_base_image='quay.io/bioconda/bioconda-utils-build-env-cos7:{}'.format(VERSION.replace('+', '_'))):
+          docker_base_image='quay.io/bioconda/bioconda-utils-build-env-cos7:{}'.format(VERSION.replace('+', '_')),
+          record_build_failures=False, blacklist_leafs=False):
     cfg = utils.load_config(config)
     setup = cfg.get('setup', None)
     if setup:
@@ -485,7 +486,9 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
                             n_workers=n_workers,
                             worker_offset=worker_offset,
                             keep_old_work=keep_old_work,
-                            mulled_conda_image=mulled_conda_image)
+                            mulled_conda_image=mulled_conda_image,
+                            record_build_failures=record_build_failures,
+                            blacklist_leafs=blacklist_leafs)
     exit(0 if success else 1)
 
 
@@ -618,12 +621,12 @@ def update_pinning(recipe_folder, config, packages="*",
     utils.RepoData().df  # trigger load
 
     build_config = utils.load_conda_build_config()
-    blacklist = utils.get_blacklist(config, recipe_folder)
+    blacklist = Blacklist(config, recipe_folder)
 
     from . import recipe
     dag = graph.build_from_recipes(
-        recip for recip in recipe.load_parallel_iter(recipe_folder, "*")
-        if recip.reldir not in blacklist)
+        r for r in recipe.load_parallel_iter(recipe_folder, "*")
+        if not blacklist.is_blacklisted(r))
 
     dag = graph.filter_recipe_dag(dag, packages, [])
     if no_leaves:

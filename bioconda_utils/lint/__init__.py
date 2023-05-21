@@ -104,6 +104,7 @@ from enum import IntEnum
 from typing import Any, Dict, List, NamedTuple, Set, Tuple
 
 import pandas as pd
+from bioconda_utils.blacklist import Blacklist
 import ruamel_yaml as yaml
 import networkx as nx
 
@@ -494,7 +495,7 @@ class Linter:
 
     def get_blacklist(self) -> Set[str]:
         """Loads the blacklist as per linter configuration"""
-        return utils.get_blacklist(self.config, self.recipe_folder)
+        return Blacklist(self.config, self.recipe_folder)
 
     def get_messages(self) -> List[LintMessage]:
         """Returns the lint messages collected during linting"""

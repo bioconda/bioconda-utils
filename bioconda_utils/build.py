@@ -9,11 +9,16 @@ import logging
 import itertools
 
 from typing import List
+from bioconda_utils.blacklist import Blacklist
+from bioconda_utils.build_failure import BuildFailureRecord
+from bioconda_utils.githandler import GitHandler
 
+import conda
 from conda.exports import UnsatisfiableError
 from conda_build.exceptions import DependencyNeedsBuildingError
 import networkx as nx
 import pandas
+from ruamel_yaml import YAML
 
 from . import utils
 from . import docker_utils
@@ -51,7 +56,10 @@ def build(recipe: str, pkg_paths: List[str] = None,
           docker_builder: docker_utils.RecipeBuilder = None,
           raise_error: bool = False,
           linter=None,
-          mulled_conda_image: str = pkg_test.MULLED_CONDA_IMAGE) -> BuildResult:
+          mulled_conda_image: str = pkg_test.MULLED_CONDA_IMAGE,
+          record_build_failure: bool = False,
+          dag: nx.DiGraph | None = None,
+          blacklist_leafs: bool = False) -> BuildResult:
     """
     Build a single recipe for a single env
 
@@ -68,7 +76,13 @@ def build(recipe: str, pkg_paths: List[str] = None,
       raise_error: Instead of returning a failed build result, raise the
         error instead. Used for testing.
       linter: Linter to use for checking recipes
+      record_build_failure: If True, record build failures in a file next to the meta.yaml
+      dag: optional nx.DiGraph with dependency information
+      blacklist_leafs: If True, blacklist leaf packages that fail to build
     """
+    if record_build_failure and not dag:
+        raise ValueError("record_build_failure requires dag to be set")
+
     if linter:
         logger.info('Linting recipe %s', recipe)
         linter.clear_messages()
@@ -141,6 +155,8 @@ def build(recipe: str, pkg_paths: List[str] = None,
 
     except (docker_utils.DockerCalledProcessError, sp.CalledProcessError) as exc:
         logger.error('BUILD FAILED %s', recipe)
+        if record_build_failure:
+            store_build_failure(recipe, exc.output, meta, dag, blacklist_leafs)
         if raise_error:
             raise exc
         return BuildResult(False, None)
@@ -160,6 +176,30 @@ def build(recipe: str, pkg_paths: List[str] = None,
         return BuildResult(True, mulled_images)
 
     return BuildResult(True, None)
+
+
+def store_build_failure(recipe, output, meta, dag, blacklist_leafs):
+    """
+    Write the exception to a file next to the meta.yaml
+    """
+    pkg_name = meta["package"]["name"]
+    is_leaf = dag.out_degree(pkg_name) == 0
+
+    git_handler = GitHandler()
+    # Ger last commit sha of given recipe
+    commit = git_handler.repo.head.commit
+    tree = commit.tree
+    file_blob = tree[os.path.join(recipe, "meta.yaml")]
+    commit_sha = file_blob.binsha.hex()
+
+    build_failure_record = BuildFailureRecord(recipe)
+    build_failure_record.commit_sha = commit_sha
+    # if recipe is a leaf (i.e. not used by others as dependency)
+    # we can automatically blacklist it if desired
+    build_failure_record.blacklist = blacklist_leafs and is_leaf
+    build_failure_record.log = output.decode("utf-8")
+
+    git_handler.commit_and_push_changes([build_failure_record.path], None, f"Add build failure record for recipe {recipe}")
 
 
 def remove_cycles(dag, name2recipes, failed, skip_dependent):
@@ -228,7 +268,9 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
                   n_workers: int = 1,
                   worker_offset: int = 0,
                   keep_old_work: bool = False,
-                  mulled_conda_image: str = pkg_test.MULLED_CONDA_IMAGE):
+                  mulled_conda_image: str = pkg_test.MULLED_CONDA_IMAGE,
+                  record_build_failures: bool = False,
+                  blacklist_leafs: bool = False):
     """
     Build one or many bioconda packages.
 
@@ -261,7 +303,7 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
         return True
 
     config = utils.load_config(config_path)
-    blacklist = utils.get_blacklist(config, recipe_folder)
+    blacklist = Blacklist(config, recipe_folder)
 
     # get channels to check
     if check_channels is None:
@@ -305,7 +347,6 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
                for package in nx.topological_sort(subdag)
                for recipe in name2recipes[package]]
 
-
     built_recipes = []
     skipped_recipes = []
     failed_uploads = []
@@ -347,7 +388,10 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
                     channels=config['channels'],
                     docker_builder=docker_builder,
                     linter=linter,
-                    mulled_conda_image=mulled_conda_image)
+                    mulled_conda_image=mulled_conda_image,
+                    dag=dag,
+                    record_build_failure=record_build_failures,
+                    blacklist_leafs=blacklist_leafs)
 
         if not res.success:
             failed.append(recipe)
