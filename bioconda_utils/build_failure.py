@@ -1,5 +1,5 @@
 import os
-from typing import Union
+from typing import Optional, Union
 from bioconda_utils.githandler import GitHandler
 
 from ruamel.yaml import YAML, CommentedMap
@@ -11,21 +11,26 @@ from bioconda_utils.recipe import Recipe
 class BuildFailureRecord:
     git_handler = None
 
-    def __init__(self, recipe: Union[str, Recipe]):
+    def __init__(self, recipe: Union[str, Recipe], platform: Optional[str]=None):
         if isinstance(recipe, Recipe):
             self.recipe_path = recipe.path
         else:
             self.recipe_path = recipe
-        self.path = os.path.join(self.recipe_path, f"build_failure.{conda.exports.subdir}.yaml")
+        if platform is None:
+            platform = conda.exports.subdir
+        self.path = os.path.join(self.recipe_path, f"build_failure.{platform}.yaml")
 
-        self.exists = False
+        def load(path):
+            with open(path, "r") as f:
+                yaml=YAML()
+                self.inner = dict(yaml.load(f))
 
         if os.path.exists(self.path):
-            with open(self.path, "r") as f:
-                yaml=YAML()
-                self.inner = yaml.load(f)
+            load(self.path)
+            self.exists = True
         else:
             self.inner = dict()
+            self.exists = False
 
     def set_commit_sha_to_current_recipe(self):
         self.commit_sha = self.get_recipe_commit_sha()
@@ -53,14 +58,23 @@ class BuildFailureRecord:
             commented_map = CommentedMap()
             commented_map.insert(0, "commit_sha", self.commit_sha, comment="The commit at which this recipe failed to build.")
             commented_map.insert(1, "blacklist", self.blacklist, comment="Set to true to blacklist this recipe so that it will be ignored as long as its latest commit is the one given above.")
-            commented_map.insert(2, "log", self.log)
-            yaml.dump(self.inner, f)
+            i = 2
+            if self.log:
+                commented_map.insert(i, "log", self.log)
+                i += 1
+            if self.reason:
+                commented_map.insert(i, "reason", self.reason)
+            yaml.dump(commented_map, f)
         self.exists = True
 
     def delete(self):
         if self.exists:
             os.remove(self.path)
             self.exists = False
+
+    @property
+    def reason(self):
+        return self.inner.get("reason", "")
 
     @property
     def log(self):
@@ -85,3 +99,7 @@ class BuildFailureRecord:
     @commit_sha.setter
     def commit_sha(self, value):
         self.inner["commit_sha"] = value
+
+    @reason.setter
+    def reason(self, value):
+        self.inner["reason"] = value

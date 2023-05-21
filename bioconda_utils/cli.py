@@ -10,6 +10,7 @@ import warnings
 
 from bioconda_utils.artifacts import upload_pr_artifacts
 from bioconda_utils.blacklist import Blacklist
+from bioconda_utils.build_failure import BuildFailureRecord
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 
 import sys
@@ -19,8 +20,9 @@ import logging
 from collections import defaultdict, Counter
 from functools import partial
 import inspect
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
+import conda
 import argh
 from argh import arg, named
 import networkx as nx
@@ -1006,6 +1008,22 @@ def autobump(recipe_folder, config, packages='*', exclude=None, cache=None,
         git_handler.close()
 
 
+@arg('recipe', help='Path to recipe that shall be blacklisted')
+@arg('reason', help='Reason for blacklisting')
+@arg('--platforms', help='Platforms to blacklist for', nargs='+', type=str, default=['linux-64', 'osx-64'])
+def blacklist_recipe(recipe, reason, platforms=None):
+    valid_platform_names = set(conda.base.constants.PLATFORM_DIRECTORIES)
+    for platform in platforms:
+        if platform not in valid_platform_names:
+            logger.error(f"Invalid platform {platform}, choose from: {', '.join(valid_platform_names)}")
+            continue
+        failure_record = BuildFailureRecord(recipe, platform=platform)
+        failure_record.set_commit_sha_to_current_recipe()
+        failure_record.reason = reason
+        failure_record.blacklist = True
+        failure_record.write()
+
+
 def main():
     if '--version' in sys.argv:
         print("This is bioconda-utils version", VERSION)
@@ -1013,5 +1031,5 @@ def main():
     argh.dispatch_commands([
         build, dag, dependent, do_lint, duplicates, update_pinning,
         bioconductor_skeleton, clean_cran_skeleton, autobump,
-        handle_merged_pr,
+        handle_merged_pr, blacklist_recipe
     ])
