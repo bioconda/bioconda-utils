@@ -27,7 +27,7 @@ class Blacklist:
         else:
             recipe_reldir = self._get_reldir(recipe)
 
-        if recipe_reldir in self.build_failures:
+        if recipe_reldir in self.global_list:
             return True
 
         build_failure_record = BuildFailureRecord(recipe)
