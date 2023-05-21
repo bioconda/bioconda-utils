@@ -4,6 +4,7 @@ These checks verify consistency with the repository (blacklisting,
 other channels, existing versions).
 """
 
+from bioconda_utils.build_failure import BuildFailureRecord
 from .. import utils
 from . import LintCheck, ERROR, WARNING, INFO
 
@@ -78,10 +79,13 @@ class recipe_is_blacklisted(LintCheck):
         self.blacklists = linter.config.get('blacklists')
 
     def check_recipe(self, recipe):
-        if recipe.name in self.blacklist:
+        if self.blacklist.is_blacklisted(recipe):
             self.message(section='package/name', data=True)
 
     def fix(self, _message, _data):
+        failure_record = BuildFailureRecord(self.recipe)
+        if failure_record.exists and failure_record.blacklist:
+            failure_record.delete()
         for blacklist in self.blacklists:
             with open(blacklist, 'r') as fdes:
                 data = fdes.readlines()

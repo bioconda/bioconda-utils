@@ -7,15 +7,18 @@ import logging
 from collections import defaultdict
 from fnmatch import fnmatch
 from itertools import chain
+from typing import Any, Dict, Optional
 
 import networkx as nx
+
+from bioconda_utils.blacklist import Blacklist
 
 from . import utils
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
-def build(recipes, config, blacklist=None, restrict=True):
+def build(recipes, config: Dict[str, Any], blacklist: Optional[Blacklist]=None, restrict: bool=True):
     """
     Returns the DAG of recipe paths and a dictionary that maps package names to
     lists of recipe paths to all defined versions of the package.  defined
@@ -48,20 +51,15 @@ def build(recipes, config, blacklist=None, restrict=True):
     recipes = list(recipes)
     metadata = list(utils.parallel_iter(utils.load_meta_fast, recipes, "Loading Recipes"))
 
-    if blacklist is None:
-        blacklist = set()
-
     # name2recipe is meta.yaml's package:name mapped to the recipe path.
     #
     # A name should map to exactly one recipe. It is possible for multiple
     # names to map to the same recipe, if the package name somehow depends on
     # the environment.
-    #
-    # Note that this may change once we support conda-build 3.
     name2recipe = defaultdict(set)
     for meta, recipe in metadata:
         name = meta["package"]["name"]
-        if name not in blacklist:
+        if blacklist is None or not blacklist.is_blacklisted(recipe):
             name2recipe[name].update([recipe])
 
     def get_deps(meta, sec):
