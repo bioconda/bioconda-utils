@@ -11,14 +11,14 @@ from typing import Any, Dict, Optional
 
 import networkx as nx
 
-from bioconda_utils.blacklist import Blacklist
+from bioconda_utils.skiplist import Skiplist
 
 from . import utils
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
-def build(recipes, config: Dict[str, Any], blacklist: Optional[Blacklist]=None, restrict: bool=True):
+def build(recipes, config: Dict[str, Any], blacklist: Optional[Skiplist]=None, restrict: bool=True):
     """
     Returns the DAG of recipe paths and a dictionary that maps package names to
     lists of recipe paths to all defined versions of the package.  defined
@@ -59,7 +59,7 @@ def build(recipes, config: Dict[str, Any], blacklist: Optional[Blacklist]=None, 
     name2recipe = defaultdict(set)
     for meta, recipe in metadata:
         name = meta["package"]["name"]
-        if blacklist is None or not blacklist.is_blacklisted(recipe):
+        if blacklist is None or not blacklist.is_skiplisted(recipe):
             name2recipe[name].update([recipe])
 
     def get_deps(meta, sec):

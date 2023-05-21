@@ -75,16 +75,16 @@ class recipe_is_blacklisted(LintCheck):
     """
     def __init__(self, linter):
         super().__init__(linter)
-        self.blacklist = linter.get_blacklist()
+        self.skiplist = linter.get_skiplist()
         self.blacklists = linter.config.get('blacklists')
 
     def check_recipe(self, recipe):
-        if self.blacklist.is_blacklisted(recipe):
+        if self.skiplist.is_skiplisted(recipe):
             self.message(section='package/name', data=True)
 
     def fix(self, _message, _data):
         failure_record = BuildFailureRecord(self.recipe)
-        if failure_record.exists and failure_record.blacklist:
+        if failure_record.exists and failure_record.skiplist:
             failure_record.delete()
         for blacklist in self.blacklists:
             with open(blacklist, 'r') as fdes:

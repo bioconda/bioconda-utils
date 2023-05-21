@@ -45,8 +45,8 @@ class BuildFailureRecord:
         commit_sha = file_blob.binsha.hex()
         return commit_sha
 
-    def blacklists_current_recipe(self):
-        if self.blacklist:
+    def skiplists_current_recipe(self):
+        if self.skiplist:
             commit_sha = self.get_recipe_commit_sha()
             if commit_sha == self.commit_sha:
                 return True
@@ -57,7 +57,7 @@ class BuildFailureRecord:
             yaml=YAML()
             commented_map = CommentedMap()
             commented_map.insert(0, "commit_sha", self.commit_sha, comment="The commit at which this recipe failed to build.")
-            commented_map.insert(1, "blacklist", self.blacklist, comment="Set to true to blacklist this recipe so that it will be ignored as long as its latest commit is the one given above.")
+            commented_map.insert(1, "skiplist", self.skiplist, comment="Set to true to skiplist this recipe so that it will be ignored as long as its latest commit is the one given above.")
             i = 2
             if self.log:
                 commented_map.insert(i, "log", self.log)
@@ -81,16 +81,16 @@ class BuildFailureRecord:
         return self.inner.get("log", "")
 
     @property
-    def blacklist(self):
-        return self.inner.get("blacklist", False)
+    def skiplist(self):
+        return self.inner.get("skiplist", False)
 
     @property
     def commit_sha(self):
         return self.inner.get("commit_sha", None)
 
-    @blacklist.setter
-    def blacklist(self, value):
-        self.inner["blacklist"] = value
+    @skiplist.setter
+    def skiplist(self, value):
+        self.inner["skiplist"] = value
 
     @log.setter
     def log(self, value):

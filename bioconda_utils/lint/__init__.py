@@ -104,7 +104,7 @@ from enum import IntEnum
 from typing import Any, Dict, List, NamedTuple, Set, Tuple
 
 import pandas as pd
-from bioconda_utils.blacklist import Blacklist
+from bioconda_utils.skiplist import Skiplist
 import ruamel_yaml as yaml
 import networkx as nx
 
@@ -493,9 +493,9 @@ class Linter:
     def reload_checks(self):
         self.check_instances = {str(check): check(self) for check in get_checks()}
 
-    def get_blacklist(self) -> Set[str]:
-        """Loads the blacklist as per linter configuration"""
-        return Blacklist(self.config, self.recipe_folder)
+    def get_skiplist(self) -> Set[str]:
+        """Loads the skiplist as per linter configuration"""
+        return Skiplist(self.config, self.recipe_folder)
 
     def get_messages(self) -> List[LintMessage]:
         """Returns the lint messages collected during linting"""
