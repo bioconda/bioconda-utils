@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.0.0...v2.1.0) (2023-05-21)
+
+
+### Features
+
+* add ability to store build failures as yaml next to recipe, add flag to automatically do so upon build failures, consider such files as blacklisting if they include `blacklist: true`. ([#888](https://www.github.com/bioconda/bioconda-utils/issues/888)) ([e78c120](https://www.github.com/bioconda/bioconda-utils/commit/e78c120a239cf1b845aba44043d51b89f7a27d55))
+
 ## [2.0.0](https://www.github.com/bioconda/bioconda-utils/compare/v1.7.1...v2.0.0) (2023-05-18)
 
 
