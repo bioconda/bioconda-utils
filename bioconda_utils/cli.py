@@ -841,6 +841,7 @@ def clean_cran_skeleton(recipe, no_windows=False):
 @arg('--exclude-channels', nargs="+", help='''Exclude recipes
      building packages present in other channels. Set to 'none' to disable
      check.''')
+@arg('--ignore-skiplists', '--ignore-blacklists', help='''Do not exclude skiplisted recipes''')
 @arg('--fetch-requirements',
      help='''Try to fetch python requirements. Please note that this requires
      downloading packages and executing setup.py, so presents a potential
@@ -879,6 +880,7 @@ def clean_cran_skeleton(recipe, no_windows=False):
 def autobump(recipe_folder, config, packages='*', exclude=None, cache=None,
              failed_urls=None, unparsed_urls=None, recipe_status=None,
              exclude_subrecipes=None, exclude_channels='conda-forge',
+             ignore_skiplists=False,
              fetch_requirements=False,
              check_branch=False, create_branch=False, create_pr=False,
              only_active=False, no_shuffle=False,
@@ -913,8 +915,9 @@ def autobump(recipe_folder, config, packages='*', exclude=None, cache=None,
     # Always exclude recipes that were explicitly disabled
     scanner.add(autobump.ExcludeDisabled)
 
-    # Exclude packages that are on the skiplist
-    scanner.add(autobump.ExcludeBlacklisted, recipe_folder, config_dict)
+    # Exclude packages that are on the blacklist
+    if not ignore_skiplists:
+        scanner.add(autobump.ExcludeBlacklisted, recipe_folder, config_dict)
 
     # Exclude sub-recipes
     if exclude_subrecipes != "never":
