@@ -31,4 +31,4 @@ class Skiplist:
             return True
 
         build_failure_record = BuildFailureRecord(recipe)
-        return build_failure_record.blacklists_current_recipe()
+        return build_failure_record.skiplists_current_recipe()
