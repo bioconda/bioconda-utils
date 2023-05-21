@@ -70,6 +70,7 @@ jobs:
               --unparsed-urls /tmp/artifacts/unparsed_urls.txt \
               --failed-urls /tmp/artifacts/failed_urls.txt \
               --recipe-status /tmp/artifacts/status.txt \
+              --ignore-skiplists \
               --create-pr \
               --no-check-pinnings \
               --no-check-pending-deps \

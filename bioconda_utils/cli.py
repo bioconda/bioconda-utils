@@ -841,7 +841,7 @@ def clean_cran_skeleton(recipe, no_windows=False):
 @arg('--exclude-channels', nargs="+", help='''Exclude recipes
      building packages present in other channels. Set to 'none' to disable
      check.''')
-@arg('--ignore-skiplists', '--ignore-blacklists', help='''Do not exclude skiplisted recipes''')
+@arg('--ignore-skiplists', help='''Do not exclude skiplisted recipes''')
 @arg('--fetch-requirements',
      help='''Try to fetch python requirements. Please note that this requires
      downloading packages and executing setup.py, so presents a potential
