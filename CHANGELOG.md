@@ -1,5 +1,12 @@
 # Changelog
 
+### [2.2.1](https://www.github.com/bioconda/bioconda-utils/compare/v2.2.0...v2.2.1) (2023-05-22)
+
+
+### Bug Fixes
+
+* use git cli to obtain recipe commit sha, since there seems to be no fast and correct way to do that with gitpython ([#892](https://www.github.com/bioconda/bioconda-utils/issues/892)) ([a6fd713](https://www.github.com/bioconda/bioconda-utils/commit/a6fd7134d03fe39760654d63a9c279c0bd92afd5))
+
 ## [2.2.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.1.0...v2.2.0) (2023-05-22)
 
 
