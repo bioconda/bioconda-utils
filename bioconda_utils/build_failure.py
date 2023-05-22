@@ -1,6 +1,7 @@
 import os
 from typing import Optional, Union
 from bioconda_utils.githandler import GitHandler
+import subprocess as sp
 
 from ruamel.yaml import YAML, CommentedMap
 import conda.exports
@@ -39,10 +40,8 @@ class BuildFailureRecord:
         if self.git_handler is None:
             self.git_handler = GitHandler()
         # Get last commit sha of recipe
-        commit = self.git_handler.repo.head.commit
-        tree = commit.tree
-        file_blob = tree[os.path.join(self.recipe_path, "meta.yaml")]
-        commit_sha = file_blob.binsha.hex()
+        filepath = os.path.join(self.recipe_path, "meta.yaml")
+        commit_sha = sp.run(["git", "rev-list", "-1", "HEAD", filepath], check=True, capture_output=True).stdout.decode().strip()
         return commit_sha
 
     def skiplists_current_recipe(self):
