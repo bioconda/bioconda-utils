@@ -57,7 +57,7 @@ import aiofiles
 from aiohttp import ClientResponseError
 
 import networkx as nx
-from bioconda_utils.blacklist import Blacklist
+from bioconda_utils.skiplist import Skiplist
 
 import conda_build.variants
 import conda_build.config
@@ -162,10 +162,10 @@ class RecipeGraphSource(RecipeSource):
             with open(self.cache_fn, "rb") as stream:
                 dag = pickle.load(stream)
         else:
-            blacklist = Blacklist(self.config, self.recipe_base)
+            blacklist = Skiplist(self.config, self.recipe_base)
             dag = graph.build_from_recipes(
                 recipe for recipe in recipes_load_parallel_iter(self.recipe_base, "*")
-                if not blacklist.is_blacklisted(recipe)
+                if not blacklist.is_skiplisted(recipe)
             )
             if self.cache_fn:
                 with open(self.cache_fn, "wb") as stream:
@@ -352,11 +352,11 @@ class ExcludeBlacklisted(Filter):
     def __init__(self, scanner: Scanner, recipe_base: str, config: Dict) -> None:
         super().__init__(scanner)
         self.blacklists = config.get('blacklists')
-        self.blacklisted = Blacklist(config, recipe_base)
+        self.skiplist = Skiplist(config, recipe_base)
         logger.warning("Excluding blacklisted recipes")
 
     async def apply(self, recipe: Recipe) -> None:
-        if self.blacklisted.is_blacklisted(recipe):
+        if self.skiplist.is_skiplisted(recipe):
             raise self.Blacklisted(recipe)
 
 

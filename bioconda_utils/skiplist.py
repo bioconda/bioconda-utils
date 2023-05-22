@@ -5,7 +5,7 @@ from bioconda_utils.recipe import Recipe
 from bioconda_utils.build_failure import BuildFailureRecord
 
 
-class Blacklist:
+class Skiplist:
     def __init__(self, config: Dict[str, Any], recipe_folder: str):
         self.recipe_folder = recipe_folder
         self.global_list = set()
@@ -21,7 +21,7 @@ class Blacklist:
     def _get_reldir(self, recipe_path: str):
         return os.path.relpath(recipe_path, self.recipe_folder)
 
-    def is_blacklisted(self, recipe: Union[str, Recipe]) -> bool:
+    def is_skiplisted(self, recipe: Union[str, Recipe]) -> bool:
         if isinstance(recipe, Recipe):
             recipe_reldir = recipe.reldir
         else:
@@ -31,4 +31,4 @@ class Blacklist:
             return True
 
         build_failure_record = BuildFailureRecord(recipe)
-        return build_failure_record.blacklists_current_recipe()
+        return build_failure_record.skiplists_current_recipe()
