@@ -194,8 +194,10 @@ def store_build_failure(recipe, output, meta, dag, skiplist_leafs):
 
     logger.info(f"Storing build failure record for recipe {recipe}")
     build_failure_record.write()
-    build_failure_record.git_handler.commit_and_push_changes([build_failure_record.path], None, f"[ci skip] Add build failure record for recipe {recipe}")
 
+    utils.run(["git", "add", build_failure_record.path])
+    utils.run(["git", "commit", "-m", f"[ci skip] Add build failure record for recipe {recipe}"])
+    utils.run(["git", "push"])
 
 def remove_cycles(dag, name2recipes, failed, skip_dependent):
     nodes_in_cycles = set()
