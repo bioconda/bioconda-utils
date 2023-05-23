@@ -155,7 +155,6 @@ def build(recipe: str, pkg_paths: List[str] = None,
 
     except (docker_utils.DockerCalledProcessError, sp.CalledProcessError) as exc:
         logger.error('BUILD FAILED %s', recipe)
-        import pdb; pdb.set_trace()
         if record_build_failure:
             store_build_failure(recipe, exc.output, meta, dag, skiplist_leafs)
         if raise_error:
