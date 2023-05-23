@@ -155,6 +155,7 @@ def build(recipe: str, pkg_paths: List[str] = None,
 
     except (docker_utils.DockerCalledProcessError, sp.CalledProcessError) as exc:
         logger.error('BUILD FAILED %s', recipe)
+        import pdb; pdb.set_trace()
         if record_build_failure:
             store_build_failure(recipe, exc.output, meta, dag, skiplist_leafs)
         if raise_error:
@@ -182,7 +183,7 @@ def store_build_failure(recipe, output, meta, dag, skiplist_leafs):
     """
     Write the exception to a file next to the meta.yaml
     """
-    pkg_name = meta["package"]["name"]
+    pkg_name = meta.meta["package"]["name"]
     is_leaf = dag.out_degree(pkg_name) == 0
 
     build_failure_record = BuildFailureRecord(recipe)
@@ -190,10 +191,11 @@ def store_build_failure(recipe, output, meta, dag, skiplist_leafs):
     # if recipe is a leaf (i.e. not used by others as dependency)
     # we can automatically blacklist it if desired
     build_failure_record.skiplist = skiplist_leafs and is_leaf
-    build_failure_record.log = output.decode("utf-8")
+    build_failure_record.log = output
 
     logger.info(f"Storing build failure record for recipe {recipe}")
-    build_failure_record.git_handler.commit_and_push_changes([build_failure_record.path], None, f"Add build failure record for recipe {recipe}")
+    build_failure_record.write()
+    build_failure_record.git_handler.commit_and_push_changes([build_failure_record.path], None, f"[ci skip] Add build failure record for recipe {recipe}")
 
 
 def remove_cycles(dag, name2recipes, failed, skip_dependent):

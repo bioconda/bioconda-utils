@@ -4,6 +4,7 @@ from bioconda_utils.githandler import GitHandler
 import subprocess as sp
 
 from ruamel.yaml import YAML, CommentedMap
+from ruamel.yaml.scalarstring import LiteralScalarString
 import conda.exports
 
 from bioconda_utils.recipe import Recipe
@@ -59,10 +60,10 @@ class BuildFailureRecord:
             commented_map.insert(1, "skiplist", self.skiplist, comment="Set to true to skiplist this recipe so that it will be ignored as long as its latest commit is the one given above.")
             i = 2
             if self.log:
-                commented_map.insert(i, "log", self.log)
+                commented_map.insert(i, "log", LiteralScalarString(self.log))
                 i += 1
             if self.reason:
-                commented_map.insert(i, "reason", self.reason)
+                commented_map.insert(i, "reason", LiteralScalarString(self.reason))
             yaml.dump(commented_map, f)
         self.exists = True
 
