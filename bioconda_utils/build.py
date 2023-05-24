@@ -194,7 +194,6 @@ def store_build_failure(recipe, output, meta, dag, skiplist_leafs):
 
     logger.info(f"Storing build failure record for recipe {recipe}")
     build_failure_record.write()
-    import pdb; pdb.set_trace()
 
     utils.run(["git", "add", build_failure_record.path], mask_envvars=True)
     utils.run(["git", "commit", "-m", f"[ci skip] Add build failure record for recipe {recipe}"], mask_envvars=True)
