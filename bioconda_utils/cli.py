@@ -184,7 +184,7 @@ def get_recipes(config, recipe_folder, packages, git_range, include_blacklisted=
         all_len = len(recipes)
         recipes = [recipe for recipe in recipes if not skiplist.is_skiplisted(recipe)]
         if all_len > len(recipes):
-            logger.info("Ignoring {all_len - len(recipes)} skiplisted recipes.")
+            logger.info(f"Ignoring {all_len - len(recipes)} skiplisted recipes.")
 
     logger.info("Processing %s recipes%s.", len(recipes),
                 utils.ellipsize_recipes(recipes, recipe_folder))

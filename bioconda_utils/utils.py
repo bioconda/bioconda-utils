@@ -561,7 +561,7 @@ def temp_os(platform):
         sys.platform = original
 
 
-def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, live: bool=True,
+def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, mask_envvars: bool=False, live: bool=True,
         mylogger: logging.Logger=logger, loglevel: int=logging.INFO,
         **kwargs: Dict[Any, Any]) -> sp.CompletedProcess:
     """
@@ -575,8 +575,9 @@ def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, live: b
 
     Arguments:
       cmd: List of command and arguments
-      env: Optional environment for command
+      env: Optional environment for command, if None, use environment of the parent process
       mask: List of terms to mask (secrets)
+      mask_envvars: Mask all environment variables; used if mask is None.
       live: Whether output should be sent to log
       kwargs: Additional arguments to `subprocess.Popen`
 
@@ -588,6 +589,8 @@ def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, live: b
       FileNotFoundError if the command could not be found
     """
     logq = queue.Queue()
+    if mask is None and mask_envvars:
+        mask = [val for val in os.environ.values() if val]
 
     def pushqueue(out, pipe):
         """Reads from a pipe and pushes into a queue, pushing "None" to

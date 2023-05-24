@@ -2,12 +2,16 @@ import os
 from typing import Optional, Union
 from bioconda_utils.githandler import GitHandler
 import subprocess as sp
+import logging
 
 from ruamel.yaml import YAML, CommentedMap
 from ruamel.yaml.scalarstring import LiteralScalarString
 import conda.exports
 
 from bioconda_utils.recipe import Recipe
+
+
+logger = logging.getLogger(__name__)
 
 
 class BuildFailureRecord:
@@ -49,7 +53,10 @@ class BuildFailureRecord:
         if self.skiplist:
             commit_sha = self.get_recipe_commit_sha()
             if commit_sha == self.commit_sha:
+                logger.info(f"Skipping {self.recipe_path} because it is skiplisted in {self.path}.")
                 return True
+            else:
+                logger.info(f"Not skipping {self.recipe_path} as requested in {self.path} because it has been changed (commit {commit_sha}) since skiplisting (commit {self.commit_sha}).")
         return False
 
     def write(self):

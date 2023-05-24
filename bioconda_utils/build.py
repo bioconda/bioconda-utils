@@ -148,7 +148,7 @@ def build(recipe: str, pkg_paths: List[str] = None,
                     cmd += [config_file.arg, config_file.path]
                 cmd += [os.path.join(recipe, 'meta.yaml')]
                 with utils.Progress():
-                    utils.run(cmd, env=os.environ, mask=False)
+                    utils.run(cmd, mask=False)
 
         logger.info('BUILD SUCCESS %s',
                     ' '.join(os.path.basename(p) for p in pkg_paths))
@@ -194,10 +194,11 @@ def store_build_failure(recipe, output, meta, dag, skiplist_leafs):
 
     logger.info(f"Storing build failure record for recipe {recipe}")
     build_failure_record.write()
+    import pdb; pdb.set_trace()
 
-    utils.run(["git", "add", build_failure_record.path])
-    utils.run(["git", "commit", "-m", f"[ci skip] Add build failure record for recipe {recipe}"])
-    utils.run(["git", "push"])
+    utils.run(["git", "add", build_failure_record.path], mask_envvars=True)
+    utils.run(["git", "commit", "-m", f"[ci skip] Add build failure record for recipe {recipe}"], mask_envvars=True)
+    utils.run(["git", "push"], mask_envvars=True)
 
 def remove_cycles(dag, name2recipes, failed, skip_dependent):
     nodes_in_cycles = set()
