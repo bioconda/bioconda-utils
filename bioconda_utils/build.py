@@ -7,6 +7,7 @@ from collections import defaultdict, namedtuple
 import os
 import logging
 import itertools
+import time
 
 from typing import List, Optional
 from bioconda_utils.skiplist import Skiplist
@@ -197,8 +198,17 @@ def store_build_failure(recipe, output, meta, dag, skiplist_leafs):
 
     utils.run(["git", "add", build_failure_record.path], mask=False)
     utils.run(["git", "commit", "-m", f"[ci skip] Add build failure record for recipe {recipe}"], mask=False)
-    utils.run(["git", "pull", "--no-rebase"], mask=False)
-    utils.run(["git", "push"], mask=False)
+    for _ in range(3):
+        try:
+            utils.run(["git", "pull", "--no-rebase"], mask=False, retries=3)
+            utils.run(["git", "push"], mask=False)
+            return
+        except sp.CalledProcessError:
+            time.sleep(1)
+    logger.error(
+        f"Failed to push build failure record for recipe {recipe}. "
+        "This might be because of raise conditions if multiple jobs do "
+        "this at the same time. Consider trying again later.")
 
 def remove_cycles(dag, name2recipes, failed, skip_dependent):
     nodes_in_cycles = set()
