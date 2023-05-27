@@ -1587,3 +1587,7 @@ def extract_stable_version(version):
     if m is None:
         raise ValueError(f"Could not extract stable version from {version}")
     return m.group(1)
+
+
+def yaml_remove_invalid_chars(text: str, valid_chars_re=re.compile(r"[\w\d\s:\{\}\[\]\(\);&|\$§\"'\?\!%#\\~*\.,-\^°]+")) -> str:
+    return valid_chars_re.sub("", text)

@@ -1,5 +1,6 @@
 import os
 from typing import Optional, Union
+from bioconda_utils import utils
 from bioconda_utils.githandler import GitHandler
 import subprocess as sp
 import logging
@@ -71,7 +72,7 @@ class BuildFailureRecord:
             commented_map.insert(1, "skiplist", self.skiplist, comment="Set to true to skiplist this recipe so that it will be ignored as long as its latest commit is the one given above.")
             i = 2
             if self.log:
-                commented_map.insert(i, "log", LiteralScalarString(self.log))
+                commented_map.insert(i, "log", LiteralScalarString(utils.yaml_remove_invalid_chars(self.log)))
                 i += 1
             if self.reason:
                 commented_map.insert(i, "reason", LiteralScalarString(self.reason))
