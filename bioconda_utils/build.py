@@ -205,6 +205,7 @@ def store_build_failure(recipe, output, meta, dag, skiplist_leafs):
             # commits on different recipes.
             # We don't want to use merge commits here because they would all trigger subsequent CI runs
             # since they lack the [ci skip] part. Further, they would pollute the git history.
+            # If the rebase fails, we simply get an error.
             utils.run(["git", "pull", "--rebase"], mask=False)
             utils.run(["git", "commit"])
             utils.run(["git", "push"], mask=False)
