@@ -207,7 +207,6 @@ def store_build_failure(recipe, output, meta, dag, skiplist_leafs):
             # since they lack the [ci skip] part. Further, they would pollute the git history.
             # If the rebase fails, we simply get an error.
             utils.run(["git", "pull", "--rebase"], mask=False)
-            utils.run(["git", "commit"])
             utils.run(["git", "push"], mask=False)
             return
         except sp.CalledProcessError:
