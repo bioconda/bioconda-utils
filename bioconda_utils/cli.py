@@ -437,7 +437,7 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
           build_image=False, keep_image=False, lint=False, lint_exclude=None,
           check_channels=None, n_workers=1, worker_offset=0, keep_old_work=False,
           mulled_conda_image=pkg_test.MULLED_CONDA_IMAGE,
-          docker_base_image='quay.io/bioconda/bioconda-utils-build-env-cos7:{}'.format(VERSION.replace('+', '_')),
+          docker_base_image=None,
           record_build_failures=False,
           skiplist_leafs=False):
     cfg = utils.load_config(config)
@@ -458,6 +458,13 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
             use_host_conda_bld = True
         else:
             use_host_conda_bld = False
+
+        if "_" in VERSION:
+            image_tag = VERSION.split("_")[1]
+            logger.warning(f"Using tag {image_tag} for docker image, since there is no image for a not yet release version ({VERSION}).")
+        else:
+            image_tag = VERSION
+        docker_base_image = f"quay.io/bioconda/bioconda-utils-build-env-cos7:{image_tag}"
 
         docker_builder = docker_utils.RecipeBuilder(
             build_script_template=build_script_template,
