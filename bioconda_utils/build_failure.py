@@ -4,6 +4,7 @@ from bioconda_utils.githandler import GitHandler
 import subprocess as sp
 import logging
 
+import ruamel.yaml
 from ruamel.yaml import YAML, CommentedMap
 from ruamel.yaml.scalarstring import LiteralScalarString
 import conda.exports
@@ -29,7 +30,10 @@ class BuildFailureRecord:
         def load(path):
             with open(path, "r") as f:
                 yaml=YAML()
-                self.inner = dict(yaml.load(f))
+                try:
+                    self.inner = dict(yaml.load(f))
+                except ruamel.yaml.reader.ReaderError as e:
+                    raise IOError(f"Unable to read build failure record {path}: {e}")
 
         if os.path.exists(self.path):
             load(self.path)
