@@ -200,7 +200,7 @@ def store_build_failure(recipe, output, meta, dag, skiplist_leafs):
     utils.run(["git", "commit", "-m", f"[ci skip] Add build failure record for recipe {recipe}"], mask=False)
     for _ in range(3):
         try:
-            utils.run(["git", "pull", "--no-rebase"], mask=False, retries=3)
+            utils.run(["git", "pull", "--no-rebase"], mask=False)
             utils.run(["git", "push"], mask=False)
             return
         except sp.CalledProcessError:
