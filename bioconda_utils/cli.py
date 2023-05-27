@@ -459,12 +459,13 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
         else:
             use_host_conda_bld = False
 
-        if "_" in VERSION:
-            image_tag = VERSION.split("_")[1]
+        if not utils.is_stable_version(VERSION):
+            image_tag = utils.extract_stable_version(VERSION)
             logger.warning(f"Using tag {image_tag} for docker image, since there is no image for a not yet release version ({VERSION}).")
         else:
             image_tag = VERSION
         docker_base_image = f"quay.io/bioconda/bioconda-utils-build-env-cos7:{image_tag}"
+        logger.info(f"Using docker image {docker_base_image} for building.")
 
         docker_builder = docker_utils.RecipeBuilder(
             build_script_template=build_script_template,

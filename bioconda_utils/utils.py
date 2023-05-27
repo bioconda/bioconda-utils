@@ -11,6 +11,7 @@ import fnmatch
 import glob
 import logging
 import os
+import re
 import subprocess as sp
 import sys
 import shutil
@@ -1575,3 +1576,14 @@ def get_github_client():
             total=10, status_forcelist=(500, 502, 504), backoff_factor=0.3
         ),
     )
+
+
+def is_stable_version(version):
+    return re.match(r"^\d+\.\d+\.\d+$", version) is not None
+
+
+def extract_stable_version(version):
+    m = re.match(r"^(\d+\.\d+\.\d+)", version)
+    if m is None:
+        raise ValueError(f"Could not extract stable version from {version}")
+    return m.group(1)
