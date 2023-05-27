@@ -200,7 +200,13 @@ def store_build_failure(recipe, output, meta, dag, skiplist_leafs):
     utils.run(["git", "commit", "-m", f"[ci skip] Add build failure record for recipe {recipe}"], mask=False)
     for _ in range(3):
         try:
-            utils.run(["git", "pull", "--no-rebase"], mask=False)
+            # Rebase is "safe" here because this is meant to be run only on the bulk branch,
+            # with no other concurrent committers than the bulk CI processes which do indepenendent
+            # commits on different recipes.
+            # We don't want to use merge commits here because they would all trigger subsequent CI runs
+            # since they lack the [ci skip] part. Further, they would pollute the git history.
+            utils.run(["git", "pull", "--rebase"], mask=False)
+            utils.run(["git", "commit"])
             utils.run(["git", "push"], mask=False)
             return
         except sp.CalledProcessError:
