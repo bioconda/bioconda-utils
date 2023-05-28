@@ -1590,4 +1590,8 @@ def extract_stable_version(version):
 
 
 def yaml_remove_invalid_chars(text: str, valid_chars_re=re.compile(r"[^ \t\n\w\d:\{\}\[\]\(\);&|\$§\"'\?\!%#\\~*\.,-\^°]+")) -> str:
+    """Remove chars that are invalid in yaml literal strings. 
+
+    E.g. we do not want them to contain carriage return chars or delete chars.
+    """
     return valid_chars_re.sub("", text)
