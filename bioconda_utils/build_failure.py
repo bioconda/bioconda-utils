@@ -76,7 +76,7 @@ class BuildFailureRecord:
                     i,
                     "log", 
                     # remove invalid chars and keep only the last 100 lines
-                    LiteralScalarString(utils.yaml_remove_invalid_chars(self.log).splitlines()[-100:]),
+                    LiteralScalarString("\n".join(utils.yaml_remove_invalid_chars(self.log).splitlines()[-100:])),
                     comment="Last 100 lines of the build log."
                 )
                 i += 1
