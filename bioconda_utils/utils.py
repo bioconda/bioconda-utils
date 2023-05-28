@@ -1589,5 +1589,5 @@ def extract_stable_version(version):
     return m.group(1)
 
 
-def yaml_remove_invalid_chars(text: str, valid_chars_re=re.compile(r"[^\w\d\s:\{\}\[\]\(\);&|\$§\"'\?\!%#\\~*\.,-\^°]+")) -> str:
+def yaml_remove_invalid_chars(text: str, valid_chars_re=re.compile(r"[^ \t\n\w\d:\{\}\[\]\(\);&|\$§\"'\?\!%#\\~*\.,-\^°]+")) -> str:
     return valid_chars_re.sub("", text)
