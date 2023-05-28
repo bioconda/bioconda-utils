@@ -1026,7 +1026,7 @@ def skiplist_recipe(recipe, reason, platforms=None):
             logger.error(f"Invalid platform {platform}, choose from: {', '.join(valid_platform_names)}")
             continue
         failure_record = BuildFailureRecord(recipe, platform=platform)
-        failure_record.set_commit_sha_to_current_recipe()
+        failure_record.set_recipe_sha_to_current_recipe()
         failure_record.reason = reason
         failure_record.skiplist = True
         failure_record.write()

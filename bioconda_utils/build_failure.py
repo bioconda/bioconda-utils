@@ -4,6 +4,7 @@ from bioconda_utils import utils
 from bioconda_utils.githandler import GitHandler
 import subprocess as sp
 import logging
+from hashlib import sha256
 
 import ruamel.yaml
 from ruamel.yaml import YAML, CommentedMap
@@ -43,32 +44,28 @@ class BuildFailureRecord:
             self.inner = dict()
             self.exists = False
 
-    def set_commit_sha_to_current_recipe(self):
-        self.commit_sha = self.get_recipe_commit_sha()
+    def set_recipe_sha_to_current_recipe(self):
+        self.recipe_sha = self.get_recipe_sha()
 
-    def get_recipe_commit_sha(self):
-        if self.git_handler is None:
-            self.git_handler = GitHandler()
-        # Get last commit sha of recipe
-        filepath = os.path.join(self.recipe_path, "meta.yaml")
-        commit_sha = sp.run(["git", "rev-list", "-1", "HEAD", filepath], check=True, capture_output=True).stdout.decode().strip()
-        return commit_sha
+    def get_recipe_sha(self):
+        with open(os.path.join(self.recipe_path, "meta.yaml"), "rb") as f:
+            return sha256.update(f.read()).hexdigest()
 
     def skiplists_current_recipe(self):
         if self.skiplist:
-            commit_sha = self.get_recipe_commit_sha()
-            if commit_sha == self.commit_sha:
+            recipe_sha = self.get_recipe_sha()
+            if recipe_sha == self.recipe_sha:
                 logger.info(f"Skipping {self.recipe_path} because it is skiplisted in {self.path}.")
                 return True
             else:
-                logger.info(f"Not skipping {self.recipe_path} as requested in {self.path} because it has been changed (commit {commit_sha}) since skiplisting (commit {self.commit_sha}).")
+                logger.info(f"Not skipping {self.recipe_path} as requested in {self.path} because it has been changed (recipe_sha {recipe_sha}) since skiplisting (recipe_sha {self.recipe_sha}).")
         return False
 
     def write(self):
         with open(self.path, "w") as f:
             yaml=YAML()
             commented_map = CommentedMap()
-            commented_map.insert(0, "commit_sha", self.commit_sha, comment="The commit at which this recipe failed to build.")
+            commented_map.insert(0, "recipe_sha", self.recipe_sha, comment="The commit at which this recipe failed to build.")
             commented_map.insert(1, "skiplist", self.skiplist, comment="Set to true to skiplist this recipe so that it will be ignored as long as its latest commit is the one given above.")
             i = 2
             if self.log:
@@ -103,8 +100,8 @@ class BuildFailureRecord:
         return self.inner.get("skiplist", False)
 
     @property
-    def commit_sha(self):
-        return self.inner.get("commit_sha", None)
+    def recipe_sha(self):
+        return self.inner.get("recipe_sha", None)
 
     @skiplist.setter
     def skiplist(self, value):
@@ -114,9 +111,9 @@ class BuildFailureRecord:
     def log(self, value):
         self.inner["log"] = value
     
-    @commit_sha.setter
-    def commit_sha(self, value):
-        self.inner["commit_sha"] = value
+    @recipe_sha.setter
+    def recipe_sha(self, value):
+        self.inner["recipe_sha"] = value
 
     @reason.setter
     def reason(self, value):

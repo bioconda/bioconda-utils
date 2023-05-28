@@ -187,7 +187,7 @@ def store_build_failure(recipe, output, meta, dag, skiplist_leafs):
     is_leaf = dag.out_degree(pkg_name) == 0
 
     build_failure_record = BuildFailureRecord(recipe)
-    build_failure_record.set_commit_sha_to_current_recipe()
+    build_failure_record.set_recipe_sha_to_current_recipe()
     # if recipe is a leaf (i.e. not used by others as dependency)
     # we can automatically blacklist it if desired
     build_failure_record.skiplist = skiplist_leafs and is_leaf
