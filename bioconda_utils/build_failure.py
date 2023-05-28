@@ -72,7 +72,13 @@ class BuildFailureRecord:
             commented_map.insert(1, "skiplist", self.skiplist, comment="Set to true to skiplist this recipe so that it will be ignored as long as its latest commit is the one given above.")
             i = 2
             if self.log:
-                commented_map.insert(i, "log", LiteralScalarString(utils.yaml_remove_invalid_chars(self.log)))
+                commented_map.insert(
+                    i,
+                    "log", 
+                    # remove invalid chars and keep only the last 100 lines
+                    LiteralScalarString(utils.yaml_remove_invalid_chars(self.log).splitlines()[-100:]),
+                    comment="Last 100 lines of the build log."
+                )
                 i += 1
             if self.reason:
                 commented_map.insert(i, "reason", LiteralScalarString(self.reason))
