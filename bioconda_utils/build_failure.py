@@ -50,7 +50,8 @@ class BuildFailureRecord:
     def get_recipe_sha(self):
         h = sha256()
         with open(os.path.join(self.recipe_path, "meta.yaml"), "rb") as f:
-            return h.update(f.read()).hexdigest()
+            h.update(f.read())
+            return h.hexdigest()
 
     def skiplists_current_recipe(self):
         if self.skiplist:
