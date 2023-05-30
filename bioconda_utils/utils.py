@@ -676,7 +676,7 @@ def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, mask_en
             if check:
                 raise sp.CalledProcessError(returncode, masked_cmds, output=output)
 
-        return sp.CompletedProcess(returncode, masked_cmds, output)
+        return sp.CompletedProcess(masked_cmds, returncode, stdout=output)
 
 
 def envstr(env):
