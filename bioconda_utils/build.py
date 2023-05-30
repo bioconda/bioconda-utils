@@ -196,25 +196,28 @@ def store_build_failure(recipe, output, meta, dag, skiplist_leafs):
     logger.info(f"Storing build failure record for recipe {recipe}")
     build_failure_record.write()
 
-    utils.run(["git", "add", build_failure_record.path], mask=False)
-    utils.run(["git", "commit", "-m", f"[ci skip] Add build failure record for recipe {recipe}"], mask=False)
-    for _ in range(3):
-        try:
-            # Rebase is "safe" here because this is meant to be run only on the bulk branch,
-            # with no other concurrent committers than the bulk CI processes which do indepenendent
-            # commits on different recipes.
-            # We don't want to use merge commits here because they would all trigger subsequent CI runs
-            # since they lack the [ci skip] part. Further, they would pollute the git history.
-            # If the rebase fails, we simply get an error.
-            utils.run(["git", "pull", "--rebase"], mask=False)
-            utils.run(["git", "push"], mask=False)
-            return
-        except sp.CalledProcessError:
-            time.sleep(1)
-    logger.error(
-        f"Failed to push build failure record for recipe {recipe}. "
-        "This might be because of raise conditions if multiple jobs do "
-        "this at the same time. Consider trying again later.")
+    if utils.run(["git", "diff", "--quiet", build_failure_record.path], mask=False).returncode:
+        utils.run(["git", "add", build_failure_record.path], mask=False)
+        utils.run(["git", "commit", "-m", f"[ci skip] Add build failure record for recipe {recipe}"], mask=False)
+        for _ in range(3):
+            try:
+                # Rebase is "safe" here because this is meant to be run only on the bulk branch,
+                # with no other concurrent committers than the bulk CI processes which do indepenendent
+                # commits on different recipes.
+                # We don't want to use merge commits here because they would all trigger subsequent CI runs
+                # since they lack the [ci skip] part. Further, they would pollute the git history.
+                # If the rebase fails, we simply get an error.
+                utils.run(["git", "pull", "--rebase"], mask=False)
+                utils.run(["git", "push"], mask=False)
+                return
+            except sp.CalledProcessError:
+                time.sleep(1)
+        logger.error(
+            f"Failed to push build failure record for recipe {recipe}. "
+            "This might be because of raise conditions if multiple jobs do "
+            "this at the same time. Consider trying again later.")
+    else:
+        logger.info("Nothing changed in build failure record. Keeping the current version.")
 
 def remove_cycles(dag, name2recipes, failed, skip_dependent):
     nodes_in_cycles = set()
