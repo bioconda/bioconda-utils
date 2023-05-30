@@ -38,12 +38,13 @@ class BuildFailureRecord:
                 except ruamel.yaml.reader.ReaderError as e:
                     raise IOError(f"Unable to read build failure record {path}: {e}")
 
-        if os.path.exists(self.path):
+        if self.exists():
             load(self.path)
-            self.exists = True
         else:
             self.inner = dict()
-            self.exists = False
+
+    def exists(self):
+        return os.path.exists(self.path)
 
     def set_recipe_sha_to_current_recipe(self):
         self.recipe_sha = self.get_recipe_sha()
@@ -92,8 +93,7 @@ class BuildFailureRecord:
             if self.reason:
                 commented_map.insert(i, "reason", LiteralScalarString(self.reason))
             yaml.dump(commented_map, f)
-        self.exists = True
-    
+
     def remove(self):
         logger.info(f"Removing build failure record for recipe {self.recipe_path}")
         os.remove(self.path)
@@ -123,11 +123,6 @@ class BuildFailureRecord:
                 "this at the same time. Consider trying again later.")
         else:
             logger.info("Nothing changed in build failure record. Keeping the current version.")
-
-    def delete(self):
-        if self.exists:
-            os.remove(self.path)
-            self.exists = False
 
     @property
     def reason(self):

@@ -156,8 +156,9 @@ def build(recipe: str, pkg_paths: List[str] = None,
         if record_build_failure:
             # Success, hence the record is obsolete. Remove it.
             build_failure_record = BuildFailureRecord(recipe)
-            build_failure_record.remove()
-            build_failure_record.commit_and_push_changes()
+            if build_failure_record.exists():
+                build_failure_record.remove()
+                build_failure_record.commit_and_push_changes()
 
     except (docker_utils.DockerCalledProcessError, sp.CalledProcessError) as exc:
         logger.error('BUILD FAILED %s', recipe)
