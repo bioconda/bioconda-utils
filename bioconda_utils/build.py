@@ -153,11 +153,16 @@ def build(recipe: str, pkg_paths: List[str] = None,
 
         logger.info('BUILD SUCCESS %s',
                     ' '.join(os.path.basename(p) for p in pkg_paths))
+        if record_build_failure:
+            # Success, hence the record is obsolete. Remove it.
+            build_failure_record = BuildFailureRecord(recipe)
+            build_failure_record.remove()
+            build_failure_record.commit_and_push_changes()
 
     except (docker_utils.DockerCalledProcessError, sp.CalledProcessError) as exc:
         logger.error('BUILD FAILED %s', recipe)
         if record_build_failure:
-            store_build_failure(recipe, exc.output, meta, dag, skiplist_leafs)
+            store_build_failure_record(recipe, exc.output, meta, dag, skiplist_leafs)
         if raise_error:
             raise exc
         return BuildResult(False, None)
@@ -179,7 +184,7 @@ def build(recipe: str, pkg_paths: List[str] = None,
     return BuildResult(True, None)
 
 
-def store_build_failure(recipe, output, meta, dag, skiplist_leafs):
+def store_build_failure_record(recipe, output, meta, dag, skiplist_leafs):
     """
     Write the exception to a file next to the meta.yaml
     """
@@ -187,37 +192,13 @@ def store_build_failure(recipe, output, meta, dag, skiplist_leafs):
     is_leaf = dag.out_degree(pkg_name) == 0
 
     build_failure_record = BuildFailureRecord(recipe)
-    build_failure_record.set_recipe_sha_to_current_recipe()
     # if recipe is a leaf (i.e. not used by others as dependency)
     # we can automatically blacklist it if desired
-    build_failure_record.skiplist = skiplist_leafs and is_leaf
-    build_failure_record.log = output
+    build_failure_record.fill(log=output, skiplist=skiplist_leafs and is_leaf)
 
-    logger.info(f"Storing build failure record for recipe {recipe}")
     build_failure_record.write()
+    build_failure_record.commit_and_push_changes()
 
-    if utils.run(["git", "diff", "--quiet", "--exit-code", build_failure_record.path], mask=False, check=False, quiet_failure=True).returncode:
-        utils.run(["git", "add", build_failure_record.path], mask=False)
-        utils.run(["git", "commit", "-m", f"[ci skip] Add build failure record for recipe {recipe}"], mask=False)
-        for _ in range(3):
-            try:
-                # Rebase is "safe" here because this is meant to be run only on the bulk branch,
-                # with no other concurrent committers than the bulk CI processes which do indepenendent
-                # commits on different recipes.
-                # We don't want to use merge commits here because they would all trigger subsequent CI runs
-                # since they lack the [ci skip] part. Further, they would pollute the git history.
-                # If the rebase fails, we simply get an error.
-                utils.run(["git", "pull", "--rebase"], mask=False)
-                utils.run(["git", "push"], mask=False)
-                return
-            except sp.CalledProcessError:
-                time.sleep(1)
-        logger.error(
-            f"Failed to push build failure record for recipe {recipe}. "
-            "This might be because of raise conditions if multiple jobs do "
-            "this at the same time. Consider trying again later.")
-    else:
-        logger.info("Nothing changed in build failure record. Keeping the current version.")
 
 def remove_cycles(dag, name2recipes, failed, skip_dependent):
     nodes_in_cycles = set()

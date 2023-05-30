@@ -1,4 +1,5 @@
 import os
+import time
 from typing import Optional, Union
 from bioconda_utils import utils
 from bioconda_utils.githandler import GitHandler
@@ -46,6 +47,14 @@ class BuildFailureRecord:
 
     def set_recipe_sha_to_current_recipe(self):
         self.recipe_sha = self.get_recipe_sha()
+    
+    def fill(self, log: Optional[str]=None, reason: Optional[str]=None, skiplist: bool=False):
+        self.set_recipe_sha_to_current_recipe()
+        # if recipe is a leaf (i.e. not used by others as dependency)
+        # we can automatically blacklist it if desired
+        self.skiplist = skiplist
+        self.log = log
+        self.reason = reason
 
     def get_recipe_sha(self):
         h = sha256()
@@ -64,6 +73,7 @@ class BuildFailureRecord:
         return False
 
     def write(self):
+        logger.info(f"Storing build failure record for recipe {self.recipe_path}")
         with open(self.path, "w") as f:
             yaml=YAML()
             commented_map = CommentedMap()
@@ -83,6 +93,36 @@ class BuildFailureRecord:
                 commented_map.insert(i, "reason", LiteralScalarString(self.reason))
             yaml.dump(commented_map, f)
         self.exists = True
+    
+    def remove(self):
+        logger.info(f"Removing build failure record for recipe {self.recipe_path}")
+        os.remove(self.path)
+
+    def commit_and_push_changes(self):
+        """Commit and push any changes, including removal of the record."""
+        if utils.run(["git", "diff", "--quiet", "--exit-code", "--", self.path], mask=False, check=False, quiet_failure=True).returncode:
+            utils.run(["git", "add", self.path], mask=False)
+            operation = "add" if os.path.exists(self.path) else "remove"
+            utils.run(["git", "commit", "-m", f"[ci skip] {operation} build failure record for recipe {self.recipe_path}"], mask=False)
+            for _ in range(3):
+                try:
+                    # Rebase is "safe" here because this is meant to be run only on the bulk branch,
+                    # with no other concurrent committers than the bulk CI processes which do indepenendent
+                    # commits on different recipes.
+                    # We don't want to use merge commits here because they would all trigger subsequent CI runs
+                    # since they lack the [ci skip] part. Further, they would pollute the git history.
+                    # If the rebase fails, we simply get an error.
+                    utils.run(["git", "pull", "--rebase"], mask=False)
+                    utils.run(["git", "push"], mask=False)
+                    return
+                except sp.CalledProcessError:
+                    time.sleep(1)
+            logger.error(
+                f"Failed to push build failure record for recipe {self.recipe_path}. "
+                "This might be because of raise conditions if multiple jobs do "
+                "this at the same time. Consider trying again later.")
+        else:
+            logger.info("Nothing changed in build failure record. Keeping the current version.")
 
     def delete(self):
         if self.exists:
