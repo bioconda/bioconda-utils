@@ -197,8 +197,9 @@ def store_build_failure(recipe, output, meta, dag, skiplist_leafs):
     build_failure_record.write()
 
     # TODO dbg
-    utils.run(["git", "diff", build_failure_record.path], mask=False, check=False)
-    if utils.run(["git", "diff", "--quiet", build_failure_record.path], mask=False, check=False, quiet_failure=True).returncode:
+    r = utils.run(["git", "diff", "--exit-code", build_failure_record.path], mask=False, check=False)
+    logger.info(f"returncode {r.returncode}")
+    if utils.run(["git", "diff", "--quiet", "--exit-code", build_failure_record.path], mask=False, check=False, quiet_failure=True).returncode:
         utils.run(["git", "add", build_failure_record.path], mask=False)
         utils.run(["git", "commit", "-m", f"[ci skip] Add build failure record for recipe {recipe}"], mask=False)
         for _ in range(3):
