@@ -563,7 +563,7 @@ def temp_os(platform):
 
 
 def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, mask_envvars: bool=False, live: bool=True,
-        mylogger: logging.Logger=logger, loglevel: int=logging.INFO,
+        mylogger: logging.Logger=logger, loglevel: int=logging.INFO, check=True, quiet_failure=False,
         **kwargs: Dict[Any, Any]) -> sp.CompletedProcess:
     """
     Run a command (with logging, masking, etc)
@@ -580,6 +580,7 @@ def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, mask_en
       mask: List of terms to mask (secrets)
       mask_envvars: Mask all environment variables; used if mask is None.
       live: Whether output should be sent to log
+      check: raise CalledProcessError on failure
       kwargs: Additional arguments to `subprocess.Popen`
 
     Returns:
@@ -668,10 +669,12 @@ def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, mask_en
         returncode = proc.poll()
 
         if returncode:
-            logger.error('COMMAND FAILED (exited with %s): %s', returncode, ' '.join(masked_cmds))
+            if not quiet_failure:
+                logger.error('COMMAND FAILED (exited with %s): %s', returncode, ' '.join(masked_cmds))
             if not live:
                 logger.error('STDOUT+STDERR:\n%s', output)
-            raise sp.CalledProcessError(returncode, masked_cmds, output=output)
+            if check:
+                raise sp.CalledProcessError(returncode, masked_cmds, output=output)
 
         return sp.CompletedProcess(returncode, masked_cmds, output)
 
