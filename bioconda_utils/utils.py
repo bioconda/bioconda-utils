@@ -961,56 +961,6 @@ def file_from_commit(commit, filename):
     return str(p.stdout)
 
 
-def newly_unblacklisted(config_file, recipe_folder, git_range):
-    """
-    Returns the set of recipes that were blacklisted in master branch but have
-    since been removed from the blacklist. Considers the contents of all
-    blacklists in the current config file and all blacklists in the same config
-    file in master branch.
-
-    Parameters
-    ----------
-
-    config_file : str
-        Needs filename (and not dict) because we check what the contents of the
-        config file were in the master branch.
-
-    recipe_folder : str
-        Path to recipe dir, needed by get_blacklist
-
-    git_range : str or list
-        If str or single-item list. If ``'HEAD'`` or ``['HEAD']`` or ``['master',
-        'HEAD']``, compares the current changes to master. If other commits are
-        specified, then use those commits directly via ``git show``.
-    """
-
-    # 'HEAD' becomes ['HEAD'] and then ['master', 'HEAD'].
-    # ['HEAD'] becomes ['master', 'HEAD']
-    # ['HEAD~~', 'HEAD'] stays the same
-    if isinstance(git_range, str):
-        git_range = [git_range]
-
-    if len(git_range) == 1:
-        git_range = ['master', git_range[0]]
-
-    # Get the set of previously blacklisted recipes by reading the original
-    # config file and then all the original blacklists it had listed
-    previous = set()
-    orig_config = file_from_commit(git_range[0], config_file)
-    for bl in yaml.safe_load(orig_config)['blacklists']:
-        with open('.tmp.blacklist', 'w', encoding='utf8') as fout:
-            fout.write(file_from_commit(git_range[0], bl))
-        previous.update(get_blacklist({'blacklists': '.tmp.blacklist'}, recipe_folder))
-        os.unlink('.tmp.blacklist')
-
-    current = get_blacklist(
-        yaml.safe_load(file_from_commit(git_range[1], config_file)),
-        recipe_folder)
-    results = previous.difference(current)
-    logger.info('Recipes newly unblacklisted:\n%s', '\n'.join(list(results)))
-    return results
-
-
 def changed_since_master(recipe_folder):
     """
     Return filenames changed since master branch.
@@ -1160,20 +1110,6 @@ def get_package_paths(recipe, check_channels, force=False):
         build_metas = new_metas
     return list(chain.from_iterable(
         api.get_output_file_paths(meta) for meta in build_metas))
-
-
-def get_blacklist(config: Dict[str, Any], recipe_folder: str) -> set:
-    "Return list of recipes to skip from blacklists"
-    blacklist = set()
-    for p in config.get('blacklists', []):
-        blacklist.update(
-            [
-                os.path.relpath(i.strip(), recipe_folder)
-                for i in open(p, encoding='utf8')
-                if not i.startswith('#') and i.strip()
-            ]
-        )
-    return blacklist
 
 
 def validate_config(config):

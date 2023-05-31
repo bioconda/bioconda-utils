@@ -1,5 +1,26 @@
 # Changelog
 
+### [2.2.1](https://www.github.com/bioconda/bioconda-utils/compare/v2.2.0...v2.2.1) (2023-05-22)
+
+
+### Bug Fixes
+
+* use git cli to obtain recipe commit sha, since there seems to be no fast and correct way to do that with gitpython ([#892](https://www.github.com/bioconda/bioconda-utils/issues/892)) ([a6fd713](https://www.github.com/bioconda/bioconda-utils/commit/a6fd7134d03fe39760654d63a9c279c0bd92afd5))
+
+## [2.2.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.1.0...v2.2.0) (2023-05-22)
+
+
+### Features
+
+* add subcommand to skiplist a given recipe using the new recipe specific mechanism; in addition, some fixes for the new skiplisting approach, and renaming blacklist into skiplist ([#890](https://www.github.com/bioconda/bioconda-utils/issues/890)) ([da7a912](https://www.github.com/bioconda/bioconda-utils/commit/da7a912c72a3b2d5566804b942ffecd585edd803))
+
+## [2.1.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.0.0...v2.1.0) (2023-05-21)
+
+
+### Features
+
+* add ability to store build failures as yaml next to recipe, add flag to automatically do so upon build failures, consider such files as blacklisting if they include `blacklist: true`. ([#888](https://www.github.com/bioconda/bioconda-utils/issues/888)) ([e78c120](https://www.github.com/bioconda/bioconda-utils/commit/e78c120a239cf1b845aba44043d51b89f7a27d55))
+
 ## [2.0.0](https://www.github.com/bioconda/bioconda-utils/compare/v1.7.1...v2.0.0) (2023-05-18)
 
 
