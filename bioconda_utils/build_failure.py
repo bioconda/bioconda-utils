@@ -100,8 +100,8 @@ class BuildFailureRecord:
 
     def commit_and_push_changes(self):
         """Commit and push any changes, including removal of the record."""
-        if utils.run(["git", "diff", "--quiet", "--exit-code", "--", self.path], mask=False, check=False, quiet_failure=True).returncode:
-            utils.run(["git", "add", self.path], mask=False)
+        utils.run(["git", "add", self.path], mask=False)
+        if utils.run(["git", "diff", "--quiet", "--exit-code", "HEAD", "--", self.path], mask=False, check=False, quiet_failure=True).returncode:
             operation = "add" if os.path.exists(self.path) else "remove"
             utils.run(["git", "commit", "-m", f"[ci skip] {operation} build failure record for recipe {self.recipe_path}"], mask=False)
             for _ in range(3):
