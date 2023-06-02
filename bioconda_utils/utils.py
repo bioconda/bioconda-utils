@@ -29,6 +29,7 @@ from typing import Sequence, Collection, List, Dict, Any, Union
 from multiprocessing import Pool
 from multiprocessing.pool import ThreadPool
 
+from yaspin import yaspin
 from urllib3 import Retry
 
 from github import Github
@@ -562,7 +563,7 @@ def temp_os(platform):
         sys.platform = original
 
 
-def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, mask_envvars: bool=False, live: bool=True,
+def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, mask_envvars: bool=False, live: bool=False,
         mylogger: logging.Logger=logger, loglevel: int=logging.INFO, check=True, quiet_failure=False,
         **kwargs: Dict[Any, Any]) -> sp.CompletedProcess:
     """
@@ -629,21 +630,30 @@ def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, mask_en
         err_thread.start()
 
         output_lines = []
-        try:
-            for _ in range(2):  # Run until we've got both `None` tokens
-                for pipe, line in iter(logq.get, None):
-                    line = do_mask(line.decode(errors='replace').rstrip())
-                    output_lines.append(line)
-                    if live:
-                        if pipe == proc.stdout:
-                            prefix = "OUT"
-                        else:
-                            prefix = "ERR"
-                        mylogger.log(loglevel, "(%s) %s", prefix, line)
-        except Exception:
-            proc.kill()
-            proc.wait()
-            raise
+        def handle_output():
+            try:
+                for _ in range(2):  # Run until we've got both `None` tokens
+                    for pipe, line in iter(logq.get, None):
+                        line = do_mask(line.decode(errors='replace').rstrip())
+                        output_lines.append(line)
+                        # only keep the last 1000 lines to avoid memory issues
+                        output_lines = output_lines[-1000:]
+                        if live:
+                            if pipe == proc.stdout:
+                                prefix = "OUT"
+                            else:
+                                prefix = "ERR"
+                            mylogger.log(loglevel, "(%s) %s", prefix, line)
+            except Exception:
+                proc.kill()
+                proc.wait()
+                raise
+        
+        if not live:
+            with yaspin(text="running"):
+                handle_output()
+        else:
+            handle_output()
 
         output = "\n".join(output_lines)
         if isinstance(cmds, str):

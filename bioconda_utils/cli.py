@@ -1032,6 +1032,11 @@ def skiplist_recipe(recipe, reason, platforms=None):
         failure_record.write()
 
 
+# TODO add subcommand to list recipes with build failure records descendingly sorted by downloads
+# in case of version subdirs, only list if the latest version also has the build failure record.
+# list how many recipes depend on this and sort by it primarily if inner
+
+
 def main():
     if '--version' in sys.argv:
         print("This is bioconda-utils version", VERSION)
