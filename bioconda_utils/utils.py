@@ -21,7 +21,7 @@ import warnings
 
 from threading import Event, Thread
 from pathlib import PurePath
-from collections import Counter, defaultdict, namedtuple
+from collections import Counter, defaultdict, namedtuple, deque
 from collections.abc import Iterable
 from itertools import product, chain, groupby, zip_longest
 from functools import partial
@@ -629,15 +629,15 @@ def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, mask_en
         out_thread.start()
         err_thread.start()
 
-        output_lines = []
-        def handle_output():
+        def handle_output(output_lines):
             try:
                 for _ in range(2):  # Run until we've got both `None` tokens
                     for pipe, line in iter(logq.get, None):
                         line = do_mask(line.decode(errors='replace').rstrip())
                         output_lines.append(line)
                         # only keep the last 1000 lines to avoid memory issues
-                        output_lines = output_lines[-1000:]
+                        if len(output_lines) > 1000:
+                            output_lines.popleft()
                         if live:
                             if pipe == proc.stdout:
                                 prefix = "OUT"
@@ -648,12 +648,13 @@ def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, mask_en
                 proc.kill()
                 proc.wait()
                 raise
-        
+
+        output_lines = deque()
         if not live:
             with yaspin(text="running"):
-                handle_output()
+                handle_output(output_lines)
         else:
-            handle_output()
+            handle_output(output_lines)
 
         output = "\n".join(output_lines)
         if isinstance(cmds, str):
