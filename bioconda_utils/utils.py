@@ -19,6 +19,7 @@ import json
 import queue
 import warnings
 
+from datetime import datetime
 from threading import Event, Thread
 from pathlib import PurePath
 from collections import Counter, defaultdict, namedtuple, deque
@@ -30,6 +31,7 @@ from multiprocessing import Pool
 from multiprocessing.pool import ThreadPool
 
 from yaspin import yaspin
+from yaspin.spinners import Spinners
 from urllib3 import Retry
 
 from github import Github
@@ -144,6 +146,18 @@ def wraps(func):
         return fully_wrapped
 
     return wrapper_wrapper
+
+
+# Taken from https://pypi.org/project/yaspin/
+class TimedText:
+    def __init__(self, text):
+        self.text = text
+        self._start = datetime.now()
+
+    def __str__(self):
+        now = datetime.now()
+        delta = now - self._start
+        return f"{self.text} ({round(delta.total_seconds(), 1)}s)"
 
 
 class LogFuncFilter:
@@ -651,7 +665,9 @@ def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, mask_en
 
         output_lines = deque()
         if not live:
-            with yaspin(text="running"):
+            spinner = Spinners.dots
+            spinner.interval = 10000
+            with yaspin(spinner, text="running", timer=True):
                 handle_output(output_lines)
         else:
             handle_output(output_lines)
