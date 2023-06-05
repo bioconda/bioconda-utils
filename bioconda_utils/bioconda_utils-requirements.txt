@@ -70,3 +70,7 @@ requests=2.22.*
 
 # merge handling
 pygithub
+
+# caching
+diskcache =5
+appdirs =1

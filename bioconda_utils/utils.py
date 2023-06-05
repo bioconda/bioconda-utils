@@ -29,9 +29,13 @@ from typing import Sequence, Collection, List, Dict, Any, Union
 from multiprocessing import Pool
 from multiprocessing.pool import ThreadPool
 
+import requests
+import intake
 from yaspin import yaspin, Spinner
 from yaspin.spinners import Spinners
 from urllib3 import Retry
+import appdirs
+import diskcache
 
 from github import Github
 
@@ -61,6 +65,8 @@ from boltons.funcutils import FunctionBuilder
 
 
 logger = logging.getLogger(__name__)
+
+disk_cache = diskcache.Cache(appdirs.user_cache_dir("bioconda-utils"))
 
 
 class TqdmHandler(logging.StreamHandler):
@@ -92,7 +98,8 @@ def tqdm(*args, **kwargs):
     """
     term_ok = (sys.stderr.isatty()
                and os.environ.get("TERM", "") != "dumb"
-               and os.environ.get("CIRCLECI", "") != "true")
+               and os.environ.get("CIRCLECI", "") != "true"
+               and os.environ.get("CI", "") != "true")
     loglevel_ok = (kwargs.get('logger', logger).getEffectiveLevel()
                    <= kwargs.get('loglevel', logging.INFO))
     kwargs['disable'] = not (term_ok and loglevel_ok)
@@ -1611,3 +1618,11 @@ def yaml_remove_invalid_chars(text: str, valid_chars_re=re.compile(r"[^ \t\n\w\d
     E.g. we do not want them to contain carriage return chars or delete chars.
     """
     return valid_chars_re.sub("", text)
+
+
+# Cache results to disk for one week.
+@disk_cache.memoize(expire=604800)
+def get_package_downloads(channel, package):
+    """Get package data for all packages in our channel as an Intake catalog object."""
+    data = requests.get(f"https://api.anaconda.org/package/{channel}/{package}").json()
+    return sum(rec["ndownloads"] for rec in data["files"])

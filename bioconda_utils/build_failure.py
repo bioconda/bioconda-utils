@@ -11,6 +11,8 @@ import ruamel.yaml
 from ruamel.yaml import YAML, CommentedMap
 from ruamel.yaml.scalarstring import LiteralScalarString
 import conda.exports
+import conda.base.constants
+import pandas as pd
 
 from bioconda_utils.recipe import Recipe
 
@@ -29,6 +31,7 @@ class BuildFailureRecord:
         if platform is None:
             platform = conda.exports.subdir
         self.path = os.path.join(self.recipe_path, f"build_failure.{platform}.yaml")
+        self.platform = platform
 
         def load(path):
             with open(path, "r") as f:
@@ -42,6 +45,15 @@ class BuildFailureRecord:
             load(self.path)
         else:
             self.inner = dict()
+
+    def get_link(self, fmt: str="md", prefix: str=""):
+        uri = self.path
+        if prefix:
+            uri = f"{prefix}/{uri}"
+        if fmt == "markdown":
+            return f"[{self.platform}]({uri})"
+        elif fmt == "txt":
+            return uri
 
     def exists(self):
         return os.path.exists(self.path)
@@ -155,3 +167,38 @@ class BuildFailureRecord:
     @reason.setter
     def reason(self, value):
         self.inner["reason"] = value
+
+
+def collect_build_failure_dataframe(recipe_folder, channel, build_failure_link_template=None):
+    def get_build_failure_records(recipe):
+        return filter(
+            BuildFailureRecord.exists, 
+            [BuildFailureRecord(recipe, platform=platform) for platform in conda.base.constants.PLATFORM_DIRECTORIES]
+        )
+
+    def has_build_failure(recipe):
+        return any(get_build_failure_records(recipe))
+
+    def get_data():
+        i = 0
+        for recipe in utils.tqdm(list(utils.get_recipes(recipe_folder))):
+            if not has_build_failure(recipe):
+                continue
+
+            components = recipe.split(os.sep)
+            is_version_subdir = len(components) == 3
+
+            if is_version_subdir:
+                # skip if latest recipe does not have a build failure
+                if not has_build_failure(os.path.dirname(recipe)):
+                    continue
+
+            package = components[-1] if not is_version_subdir else components[-2]
+            downloads = utils.get_package_downloads(channel, package)
+
+            links = ", ".join(build_failure_link_template(rec) for rec in get_build_failure_records(recipe))
+            yield (recipe, downloads, links)
+
+    data = pd.DataFrame(get_data(), columns=["recipe", "downloads", "links"])
+    data.sort_values(by=["downloads"], ascending=False, inplace=True)
+    return data

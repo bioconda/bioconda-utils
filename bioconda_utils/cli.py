@@ -10,7 +10,7 @@ import warnings
 
 from bioconda_utils.artifacts import upload_pr_artifacts
 from bioconda_utils.skiplist import Skiplist
-from bioconda_utils.build_failure import BuildFailureRecord
+from bioconda_utils.build_failure import BuildFailureRecord, collect_build_failure_dataframe
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 
 import sys
@@ -1016,25 +1016,60 @@ def autobump(recipe_folder, config, packages='*', exclude=None, cache=None,
         git_handler.close()
 
 
-@arg('recipe', help='Path to recipe that shall be skiplisted')
-@arg('reason', help='Reason for skiplisting')
+@arg('recipes', nargs="+", type=str, help='Paths to recipes that shall be skiplisted')
+@arg('--reason', help='Reason for skiplisting. If omitted, will fail if there is no existing build failure record with a log entry.')
 @arg('--platforms', help='Platforms to skiplist for', nargs='+', type=str, default=['linux-64', 'osx-64'])
-def skiplist_recipe(recipe, reason, platforms=None):
+def skiplist_recipes(recipes, reason=None, platforms=None):
     valid_platform_names = set(conda.base.constants.PLATFORM_DIRECTORIES)
-    for platform in platforms:
-        if platform not in valid_platform_names:
-            logger.error(f"Invalid platform {platform}, choose from: {', '.join(valid_platform_names)}")
-            continue
-        failure_record = BuildFailureRecord(recipe, platform=platform)
-        failure_record.set_recipe_sha_to_current_recipe()
-        failure_record.reason = reason
-        failure_record.skiplist = True
-        failure_record.write()
+    for recipe in recipes:
+        for platform in platforms:
+            if platform not in valid_platform_names:
+                logger.error(f"Invalid platform {platform}, choose from: {', '.join(valid_platform_names)}")
+                continue
+            failure_record = BuildFailureRecord(recipe, platform=platform)
+
+            if not reason and failure_record.exists():
+                if not failure_record.log:
+                    logger.error(
+                        f"Recipe {recipe} has a build failure record ({failure_record.path}), "
+                        "but no log entry. Please add a log entry or specify a reason."
+                    )
+                    continue
+                if failure_record.recipe_sha != failure_record.get_recipe_sha():
+                    logger.error(
+                        f"Recipe {recipe} has a build failure record ({failure_record.path}), "
+                        "but the recipe has changed since recording the build log. "
+                        "Please specify a reason for skipping or rebuild for updating the log."
+                    )
+                    continue
+
+            failure_record.fill(reason=reason, skiplist=True)
+            failure_record.write()
 
 
 # TODO add subcommand to list recipes with build failure records descendingly sorted by downloads
 # in case of version subdirs, only list if the latest version also has the build failure record.
 # list how many recipes depend on this and sort by it primarily if inner
+@arg("recipe_folder", help="Path to the recipes folder")
+@arg('--channel', help="Channel with packages to check", default="bioconda")
+@arg('--output-format', help="Output format", choices=['txt', 'markdown'], default="txt")
+@arg('--link-prefix', help="Prefix for links to build failures", default='')
+def list_build_failures(recipe_folder, channel=None, output_format=None, link_prefix=None):
+    """List recipes with build failure records"""
+
+    df = collect_build_failure_dataframe(
+        recipe_folder,
+        channel,
+        build_failure_link_template=lambda rec: rec.get_link(fmt=output_format, prefix=link_prefix)
+    )
+    if output_format == "markdown":
+        fmt_writer = pandas.DataFrame.to_markdown
+    elif output_format == "txt":
+        fmt_writer = pandas.DataFrame.to_string
+    else:
+        logger.error("Invalid output format, must be txt or markdown.")
+        exit(1)
+    fmt_writer(df, sys.stdout, index=False)
 
 
 def main():
@@ -1044,5 +1079,5 @@ def main():
     argh.dispatch_commands([
         build, dag, dependent, do_lint, duplicates, update_pinning,
         bioconductor_skeleton, clean_cran_skeleton, autobump,
-        handle_merged_pr, skiplist_recipe
+        handle_merged_pr, skiplist_recipes, list_build_failures
     ])
