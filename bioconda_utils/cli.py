@@ -1025,9 +1025,16 @@ def autobump(recipe_folder, config, packages='*', exclude=None, cache=None,
      choices=["compiler error", "conda/mamba bug", "test failure", "dependency issue", "checksum mismatch", "source download error"]
 )
 @arg('--platforms', help='Platforms to annotate', nargs='+', type=str, default=['linux-64', 'osx-64'])
-def annotate_build_failure(recipes, skiplist=False, reason=None, category=None, platforms=None):
+@arg('--existing-only', help="Only annotate already existing build failure records. The platform setting is ignored in this case.", action="store_true")
+def annotate_build_failure(recipes, skiplist=False, reason=None, category=None, platforms=None, existing_only=False):
     valid_platform_names = set(conda.base.constants.PLATFORM_DIRECTORIES)
     for recipe in recipes:
+        if existing_only:
+            platforms = [
+                platform
+                for platform in conda.base.constants.PLATFORM_DIRECTORIES 
+                if BuildFailureRecord(recipe, platform=platform).exists()
+            ]
         for platform in platforms:
             if platform not in valid_platform_names:
                 logger.error(f"Invalid platform {platform}, choose from: {', '.join(valid_platform_names)}")
