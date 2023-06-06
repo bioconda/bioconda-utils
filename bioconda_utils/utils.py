@@ -30,7 +30,6 @@ from multiprocessing import Pool
 from multiprocessing.pool import ThreadPool
 
 import requests
-import intake
 from yaspin import yaspin, Spinner
 from yaspin.spinners import Spinners
 from urllib3 import Retry
@@ -1632,6 +1631,6 @@ def yaml_remove_invalid_chars(text: str, valid_chars_re=re.compile(r"[^ \t\n\w\d
 # Cache results to disk for one week.
 @disk_cache.memoize(expire=604800)
 def get_package_downloads(channel, package):
-    """Get package data for all packages in our channel as an Intake catalog object."""
+    """Use anaconda API to obtain download counts."""
     data = requests.get(f"https://api.anaconda.org/package/{channel}/{package}").json()
     return sum(rec["ndownloads"] for rec in data["files"])
