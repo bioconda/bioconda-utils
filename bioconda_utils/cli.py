@@ -1018,7 +1018,7 @@ def autobump(recipe_folder, config, packages='*', exclude=None, cache=None,
 
 
 @arg('recipes', nargs="+", type=str, help='Paths to recipes that shall be skiplisted')
-@arg('--skiplist', action="store_true", help='Skiplist recipe.')
+@arg('--skiplist', action="store_true", help='Skiplist recipes.')
 @arg('--reason', help='Reason for skiplisting. If omitted, will fail if there is no existing build failure record with a log entry.')
 @arg('--category',
      help='Category of build failure. If omitted, will fail if there is no existing build failure record with a log entry.',
@@ -1026,7 +1026,7 @@ def autobump(recipe_folder, config, packages='*', exclude=None, cache=None,
 )
 @arg('--platforms', help='Platforms to annotate', nargs='+', type=str, default=['linux-64', 'osx-64'])
 @arg('--existing-only', help="Only annotate already existing build failure records. The platform setting is ignored in this case.", action="store_true")
-def annotate_build_failure(recipes, skiplist=False, reason=None, category=None, platforms=None, existing_only=False):
+def annotate_build_failures(recipes, skiplist=False, reason=None, category=None, platforms=None, existing_only=False):
     valid_platform_names = set(conda.base.constants.PLATFORM_DIRECTORIES)
     for recipe in recipes:
         if existing_only:
@@ -1088,10 +1088,10 @@ def list_build_failures(recipe_folder, config, channel=None, output_format=None,
 
 
 @arg(
-    '--message',
+    'message',
      help="The commit message. Will be prepended with [ci skip] to avoid that commits accidentally trigger a rerun while bulk is already running"
 )
-def bulk_commit(message=None):
+def bulk_commit(message):
     bulk.commit(message)
 
 
@@ -1106,6 +1106,6 @@ def main():
     argh.dispatch_commands([
         build, dag, dependent, do_lint, duplicates, update_pinning,
         bioconductor_skeleton, clean_cran_skeleton, autobump,
-        handle_merged_pr, annotate_build_failure, list_build_failures,
+        handle_merged_pr, annotate_build_failures, list_build_failures,
         bulk_commit, bulk_trigger_ci
     ])
