@@ -1061,7 +1061,8 @@ def list_build_failures(recipe_folder, config, channel=None, output_format=None,
         recipe_folder,
         config,
         channel,
-        build_failure_link_template=lambda rec: rec.get_link(fmt=output_format, prefix=link_prefix)
+        link_fmt=output_format,
+        link_prefix=link_prefix,
     )
     if output_format == "markdown":
         fmt_writer = pandas.DataFrame.to_markdown

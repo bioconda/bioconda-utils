@@ -47,15 +47,6 @@ class BuildFailureRecord:
         else:
             self.inner = dict()
 
-    def get_link(self, fmt: str="md", prefix: str=""):
-        uri = self.path
-        if prefix:
-            uri = f"{prefix}/{uri}"
-        if fmt == "markdown":
-            return f"[{self.platform}]({uri})"
-        elif fmt == "txt":
-            return uri
-
     def exists(self):
         return os.path.exists(self.path)
 
@@ -170,7 +161,7 @@ class BuildFailureRecord:
         self.inner["reason"] = value
 
 
-def collect_build_failure_dataframe(recipe_folder, config, channel, build_failure_link_template=None):
+def collect_build_failure_dataframe(recipe_folder, config, channel, link_fmt="txt", link_prefix=""):
     def get_build_failure_records(recipe):
         return filter(
             BuildFailureRecord.exists, 
@@ -203,10 +194,11 @@ def collect_build_failure_dataframe(recipe_folder, config, channel, build_failur
             downloads = utils.get_package_downloads(channel, package)
             recs = list(get_build_failure_records(recipe))
 
-            links = ", ".join(build_failure_link_template(rec) for rec in recs)
+            failures = ", ".join(utils.format_link(rec.path, link_fmt, prefix=link_prefix, label=rec.platform) for rec in recs)
             skiplisted = any(rec.skiplist for rec in recs)
-            yield (recipe, downloads, descendants, skiplisted, links)
+            prs = utils.format_link(f"https://github.com/bioconda/bioconda-recipes/pulls?q=is%3Apr+is%3Aopen+{package}", link_fmt, label="show")
+            yield (recipe, downloads, descendants, skiplisted, failures, prs)
 
-    data = pd.DataFrame(get_data(), columns=["recipe", "downloads", "depending", "skiplisted", "build failures"])
+    data = pd.DataFrame(get_data(), columns=["recipe", "downloads", "depending", "skiplisted", "build failures", "pull requests"])
     data.sort_values(by=["depending", "downloads"], ascending=False, inplace=True)
     return data

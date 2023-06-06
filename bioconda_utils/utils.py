@@ -833,6 +833,15 @@ def parallel_iter(func, items, desc, *args, **kwargs):
         )
 
 
+def format_link(uri, fmt: str, prefix: str="", label: str=""):
+    if prefix:
+        uri = f"{prefix}/{uri}"
+    if fmt == "markdown":
+        return f"[{label}]({uri})"
+    elif fmt == "txt":
+        return uri
+    else:
+        raise ValueError(f"Invalid link format: {fmt}")
 
 
 def get_recipes(recipe_folder, package="*", exclude=None):
