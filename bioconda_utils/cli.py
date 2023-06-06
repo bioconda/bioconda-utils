@@ -7,6 +7,7 @@ Bioconda Utils Command Line Interface
 # ".../importlib/_bootstrap.py:219: RuntimeWarning: numpy.dtype size \
 # changed, may indicate binary incompatibility. Expected 96, got 88"
 import warnings
+from bioconda_utils import bulk
 
 from bioconda_utils.artifacts import upload_pr_artifacts
 from bioconda_utils.skiplist import Skiplist
@@ -1017,9 +1018,14 @@ def autobump(recipe_folder, config, packages='*', exclude=None, cache=None,
 
 
 @arg('recipes', nargs="+", type=str, help='Paths to recipes that shall be skiplisted')
+@arg('--skiplist', action="store_true", help='Skiplist recipe.')
 @arg('--reason', help='Reason for skiplisting. If omitted, will fail if there is no existing build failure record with a log entry.')
-@arg('--platforms', help='Platforms to skiplist for', nargs='+', type=str, default=['linux-64', 'osx-64'])
-def skiplist_recipes(recipes, reason=None, platforms=None):
+@arg('--category',
+     help='Category of build failure. If omitted, will fail if there is no existing build failure record with a log entry.',
+     choices=["compiler error", "conda/mamba bug", "test failure", "dependency issue", "checksum mismatch", "source download error"]
+)
+@arg('--platforms', help='Platforms to annotate', nargs='+', type=str, default=['linux-64', 'osx-64'])
+def annotate_build_failure(recipes, skiplist=False, reason=None, category=None, platforms=None):
     valid_platform_names = set(conda.base.constants.PLATFORM_DIRECTORIES)
     for recipe in recipes:
         for platform in platforms:
@@ -1043,7 +1049,7 @@ def skiplist_recipes(recipes, reason=None, platforms=None):
                     )
                     continue
 
-            failure_record.fill(reason=reason, skiplist=True)
+            failure_record.fill(reason=reason, category=category, skiplist=skiplist)
             failure_record.write()
 
 
@@ -1074,6 +1080,18 @@ def list_build_failures(recipe_folder, config, channel=None, output_format=None,
     fmt_writer(df, sys.stdout, index=False)
 
 
+@arg(
+    '--message',
+     help="The commit message. Will be prepended with [ci skip] to avoid that commits accidentally trigger a rerun while bulk is already running"
+)
+def bulk_commit(message=None):
+    bulk.commit(message)
+
+
+def bulk_trigger_ci():
+    bulk.trigger_ci()
+
+
 def main():
     if '--version' in sys.argv:
         print("This is bioconda-utils version", VERSION)
@@ -1081,5 +1099,6 @@ def main():
     argh.dispatch_commands([
         build, dag, dependent, do_lint, duplicates, update_pinning,
         bioconductor_skeleton, clean_cran_skeleton, autobump,
-        handle_merged_pr, skiplist_recipes, list_build_failures
+        handle_merged_pr, annotate_build_failure, list_build_failures,
+        bulk_commit, bulk_trigger_ci
     ])

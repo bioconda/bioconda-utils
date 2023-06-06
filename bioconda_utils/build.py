@@ -125,6 +125,12 @@ def build(recipe: str, pkg_paths: List[str] = None,
     else:
         base_image = 'quay.io/bioconda/base-glibc-busybox-bash:2.1.0'
 
+    build_failure_record = BuildFailureRecord(recipe)
+    build_failure_record_existed_before_build = build_failure_record.exists()
+    if build_failure_record_existed_before_build:
+        # remove record to avoid that it is leaked into the package
+        build_failure_record.remove()
+
     try:
         if docker_builder is not None:
             docker_builder.build_recipe(recipe_dir=os.path.abspath(recipe),
@@ -155,9 +161,8 @@ def build(recipe: str, pkg_paths: List[str] = None,
                     ' '.join(os.path.basename(p) for p in pkg_paths))
         if record_build_failure:
             # Success, hence the record is obsolete. Remove it.
-            build_failure_record = BuildFailureRecord(recipe)
-            if build_failure_record.exists():
-                build_failure_record.remove()
+            if build_failure_record_existed_before_build:
+                # record is already removed (see above), but change has to be committed
                 build_failure_record.commit_and_push_changes()
 
     except (docker_utils.DockerCalledProcessError, sp.CalledProcessError) as exc:

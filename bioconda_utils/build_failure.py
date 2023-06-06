@@ -53,13 +53,17 @@ class BuildFailureRecord:
     def set_recipe_sha_to_current_recipe(self):
         self.recipe_sha = self.get_recipe_sha()
     
-    def fill(self, log: Optional[str]=None, reason: Optional[str]=None, skiplist: bool=False):
+    def fill(self, log: Optional[str]=None, reason: Optional[str]=None, category: Optional[str]=None, skiplist: bool=False):
         self.set_recipe_sha_to_current_recipe()
         # if recipe is a leaf (i.e. not used by others as dependency)
         # we can automatically blacklist it if desired
         self.skiplist = skiplist
-        self.log = log
-        self.reason = reason
+        if log:
+            self.log = log
+        if reason:
+            self.reason = reason
+        if category:
+            self.category = category
 
     def get_recipe_sha(self):
         h = sha256()
@@ -133,7 +137,17 @@ class BuildFailureRecord:
         return self.inner.get("reason", "")
 
     @property
+    def category(self):
+        return self.inner.get("category", "")
+
+    @property
     def log(self):
+        # Remove category and reason in case a new log is recorded.
+        # This is necessary to avoid inconsistency with those manual annotations.
+        if "category" in self.inner:
+            del self.inner["category"]
+        if "reason" in self.inner:
+            del self.inner["reason"]
         return self.inner.get("log", "")
 
     @property
@@ -159,6 +173,10 @@ class BuildFailureRecord:
     @reason.setter
     def reason(self, value):
         self.inner["reason"] = value
+
+    @category.setter
+    def category(self, value):
+        self.inner["category"] = value
 
 
 def collect_build_failure_dataframe(recipe_folder, config, channel, link_fmt="txt", link_prefix=""):
