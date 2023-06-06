@@ -1050,15 +1050,16 @@ def skiplist_recipes(recipes, reason=None, platforms=None):
 # TODO add subcommand to list recipes with build failure records descendingly sorted by downloads
 # in case of version subdirs, only list if the latest version also has the build failure record.
 # list how many recipes depend on this and sort by it primarily if inner
-@arg("recipe_folder", help="Path to the recipes folder")
+@recipe_folder_and_config()
 @arg('--channel', help="Channel with packages to check", default="bioconda")
 @arg('--output-format', help="Output format", choices=['txt', 'markdown'], default="txt")
 @arg('--link-prefix', help="Prefix for links to build failures", default='')
-def list_build_failures(recipe_folder, channel=None, output_format=None, link_prefix=None):
+def list_build_failures(recipe_folder, config, channel=None, output_format=None, link_prefix=None):
     """List recipes with build failure records"""
 
     df = collect_build_failure_dataframe(
         recipe_folder,
+        config,
         channel,
         build_failure_link_template=lambda rec: rec.get_link(fmt=output_format, prefix=link_prefix)
     )

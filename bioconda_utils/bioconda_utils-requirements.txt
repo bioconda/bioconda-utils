@@ -74,3 +74,6 @@ pygithub
 # caching
 diskcache =5
 appdirs =1
+
+# build failure output
+tabulate =0.9

@@ -1,8 +1,6 @@
 import os
 import time
 from typing import Optional, Union
-from bioconda_utils import utils
-from bioconda_utils.githandler import GitHandler
 import subprocess as sp
 import logging
 from hashlib import sha256
@@ -13,8 +11,11 @@ from ruamel.yaml.scalarstring import LiteralScalarString
 import conda.exports
 import conda.base.constants
 import pandas as pd
+import networkx as nx
 
 from bioconda_utils.recipe import Recipe
+from bioconda_utils import graph, utils
+from bioconda_utils.githandler import GitHandler
 
 
 logger = logging.getLogger(__name__)
@@ -169,7 +170,7 @@ class BuildFailureRecord:
         self.inner["reason"] = value
 
 
-def collect_build_failure_dataframe(recipe_folder, channel, build_failure_link_template=None):
+def collect_build_failure_dataframe(recipe_folder, config, channel, build_failure_link_template=None):
     def get_build_failure_records(recipe):
         return filter(
             BuildFailureRecord.exists, 
@@ -178,10 +179,12 @@ def collect_build_failure_dataframe(recipe_folder, channel, build_failure_link_t
 
     def has_build_failure(recipe):
         return any(get_build_failure_records(recipe))
+    
+    recipes = list(utils.get_recipes(recipe_folder))
+    dag, _ = graph.build(recipes, config)
 
     def get_data():
-        i = 0
-        for recipe in utils.tqdm(list(utils.get_recipes(recipe_folder))):
+        for recipe in utils.tqdm(recipes, desc="Checking recipes"):
             if not has_build_failure(recipe):
                 continue
 
@@ -194,11 +197,16 @@ def collect_build_failure_dataframe(recipe_folder, channel, build_failure_link_t
                     continue
 
             package = components[-1] if not is_version_subdir else components[-2]
+
+            descendants = len(nx.descendants(dag, package))
+
             downloads = utils.get_package_downloads(channel, package)
+            recs = list(get_build_failure_records(recipe))
 
-            links = ", ".join(build_failure_link_template(rec) for rec in get_build_failure_records(recipe))
-            yield (recipe, downloads, links)
+            links = ", ".join(build_failure_link_template(rec) for rec in recs)
+            skiplisted = any(rec.skiplist for rec in recs)
+            yield (recipe, downloads, descendants, skiplisted, links)
 
-    data = pd.DataFrame(get_data(), columns=["recipe", "downloads", "links"])
-    data.sort_values(by=["downloads"], ascending=False, inplace=True)
+    data = pd.DataFrame(get_data(), columns=["recipe", "downloads", "depending", "skiplisted", "build failures"])
+    data.sort_values(by=["depending", "downloads"], ascending=False, inplace=True)
     return data

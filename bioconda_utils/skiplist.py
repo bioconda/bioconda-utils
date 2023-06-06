@@ -2,8 +2,6 @@ import os
 from typing import Any, Dict, Union
 from bioconda_utils.recipe import Recipe
 
-from bioconda_utils.build_failure import BuildFailureRecord
-
 
 class Skiplist:
     def __init__(self, config: Dict[str, Any], recipe_folder: str):
@@ -22,6 +20,8 @@ class Skiplist:
         return os.path.relpath(recipe_path, self.recipe_folder)
 
     def is_skiplisted(self, recipe: Union[str, Recipe]) -> bool:
+        from bioconda_utils.build_failure import BuildFailureRecord
+        
         if isinstance(recipe, Recipe):
             recipe_reldir = recipe.reldir
         else:

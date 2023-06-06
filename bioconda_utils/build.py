@@ -190,7 +190,7 @@ def store_build_failure_record(recipe, output, meta, dag, skiplist_leafs):
     Write the exception to a file next to the meta.yaml
     """
     pkg_name = meta.meta["package"]["name"]
-    is_leaf = dag.out_degree(pkg_name) == 0
+    is_leaf = graph.is_leaf(dag, pkg_name)
 
     build_failure_record = BuildFailureRecord(recipe)
     # if recipe is a leaf (i.e. not used by others as dependency)
