@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.3.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.2.1...v2.3.0) (2023-06-07)
+
+
+### Features
+
+* always add a fallback archive URL to the meta.yaml when using bioconductor-skeleton ([#886](https://www.github.com/bioconda/bioconda-utils/issues/886)) ([d885495](https://www.github.com/bioconda/bioconda-utils/commit/d885495d54b177411863fdca3bdfa35ca781457f))
+
+
+### Bug Fixes
+
+* various little fixes for build failure records and automatic skiplisting ([#894](https://www.github.com/bioconda/bioconda-utils/issues/894)) ([715efc2](https://www.github.com/bioconda/bioconda-utils/commit/715efc27319afda8b7fe19a0d112a84e8b8569c9))
+
 ### [2.2.1](https://www.github.com/bioconda/bioconda-utils/compare/v2.2.0...v2.2.1) (2023-05-22)
 
 
