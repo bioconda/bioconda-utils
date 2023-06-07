@@ -144,3 +144,7 @@ def filter(dag, packages):
                 raise
 
     return nx.subgraph(dag, nodes)
+
+
+def is_leaf(dag, pkg_name: str):
+    return dag.out_degree(pkg_name) == 0
