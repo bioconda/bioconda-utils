@@ -7,6 +7,7 @@ from collections import defaultdict, namedtuple
 import os
 import logging
 import itertools
+import time
 
 from typing import List, Optional
 from bioconda_utils.skiplist import Skiplist
@@ -124,6 +125,12 @@ def build(recipe: str, pkg_paths: List[str] = None,
     else:
         base_image = 'quay.io/bioconda/base-glibc-busybox-bash:2.1.0'
 
+    build_failure_record = BuildFailureRecord(recipe)
+    build_failure_record_existed_before_build = build_failure_record.exists()
+    if build_failure_record_existed_before_build:
+        # remove record to avoid that it is leaked into the package
+        build_failure_record.remove()
+
     try:
         if docker_builder is not None:
             docker_builder.build_recipe(recipe_dir=os.path.abspath(recipe),
@@ -148,15 +155,20 @@ def build(recipe: str, pkg_paths: List[str] = None,
                     cmd += [config_file.arg, config_file.path]
                 cmd += [os.path.join(recipe, 'meta.yaml')]
                 with utils.Progress():
-                    utils.run(cmd, env=os.environ, mask=False)
+                    utils.run(cmd, mask=False)
 
         logger.info('BUILD SUCCESS %s',
                     ' '.join(os.path.basename(p) for p in pkg_paths))
+        if record_build_failure:
+            # Success, hence the record is obsolete. Remove it.
+            if build_failure_record_existed_before_build:
+                # record is already removed (see above), but change has to be committed
+                build_failure_record.commit_and_push_changes()
 
     except (docker_utils.DockerCalledProcessError, sp.CalledProcessError) as exc:
         logger.error('BUILD FAILED %s', recipe)
         if record_build_failure:
-            store_build_failure(recipe, exc.output, meta, dag, skiplist_leafs)
+            store_build_failure_record(recipe, exc.output, meta, dag, skiplist_leafs)
         if raise_error:
             raise exc
         return BuildResult(False, None)
@@ -178,22 +190,20 @@ def build(recipe: str, pkg_paths: List[str] = None,
     return BuildResult(True, None)
 
 
-def store_build_failure(recipe, output, meta, dag, skiplist_leafs):
+def store_build_failure_record(recipe, output, meta, dag, skiplist_leafs):
     """
     Write the exception to a file next to the meta.yaml
     """
-    pkg_name = meta["package"]["name"]
-    is_leaf = dag.out_degree(pkg_name) == 0
+    pkg_name = meta.meta["package"]["name"]
+    is_leaf = graph.is_leaf(dag, pkg_name)
 
     build_failure_record = BuildFailureRecord(recipe)
-    build_failure_record.set_commit_sha_to_current_recipe()
     # if recipe is a leaf (i.e. not used by others as dependency)
     # we can automatically blacklist it if desired
-    build_failure_record.skiplist = skiplist_leafs and is_leaf
-    build_failure_record.log = output.decode("utf-8")
+    build_failure_record.fill(log=output, skiplist=skiplist_leafs and is_leaf)
 
-    logger.info(f"Storing build failure record for recipe {recipe}")
-    build_failure_record.git_handler.commit_and_push_changes([build_failure_record.path], None, f"Add build failure record for recipe {recipe}")
+    build_failure_record.write()
+    build_failure_record.commit_and_push_changes()
 
 
 def remove_cycles(dag, name2recipes, failed, skip_dependent):

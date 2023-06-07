@@ -312,7 +312,9 @@ def find_best_bioc_version(package, version):
         for kind, func in zip(
             ('package', 'data'),
             (
-                bioconductor_tarball_url, bioconductor_annotation_data_url,
+                bioconductor_tarball_url,
+                bioconductor_archive_tarball_url,
+                bioconductor_annotation_data_url,
                 bioconductor_experiment_data_url,
             ),
         ):
