@@ -20,7 +20,7 @@ jobs:
 
   publish_containers:
     runs-on: ubuntu-latest
-    needs: release-please
+    needs: release_please
     steps:
       - uses: actions/checkout@v2
         if: ${{ needs.release_please.outputs.release_created }}
