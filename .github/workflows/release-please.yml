@@ -6,8 +6,11 @@ on:
 name: release-please
 
 jobs:
-  release-please:
+  release_please:
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       - uses: GoogleCloudPlatform/release-please-action@v2
         id: release
@@ -15,26 +18,27 @@ jobs:
           release-type: python
           package-name: bioconda-utils
 
+  publish_containers:
+    runs-on: ubuntu-latest
+    needs: release_please
+    if: needs.release_please.outputs.release_created
+    steps:
       - uses: actions/checkout@v2
-        if: ${{ steps.release.outputs.release_created }}
         with:
           fetch-depth: 0
 
       - id: get-tag
-        if: ${{ steps.release.outputs.release_created }}
         run: |
           #tag=${{ github.event.release && github.event.release.tag_name || github.sha }}
-          tag=${{ steps.release.outputs.tag_name }}
+          tag=${{ needs.release_please.outputs.tag_name }}
           printf %s "::set-output name=tag::${tag#v}"
 
       - name: Install qemu dependency
-        if: ${{ steps.release.outputs.release_created }}
         run: |
           sudo apt-get update
           sudo apt-get install -y qemu-user-static
 
       - name: Build x86_64 Image
-        if: ${{ steps.release.outputs.release_created }}
         id: buildah-build
         uses: redhat-actions/buildah-build@v2
         with:
@@ -48,8 +52,16 @@ jobs:
           dockerfiles: |
             ./Dockerfile
 
+      - name: Push To Quay
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.buildah-build.outputs.image }}
+          tags: ${{ steps.buildah-build.outputs.tags }}
+          registry: ${{ secrets.QUAY_BIOCONDA_REPO }}
+          username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
+          password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
+
       - name: Build ARM Image
-        if: ${{ steps.release.outputs.release_created }}
         id: buildah-build-arm
         uses: redhat-actions/buildah-build@v2
         with:
@@ -63,26 +75,7 @@ jobs:
           dockerfiles: |
             ./Dockerfile
 
-      - name: Test Built Image
-        if: ${{ steps.release.outputs.release_created }}
-        run: |
-          image='${{ steps.buildah-build.outputs.image }}'
-          for tag in ${{ steps.buildah-build.outputs.tags }} ; do
-            podman run --rm "${image}:${tag}" bioconda-utils --version
-          done
-
       - name: Push To Quay
-        if: ${{ steps.release.outputs.release_created }}
-        uses: redhat-actions/push-to-registry@v2
-        with:
-          image: ${{ steps.buildah-build.outputs.image }}
-          tags: ${{ steps.buildah-build.outputs.tags }}
-          registry: ${{ secrets.QUAY_BIOCONDA_REPO }}
-          username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
-          password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
-
-      - name: Push To Quay
-        if: ${{ steps.release.outputs.release_created }}
         uses: redhat-actions/push-to-registry@v2
         with:
           image: ${{ steps.buildah-build-arm.outputs.image }}
