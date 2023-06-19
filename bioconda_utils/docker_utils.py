@@ -175,7 +175,7 @@ class RecipeBuilder(object):
         keep_image=False,
         build_image=False,
         image_build_dir=None,
-        docker_base_image='quay.io/bioconda/bioconda-utils-build-env-cos7:{}'.format(__version__.replace('+', '_'))
+        docker_base_image=None
     ):
         """
         Class to handle building a custom docker container that can be used for
@@ -257,7 +257,6 @@ class RecipeBuilder(object):
 
         docker_base_image : str or None
             Name of base image that can be used in **dockerfile_template**.
-            Defaults to 'quay.io/bioconda/bioconda-utils-build-env-cos7:bioconda-utils-version'
         """
         self.requirements = requirements
         self.conda_build_args = ""

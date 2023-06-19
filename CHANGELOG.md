@@ -1,5 +1,26 @@
 # Changelog
 
+### [2.3.1](https://www.github.com/bioconda/bioconda-utils/compare/v2.3.0...v2.3.1) (2023-06-07)
+
+
+### Bug Fixes
+
+* improved release workflow ([7abe60d](https://www.github.com/bioconda/bioconda-utils/commit/7abe60dec3e457fa98cff6dd0428327564f4315e))
+* improved release workflow ([18aa50b](https://www.github.com/bioconda/bioconda-utils/commit/18aa50bbcf8d11e4229c0b1a0e1b8beaac58eab7))
+* improved release workflow ([62b8ebe](https://www.github.com/bioconda/bioconda-utils/commit/62b8ebee298a6aaec5cc5fc75af7a9aeec2afde5))
+
+## [2.3.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.2.1...v2.3.0) (2023-06-07)
+
+
+### Features
+
+* always add a fallback archive URL to the meta.yaml when using bioconductor-skeleton ([#886](https://www.github.com/bioconda/bioconda-utils/issues/886)) ([d885495](https://www.github.com/bioconda/bioconda-utils/commit/d885495d54b177411863fdca3bdfa35ca781457f))
+
+
+### Bug Fixes
+
+* various little fixes for build failure records and automatic skiplisting ([#894](https://www.github.com/bioconda/bioconda-utils/issues/894)) ([715efc2](https://www.github.com/bioconda/bioconda-utils/commit/715efc27319afda8b7fe19a0d112a84e8b8569c9))
+
 ### [2.2.1](https://www.github.com/bioconda/bioconda-utils/compare/v2.2.0...v2.2.1) (2023-05-22)
 
 

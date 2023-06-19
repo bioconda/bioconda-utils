@@ -84,8 +84,8 @@ class recipe_is_blacklisted(LintCheck):
 
     def fix(self, _message, _data):
         failure_record = BuildFailureRecord(self.recipe)
-        if failure_record.exists and failure_record.skiplist:
-            failure_record.delete()
+        if failure_record.exists() and failure_record.skiplist:
+            failure_record.remove()
         for blacklist in self.blacklists:
             with open(blacklist, 'r') as fdes:
                 data = fdes.readlines()

@@ -11,6 +11,7 @@ import fnmatch
 import glob
 import logging
 import os
+import re
 import subprocess as sp
 import sys
 import shutil
@@ -20,7 +21,7 @@ import warnings
 
 from threading import Event, Thread
 from pathlib import PurePath
-from collections import Counter, defaultdict, namedtuple
+from collections import Counter, defaultdict, namedtuple, deque
 from collections.abc import Iterable
 from itertools import product, chain, groupby, zip_longest
 from functools import partial
@@ -28,7 +29,12 @@ from typing import Sequence, Collection, List, Dict, Any, Union
 from multiprocessing import Pool
 from multiprocessing.pool import ThreadPool
 
+import requests
+from yaspin import yaspin, Spinner
+from yaspin.spinners import Spinners
 from urllib3 import Retry
+import appdirs
+import diskcache
 
 from github import Github
 
@@ -58,6 +64,8 @@ from boltons.funcutils import FunctionBuilder
 
 
 logger = logging.getLogger(__name__)
+
+disk_cache = diskcache.Cache(appdirs.user_cache_dir("bioconda-utils"))
 
 
 class TqdmHandler(logging.StreamHandler):
@@ -89,7 +97,8 @@ def tqdm(*args, **kwargs):
     """
     term_ok = (sys.stderr.isatty()
                and os.environ.get("TERM", "") != "dumb"
-               and os.environ.get("CIRCLECI", "") != "true")
+               and os.environ.get("CIRCLECI", "") != "true"
+               and os.environ.get("CI", "") != "true")
     loglevel_ok = (kwargs.get('logger', logger).getEffectiveLevel()
                    <= kwargs.get('loglevel', logging.INFO))
     kwargs['disable'] = not (term_ok and loglevel_ok)
@@ -561,8 +570,8 @@ def temp_os(platform):
         sys.platform = original
 
 
-def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, live: bool=True,
-        mylogger: logging.Logger=logger, loglevel: int=logging.INFO,
+def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, mask_envvars: bool=False, live: bool=False,
+        mylogger: logging.Logger=logger, loglevel: int=logging.INFO, check=True, quiet_failure=False,
         **kwargs: Dict[Any, Any]) -> sp.CompletedProcess:
     """
     Run a command (with logging, masking, etc)
@@ -575,9 +584,11 @@ def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, live: b
 
     Arguments:
       cmd: List of command and arguments
-      env: Optional environment for command
+      env: Optional environment for command, if None, use environment of the parent process
       mask: List of terms to mask (secrets)
+      mask_envvars: Mask all environment variables; used if mask is None.
       live: Whether output should be sent to log
+      check: raise CalledProcessError on failure
       kwargs: Additional arguments to `subprocess.Popen`
 
     Returns:
@@ -588,6 +599,8 @@ def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, live: b
       FileNotFoundError if the command could not be found
     """
     logq = queue.Queue()
+    if mask is None and mask_envvars:
+        mask = [val for val in os.environ.values() if val]
 
     def pushqueue(out, pipe):
         """Reads from a pipe and pushes into a queue, pushing "None" to
@@ -623,22 +636,33 @@ def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, live: b
         out_thread.start()
         err_thread.start()
 
-        output_lines = []
-        try:
-            for _ in range(2):  # Run until we've got both `None` tokens
-                for pipe, line in iter(logq.get, None):
-                    line = do_mask(line.decode(errors='replace').rstrip())
-                    output_lines.append(line)
-                    if live:
-                        if pipe == proc.stdout:
-                            prefix = "OUT"
-                        else:
-                            prefix = "ERR"
-                        mylogger.log(loglevel, "(%s) %s", prefix, line)
-        except Exception:
-            proc.kill()
-            proc.wait()
-            raise
+        def handle_output(output_lines):
+            try:
+                for _ in range(2):  # Run until we've got both `None` tokens
+                    for pipe, line in iter(logq.get, None):
+                        line = do_mask(line.decode(errors='replace').rstrip())
+                        output_lines.append(line)
+                        # only keep the last 1000 lines to avoid memory issues
+                        if len(output_lines) > 1000:
+                            output_lines.popleft()
+                        if live:
+                            if pipe == proc.stdout:
+                                prefix = "OUT"
+                            else:
+                                prefix = "ERR"
+                            mylogger.log(loglevel, "(%s) %s", prefix, line)
+            except Exception:
+                proc.kill()
+                proc.wait()
+                raise
+
+        output_lines = deque()
+        if not live:
+            spinner = Spinner(interval=5000, frames=Spinners.dots.frames)
+            with yaspin(spinner, text="running", timer=True):
+                handle_output(output_lines)
+        else:
+            handle_output(output_lines)
 
         output = "\n".join(output_lines)
         if isinstance(cmds, str):
@@ -664,12 +688,14 @@ def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, live: b
         returncode = proc.poll()
 
         if returncode:
-            logger.error('COMMAND FAILED (exited with %s): %s', returncode, ' '.join(masked_cmds))
+            if not quiet_failure:
+                logger.error('COMMAND FAILED (exited with %s): %s', returncode, ' '.join(masked_cmds))
             if not live:
                 logger.error('STDOUT+STDERR:\n%s', output)
-            raise sp.CalledProcessError(returncode, masked_cmds, output=output)
+            if check:
+                raise sp.CalledProcessError(returncode, masked_cmds, output=output)
 
-        return sp.CompletedProcess(returncode, masked_cmds, output)
+        return sp.CompletedProcess(masked_cmds, returncode, stdout=output)
 
 
 def envstr(env):
@@ -806,6 +832,15 @@ def parallel_iter(func, items, desc, *args, **kwargs):
         )
 
 
+def format_link(uri, fmt: str, prefix: str="", label: str=""):
+    if prefix:
+        uri = f"{prefix}/{uri}"
+    if fmt == "markdown":
+        return f"[{label}]({uri})"
+    elif fmt == "txt":
+        return uri
+    else:
+        raise ValueError(f"Invalid link format: {fmt}")
 
 
 def get_recipes(recipe_folder, package="*", exclude=None):
@@ -1572,3 +1607,30 @@ def get_github_client():
             total=10, status_forcelist=(500, 502, 504), backoff_factor=0.3
         ),
     )
+
+
+def is_stable_version(version):
+    return re.match(r"^\d+\.\d+\.\d+$", version) is not None
+
+
+def extract_stable_version(version):
+    m = re.match(r"^(\d+\.\d+\.\d+)", version)
+    if m is None:
+        raise ValueError(f"Could not extract stable version from {version}")
+    return m.group(1)
+
+
+def yaml_remove_invalid_chars(text: str, valid_chars_re=re.compile(r"[^ \t\n\w\d:\{\}\[\]\(\);&|\$§\"'\?\!%#\\~*\.,-\^°]+")) -> str:
+    """Remove chars that are invalid in yaml literal strings. 
+
+    E.g. we do not want them to contain carriage return chars or delete chars.
+    """
+    return valid_chars_re.sub("", text)
+
+
+# Cache results to disk for one week.
+@disk_cache.memoize(expire=604800)
+def get_package_downloads(channel, package):
+    """Use anaconda API to obtain download counts."""
+    data = requests.get(f"https://api.anaconda.org/package/{channel}/{package}").json()
+    return sum(rec["ndownloads"] for rec in data["files"])
