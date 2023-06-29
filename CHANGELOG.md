@@ -1,5 +1,12 @@
 # Changelog
 
+### [2.3.2](https://www.github.com/bioconda/bioconda-utils/compare/v2.3.1...v2.3.2) (2023-06-29)
+
+
+### Bug Fixes
+
+* update to boa 0.15 which supports strict channel priorities ([#887](https://www.github.com/bioconda/bioconda-utils/issues/887)) ([52f5e6d](https://www.github.com/bioconda/bioconda-utils/commit/52f5e6db3262dd36ac88c4db72dbf7085712eb46))
+
 ### [2.3.1](https://www.github.com/bioconda/bioconda-utils/compare/v2.3.0...v2.3.1) (2023-06-07)
 
 
