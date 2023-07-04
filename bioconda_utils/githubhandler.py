@@ -126,20 +126,6 @@ class GitHubHandler:
     def __repr__(self):
         return f"{self.__class__.__name__}({self.user}/{self.repo})"
 
-    def for_json(self):
-        """Return JSON repesentation of object"""
-        return {
-            '__module__': self.__module__,
-            '__type__': self.__class__.__qualname__,
-            'dry_run': self.dry_run,
-            'to_user': self.user,
-            'to_repo': self.repo,
-            'installation': self.installation
-        }
-
-    def __to_json__(self):
-        return self.for_json()
-
     @property
     def rate_limit(self) -> gidgethub.sansio.RateLimit:
         """Last recorded rate limit data"""

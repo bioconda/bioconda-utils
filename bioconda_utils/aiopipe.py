@@ -237,7 +237,7 @@ class AsyncRequests():
         self.cache: Optional[Dict[str, Dict[str, str]]] = None
 
     async def __aenter__(self) -> 'AsyncRequests':
-        session = aiohttp.ClientSession(headers={'User-Agent': self.USER_AGENT})
+        session = aiohttp.ClientSession(headers={'User-Agent': self.USER_AGENT}, trust_env=True)
         await session.__aenter__()
         self.session = session
         if self.cache_fn:
@@ -351,7 +351,8 @@ class AsyncRequests():
 
         parsed = urlparse(url)
         async with aioftp.ClientSession(parsed.netloc,
-                                        password=self.USER_AGENT+"@") as client:
+                                        password=self.USER_AGENT+"@",
+                                        trust_env=True) as client:
             res = [str(path) for path, _info in await client.list(parsed.path)]
         if self.cache:
             self.cache["ftp_list"][url] = res
@@ -366,7 +367,8 @@ class AsyncRequests():
         parsed = urlparse(url)
         checksum = sha256()
         async with aioftp.ClientSession(parsed.netloc,
-                                        password=self.USER_AGENT+"@") as client:
+                                        password=self.USER_AGENT+"@",
+                                        trust_env=True) as client:
             async with client.download_stream(parsed.path) as stream:
                 async for block in stream.iter_by_block():
                     checksum.update(block)
