@@ -1,5 +1,13 @@
 # Changelog
 
+### [2.3.3](https://www.github.com/bioconda/bioconda-utils/compare/v2.3.2...v2.3.3) (2023-07-06)
+
+
+### Bug Fixes
+
+* adds alternate lookup if base lookup fails ([#896](https://www.github.com/bioconda/bioconda-utils/issues/896)) ([17a1475](https://www.github.com/bioconda/bioconda-utils/commit/17a147508a64bdafb6031c05a75724b25669ec8d))
+* update r-base pinning ([#901](https://www.github.com/bioconda/bioconda-utils/issues/901)) ([54d8702](https://www.github.com/bioconda/bioconda-utils/commit/54d870205d823b6f292df5258b980cbbaa97df77))
+
 ### [2.3.2](https://www.github.com/bioconda/bioconda-utils/compare/v2.3.1...v2.3.2) (2023-06-29)
 
 
