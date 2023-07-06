@@ -30,7 +30,7 @@ bamtools:
 # NOTE: Workaround https://github.com/conda/conda-build/issues/3974 we slightly alter the values
 #       from conda-forge-pinnings here (inserting '.*' or ' ' which should be ignored later on).
 r_base:
-  - "4.2.*"
+  - "4.3.*"
 
 python:
   - 3.10.*  *_cpython
