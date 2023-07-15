@@ -1,5 +1,12 @@
 # Changelog
 
+### [2.3.4](https://www.github.com/bioconda/bioconda-utils/compare/v2.3.3...v2.3.4) (2023-07-15)
+
+
+### Bug Fixes
+
+* update pinning for libxml2 due to conda-forge migration ([#903](https://www.github.com/bioconda/bioconda-utils/issues/903)) ([ee226f8](https://www.github.com/bioconda/bioconda-utils/commit/ee226f8e84a0820430c105412f08714a4de34715))
+
 ### [2.3.3](https://www.github.com/bioconda/bioconda-utils/compare/v2.3.2...v2.3.3) (2023-07-06)
 
 
