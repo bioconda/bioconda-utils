@@ -231,6 +231,36 @@ class HrefParser(HTMLParser):
         logger.debug("Error parsing HTML: %s", message)
 
 
+class IncludeFragmentParser(HTMLParser):
+    """Extract include-fragment targets from HTML"""
+    def __init__(self, link_re: Pattern[str]) -> None:
+        super().__init__()
+        self.link_re = link_re
+        self.matches: List[Mapping[str, Any]] = []
+
+    def get_matches(self) -> List[Mapping[str, Any]]:
+        """Return matches found for **link_re** in href links"""
+        return self.matches
+
+    def handle_starttag(self, tag: str, attrs: List[Tuple[str, str]]) -> None:
+        if tag == "include-fragment":
+            for key, val in attrs:
+                if key == "src":
+                    self.handle_a_href(val)
+                    break
+
+    def handle_a_href(self, href: str) -> None:
+        """Process href attributes of anchor tags"""
+        match = self.link_re.search(href)
+        if match:
+            data = match.groupdict()
+            data["href"] = href
+            self.matches.append(data)
+
+    def error(self, message: str) -> None:
+        logger.debug("Error parsing HTML: %s", message)
+
+
 # pylint: disable=abstract-method
 class HTMLHoster(Hoster):
     """Base for Hosters handling release listings in HTML format"""
@@ -326,7 +356,7 @@ class GithubBase(OrderedHTMLHoster):
 class GithubRelease(GithubBase):
     """Matches release artifacts uploaded to Github"""
     link_pattern = r"/{account}/{project}/releases/download/{tag}/{fname}{ext}?"
-    alt_releases_formats = ["https://api.github.com/repos/{account}/{project}/releases"]
+    expanded_assets_pattern = r"https://github.com/{account}/{project}/releases/expanded_assets/{version}"
 
     async def get_versions(self, req, orig_version):
         # first, try the older version when HTML worked
@@ -334,53 +364,45 @@ class GithubRelease(GithubBase):
         if len(matches) > 0:
             return matches
 
-        # old version found nothing, try with the alternate github API URLs which return JSON
-        self.releases_urls = [
-            template.format_map(self.vals)
-            for template in self.alt_releases_formats
-        ]
-
-        # this is basically copied from a mixture of the base version and the JSON version
-        # need to compile the link regex
+        # old version found nothing, pull the webpage and expand the assets
+        # this section is basically copied from HTMLHoster, but we need the raw contents of the webpage to look for expanded assets
         exclude = set(self.exclude)
         vals = {key: val
                 for key, val in self.vals.items()
                 if key not in exclude}
+        
+        # this is the pattern for the expanded assets
+        expanded_assets_pattern = replace_named_capture_group(self.expanded_assets_pattern_compiled, vals)
+        expanded_assets_re = re.compile(expanded_assets_pattern)
+
+        # after we expand an asset, we still need to look for the original link pattern within the asset
         link_pattern = replace_named_capture_group(self.link_pattern_compiled, vals)
         link_re = re.compile(link_pattern)
-
-        # now iterate over the alter release URLs
-        matches = []
+        
+        result = []
         for url in self.releases_urls:
-            text = await req.get_text_from_url(url)
-            data = json.loads(text)
-
-            # structured as an array of tagged releases
-            for tag_dict in data:
-                # each release has an asset dict
-                for asset_dict in tag_dict.get('assets', []):
-                    # there is a direct download link for each asset, which should make the typical pattern for an HTML user
-                    download_url = asset_dict['browser_download_url']
-                    re_match = link_re.search(download_url)
+            # we cannot use the HrefParser because it's not in an <a> tag
+            parser = IncludeFragmentParser(expanded_assets_re)
+            parser.feed(await req.get_text_from_url(url))
             
-                    if re_match:
-                        # this one matches the pattern
-                        # link - just copy the download_url in full
-                        # version - pull out of the regex match
-                        data = re_match.groupdict()
-                        matches.append({
-                            'link' : download_url,
-                            'version' : data['version']
-                        })
+            # now iterate over each expanded asset we find
+            for match in parser.get_matches():
+                # fetch the expansion and look for the primary URL
+                link_parser = HrefParser(link_re)
+                link_parser.feed(await req.get_text_from_url(match["href"]))
+                
+                for lp_match in link_parser.get_matches():
+                    # we found a match in the expansion
+                    result.append({
+                        'link' : urljoin(url, lp_match["href"]),
+                        'version' : lp_match['version']
+                    })
 
-        # now strip down to the version(s) that are more recent than what currently is in bioconda
-        num = None
-        for num, match in enumerate(matches):
-            if match["version"] == self.vals["version"]:
-                break
-        if num is None:
-            return matches
-        return matches[:num + 1]
+                if match["version"] == self.vals["version"]:
+                    # we hit the current version, early exit so we do not fetch every expanded asset on the full page
+                    break
+
+        return result
 
 class GithubTag(GithubBase):
     """Matches GitHub repository archives created automatically from tags"""
