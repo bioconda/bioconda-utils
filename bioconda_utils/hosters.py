@@ -371,7 +371,7 @@ class GithubRelease(GithubBase):
                 for key, val in self.vals.items()
                 if key not in exclude}
         
-        # this is the pattern for the expanded assets
+        # this is the pattern for the expanded assets, which auto-expand when viewed via web
         expanded_assets_pattern = replace_named_capture_group(self.expanded_assets_pattern_compiled, vals)
         expanded_assets_re = re.compile(expanded_assets_pattern)
 
