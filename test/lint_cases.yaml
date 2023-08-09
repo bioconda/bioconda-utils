@@ -13,7 +13,11 @@ setup:
           noarch: True
           number: 0
           run_exports:
-            - { { pin_subpackage('one') } }
+            # add a dummy run export
+            # (jinja templating as in reality is not
+            # supported by our test system to the same
+            # extend as in conda build)
+            - dummy
         test:
           commands:
             - do nothing
@@ -36,7 +40,11 @@ setup:
           noarch: True
           number: 0
           run_exports:
-            - { { pin_subpackage('one') } }
+            # add a dummy run export
+            # (jinja templating as in reality is not
+            # supported by our test system to the same
+            # extend as in conda build)
+            - dummy
         test:
           commands:
             - do nothing
