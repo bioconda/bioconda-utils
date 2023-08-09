@@ -7,6 +7,11 @@ Bioconda Utils Command Line Interface
 # ".../importlib/_bootstrap.py:219: RuntimeWarning: numpy.dtype size \
 # changed, may indicate binary incompatibility. Expected 96, got 88"
 import warnings
+from bioconda_utils import bulk
+
+from bioconda_utils.artifacts import upload_pr_artifacts
+from bioconda_utils.skiplist import Skiplist
+from bioconda_utils.build_failure import BuildFailureRecord, collect_build_failure_dataframe
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 
 import sys
@@ -16,8 +21,9 @@ import logging
 from collections import defaultdict, Counter
 from functools import partial
 import inspect
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
+import conda
 import argh
 from argh import arg, named
 import networkx as nx
@@ -33,6 +39,7 @@ from . import bioconductor_skeleton as _bioconductor_skeleton
 from . import cran_skeleton
 from . import update_pinnings
 from . import graph
+from . import pkg_test
 from .githandler import BiocondaRepo, install_gpg_key
 
 logger = logging.getLogger(__name__)
@@ -152,12 +159,12 @@ def get_recipes_to_build(git_range: Tuple[str], recipe_folder: str) -> List[str]
     return repo.get_recipes_to_build(ref, other)
 
 
-def get_recipes(config, recipe_folder, packages, git_range) -> List[str]:
+def get_recipes(config, recipe_folder, packages, git_range, include_blacklisted=False) -> List[str]:
     """Gets list of paths to recipe folders to be built
 
     Considers all recipes matching globs in packages, constrains to
     recipes modified or unblacklisted in the git_range if given, then
-    removes blacklisted recipes.
+    removes blacklisted recipes (unless include_blacklisted=True).
 
     """
     recipes = list(utils.get_recipes(recipe_folder, packages))
@@ -173,15 +180,13 @@ def get_recipes(config, recipe_folder, packages, git_range) -> List[str]:
             logger.info("Overlap was %s recipes%s.", len(recipes),
                         utils.ellipsize_recipes(recipes, recipe_folder))
 
-    blacklist = utils.get_blacklist(config, recipe_folder)
-    blacklisted = []
-    for recipe in recipes:
-        if os.path.relpath(recipe, recipe_folder) in blacklist:
-            blacklisted.append(recipe)
-    if blacklisted:
-        logger.info("Ignoring %s blacklisted recipes%s.", len(blacklisted),
-                    utils.ellipsize_recipes(blacklisted, recipe_folder))
-        recipes = [recipe for recipe in recipes if recipe not in set(blacklisted)]
+    if not include_blacklisted:
+        skiplist = Skiplist(config, recipe_folder)
+        all_len = len(recipes)
+        recipes = [recipe for recipe in recipes if not skiplist.is_skiplisted(recipe)]
+        if all_len > len(recipes):
+            logger.info(f"Ignoring {all_len - len(recipes)} skiplisted recipes.")
+
     logger.info("Processing %s recipes%s.", len(recipes),
                 utils.ellipsize_recipes(recipes, recipe_folder))
     return recipes
@@ -342,7 +347,7 @@ def do_lint(recipe_folder, config, packages="*", cache=None, list_checks=False,
     if cache is not None:
         utils.RepoData().set_cache(cache)
 
-    recipes = get_recipes(config, recipe_folder, packages, git_range)
+    recipes = get_recipes(config, recipe_folder, packages, git_range, include_blacklisted=True)
     linter = lint.Linter(config, recipe_folder, exclude)
     result = linter.lint(recipes, fix=try_fix)
     messages = linter.get_messages()
@@ -376,6 +381,8 @@ def do_lint(recipe_folder, config, packages="*", cache=None, list_checks=False,
      help='Build packages in docker container.')
 @arg('--mulled-test', action='store_true', help="Run a mulled-build test on the built package")
 @arg('--mulled-upload-target', help="Provide a quay.io target to push mulled docker images to.")
+@arg('--mulled-conda-image', help='''Conda Docker image to install the package with during
+     the mulled based tests.''')
 @arg('--build_script_template', help='''Filename to optionally replace build
      script template used by the Docker container. By default use
      docker_utils.BUILD_SCRIPT_TEMPLATE. Only used if --docker is True.''')
@@ -420,12 +427,20 @@ def do_lint(recipe_folder, config, packages="*", cache=None, list_checks=False,
      than one worker, then make sure to give each a different offset!''')
 @arg('--keep-old-work', action='store_true', help='''Do not remove anything
 from environment, even after successful build and test.''')
+@arg('--docker-base-image', help='''Name of base image that can be used in
+     Dockerfile template.''')
+@arg("--record-build-failures", action="store_true", help="Record build failures in build_failure.yaml next to the recipe.")
+@arg("--skiplist-leafs", action="store_true", help="Skiplist leaf recipes (i.e. ones that are not depended on by any other recipes) that fail to build.")
 @enable_logging()
 def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
           force=False, docker=None, mulled_test=False, build_script_template=None,
           pkg_dir=None, anaconda_upload=False, mulled_upload_target=None,
           build_image=False, keep_image=False, lint=False, lint_exclude=None,
-          check_channels=None, n_workers=1, worker_offset=0, keep_old_work=False):
+          check_channels=None, n_workers=1, worker_offset=0, keep_old_work=False,
+          mulled_conda_image=pkg_test.MULLED_CONDA_IMAGE,
+          docker_base_image=None,
+          record_build_failures=False,
+          skiplist_leafs=False):
     cfg = utils.load_config(config)
     setup = cfg.get('setup', None)
     if setup:
@@ -445,12 +460,21 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
         else:
             use_host_conda_bld = False
 
+        if not utils.is_stable_version(VERSION):
+            image_tag = utils.extract_stable_version(VERSION)
+            logger.warning(f"Using tag {image_tag} for docker image, since there is no image for a not yet release version ({VERSION}).")
+        else:
+            image_tag = VERSION
+        docker_base_image = docker_base_image or f"quay.io/bioconda/bioconda-utils-build-env-cos7:{image_tag}"
+        logger.info(f"Using docker image {docker_base_image} for building.")
+
         docker_builder = docker_utils.RecipeBuilder(
             build_script_template=build_script_template,
             pkg_dir=pkg_dir,
             use_host_conda_bld=use_host_conda_bld,
             keep_image=keep_image,
             build_image=build_image,
+            docker_base_image=docker_base_image
         )
     else:
         docker_builder = None
@@ -473,9 +497,49 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
                             label=label,
                             n_workers=n_workers,
                             worker_offset=worker_offset,
-                            keep_old_work=keep_old_work)
+                            keep_old_work=keep_old_work,
+                            mulled_conda_image=mulled_conda_image,
+                            record_build_failures=record_build_failures,
+                            skiplist_leafs=skiplist_leafs)
     exit(0 if success else 1)
 
+
+@recipe_folder_and_config()
+@arg('--repo', help='Name of the github repository to check (e.g. bioconda/bioconda-recipes).')
+@arg('--git-range', nargs='+',
+     help='''Git range (e.g. commits or something like
+     "master HEAD" to check commits in HEAD vs master, or just "HEAD" to
+     include uncommitted changes). All recipes modified within this range will
+     be built if not present in the channel.''')
+@arg('--dryrun', action='store_true', help='''Do not actually upload anything.''')
+@arg('--fallback', choices=['build', 'ignore'], default='build', help="What to do if no artifacts are found in the PR.")
+@arg('--quay-upload-target', help="Provide a quay.io target to push docker images to.")
+@enable_logging()
+def handle_merged_pr(
+    recipe_folder,
+    config,
+    repo=None,
+    git_range=None,
+    dryrun=False,
+    fallback='build',
+    quay_upload_target=None
+):
+    label = os.getenv('BIOCONDA_LABEL', None) or None
+
+    success = upload_pr_artifacts(
+        config, repo, git_range[1], dryrun=dryrun, mulled_upload_target=quay_upload_target, label=label
+    )
+    if not success and fallback == 'build':
+        success = build(
+            recipe_folder,
+            config,
+            git_range=git_range,
+            anaconda_upload=not dryrun,
+            mulled_upload_target=quay_upload_target if not dryrun else None,
+            mulled_test=True,
+            label=label,
+        )
+    exit(0 if success else 1)
 
 @recipe_folder_and_config()
 @arg('--packages',
@@ -569,12 +633,12 @@ def update_pinning(recipe_folder, config, packages="*",
     utils.RepoData().df  # trigger load
 
     build_config = utils.load_conda_build_config()
-    blacklist = utils.get_blacklist(config, recipe_folder)
+    skiplist = Skiplist(config, recipe_folder)
 
     from . import recipe
     dag = graph.build_from_recipes(
-        recip for recip in recipe.load_parallel_iter(recipe_folder, "*")
-        if recip.reldir not in blacklist)
+        r for r in recipe.load_parallel_iter(recipe_folder, "*")
+        if not skiplist.is_skiplisted(r))
 
     dag = graph.filter_recipe_dag(dag, packages, [])
     if no_leaves:
@@ -786,7 +850,7 @@ def clean_cran_skeleton(recipe, no_windows=False):
 @arg('--exclude-channels', nargs="+", help='''Exclude recipes
      building packages present in other channels. Set to 'none' to disable
      check.''')
-@arg('--ignore-blacklists', help='''Do not exclude recipes from blacklist''')
+@arg('--ignore-skiplists', help='''Do not exclude skiplisted recipes''')
 @arg('--fetch-requirements',
      help='''Try to fetch python requirements. Please note that this requires
      downloading packages and executing setup.py, so presents a potential
@@ -825,7 +889,7 @@ def clean_cran_skeleton(recipe, no_windows=False):
 def autobump(recipe_folder, config, packages='*', exclude=None, cache=None,
              failed_urls=None, unparsed_urls=None, recipe_status=None,
              exclude_subrecipes=None, exclude_channels='conda-forge',
-             ignore_blacklists=False,
+             ignore_skiplists=False,
              fetch_requirements=False,
              check_branch=False, create_branch=False, create_pr=False,
              only_active=False, no_shuffle=False,
@@ -861,7 +925,7 @@ def autobump(recipe_folder, config, packages='*', exclude=None, cache=None,
     scanner.add(autobump.ExcludeDisabled)
 
     # Exclude packages that are on the blacklist
-    if not ignore_blacklists:
+    if not ignore_skiplists:
         scanner.add(autobump.ExcludeBlacklisted, recipe_folder, config_dict)
 
     # Exclude sub-recipes
@@ -953,20 +1017,87 @@ def autobump(recipe_folder, config, packages='*', exclude=None, cache=None,
         git_handler.close()
 
 
-@arg('--loglevel', default='info', help='Log level')
-def bot(loglevel='info'):
-    """Locally accedd bioconda-bot command API
+@arg('recipes', nargs="+", type=str, help='Paths to recipes that shall be skiplisted')
+@arg('--skiplist', action="store_true", help='Skiplist recipes.')
+@arg('--reason', help='Reason for skiplisting. If omitted, will fail if there is no existing build failure record with a log entry.')
+@arg('--category',
+     help='Category of build failure. If omitted, will fail if there is no existing build failure record with a log entry.',
+     choices=["compiler error", "conda/mamba bug", "test failure", "dependency issue", "checksum mismatch", "source download error"]
+)
+@arg('--platforms', help='Platforms to annotate', nargs='+', type=str, default=['linux-64', 'osx-64'])
+@arg('--existing-only', help="Only annotate already existing build failure records. The platform setting is ignored in this case.", action="store_true")
+def annotate_build_failures(recipes, skiplist=False, reason=None, category=None, platforms=None, existing_only=False):
+    valid_platform_names = set(conda.base.constants.PLATFORM_DIRECTORIES)
+    for recipe in recipes:
+        if existing_only:
+            platforms = [
+                platform
+                for platform in conda.base.constants.PLATFORM_DIRECTORIES 
+                if BuildFailureRecord(recipe, platform=platform).exists()
+            ]
+        for platform in platforms:
+            if platform not in valid_platform_names:
+                logger.error(f"Invalid platform {platform}, choose from: {', '.join(valid_platform_names)}")
+                continue
+            failure_record = BuildFailureRecord(recipe, platform=platform)
 
-    To run the bot locally, use:
+            if not reason and failure_record.exists():
+                if not failure_record.log:
+                    logger.error(
+                        f"Recipe {recipe} has a build failure record ({failure_record.path}), "
+                        "but no log entry. Please add a log entry or specify a reason."
+                    )
+                    continue
+                if failure_record.recipe_sha != failure_record.get_recipe_sha():
+                    logger.error(
+                        f"Recipe {recipe} has a build failure record ({failure_record.path}), "
+                        "but the recipe has changed since recording the build log. "
+                        "Please specify a reason for skipping or rebuild for updating the log."
+                    )
+                    continue
 
-    $ gunicorn bioconda_utils.bot:init_app_internal_celery --worker-class aiohttp.worker.GunicornWebWorker
+            failure_record.fill(reason=reason, category=category, skiplist=skiplist)
+            failure_record.write()
 
-    You can append --reload to have gunicorn reload if any of the python files change.
-    """
 
-    utils.setup_logger('bioconda_utils', loglevel)
+# TODO add subcommand to list recipes with build failure records descendingly sorted by downloads
+# in case of version subdirs, only list if the latest version also has the build failure record.
+# list how many recipes depend on this and sort by it primarily if inner
+@recipe_folder_and_config()
+@arg('--channel', help="Channel with packages to check", default="bioconda")
+@arg('--output-format', help="Output format", choices=['txt', 'markdown'], default="txt")
+@arg('--link-prefix', help="Prefix for links to build failures", default='')
+def list_build_failures(recipe_folder, config, channel=None, output_format=None, link_prefix=None):
+    """List recipes with build failure records"""
 
-    logger.error("Nothing here yet")
+    df = collect_build_failure_dataframe(
+        recipe_folder,
+        config,
+        channel,
+        link_fmt=output_format,
+        link_prefix=link_prefix,
+    )
+    if output_format == "markdown":
+        fmt_writer = pandas.DataFrame.to_markdown
+    elif output_format == "txt":
+        fmt_writer = pandas.DataFrame.to_string
+    else:
+        logger.error("Invalid output format, must be txt or markdown.")
+        exit(1)
+    fmt_writer(df, sys.stdout, index=False)
+
+
+@arg(
+    'message',
+     help="The commit message. Will be prepended with [ci skip] to avoid that commits accidentally trigger a rerun while bulk is already running"
+)
+def bulk_commit(message):
+    bulk.commit(message)
+
+
+def bulk_trigger_ci():
+    bulk.trigger_ci()
+
 
 def main():
     if '--version' in sys.argv:
@@ -974,5 +1105,7 @@ def main():
         sys.exit(0)
     argh.dispatch_commands([
         build, dag, dependent, do_lint, duplicates, update_pinning,
-        bioconductor_skeleton, clean_cran_skeleton, autobump, bot
+        bioconductor_skeleton, clean_cran_skeleton, autobump,
+        handle_merged_pr, annotate_build_failures, list_build_failures,
+        bulk_commit, bulk_trigger_ci
     ])

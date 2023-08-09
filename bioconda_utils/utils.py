@@ -11,6 +11,7 @@ import fnmatch
 import glob
 import logging
 import os
+import re
 import subprocess as sp
 import sys
 import shutil
@@ -20,13 +21,22 @@ import warnings
 
 from threading import Event, Thread
 from pathlib import PurePath
-from collections import Counter, defaultdict, namedtuple
+from collections import Counter, defaultdict, namedtuple, deque
 from collections.abc import Iterable
 from itertools import product, chain, groupby, zip_longest
 from functools import partial
 from typing import Sequence, Collection, List, Dict, Any, Union
 from multiprocessing import Pool
 from multiprocessing.pool import ThreadPool
+
+import requests
+from yaspin import yaspin, Spinner
+from yaspin.spinners import Spinners
+from urllib3 import Retry
+import appdirs
+import diskcache
+
+from github import Github
 
 import pkg_resources
 import pandas as pd
@@ -45,6 +55,7 @@ conda.gateways.logging.initialize_logging = lambda: None
 
 from conda_build import api
 from conda.exports import VersionOrder
+from conda.exports import subdir as conda_subdir
 from boa.cli.mambabuild import prepare as insert_mambabuild
 
 from jsonschema import validate
@@ -53,6 +64,8 @@ from boltons.funcutils import FunctionBuilder
 
 
 logger = logging.getLogger(__name__)
+
+disk_cache = diskcache.Cache(appdirs.user_cache_dir("bioconda-utils"))
 
 
 class TqdmHandler(logging.StreamHandler):
@@ -84,7 +97,8 @@ def tqdm(*args, **kwargs):
     """
     term_ok = (sys.stderr.isatty()
                and os.environ.get("TERM", "") != "dumb"
-               and os.environ.get("CIRCLECI", "") != "true")
+               and os.environ.get("CIRCLECI", "") != "true"
+               and os.environ.get("CI", "") != "true")
     loglevel_ok = (kwargs.get('logger', logger).getEffectiveLevel()
                    <= kwargs.get('loglevel', logging.INFO))
     kwargs['disable'] = not (term_ok and loglevel_ok)
@@ -556,8 +570,8 @@ def temp_os(platform):
         sys.platform = original
 
 
-def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, live: bool=True,
-        mylogger: logging.Logger=logger, loglevel: int=logging.INFO,
+def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, mask_envvars: bool=False, live: bool=False,
+        mylogger: logging.Logger=logger, loglevel: int=logging.INFO, check=True, quiet_failure=False,
         **kwargs: Dict[Any, Any]) -> sp.CompletedProcess:
     """
     Run a command (with logging, masking, etc)
@@ -570,9 +584,11 @@ def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, live: b
 
     Arguments:
       cmd: List of command and arguments
-      env: Optional environment for command
+      env: Optional environment for command, if None, use environment of the parent process
       mask: List of terms to mask (secrets)
+      mask_envvars: Mask all environment variables; used if mask is None.
       live: Whether output should be sent to log
+      check: raise CalledProcessError on failure
       kwargs: Additional arguments to `subprocess.Popen`
 
     Returns:
@@ -583,6 +599,8 @@ def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, live: b
       FileNotFoundError if the command could not be found
     """
     logq = queue.Queue()
+    if mask is None and mask_envvars:
+        mask = [val for val in os.environ.values() if val]
 
     def pushqueue(out, pipe):
         """Reads from a pipe and pushes into a queue, pushing "None" to
@@ -618,22 +636,33 @@ def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, live: b
         out_thread.start()
         err_thread.start()
 
-        output_lines = []
-        try:
-            for _ in range(2):  # Run until we've got both `None` tokens
-                for pipe, line in iter(logq.get, None):
-                    line = do_mask(line.decode(errors='replace').rstrip())
-                    output_lines.append(line)
-                    if live:
-                        if pipe == proc.stdout:
-                            prefix = "OUT"
-                        else:
-                            prefix = "ERR"
-                        mylogger.log(loglevel, "(%s) %s", prefix, line)
-        except Exception:
-            proc.kill()
-            proc.wait()
-            raise
+        def handle_output(output_lines):
+            try:
+                for _ in range(2):  # Run until we've got both `None` tokens
+                    for pipe, line in iter(logq.get, None):
+                        line = do_mask(line.decode(errors='replace').rstrip())
+                        output_lines.append(line)
+                        # only keep the last 1000 lines to avoid memory issues
+                        if len(output_lines) > 1000:
+                            output_lines.popleft()
+                        if live:
+                            if pipe == proc.stdout:
+                                prefix = "OUT"
+                            else:
+                                prefix = "ERR"
+                            mylogger.log(loglevel, "(%s) %s", prefix, line)
+            except Exception:
+                proc.kill()
+                proc.wait()
+                raise
+
+        output_lines = deque()
+        if not live:
+            spinner = Spinner(interval=5000, frames=Spinners.dots.frames)
+            with yaspin(spinner, text="running", timer=True):
+                handle_output(output_lines)
+        else:
+            handle_output(output_lines)
 
         output = "\n".join(output_lines)
         if isinstance(cmds, str):
@@ -659,12 +688,14 @@ def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, live: b
         returncode = proc.poll()
 
         if returncode:
-            logger.error('COMMAND FAILED (exited with %s): %s', returncode, ' '.join(masked_cmds))
+            if not quiet_failure:
+                logger.error('COMMAND FAILED (exited with %s): %s', returncode, ' '.join(masked_cmds))
             if not live:
                 logger.error('STDOUT+STDERR:\n%s', output)
-            raise sp.CalledProcessError(returncode, masked_cmds, output=output)
+            if check:
+                raise sp.CalledProcessError(returncode, masked_cmds, output=output)
 
-        return sp.CompletedProcess(returncode, masked_cmds, output)
+        return sp.CompletedProcess(masked_cmds, returncode, stdout=output)
 
 
 def envstr(env):
@@ -801,6 +832,15 @@ def parallel_iter(func, items, desc, *args, **kwargs):
         )
 
 
+def format_link(uri, fmt: str, prefix: str="", label: str=""):
+    if prefix:
+        uri = f"{prefix}/{uri}"
+    if fmt == "markdown":
+        return f"[{label}]({uri})"
+    elif fmt == "txt":
+        return uri
+    else:
+        raise ValueError(f"Invalid link format: {fmt}")
 
 
 def get_recipes(recipe_folder, package="*", exclude=None):
@@ -956,56 +996,6 @@ def file_from_commit(commit, filename):
     return str(p.stdout)
 
 
-def newly_unblacklisted(config_file, recipe_folder, git_range):
-    """
-    Returns the set of recipes that were blacklisted in master branch but have
-    since been removed from the blacklist. Considers the contents of all
-    blacklists in the current config file and all blacklists in the same config
-    file in master branch.
-
-    Parameters
-    ----------
-
-    config_file : str
-        Needs filename (and not dict) because we check what the contents of the
-        config file were in the master branch.
-
-    recipe_folder : str
-        Path to recipe dir, needed by get_blacklist
-
-    git_range : str or list
-        If str or single-item list. If ``'HEAD'`` or ``['HEAD']`` or ``['master',
-        'HEAD']``, compares the current changes to master. If other commits are
-        specified, then use those commits directly via ``git show``.
-    """
-
-    # 'HEAD' becomes ['HEAD'] and then ['master', 'HEAD'].
-    # ['HEAD'] becomes ['master', 'HEAD']
-    # ['HEAD~~', 'HEAD'] stays the same
-    if isinstance(git_range, str):
-        git_range = [git_range]
-
-    if len(git_range) == 1:
-        git_range = ['master', git_range[0]]
-
-    # Get the set of previously blacklisted recipes by reading the original
-    # config file and then all the original blacklists it had listed
-    previous = set()
-    orig_config = file_from_commit(git_range[0], config_file)
-    for bl in yaml.safe_load(orig_config)['blacklists']:
-        with open('.tmp.blacklist', 'w', encoding='utf8') as fout:
-            fout.write(file_from_commit(git_range[0], bl))
-        previous.update(get_blacklist({'blacklists': '.tmp.blacklist'}, recipe_folder))
-        os.unlink('.tmp.blacklist')
-
-    current = get_blacklist(
-        yaml.safe_load(file_from_commit(git_range[1], config_file)),
-        recipe_folder)
-    results = previous.difference(current)
-    logger.info('Recipes newly unblacklisted:\n%s', '\n'.join(list(results)))
-    return results
-
-
 def changed_since_master(recipe_folder):
     """
     Return filenames changed since master branch.
@@ -1055,7 +1045,7 @@ def check_recipe_skippable(recipe, check_channels):
         first_meta = metas[0]
         if first_meta.get_value('build/noarch'):
             if platform != 'linux':
-                logger.debug('FILTER: only building %s on '
+                logger.info('FILTER: only building %s on '
                              'linux because it defines noarch.',
                              recipe)
                 return True
@@ -1112,7 +1102,16 @@ def _filter_existing_packages(metas, check_channels):
                 new_metas.append(meta)
             else:
                 existing_metas.append(meta)
-        for divergent_build in (existing_pkg_builds - set(build_meta.keys())):
+        # Filter the existing_pkg_builds according to the native CPU architecture to avoid
+        # inaccurate divergent build results.
+        #
+        # For example, when a package has only `linux-64` arch type package, if we
+        # build on aarch64 machine, the `divergent_builds` will wrongly include the linux-64
+        # one, we need to filter the non-native CPU architecture versions.
+        native_pkg_builds = {
+            x for x in existing_pkg_builds if x.subdir in (conda_subdir, 'noarch')
+        }
+        for divergent_build in (native_pkg_builds - set(build_meta.keys())):
             divergent_builds.add(
                 '-'.join((pkg_key[0], pkg_key[1], divergent_build[1])))
     return new_metas, existing_metas, divergent_builds
@@ -1146,20 +1145,6 @@ def get_package_paths(recipe, check_channels, force=False):
         build_metas = new_metas
     return list(chain.from_iterable(
         api.get_output_file_paths(meta) for meta in build_metas))
-
-
-def get_blacklist(config: Dict[str, Any], recipe_folder: str) -> set:
-    "Return list of recipes to skip from blacklists"
-    blacklist = set()
-    for p in config.get('blacklists', []):
-        blacklist.update(
-            [
-                os.path.relpath(i.strip(), recipe_folder)
-                for i in open(p, encoding='utf8')
-                if not i.startswith('#') and i.strip()
-            ]
-        )
-    return blacklist
 
 
 def validate_config(config):
@@ -1312,7 +1297,8 @@ class AsyncRequests:
         conn = aiohttp.TCPConnector(limit_per_host=cls.CONNECTIONS_PER_HOST)
         async with aiohttp.ClientSession(
                 connector=conn,
-                headers={'User-Agent': cls.USER_AGENT}
+                headers={'User-Agent': cls.USER_AGENT},
+                trust_env=True,
         ) as session:
             coros = [
                 asyncio.ensure_future(cls._async_fetch_one(session, url, desc, cb, data, fd))
@@ -1610,3 +1596,41 @@ class RepoData:
         if isinstance(key, str):
             return list(df[key])
         return df[key].itertuples(index=False)
+
+
+def get_github_client():
+    """Get a Github client with a robust retry policy.
+    """
+    return Github(
+        os.environ["GITHUB_TOKEN"],
+        retry=Retry(
+            total=10, status_forcelist=(500, 502, 504), backoff_factor=0.3
+        ),
+    )
+
+
+def is_stable_version(version):
+    return re.match(r"^\d+\.\d+\.\d+$", version) is not None
+
+
+def extract_stable_version(version):
+    m = re.match(r"^(\d+\.\d+\.\d+)", version)
+    if m is None:
+        raise ValueError(f"Could not extract stable version from {version}")
+    return m.group(1)
+
+
+def yaml_remove_invalid_chars(text: str, valid_chars_re=re.compile(r"[^ \t\n\w\d:\{\}\[\]\(\);&|\$§\"'\?\!%#\\~*\.,-\^°]+")) -> str:
+    """Remove chars that are invalid in yaml literal strings. 
+
+    E.g. we do not want them to contain carriage return chars or delete chars.
+    """
+    return valid_chars_re.sub("", text)
+
+
+# Cache results to disk for one week.
+@disk_cache.memoize(expire=604800)
+def get_package_downloads(channel, package):
+    """Use anaconda API to obtain download counts."""
+    data = requests.get(f"https://api.anaconda.org/package/{channel}/{package}").json()
+    return sum(rec["ndownloads"] for rec in data["files"])

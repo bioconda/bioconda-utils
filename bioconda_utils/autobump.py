@@ -57,6 +57,7 @@ import aiofiles
 from aiohttp import ClientResponseError
 
 import networkx as nx
+from bioconda_utils.skiplist import Skiplist
 
 import conda_build.variants
 import conda_build.config
@@ -75,13 +76,13 @@ from .recipe import load_parallel_iter as recipes_load_parallel_iter
 from .aiopipe import AsyncFilter, AsyncPipeline, AsyncRequests, EndProcessingItem, EndProcessing
 
 from .githandler import GitHandler
-from .githubhandler import AiohttpGitHubHandler, GitHubHandler
+from .githubhandler import GitHubHandler
 
 # pkg_resources.parse_version returns a Version or LegacyVersion object
 # as defined in packaging.version. Since it's bundling it's own copy of
 # packaging, the class it returns is not the same as the one we can import.
 # So we cheat by having it create a LegacyVersion delibarately.
-LegacyVersion = parse_version("").__class__  # pylint: disable=invalid-name
+LegacyVersion = parse_version("1.1").__class__  # pylint: disable=invalid-name
 
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -161,10 +162,10 @@ class RecipeGraphSource(RecipeSource):
             with open(self.cache_fn, "rb") as stream:
                 dag = pickle.load(stream)
         else:
-            blacklist = utils.get_blacklist(self.config, self.recipe_base)
+            blacklist = Skiplist(self.config, self.recipe_base)
             dag = graph.build_from_recipes(
                 recipe for recipe in recipes_load_parallel_iter(self.recipe_base, "*")
-                if recipe.reldir not in blacklist
+                if not blacklist.is_skiplisted(recipe)
             )
             if self.cache_fn:
                 with open(self.cache_fn, "wb") as stream:
@@ -351,15 +352,11 @@ class ExcludeBlacklisted(Filter):
     def __init__(self, scanner: Scanner, recipe_base: str, config: Dict) -> None:
         super().__init__(scanner)
         self.blacklists = config.get('blacklists')
-        self.blacklisted = utils.get_blacklist(config, recipe_base)
-        logger.warning("Excluding %i blacklisted recipes", len(self.blacklisted))
-
-    def get_info(self) -> str:
-        return (super().get_info() +
-                f": {', '.join(self.blacklists)} / {len(self.blacklisted)} recipes")
+        self.skiplist = Skiplist(config, recipe_base)
+        logger.warning("Excluding blacklisted recipes")
 
     async def apply(self, recipe: Recipe) -> None:
-        if recipe.reldir in self.blacklisted:
+        if self.skiplist.is_skiplisted(recipe):
             raise self.Blacklisted(recipe)
 
 

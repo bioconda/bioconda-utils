@@ -3,6 +3,8 @@ Deploy Artifacts to Anaconda and Quay
 """
 
 import os
+from pathlib import Path
+import shutil
 import subprocess as sp
 import logging
 from . import utils
@@ -94,21 +96,22 @@ def skopeo_upload(image_file: str, target: str,
     The image name and tag are read from the archive.
 
     Args:
-      image_file: path to the file to be uploaded (may be gzip'ed)
+      image_file: path to the file to be uploaded (may be gzip'ed). NOTE: may not contain a colon!
       target: namespace/repo for the image
       creds: login credentials (``USER:PASS``)
       registry: url of the registry. defaults to "quay.io"
       timeout: timeout in seconds
     """
     cmd = ['skopeo',
-           '--insecure-policy', # disable policy checks
-           '--command-timeout', str(timeout) + "s",
+           '--command-timeout', f'{timeout}s',
            'copy',
-           'docker-archive:{}'.format(image_file),
-           'docker://{}/{}'.format(registry, target),
+           f'docker-archive:{image_file}',
+           f'docker://{registry}/{target}',
            '--dest-creds', creds]
+    env = os.environ.copy()
+    env['SSL_CERT_DIR'] = str(Path(shutil.which('skopeo')).parents[1] / 'ssl')
     try:
-        utils.run(cmd, mask=creds.split(':'))
+        utils.run(cmd, mask=creds.split(':'), env=env)
         return True
     except sp.CalledProcessError as exc:
         logger.error("Failed to upload %s to %s", image_file, target)

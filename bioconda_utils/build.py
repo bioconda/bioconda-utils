@@ -8,13 +8,19 @@ import itertools
 import logging
 import os
 import sys
+import time
 
-from typing import List
+from typing import List, Optional
+from bioconda_utils.skiplist import Skiplist
+from bioconda_utils.build_failure import BuildFailureRecord
+from bioconda_utils.githandler import GitHandler
 
+import conda
 from conda.exports import UnsatisfiableError
 from conda_build.exceptions import DependencyNeedsBuildingError
 import networkx as nx
 import pandas
+from ruamel_yaml import YAML
 
 from . import utils
 from . import docker_utils
@@ -51,7 +57,11 @@ def build(recipe: str, pkg_paths: List[str] = None,
           channels: List[str] = None,
           docker_builder: docker_utils.RecipeBuilder = None,
           raise_error: bool = False,
-          linter=None) -> BuildResult:
+          linter=None,
+          mulled_conda_image: str = pkg_test.MULLED_CONDA_IMAGE,
+          record_build_failure: bool = False,
+          dag: Optional[nx.DiGraph] = None,
+          skiplist_leafs: bool = False) -> BuildResult:
     """
     Build a single recipe for a single env
 
@@ -68,7 +78,13 @@ def build(recipe: str, pkg_paths: List[str] = None,
       raise_error: Instead of returning a failed build result, raise the
         error instead. Used for testing.
       linter: Linter to use for checking recipes
+      record_build_failure: If True, record build failures in a file next to the meta.yaml
+      dag: optional nx.DiGraph with dependency information
+      skiplist_leafs: If True, blacklist leaf packages that fail to build
     """
+    if record_build_failure and not dag:
+        raise ValueError("record_build_failure requires dag to be set")
+
     if linter:
         logger.info('Linting recipe %s', recipe)
         linter.clear_messages()
@@ -110,6 +126,12 @@ def build(recipe: str, pkg_paths: List[str] = None,
     else:
         base_image = 'quay.io/bioconda/base-glibc-busybox-bash:2.1.0'
 
+    build_failure_record = BuildFailureRecord(recipe)
+    build_failure_record_existed_before_build = build_failure_record.exists()
+    if build_failure_record_existed_before_build:
+        # remove record to avoid that it is leaked into the package
+        build_failure_record.remove()
+
     try:
         if docker_builder is not None:
             docker_builder.build_recipe(recipe_dir=os.path.abspath(recipe),
@@ -140,13 +162,20 @@ def build(recipe: str, pkg_paths: List[str] = None,
                     cmd += [config_file.arg, config_file.path]
                 cmd += [os.path.join(recipe, 'meta.yaml')]
                 with utils.Progress():
-                    utils.run(cmd, env=os.environ, mask=False)
+                    utils.run(cmd, mask=False)
 
         logger.info('BUILD SUCCESS %s',
                     ' '.join(os.path.basename(p) for p in pkg_paths))
+        if record_build_failure:
+            # Success, hence the record is obsolete. Remove it.
+            if build_failure_record_existed_before_build:
+                # record is already removed (see above), but change has to be committed
+                build_failure_record.commit_and_push_changes()
 
     except (docker_utils.DockerCalledProcessError, sp.CalledProcessError) as exc:
         logger.error('BUILD FAILED %s', recipe)
+        if record_build_failure:
+            store_build_failure_record(recipe, exc.output, meta, dag, skiplist_leafs)
         if raise_error:
             raise exc
         return BuildResult(False, None)
@@ -156,7 +185,8 @@ def build(recipe: str, pkg_paths: List[str] = None,
         mulled_images = []
         for pkg_path in pkg_paths:
             try:
-                pkg_test.test_package(pkg_path, base_image=base_image)
+                pkg_test.test_package(pkg_path, base_image=base_image,
+                                      conda_image=mulled_conda_image)
             except sp.CalledProcessError:
                 logger.error('TEST FAILED: %s', recipe)
                 return BuildResult(False, None)
@@ -165,6 +195,22 @@ def build(recipe: str, pkg_paths: List[str] = None,
         return BuildResult(True, mulled_images)
 
     return BuildResult(True, None)
+
+
+def store_build_failure_record(recipe, output, meta, dag, skiplist_leafs):
+    """
+    Write the exception to a file next to the meta.yaml
+    """
+    pkg_name = meta.meta["package"]["name"]
+    is_leaf = graph.is_leaf(dag, pkg_name)
+
+    build_failure_record = BuildFailureRecord(recipe)
+    # if recipe is a leaf (i.e. not used by others as dependency)
+    # we can automatically blacklist it if desired
+    build_failure_record.fill(log=output, skiplist=skiplist_leafs and is_leaf)
+
+    build_failure_record.write()
+    build_failure_record.commit_and_push_changes()
 
 
 def remove_cycles(dag, name2recipes, failed, skip_dependent):
@@ -232,7 +278,10 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
                   lint_exclude: List[str] = None,
                   n_workers: int = 1,
                   worker_offset: int = 0,
-                  keep_old_work: bool = False):
+                  keep_old_work: bool = False,
+                  mulled_conda_image: str = pkg_test.MULLED_CONDA_IMAGE,
+                  record_build_failures: bool = False,
+                  skiplist_leafs: bool = False):
     """
     Build one or many bioconda packages.
 
@@ -265,7 +314,7 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
         return True
 
     config = utils.load_config(config_path)
-    blacklist = utils.get_blacklist(config, recipe_folder)
+    blacklist = Skiplist(config, recipe_folder)
 
     # get channels to check
     if check_channels is None:
@@ -309,7 +358,6 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
                for package in nx.topological_sort(subdag)
                for recipe in name2recipes[package]]
 
-
     built_recipes = []
     skipped_recipes = []
     failed_uploads = []
@@ -350,7 +398,11 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
                     mulled_test=mulled_test,
                     channels=config['channels'],
                     docker_builder=docker_builder,
-                    linter=linter)
+                    linter=linter,
+                    mulled_conda_image=mulled_conda_image,
+                    dag=dag,
+                    record_build_failure=record_build_failures,
+                    skiplist_leafs=skiplist_leafs)
 
         if not res.success:
             failed.append(recipe)

@@ -17,7 +17,6 @@ from conda_build.metadata import MetaData
 
 logger = logging.getLogger(__name__)
 
-# TODO: Make this configurable in bioconda_utils.build and bioconda_utils.cli.
 MULLED_CONDA_IMAGE = "quay.io/bioconda/create-env:latest"
 
 

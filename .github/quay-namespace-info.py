@@ -40,6 +40,7 @@ if __name__ == "__main__":
     HEADERS = {'Content-Type': 'application/json'}
     QUAY_OAUTH_TOKEN = os.getenv('QUAY_OAUTH_TOKEN')
     if QUAY_OAUTH_TOKEN:
+        print(f'Quay Token found, using it for {args.namespace}')
         HEADERS['Authorization'] = f'Bearer {QUAY_OAUTH_TOKEN}'
 
     # Starting querying Quay
@@ -116,10 +117,10 @@ if __name__ == "__main__":
                 repo_status[repo]['is_public'] = "True (changed by script)"
                 # Again, be nice to Quay
                 time.sleep(0.3)
-                fh.write(f'Changed visibility of {args.namespace}/{repo} to public')
+                fh.write(f'Changed visibility of {args.namespace}/{repo} to public\n')
 
     # Print status
-    with open(f'{args.namespace}-status.tsv', 'w') as fh:
+    with open(f'{args.namespace}-status.txt', 'w') as fh:
         fh.write('namespace\tname\tis_public\n')
         for k,v in sorted(repo_status.items()):
             fh.write(f'{v["namespace"]}\t{v["name"]}\t{v["is_public"]}\n')
