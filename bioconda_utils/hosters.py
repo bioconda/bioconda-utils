@@ -357,14 +357,25 @@ class GithubRelease(GithubBase):
     """Matches release artifacts uploaded to Github"""
     link_pattern = r"/{account}/{project}/releases/download/{tag}/{fname}{ext}?"
     expanded_assets_pattern = r"https://github.com/{account}/{project}/releases/expanded_assets/{version}"
+    alt_releases_formats = ["https://api.github.com/repos/{account}/{project}/releases"]
 
     async def get_versions(self, req, orig_version):
         # first, try the older version when HTML worked
         matches = await super().get_versions(req, orig_version)
         if len(matches) > 0:
             return matches
-
-        # old version found nothing, pull the webpage and expand the assets
+        
+        # now try the expanded webpage parsing, this may break if the HTML page changes in the future
+        matches = await self.get_expanded_versions(req, orig_version)
+        if len(matches) > 0:
+            return matches
+        
+        # now try the github API parsing, this will hit the API rate limit
+        matches = await self.get_api_versions(req, orig_version)
+        return matches
+    
+    async def get_expanded_versions(self, req, orig_version):
+        # this version will parse the releases page and expand sub-pages that are collapsed in the initial download
         # this section is basically copied from HTMLHoster, but we need the raw contents of the webpage to look for expanded assets
         exclude = set(self.exclude)
         vals = {key: val
@@ -403,6 +414,58 @@ class GithubRelease(GithubBase):
                     break
 
         return result
+
+    async def get_api_versions(self, req, orig_version):
+        # this version searches using the API for releases
+        # TODO: we basically immediately hit the rate limit with this version, we eventually need some long-term persistent memory
+        #   that can track the etags or last-modified so we do not hit this limit except in the initial spin-up
+        #   more information on etags: https://docs.github.com/en/rest/overview/resources-in-the-rest-api?apiVersion=2022-11-28#conditional-requests
+        self.releases_urls = [
+            template.format_map(self.vals)
+            for template in self.alt_releases_formats
+        ]
+
+        # this is basically copied from a mixture of the base version and the JSON version
+        # need to compile the link regex
+        exclude = set(self.exclude)
+        vals = {key: val
+                for key, val in self.vals.items()
+                if key not in exclude}
+        link_pattern = replace_named_capture_group(self.link_pattern_compiled, vals)
+        link_re = re.compile(link_pattern)
+
+        # now iterate over the alternate release URLs
+        matches = []
+        for url in self.releases_urls:
+            text = await req.get_text_from_url(url)
+            data = json.loads(text)
+
+            # structured as an array of tagged releases
+            for tag_dict in data:
+                # each release has an asset dict
+                for asset_dict in tag_dict.get('assets', []):
+                    # there is a direct download link for each asset, which should make the typical pattern for an HTML user
+                    download_url = asset_dict['browser_download_url']
+                    re_match = link_re.search(download_url)
+            
+                    if re_match:
+                        # this one matches the pattern
+                        # link - just copy the download_url in full
+                        # version - pull out of the regex match
+                        data = re_match.groupdict()
+                        matches.append({
+                            'link' : download_url,
+                            'version' : data['version']
+                        })
+
+        # now strip down to the version(s) that are more recent than what currently is in bioconda
+        num = None
+        for num, match in enumerate(matches):
+            if match["version"] == self.vals["version"]:
+                break
+        if num is None:
+            return matches
+        return matches[:num + 1]
 
 class GithubTag(GithubBase):
     """Matches GitHub repository archives created automatically from tags"""
