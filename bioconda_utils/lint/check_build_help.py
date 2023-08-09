@@ -160,9 +160,21 @@ class missing_run_exports(LintCheck):
     package to ``>=x.x.x,<y.0.0`` where ``x.x.x`` is the version of the package at
     build time of the one depending on it, and ``y = x + 1`` is the next major 
     (i.e. potentially not backward compatible) version.
+    In the recipe depending on this one, one just needs to specify the package name
+    and no version at all.
     If you need a different pinning strategy for this particular recipe (e.g. because it does
     not follow semantic versioning), check out the possible arguments of `pin_subpackage` here:
     https://docs.conda.io/projects/conda-build/en/stable/resources/define-metadata.html#export-runtime-requirements
+
+    Since this strategy can lead to potentially more conflicts in dependency pinnings between tools,
+    it is advisable to additionally set a common version of very frequently used packages for all
+    builds. This happens by specifying the version via a separate pull request in the project wide build
+    configuration file here:
+    https://github.com/bioconda/bioconda-utils/blob/master/bioconda_utils/bioconda_utils-conda_build_config.yaml
+
+    Finally, note that conda is unable to conduct such pinnings in case the dependency and the depending recipe
+    are updated within the same pull request. Hence, the pull request adding the run_export statement
+    has to be merged before the one updating or creating the depending recipe is created.
     """
     def check_recipe(self, recipe):
         build = recipe.meta["build"]
