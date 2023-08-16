@@ -78,7 +78,8 @@ tests:
     expect: missing_meta_yaml
   - name: empty_build_section
     remove: build
-    expect: [should_be_noarch_generic, missing_build_number]
+    expect:
+      [should_be_noarch_generic, missing_build_number, missing_run_exports]
   - name: missing_home
     remove: about/home
     expect: missing_home
