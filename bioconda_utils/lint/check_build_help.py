@@ -177,6 +177,6 @@ class missing_run_exports(LintCheck):
     has to be merged before the one updating or creating the depending recipe is created.
     """
     def check_recipe(self, recipe):
-        build = recipe.meta["build"]
+        build = recipe.meta.get("build", dict())
         if "run_exports" not in build:
             self.message()
