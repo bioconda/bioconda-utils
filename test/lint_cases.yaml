@@ -102,6 +102,7 @@ tests:
           - missing_license
           - missing_build_number
           - missing_summary
+          - missing_run_exports
           - missing_tests
           - no_tests
           - gpl_requires_license_distributed

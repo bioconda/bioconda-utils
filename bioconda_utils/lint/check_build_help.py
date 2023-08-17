@@ -139,8 +139,9 @@ class cython_needs_compiler(LintCheck):
 
 
 class missing_run_exports(LintCheck):
-    """Every recipe should have a run_export statement that ensures
-    that the package is automatically pinned to a compatible version if
+    """Recipe should have a run_export statement that ensures correct pinning in downstream packages
+
+    This ensures that the package is automatically pinned to a compatible version if
     it is used as a dependency in another recipe.
     This is a conservative strategy to avoid breakaged. We came to the 
     conclusion that it is better to require this little overhead instead
@@ -149,21 +150,24 @@ class missing_run_exports(LintCheck):
     libraries) but also for e.g. Python packages, as those might also
     introduce breaking changes in their APIs or command line interfaces.
 
-
     Add run_exports to the recipe like this::
 
       build:
         run_exports:
-          - {{ pin_subpackage('myrecipe') }}
+          - {{ pin_subpackage('myrecipe', max_pin="x") }}
 
-    with ``myrecipe`` being the name of the recipe. This will by default pin the
-    package to ``>=x.x.x,<y.0.0`` where ``x.x.x`` is the version of the package at
-    build time of the one depending on it, and ``y = x + 1`` is the next major 
-    (i.e. potentially not backward compatible) version.
+    with ``myrecipe`` being the name of the recipe (you can also use the name variable).
+    This will by default pin the package to ``>=1.2.0,<2.0.0`` where ``1.2.0`` is the 
+    version of the package at build time of the one depending on it and ``<2.0.0`` constrains
+    it to be less than the next major (i.e. potentially not backward compatible) version.
+
     In the recipe depending on this one, one just needs to specify the package name
     and no version at all.
     If you need a different pinning strategy for this particular recipe (e.g. because it does
-    not follow semantic versioning), check out the possible arguments of `pin_subpackage` here:
+    not follow semantic versioning), you can e.g. use ``max_pin="x.x"`` to pin to the minor
+    version (i.e. translating to ``>=1.2.0,<1.3.0`` ).
+    
+    Also check out the possible arguments of `pin_subpackage` here:
     https://docs.conda.io/projects/conda-build/en/stable/resources/define-metadata.html#export-runtime-requirements
 
     Since this strategy can lead to potentially more conflicts in dependency pinnings between tools,
