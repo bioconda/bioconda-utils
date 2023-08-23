@@ -206,10 +206,11 @@ def collect_build_failure_dataframe(recipe_folder, config, channel, link_fmt="tx
                     continue
 
             package = components[-1] if not is_version_subdir else components[-2]
+            meta = utils.load_meta_fast(recipe)[0]
+            package_name = meta["package"]["name"]
+            descendants = len(nx.descendants(dag, package_name))
 
-            descendants = len(nx.descendants(dag, package))
-
-            downloads = utils.get_package_downloads(channel, package)
+            downloads = utils.get_package_downloads(channel, package_name)
             recs = list(get_build_failure_records(recipe))
 
             failures = ", ".join(utils.format_link(rec.path, link_fmt, prefix=link_prefix, label=rec.platform) for rec in recs)
