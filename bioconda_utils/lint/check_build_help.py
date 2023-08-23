@@ -160,6 +160,10 @@ class missing_run_exports(LintCheck):
     This will by default pin the package to ``>=1.2.0,<2.0.0`` where ``1.2.0`` is the 
     version of the package at build time of the one depending on it and ``<2.0.0`` constrains
     it to be less than the next major (i.e. potentially not backward compatible) version.
+    
+    If the software has a normal versioning (like 1.2.3) but does reportedly not follow semantic versioning, please choose the ``max_pin`` argument such that it captures the potential next version that will introduce a breaking change. E.g. if you expect breaking changes to occur with the next minor release, choose ``max_pin="x.x"``, if they even can occur with the next patch release, choose ``max_pin="x.x.x"``.
+    
+    If the software does have a non-standard versioning (e.g. calendar versioning like 20220602), we cannot really protect well against breakages. However, we can at least pin to the current version as a minimum and skip the max_pin constraint. This works by setting ``max_pin=None``.
 
     In the recipe depending on this one, one just needs to specify the package name
     and no version at all.
