@@ -150,7 +150,7 @@ class missing_run_exports(LintCheck):
     libraries) but also for e.g. Python packages, as those might also
     introduce breaking changes in their APIs or command line interfaces.
 
-    Add run_exports to the recipe like this::
+    We distinguish between three cases. If the software follows semantic versioning (or it has at least a normal version string (like 1.2.3) and the actual strategy of the devs is unknown), add run_exports to the recipe like this::
 
       build:
         run_exports:
