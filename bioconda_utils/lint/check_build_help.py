@@ -143,7 +143,7 @@ class missing_run_exports(LintCheck):
 
     This ensures that the package is automatically pinned to a compatible version if
     it is used as a dependency in another recipe.
-    This is a conservative strategy to avoid breakaged. We came to the 
+    This is a conservative strategy to avoid breakage. We came to the 
     conclusion that it is better to require this little overhead instead
     of trying to fix things when they break later on.
     This holds for compiled packages (in particular those with shared
