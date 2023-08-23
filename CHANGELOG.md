@@ -1,5 +1,14 @@
 # Changelog
 
+### [2.3.5](https://www.github.com/bioconda/bioconda-utils/compare/v2.3.4...v2.3.5) (2023-08-23)
+
+
+### Bug Fixes
+
+* recover --docker-base-image feature ([#906](https://www.github.com/bioconda/bioconda-utils/issues/906)) ([aa08857](https://www.github.com/bioconda/bioconda-utils/commit/aa088572d3721837d08556634961c5c7d86814c1))
+* swaps from github API to expanding the assets ([#907](https://www.github.com/bioconda/bioconda-utils/issues/907)) ([2099a40](https://www.github.com/bioconda/bioconda-utils/commit/2099a405f1b888699eb2026146aa0b4f3f070fb0))
+* use package name instead of folder for build failure list dag check ([#910](https://www.github.com/bioconda/bioconda-utils/issues/910)) ([11fb14f](https://www.github.com/bioconda/bioconda-utils/commit/11fb14fd1a95c05dca96887d0d9935f6954447e2))
+
 ### [2.3.4](https://www.github.com/bioconda/bioconda-utils/compare/v2.3.3...v2.3.4) (2023-07-15)
 
 
