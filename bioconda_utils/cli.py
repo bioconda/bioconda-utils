@@ -353,7 +353,10 @@ def do_lint(recipe_folder, config, packages="*", cache=None, list_checks=False,
     messages = linter.get_messages()
 
     if messages:
-        print("The following problems have been found:\n")
+        print(
+            "The following problems have been found (visit https://bioconda.github.io/contributor/linting.html "
+            "for details on the particular lints you get below.):\n"
+        )
         print(linter.get_report())
 
     if not result:

@@ -136,3 +136,55 @@ class cython_needs_compiler(LintCheck):
     def check_deps(self, deps):
         if 'cython' in deps and 'compiler_c' not in deps:
             self.message()
+
+
+class missing_run_exports(LintCheck):
+    """Recipe should have a run_export statement that ensures correct pinning in downstream packages
+
+    This ensures that the package is automatically pinned to a compatible version if
+    it is used as a dependency in another recipe.
+    This is a conservative strategy to avoid breakage. We came to the 
+    conclusion that it is better to require this little overhead instead
+    of trying to fix things when they break later on.
+    This holds for compiled packages (in particular those with shared
+    libraries) but also for e.g. Python packages, as those might also
+    introduce breaking changes in their APIs or command line interfaces.
+
+    We distinguish between three cases. If the software follows semantic versioning (or it has at least a normal version string (like 1.2.3) and the actual strategy of the devs is unknown), add run_exports to the recipe like this::
+
+      build:
+        run_exports:
+          - {{ pin_subpackage('myrecipe', max_pin="x") }}
+
+    with ``myrecipe`` being the name of the recipe (you can also use the name variable).
+    This will by default pin the package to ``>=1.2.0,<2.0.0`` where ``1.2.0`` is the 
+    version of the package at build time of the one depending on it and ``<2.0.0`` constrains
+    it to be less than the next major (i.e. potentially not backward compatible) version.
+    
+    If the software has a normal versioning (like 1.2.3) but does reportedly not follow semantic versioning, please choose the ``max_pin`` argument such that it captures the potential next version that will introduce a breaking change. E.g. if you expect breaking changes to occur with the next minor release, choose ``max_pin="x.x"``, if they even can occur with the next patch release, choose ``max_pin="x.x.x"``.
+    
+    If the software does have a non-standard versioning (e.g. calendar versioning like 20220602), we cannot really protect well against breakages. However, we can at least pin to the current version as a minimum and skip the max_pin constraint. This works by setting ``max_pin=None``.
+
+    In the recipe depending on this one, one just needs to specify the package name
+    and no version at all.
+    If you need a different pinning strategy for this particular recipe (e.g. because it does
+    not follow semantic versioning), you can e.g. use ``max_pin="x.x"`` to pin to the minor
+    version (i.e. translating to ``>=1.2.0,<1.3.0`` ).
+    
+    Also check out the possible arguments of `pin_subpackage` here:
+    https://docs.conda.io/projects/conda-build/en/stable/resources/define-metadata.html#export-runtime-requirements
+
+    Since this strategy can lead to potentially more conflicts in dependency pinnings between tools,
+    it is advisable to additionally set a common version of very frequently used packages for all
+    builds. This happens by specifying the version via a separate pull request in the project wide build
+    configuration file here:
+    https://github.com/bioconda/bioconda-utils/blob/master/bioconda_utils/bioconda_utils-conda_build_config.yaml
+
+    Finally, note that conda is unable to conduct such pinnings in case the dependency and the depending recipe
+    are updated within the same pull request. Hence, the pull request adding the run_export statement
+    has to be merged before the one updating or creating the depending recipe is created.
+    """
+    def check_recipe(self, recipe):
+        build = recipe.meta.get("build", dict())
+        if "run_exports" not in build:
+            self.message()
