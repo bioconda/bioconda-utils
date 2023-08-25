@@ -150,7 +150,9 @@ class missing_run_exports(LintCheck):
     libraries) but also for e.g. Python packages, as those might also
     introduce breaking changes in their APIs or command line interfaces.
 
-    We distinguish between three cases. If the software follows semantic versioning (or it has at least a normal version string (like 1.2.3) and the actual strategy of the devs is unknown), add run_exports to the recipe like this::
+    We distinguish between four cases. 
+    
+    **Case 1:** If the software follows semantic versioning (or it has at least a normal version string (like 1.2.3) and the actual strategy of the devs is unknown), add run_exports to the recipe like this::
 
       build:
         run_exports:
@@ -160,16 +162,20 @@ class missing_run_exports(LintCheck):
     This will by default pin the package to ``>=1.2.0,<2.0.0`` where ``1.2.0`` is the 
     version of the package at build time of the one depending on it and ``<2.0.0`` constrains
     it to be less than the next major (i.e. potentially not backward compatible) version.
+
+    **Case 2:** If the software version starts with a 0 (e.g. ``0.3.2``) semantic versioning allows breaking changes in minor releases. Hence, you should use::
+
+      build:
+        run_exports:
+          - {{ pin_subpackage('myrecipe', max_pin="x.x") }}
     
-    If the software has a normal versioning (like 1.2.3) but does reportedly not follow semantic versioning, please choose the ``max_pin`` argument such that it captures the potential next version that will introduce a breaking change. E.g. if you expect breaking changes to occur with the next minor release, choose ``max_pin="x.x"``, if they even can occur with the next patch release, choose ``max_pin="x.x.x"``.
+    **Case 3:** If the software has a normal versioning (like 1.2.3) but does reportedly not follow semantic versioning, please choose the ``max_pin`` argument such that it captures the potential next version that will introduce a breaking change.
+    E.g. if you expect breaking changes to occur with the next minor release, choose ``max_pin="x.x"``, if they even can occur with the next patch release, choose ``max_pin="x.x.x"``.
     
-    If the software does have a non-standard versioning (e.g. calendar versioning like 20220602), we cannot really protect well against breakages. However, we can at least pin to the current version as a minimum and skip the max_pin constraint. This works by setting ``max_pin=None``.
+    **Case 4:** If the software does have a non-standard versioning (e.g. calendar versioning like 20220602), we cannot really protect well against breakages. However, we can at least pin to the current version as a minimum and skip the max_pin constraint. This works by setting ``max_pin=None``.
 
     In the recipe depending on this one, one just needs to specify the package name
     and no version at all.
-    If you need a different pinning strategy for this particular recipe (e.g. because it does
-    not follow semantic versioning), you can e.g. use ``max_pin="x.x"`` to pin to the minor
-    version (i.e. translating to ``>=1.2.0,<1.3.0`` ).
     
     Also check out the possible arguments of `pin_subpackage` here:
     https://docs.conda.io/projects/conda-build/en/stable/resources/define-metadata.html#export-runtime-requirements
@@ -186,7 +192,8 @@ class missing_run_exports(LintCheck):
 
     **Importantly** note that this shall not be used to pin compatible versions of other recipes in the current recipe.
     Rather, those other recipes have to get their own run_exports sections.
-    Usually, there is no need to use ``pin_compatible``, just use ``pin_subpackage`` as shown above.
+    Usually, there is no need to use ``pin_compatible``, just use ``pin_subpackage`` as shown above, and fix
+    run_exports in upstream packages as well if needed.
     """
     def check_recipe(self, recipe):
         build = recipe.meta.get("build", dict())
