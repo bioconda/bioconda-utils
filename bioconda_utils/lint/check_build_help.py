@@ -183,6 +183,10 @@ class missing_run_exports(LintCheck):
     Finally, note that conda is unable to conduct such pinnings in case the dependency and the depending recipe
     are updated within the same pull request. Hence, the pull request adding the run_export statement
     has to be merged before the one updating or creating the depending recipe is created.
+
+    **Importantly** note that this shall not be used to pin compatible versions of other recipes in the current recipe.
+    Rather, those other recipes have to get their own run_exports sections.
+    Usually, there is no need to use ``pin_compatible``, just use ``pin_subpackage`` as shown above.
     """
     def check_recipe(self, recipe):
         build = recipe.meta.get("build", dict())
