@@ -406,7 +406,8 @@ class GithubRelease(GithubBase):
                     # we found a match in the expansion
                     result.append({
                         'link' : urljoin(url, lp_match["href"]),
-                        'version' : lp_match['version']
+                        'version' : lp_match['version'],
+                        'vals' : vals
                     })
 
                 if match["version"] == self.vals["version"]:
@@ -455,7 +456,8 @@ class GithubRelease(GithubBase):
                         data = re_match.groupdict()
                         matches.append({
                             'link' : download_url,
-                            'version' : data['version']
+                            'version' : data['version'],
+                            'vals' : vals
                         })
 
         # now strip down to the version(s) that are more recent than what currently is in bioconda
