@@ -21,9 +21,6 @@ pin_run_as_build:
     max_pin: x.x
     min_pin: x.x
 
-htslib:
-  - "1.17"
-
 bamtools:
   - "2.5.1"
 
