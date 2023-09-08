@@ -16,7 +16,7 @@ jobs:
           - long_running_2
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: set path
         run: echo "/opt/mambaforge/bin" >> $GITHUB_PATH
@@ -51,7 +51,7 @@ jobs:
     name: OSX tests
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: set path
         run: echo "/opt/mambaforge/bin" >> $GITHUB_PATH
@@ -80,7 +80,7 @@ jobs:
     name: autobump test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: set path
         run: echo "/opt/mambaforge/bin" >> $GITHUB_PATH
 
