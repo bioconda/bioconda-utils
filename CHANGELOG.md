@@ -1,5 +1,14 @@
 # Changelog
 
+### [2.4.1](https://www.github.com/bioconda/bioconda-utils/compare/v2.4.0...v2.4.1) (2023-09-28)
+
+
+### Bug Fixes
+
+* adding "vals" to GithubRelease changes for API and expanded assets ([#912](https://www.github.com/bioconda/bioconda-utils/issues/912)) ([9e0e445](https://www.github.com/bioconda/bioconda-utils/commit/9e0e44581cade8d994a5b923964df060122b7519))
+* Remove htslib build pinning ([#917](https://www.github.com/bioconda/bioconda-utils/issues/917)) ([c7efb92](https://www.github.com/bioconda/bioconda-utils/commit/c7efb9250312abdcfbdc10be60b5a0fa92e52726))
+* Version constraints can start with `!` as well ([#919](https://www.github.com/bioconda/bioconda-utils/issues/919)) ([ee56f6e](https://www.github.com/bioconda/bioconda-utils/commit/ee56f6e1d20aa7c96f150ff79a084faf0521e70b)), closes [#918](https://www.github.com/bioconda/bioconda-utils/issues/918)
+
 ## [2.4.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.3.4...v2.4.0) (2023-08-24)
 
 
