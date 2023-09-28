@@ -303,7 +303,7 @@ tests:
       build.sh: |
         $PYTHON setup.py install
   - name: version_constraints_whitespace_ok
-    add: { requirements: { run: ["one >1", "two >=1", "three >1,<2"] } }
+    add: { requirements: { run: ["one >1", "two >=1", "three >1,<2", "four !=3.3"] } }
   - name: version_constraints_whitespace_missing
     expect: version_constraints_missing_whitespace
     add: { requirements: { run: ["one>1"] } }
