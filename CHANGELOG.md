@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.5.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.4.0...v2.5.0) (2023-10-04)
+
+
+### Features
+
+* add special lints for bioconda-repodata-patches recipe ([#855](https://www.github.com/bioconda/bioconda-utils/issues/855)) ([11c9229](https://www.github.com/bioconda/bioconda-utils/commit/11c92296bbc566fcd481ea45c4d55247b4ba154d))
+
+
+### Bug Fixes
+
+* adding "vals" to GithubRelease changes for API and expanded assets ([#912](https://www.github.com/bioconda/bioconda-utils/issues/912)) ([9e0e445](https://www.github.com/bioconda/bioconda-utils/commit/9e0e44581cade8d994a5b923964df060122b7519))
+* Remove htslib build pinning ([#917](https://www.github.com/bioconda/bioconda-utils/issues/917)) ([c7efb92](https://www.github.com/bioconda/bioconda-utils/commit/c7efb9250312abdcfbdc10be60b5a0fa92e52726))
+* Version constraints can start with `!` as well ([#919](https://www.github.com/bioconda/bioconda-utils/issues/919)) ([ee56f6e](https://www.github.com/bioconda/bioconda-utils/commit/ee56f6e1d20aa7c96f150ff79a084faf0521e70b)), closes [#918](https://www.github.com/bioconda/bioconda-utils/issues/918)
+
+
+### Documentation
+
+* try to clarify some confusion with run_exports. ([#914](https://www.github.com/bioconda/bioconda-utils/issues/914)) ([417e7da](https://www.github.com/bioconda/bioconda-utils/commit/417e7da6524c71ac0aafdcd75244bd001de17efd))
+
 ## [2.4.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.3.4...v2.4.0) (2023-08-24)
 
 
