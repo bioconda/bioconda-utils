@@ -24,7 +24,7 @@ jobs:
             image: bioconda-utils-build-env-cos7
             base_image: quay.io/condaforge/linux-anvil-cos7-x86_64
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
