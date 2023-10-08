@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.6.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.5.0...v2.6.0) (2023-10-08)
+
+
+### Features
+
+* download aarch64 artifacts from CircleCI ([#921](https://www.github.com/bioconda/bioconda-utils/issues/921)) ([b9cddd4](https://www.github.com/bioconda/bioconda-utils/commit/b9cddd42eb7c45dbbd207cf5d209ea328c02eff1))
+
 ## [2.5.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.4.0...v2.5.0) (2023-10-04)
 
 
