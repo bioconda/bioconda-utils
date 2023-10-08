@@ -11,6 +11,7 @@ import fnmatch
 import glob
 import logging
 import os
+import platform
 import re
 import subprocess as sp
 import sys
@@ -1514,6 +1515,9 @@ class RepoData:
 
     @staticmethod
     def native_platform():
+        arch = platform.machine()
+        if sys.platform.startswith("linux") and arch == "aarch64":
+            return "linux-aarch64"
         if sys.platform.startswith("linux"):
             return "linux"
         if sys.platform.startswith("darwin"):
@@ -1524,14 +1528,15 @@ class RepoData:
     def platform2subdir(platform):
         if platform == 'linux':
             return 'linux-64'
+        elif platform == 'linux-aarch64':
+            return 'linux-aarch64'
         elif platform == 'osx':
             return 'osx-64'
         elif platform == 'noarch':
             return 'noarch'
         else:
             raise ValueError(
-                'Unsupported platform: bioconda only supports linux, osx and noarch.')
-
+                'Unsupported platform: bioconda only supports linux, linux-aarch64, osx and noarch.')
 
 
     def get_versions(self, name):

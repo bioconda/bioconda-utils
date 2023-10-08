@@ -517,6 +517,7 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
 @arg('--dryrun', action='store_true', help='''Do not actually upload anything.''')
 @arg('--fallback', choices=['build', 'ignore'], default='build', help="What to do if no artifacts are found in the PR.")
 @arg('--quay-upload-target', help="Provide a quay.io target to push docker images to.")
+@arg('--artifact-source', choices=['azure', 'circleci'], default='azure', help="Application hosting build artifacts (e.g., Azure or Circle CI).")
 @enable_logging()
 def handle_merged_pr(
     recipe_folder,
@@ -525,12 +526,13 @@ def handle_merged_pr(
     git_range=None,
     dryrun=False,
     fallback='build',
-    quay_upload_target=None
+    quay_upload_target=None,
+    artifact_source='azure'
 ):
     label = os.getenv('BIOCONDA_LABEL', None) or None
 
     success = upload_pr_artifacts(
-        config, repo, git_range[1], dryrun=dryrun, mulled_upload_target=quay_upload_target, label=label
+        config, repo, git_range[1], dryrun=dryrun, mulled_upload_target=quay_upload_target, label=label, artifact_source=artifact_source
     )
     if not success and fallback == 'build':
         success = build(
