@@ -27,6 +27,7 @@ from . import pkg_test
 from . import upload
 from . import lint
 from . import graph
+from . import recipe as _recipe
 
 logger = logging.getLogger(__name__)
 
@@ -355,7 +356,21 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
     skipped_recipes = []
     failed_uploads = []
 
+    def skip_additional_platform():
+        recipe_obj = _recipe.Recipe.from_file(recipe_folder, recipe)
+        native_platform = utils.RepoData().native_platform()
+        # On linux-aarch64 env, only build recipe with linux-aarch64 additional_platforms
+        if native_platform == "linux-aarch64":
+            if "linux-aarch64" not in recipe_obj.extra_additional_platforms:
+                logger.info("BUILD SKIP: skipping %s for %s platform", recipe, native_platform)
+                return True
+        return False
+
     for recipe, name in recipes:
+        # If not force, skip recipes that are not for this platform
+        if not force and skip_additional_platform():
+            continue
+
         if name in skip_dependent:
             logger.info('BUILD SKIP: skipping %s because it depends on %s '
                         'which had a failed build.',
