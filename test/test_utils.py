@@ -6,7 +6,6 @@ import yaml
 import tempfile
 import requests
 import uuid
-import unittest.mock
 import contextlib
 import tarfile
 import logging
@@ -890,8 +889,7 @@ def test_load_meta_skipping():
     assert utils.load_all_meta(recipe) == []
 
 
-@unittest.mock.patch('bioconda_utils.utils.RepoData.native_platform')
-def test_native_platform_skipping(func_mock):
+def test_native_platform_skipping():
     expections = [
         # Don't skip linux-x86 for any recipes
         ["one", "linux", False],
@@ -920,10 +918,11 @@ def test_native_platform_skipping(func_mock):
     r.write_recipes()
     # Make sure RepoData singleton init
     utils.RepoData.register_config(config_fixture)
-    for recipe_name, native_platform, result in expections:
+    for recipe_name, platform, result in expections:
         recipe_folder = os.path.dirname(r.recipe_dirs[recipe_name])
-        func_mock.return_value = native_platform
-        assert build.check_native_platform_skippable(recipe_folder, r.recipe_dirs[recipe_name]) == result
+        assert build.do_not_consider_for_additional_platform(recipe_folder,
+                                                             r.recipe_dirs[recipe_name],
+                                                             platform) == result
 
 
 def test_variants():

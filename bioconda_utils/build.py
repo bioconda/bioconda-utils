@@ -260,23 +260,22 @@ def get_subdags(dag, n_workers, worker_offset):
     return subdags
 
 
-def check_native_platform_skippable(recipe_folder: str, recipe: str):
+def do_not_consider_for_additional_platform(recipe_folder: str, recipe: str, platform: str):
     """
     Given a recipe, check this recipe should skip in current platform or not.
 
     Arguments:
       recipe_folder: Directory containing possibly many, and possibly nested, recipes.
-      recipe: recipe name
+      recipe: Relative path to recipe
+      platform: current native platform
 
     Returns:
       Return True if current native platform are not included in recipe's additional platforms (no need to build).
     """
     recipe_obj = _recipe.Recipe.from_file(recipe_folder, recipe)
-    native_platform = utils.RepoData().native_platform()
     # On linux-aarch64 env, only build recipe with linux-aarch64 extra_additional_platforms
-    if native_platform == "linux-aarch64":
+    if platform == "linux-aarch64":
         if "linux-aarch64" not in recipe_obj.extra_additional_platforms:
-            logger.info("BUILD SKIP: skipping %s for %s platform", recipe, native_platform)
             return True
     return False
 
@@ -378,8 +377,9 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
     failed_uploads = []
 
     for recipe, name in recipes:
-        # If not force, skip recipes that are not for this platform
-        if not force and check_native_platform_skippable(recipe_folder, recipe):
+        platform = utils.RepoData().native_platform()
+        if not force and do_not_consider_for_additional_platform(recipe_folder, recipe, platform):
+            logger.info("BUILD SKIP: skipping %s for additional platform %s", recipe, platform)
             continue
 
         if name in skip_dependent:
