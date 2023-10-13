@@ -56,6 +56,33 @@ two:
       license: BSD
       home: https://elsewhere
       summary: the_summary
+three:
+  folder: three
+  meta.yaml:
+    #{% set version="0.1" %}
+    package:
+      name: three
+      version: #{{version}}
+    source:
+      - url: https://somewhere # [osx]
+        sha256: 123            # [osx[
+      - url: https://somewhere # [linux]
+        sha256: 456            # [linux]
+    build:
+      number: 0
+    outputs:
+      - name: libthree
+      - name: three-tools
+    test:
+      commands:
+        - do nothing
+    about:
+      license: BSD
+      home: https://elsewhere
+      summary: the_summary
+    extra:
+      additional-platforms:
+        - linux-aarch64
 """
 RECIPES = yaml.load(RECIPE_DATA)
 
@@ -256,6 +283,16 @@ def test_recipe_package_names(recipe):
         'two': ['two', 'libtwo', 'two-tools'],
     }[recipe.name]
     assert recipe.package_names == expected
+
+
+@with_recipes
+def test_recipe_extra_additional_platforms(recipe):
+    expected = {
+        'one': [],
+        'two': [],
+        'three': ["linux-aarch64"]
+    }[recipe.name]
+    assert recipe.extra_additional_platforms == expected
 
 
 @with_recipes
