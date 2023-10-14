@@ -407,6 +407,13 @@ class Recipe():
         return []
 
     @property
+    def extra_additional_platforms(self) -> list:
+        """The extra additional-platforms list"""
+        if 'extra' in self.meta and 'additional-platforms' in self.meta['extra']:
+            return list(self.meta["extra"]["additional-platforms"])
+        return []
+
+    @property
     def name(self) -> str:
         """The name of the toplevel package built by this recipe"""
         return self.meta["package"]["name"]

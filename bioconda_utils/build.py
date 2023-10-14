@@ -27,6 +27,7 @@ from . import pkg_test
 from . import upload
 from . import lint
 from . import graph
+from . import recipe as _recipe
 
 logger = logging.getLogger(__name__)
 
@@ -259,6 +260,26 @@ def get_subdags(dag, n_workers, worker_offset):
     return subdags
 
 
+def do_not_consider_for_additional_platform(recipe_folder: str, recipe: str, platform: str):
+    """
+    Given a recipe, check this recipe should skip in current platform or not.
+
+    Arguments:
+      recipe_folder: Directory containing possibly many, and possibly nested, recipes.
+      recipe: Relative path to recipe
+      platform: current native platform
+
+    Returns:
+      Return True if current native platform are not included in recipe's additional platforms (no need to build).
+    """
+    recipe_obj = _recipe.Recipe.from_file(recipe_folder, recipe)
+    # On linux-aarch64 env, only build recipe with linux-aarch64 extra_additional_platforms
+    if platform == "linux-aarch64":
+        if "linux-aarch64" not in recipe_obj.extra_additional_platforms:
+            return True
+    return False
+
+
 def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
                   mulled_test: bool = True, testonly: bool = False,
                   force: bool = False,
@@ -356,6 +377,11 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
     failed_uploads = []
 
     for recipe, name in recipes:
+        platform = utils.RepoData().native_platform()
+        if not force and do_not_consider_for_additional_platform(recipe_folder, recipe, platform):
+            logger.info("BUILD SKIP: skipping %s for additional platform %s", recipe, platform)
+            continue
+
         if name in skip_dependent:
             logger.info('BUILD SKIP: skipping %s because it depends on %s '
                         'which had a failed build.',

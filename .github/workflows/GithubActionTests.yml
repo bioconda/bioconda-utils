@@ -17,6 +17,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: set path
         run: echo "/opt/mambaforge/bin" >> $GITHUB_PATH
@@ -52,6 +54,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: set path
         run: echo "/opt/mambaforge/bin" >> $GITHUB_PATH

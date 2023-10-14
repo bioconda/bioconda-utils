@@ -259,6 +259,18 @@ def test_recipe_package_names(recipe):
 
 
 @with_recipes
+def test_recipe_extra_additional_platforms(recipe):
+    assert recipe.extra_additional_platforms == []
+    recipe.meta_yaml += [
+        'extra:',
+        '  additional-platforms:',
+        '    - linux-aarch64'
+    ]
+    recipe.render()
+    assert recipe.extra_additional_platforms == ["linux-aarch64"]
+
+
+@with_recipes
 def test_get_deps_dict(recipe):
     recipe.meta_yaml.extend([
         'requirements:',
