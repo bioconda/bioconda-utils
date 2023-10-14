@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.7.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.6.0...v2.7.0) (2023-10-14)
+
+
+### Features
+
+* add support to run build for recipes with linux-aarch64 additional-platforms ([#923](https://www.github.com/bioconda/bioconda-utils/issues/923)) ([55671f7](https://www.github.com/bioconda/bioconda-utils/commit/55671f77124065fd09bb7d9c4a856cf0e87e48a4))
+
 ## [2.6.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.5.0...v2.6.0) (2023-10-08)
 
 
