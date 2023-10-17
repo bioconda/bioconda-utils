@@ -403,6 +403,10 @@ tests:
     add:
       requirements: { host: [cython], build: ['{{compiler("c")}}'] }
       build: { noarch: False }
+  - name: cython_cxx_compiler_ok
+    add:
+      requirements: { host: [cython], build: ['{{compiler("cxx")}}'] }
+      build: { noarch: False }
   - name: missing_run_exports
     remove: build/run_exports
     expect: missing_run_exports
