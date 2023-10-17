@@ -134,7 +134,7 @@ class cython_needs_compiler(LintCheck):
     """
     severity = WARNING
     def check_deps(self, deps):
-        if 'cython' in deps and 'compiler_c' not in deps:
+        if 'cython' in deps and 'compiler_c' not in deps and 'compiler_cxx' not in deps:
             self.message()
 
 
