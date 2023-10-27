@@ -382,7 +382,6 @@ def do_lint(recipe_folder, config, packages="*", cache=None, list_checks=False,
      those packages matching --packages globs will be built.''')
 @arg('--docker', action='store_true',
      help='Build packages in docker container.')
-@arg('--live-logs', action='store_true', help="Live logging during the build process")
 @arg('--mulled-test', action='store_true', help="Run a mulled-build test on the built package")
 @arg('--mulled-upload-target', help="Provide a quay.io target to push mulled docker images to.")
 @arg('--mulled-conda-image', help='''Conda Docker image to install the package with during
@@ -435,6 +434,7 @@ from environment, even after successful build and test.''')
      Dockerfile template.''')
 @arg("--record-build-failures", action="store_true", help="Record build failures in build_failure.yaml next to the recipe.")
 @arg("--skiplist-leafs", action="store_true", help="Skiplist leaf recipes (i.e. ones that are not depended on by any other recipes) that fail to build.")
+@arg('--live-logs', action='store_true', help="Live logging during the build process")
 @enable_logging()
 def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
           force=False, docker=None, mulled_test=False, build_script_template=None,
