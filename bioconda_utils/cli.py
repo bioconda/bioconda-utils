@@ -437,14 +437,15 @@ from environment, even after successful build and test.''')
 @arg("--skiplist-leafs", action="store_true", help="Skiplist leaf recipes (i.e. ones that are not depended on by any other recipes) that fail to build.")
 @enable_logging()
 def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
-          force=False, docker=None, live_logs=False, mulled_test=False, build_script_template=None,
+          force=False, docker=None, mulled_test=False, build_script_template=None,
           pkg_dir=None, anaconda_upload=False, mulled_upload_target=None,
           build_image=False, keep_image=False, lint=False, lint_exclude=None,
           check_channels=None, n_workers=1, worker_offset=0, keep_old_work=False,
           mulled_conda_image=pkg_test.MULLED_CONDA_IMAGE,
           docker_base_image=None,
           record_build_failures=False,
-          skiplist_leafs=False):
+          skiplist_leafs=False,
+          live_logs=False):
     cfg = utils.load_config(config)
     setup = cfg.get('setup', None)
     if setup:
