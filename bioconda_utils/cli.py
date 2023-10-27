@@ -382,6 +382,7 @@ def do_lint(recipe_folder, config, packages="*", cache=None, list_checks=False,
      those packages matching --packages globs will be built.''')
 @arg('--docker', action='store_true',
      help='Build packages in docker container.')
+@arg('--live-logs', action='store_true', help="Live logging during the build process")
 @arg('--mulled-test', action='store_true', help="Run a mulled-build test on the built package")
 @arg('--mulled-upload-target', help="Provide a quay.io target to push mulled docker images to.")
 @arg('--mulled-conda-image', help='''Conda Docker image to install the package with during
@@ -436,7 +437,7 @@ from environment, even after successful build and test.''')
 @arg("--skiplist-leafs", action="store_true", help="Skiplist leaf recipes (i.e. ones that are not depended on by any other recipes) that fail to build.")
 @enable_logging()
 def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
-          force=False, docker=None, mulled_test=False, build_script_template=None,
+          force=False, docker=None, live_logs=False, mulled_test=False, build_script_template=None,
           pkg_dir=None, anaconda_upload=False, mulled_upload_target=None,
           build_image=False, keep_image=False, lint=False, lint_exclude=None,
           check_channels=None, n_workers=1, worker_offset=0, keep_old_work=False,
@@ -503,7 +504,8 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
                             keep_old_work=keep_old_work,
                             mulled_conda_image=mulled_conda_image,
                             record_build_failures=record_build_failures,
-                            skiplist_leafs=skiplist_leafs)
+                            skiplist_leafs=skiplist_leafs,
+                            live_logs=live_logs)
     exit(0 if success else 1)
 
 
