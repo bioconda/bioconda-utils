@@ -52,6 +52,10 @@ RUN . /opt/conda/etc/profile.d/conda.sh  && conda activate base && \
     '/^conda([><!=~ ].+)?$/p' \
     /opt/bioconda-utils/bioconda_utils-requirements.txt \
     | xargs -r mamba install --yes && \
+    # FIXME: "remove truststore" only necessary due to python downgrade.
+    #        Updating requirements should fix that.
+    #        (Also this removal will break in future.)
+    mamba remove --yes truststore && \
     mamba install --yes --file /opt/bioconda-utils/bioconda_utils-requirements.txt && \
     pip install --no-deps --find-links /opt/bioconda-utils bioconda_utils && \
     mamba clean --yes --index --tarballs && \
