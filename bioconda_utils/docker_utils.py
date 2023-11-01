@@ -402,7 +402,7 @@ class RecipeBuilder(object):
             shutil.rmtree(build_dir)
         return p
 
-    def build_recipe(self, recipe_dir, build_args, env, noarch=False, live_logs=False):
+    def build_recipe(self, recipe_dir, build_args, env, noarch=False, live_logs=True):
         """
         Build a single recipe.
 
