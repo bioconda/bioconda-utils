@@ -62,7 +62,7 @@ def build(recipe: str, pkg_paths: List[str] = None,
           record_build_failure: bool = False,
           dag: Optional[nx.DiGraph] = None,
           skiplist_leafs: bool = False,
-          live_logs: bool = False) -> BuildResult:
+          live_logs: bool = True) -> BuildResult:
     """
     Build a single recipe for a single env
 
@@ -82,6 +82,7 @@ def build(recipe: str, pkg_paths: List[str] = None,
       record_build_failure: If True, record build failures in a file next to the meta.yaml
       dag: optional nx.DiGraph with dependency information
       skiplist_leafs: If True, blacklist leaf packages that fail to build
+      live_logs: If True, enable live logging during the build process
     """
     if record_build_failure and not dag:
         raise ValueError("record_build_failure requires dag to be set")
@@ -298,7 +299,7 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
                   mulled_conda_image: str = pkg_test.MULLED_CONDA_IMAGE,
                   record_build_failures: bool = False,
                   skiplist_leafs: bool = False,
-                  live_logs: bool = False):
+                  live_logs: bool = True):
     """
     Build one or many bioconda packages.
 
@@ -325,6 +326,8 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
       worker_offset: If n_workers is >1, then every worker_offset within a given group of
         sub-DAGs will be processed.
       keep_old_work: Do not remove anything from environment, even after successful build and test.
+      skiplist_leafs: If True, blacklist leaf packages that fail to build
+      live_logs: If True, enable live logging during the build process
     """
     if not recipes:
         logger.info("Nothing to be done.")
