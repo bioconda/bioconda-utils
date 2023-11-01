@@ -1,5 +1,12 @@
 # Changelog
 
+### [2.7.1](https://www.github.com/bioconda/bioconda-utils/compare/v2.7.0...v2.7.1) (2023-11-01)
+
+
+### Bug Fixes
+
+* try locale C.utf8 ([#931](https://www.github.com/bioconda/bioconda-utils/issues/931)) ([584fcdd](https://www.github.com/bioconda/bioconda-utils/commit/584fcddd45854b88cdf4af72df0a1ad5cc3c9fcc))
+
 ## [2.7.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.6.0...v2.7.0) (2023-10-14)
 
 
