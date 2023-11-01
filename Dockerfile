@@ -6,7 +6,7 @@ ARG BASE_IMAGE=quay.io/condaforge/linux-anvil-cos7-x86_64
 FROM ${BASE_IMAGE} as base
 
 # Copy over C.UTF-8 locale from our base image to make it consistently available during build.
-COPY --from=quay.io/bioconda/base-glibc-busybox-bash /usr/lib/locale/C.UTF-8 /usr/lib/locale/C.UTF-8
+COPY --from=quay.io/bioconda/base-glibc-busybox-bash /usr/lib/locale/C.utf8 /usr/lib/locale/C.utf8
 
 # Provide system deps unconditionally until we are able to offer per-recipe installs.
 # (Addresses, e.g., "ImportError: libGL.so.1" in tests directly invoked by conda-build.)
@@ -52,6 +52,10 @@ RUN . /opt/conda/etc/profile.d/conda.sh  && conda activate base && \
     '/^conda([><!=~ ].+)?$/p' \
     /opt/bioconda-utils/bioconda_utils-requirements.txt \
     | xargs -r mamba install --yes && \
+    # FIXME: "remove truststore" only necessary due to python downgrade.
+    #        Updating requirements should fix that.
+    #        (Also this removal will break in future.)
+    mamba remove --yes truststore && \
     mamba install --yes --file /opt/bioconda-utils/bioconda_utils-requirements.txt && \
     pip install --no-deps --find-links /opt/bioconda-utils bioconda_utils && \
     mamba clean --yes --index --tarballs && \
