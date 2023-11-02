@@ -402,7 +402,7 @@ class RecipeBuilder(object):
             shutil.rmtree(build_dir)
         return p
 
-    def build_recipe(self, recipe_dir, build_args, env, noarch=False):
+    def build_recipe(self, recipe_dir, build_args, env, noarch=False, live_logs=True):
         """
         Build a single recipe.
 
@@ -474,7 +474,7 @@ class RecipeBuilder(object):
 
         logger.debug('DOCKER: cmd: %s', cmd)
         with utils.Progress():
-            p = utils.run(cmd, mask=False)
+            p = utils.run(cmd, mask=False, live=live_logs)
         return p
 
     def cleanup(self):
