@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.8.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.7.0...v2.8.0) (2023-11-02)
+
+
+### Features
+
+* Enable Live logs and add option to disable ([#930](https://www.github.com/bioconda/bioconda-utils/issues/930)) ([47eaadc](https://www.github.com/bioconda/bioconda-utils/commit/47eaadcd4f0da856733e3fd3170d3451ec9c4b8d))
+
+
+### Bug Fixes
+
+* try locale C.utf8 ([#931](https://www.github.com/bioconda/bioconda-utils/issues/931)) ([584fcdd](https://www.github.com/bioconda/bioconda-utils/commit/584fcddd45854b88cdf4af72df0a1ad5cc3c9fcc))
+
 ## [2.7.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.6.0...v2.7.0) (2023-10-14)
 
 
