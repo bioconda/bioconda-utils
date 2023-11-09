@@ -1,5 +1,12 @@
 # Changelog
 
+### [2.9.1](https://www.github.com/bioconda/bioconda-utils/compare/v2.9.0...v2.9.1) (2023-11-09)
+
+
+### Documentation
+
+* run_export -> run_exports plural in help message ([#928](https://www.github.com/bioconda/bioconda-utils/issues/928)) ([2c5d4ad](https://www.github.com/bioconda/bioconda-utils/commit/2c5d4ad754f7bfa17b90495dc602118c7270d4bc))
+
 ## [2.9.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.8.0...v2.9.0) (2023-11-05)
 
 
