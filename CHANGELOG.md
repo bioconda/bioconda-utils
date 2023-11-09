@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.9.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.8.0...v2.9.0) (2023-11-05)
+
+
+### Features
+
+* use new container version by default (3.0) ([#935](https://www.github.com/bioconda/bioconda-utils/issues/935)) ([11d53db](https://www.github.com/bioconda/bioconda-utils/commit/11d53dbb18d5edf0a6a546c5a53c6d5e942dfc4a))
+
+## [2.8.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.7.0...v2.8.0) (2023-11-02)
+
+
+### Features
+
+* Enable Live logs and add option to disable ([#930](https://www.github.com/bioconda/bioconda-utils/issues/930)) ([47eaadc](https://www.github.com/bioconda/bioconda-utils/commit/47eaadcd4f0da856733e3fd3170d3451ec9c4b8d))
+
+
+### Bug Fixes
+
+* try locale C.utf8 ([#931](https://www.github.com/bioconda/bioconda-utils/issues/931)) ([584fcdd](https://www.github.com/bioconda/bioconda-utils/commit/584fcddd45854b88cdf4af72df0a1ad5cc3c9fcc))
+
 ## [2.7.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.6.0...v2.7.0) (2023-10-14)
 
 
