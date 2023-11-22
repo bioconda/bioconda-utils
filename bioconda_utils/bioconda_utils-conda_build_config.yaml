@@ -37,6 +37,7 @@ libxml2:
   - "2.11.*"
 
 python:
+  - 3.11.*  *_cpython
   - 3.10.*  *_cpython
   - 3.9.*  *_cpython
   - 3.8.*  *_cpython
@@ -46,12 +47,14 @@ python_impl:
   - cpython
   - cpython
   - cpython
+  - cpython
 
 # Warning! This needs to both match the length of python and python_impl but ALSO match what conda-forge is using/has used!
 numpy:
-  - 1.21.*
-  - 1.21.*
-  - 1.21.*
+  - 1.23.*
+  - 1.22.*
+  - 1.22.*
+  - 1.22.*
 
 channel_sources:
   - conda-forge,bioconda,defaults

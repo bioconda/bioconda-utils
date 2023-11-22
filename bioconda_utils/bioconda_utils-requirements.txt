@@ -23,7 +23,7 @@ jsonschema=3.2.*     # JSON schema verification
 pyopenssl>=22.1      # Stay compatible with cryptography
 
 # pinnings
-conda-forge-pinning=2023.05.06.13.08.41
+conda-forge-pinning=2024.03.06.07.52.39
 
 # tools
 anaconda-client=1.6.*  # anaconda_upload
