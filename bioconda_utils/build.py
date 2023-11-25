@@ -183,7 +183,8 @@ def build(recipe: str, pkg_paths: List[str] = None,
         for pkg_path in pkg_paths:
             try:
                 pkg_test.test_package(pkg_path, base_image=base_image,
-                                      conda_image=mulled_conda_image)
+                                      conda_image=mulled_conda_image,
+                                      live_logs=live_logs)
             except sp.CalledProcessError:
                 logger.error('TEST FAILED: %s', recipe)
                 return BuildResult(False, None)
