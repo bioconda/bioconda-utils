@@ -86,9 +86,6 @@ def mulled_upload(image: str, quay_target: str) -> sp.CompletedProcess:
 
     env = os.environ.copy()
 
-    # Env var expected by mulled-build
-    env["DEST_BASE_IMAGE"] = base_image
-
     mask = []
     if os.environ.get('QUAY_OAUTH_TOKEN', False):
         token = os.environ['QUAY_OAUTH_TOKEN']
