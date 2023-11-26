@@ -83,12 +83,18 @@ def mulled_upload(image: str, quay_target: str) -> sp.CompletedProcess:
     if not os.path.exists(involucro_path):
         raise RuntimeError('internal involucro wrapper missing')
     cmd += ['--involucro-path', involucro_path]
+
+    env = os.environ.copy()
+
+    # Env var expected by mulled-build
+    env["DEST_BASE_IMAGE"] = base_image
+
     mask = []
     if os.environ.get('QUAY_OAUTH_TOKEN', False):
         token = os.environ['QUAY_OAUTH_TOKEN']
         cmd.extend(['--oauth-token', token])
         mask = [token]
-    return utils.run(cmd, mask=mask)
+    return utils.run(cmd, mask=mask, env=env)
 
 
 def skopeo_upload(image_file: str, target: str,
