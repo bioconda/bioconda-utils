@@ -92,6 +92,7 @@ def test_package(
     mulled_args="",
     base_image=None,
     conda_image=MULLED_CONDA_IMAGE,
+    live_logs = True,
 ):
     """
     Tests a built package in a minimal docker container.
@@ -119,6 +120,9 @@ def test_package(
     conda_image : None | str
         Conda Docker image to install the package with during the mulled based
         tests.
+
+    live_logs : True | bool
+        If True, enable live logging during the build process
     """
 
     assert path.endswith('.tar.bz2'), "Unrecognized path {0}".format(path)
@@ -173,6 +177,6 @@ def test_package(
     env["CONDA_IMAGE"] = conda_image
     with tempfile.TemporaryDirectory() as d:
         with utils.Progress():
-            p = utils.run(cmd, env=env, cwd=d, mask=False)
+            p = utils.run(cmd, env=env, cwd=d, mask=False, live=live_logs)
 
     return p
