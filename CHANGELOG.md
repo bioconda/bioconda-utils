@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.10.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.9.0...v2.10.0) (2023-11-26)
+
+
+### Features
+
+* live logs for mulled build ([#939](https://www.github.com/bioconda/bioconda-utils/issues/939)) ([7f83d7f](https://www.github.com/bioconda/bioconda-utils/commit/7f83d7f66ab81279a5d7c990b9311d493d416d5b))
+
+
+### Bug Fixes
+
+* specify involucro path when uploading ([#941](https://www.github.com/bioconda/bioconda-utils/issues/941)) ([3086cc0](https://www.github.com/bioconda/bioconda-utils/commit/3086cc083213b9084ba7d0ee5bc12e0d86cebc0b))
+
+
+### Documentation
+
+* run_export -> run_exports plural in help message ([#928](https://www.github.com/bioconda/bioconda-utils/issues/928)) ([2c5d4ad](https://www.github.com/bioconda/bioconda-utils/commit/2c5d4ad754f7bfa17b90495dc602118c7270d4bc))
+
 ## [2.9.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.8.0...v2.9.0) (2023-11-05)
 
 
