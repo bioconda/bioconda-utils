@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.11.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.10.0...v2.11.0) (2023-11-30)
+
+
+### Features
+
+* make GITHUB_TOKEN optional for fetch ([#942](https://www.github.com/bioconda/bioconda-utils/issues/942)) ([c0eab1d](https://www.github.com/bioconda/bioconda-utils/commit/c0eab1d7224d6b13ebe399e7933460249e4e9a58))
+
 ## [2.10.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.9.0...v2.10.0) (2023-11-26)
 
 
