@@ -568,9 +568,7 @@ def dag(recipe_folder, config, packages="*", format='gml', hide_singletons=False
     """
     Export the DAG of packages to a graph format file for visualization
     """
-    dag, name2recipes = graph.build(utils.get_recipes(recipe_folder, "*"), config)
-    if packages != "*":
-        dag = graph.filter(dag, packages)
+    dag, name2recipes = graph.build(utils.get_recipes(recipe_folder, packages), config)
     if hide_singletons:
         for node in nx.nodes(dag):
             if dag.degree(node) == 0:
