@@ -774,7 +774,7 @@ class BioCProjectPage(object):
                 dependency_mapping[prefix + name.lower() + version] = name
 
         # Check SystemRequirements in the DESCRIPTION file to make sure
-        # packages with such reqquirements are provided correct recipes.
+        # packages with such requirements are provided correct recipes.
         if (self.packages[self.package].get('SystemRequirements') is not None):
             logger.warning(
                 "The 'SystemRequirements' {} are needed".format(
@@ -959,6 +959,7 @@ class BioCProjectPage(object):
                 'build', OrderedDict((
                     ('number', self.build_number),
                     ('rpaths', ['lib/R/lib/', 'lib/']),
+                    ('run_exports', f'{{{{ pin_subpackage("bioconductor-{self.package_lower}", max_pin="x") }}}}'),
                 )),
             ),
             (
