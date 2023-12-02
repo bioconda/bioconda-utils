@@ -38,7 +38,11 @@ class BuildFailureRecord:
             with open(path, "r") as f:
                 yaml=YAML()
                 try:
-                    self.inner = dict(yaml.load(f))
+                    loaded = yaml.load(f)
+                    if loaded is None:
+                        raise IOError(f"Unable to read build failure record {path}: {e}")
+                    else:
+                        self.inner = dict(yaml.load(f))
                 except ruamel.yaml.reader.ReaderError as e:
                     raise IOError(f"Unable to read build failure record {path}: {e}")
 
