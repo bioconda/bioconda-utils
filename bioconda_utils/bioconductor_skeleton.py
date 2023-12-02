@@ -1249,7 +1249,19 @@ def write_recipe(package, recipe_dir, config, bioc_data_packages=None, force=Fal
             (updated_version == current_version) and
             (updated_meta != current_meta)
         ):
-            proj.build_number = int(current_build_number) + 1
+            # Sometimes when updating all packages, the updating process fails
+            # partway. Re-running the updating process should not bump the
+            # build number if no builds for this version exist yet in the repo.
+            existing_bldnos = utils.RepoData().get_package_data(
+                key="build_number",
+                name="bioconductor-" + proj.package.lower(),
+                version=updated_version
+            )
+            if not existing_bldnos:
+                proj.build_number = 0
+            else:
+                proj.build_number = sorted([int(i) for i in existing_bldnos]) [-1] + 1
+
         if 'extra' in current_meta:
             exclude = set(['final', 'copy_test_source_files'])
             proj.extra = {x: y for x, y in current_meta['extra'].items() if x not in exclude}
