@@ -959,7 +959,7 @@ class BioCProjectPage(object):
                 'build', OrderedDict((
                     ('number', self.build_number),
                     ('rpaths', ['lib/R/lib/', 'lib/']),
-                    ('run_exports', f'{{{{ pin_subpackage("bioconductor-{self.package_lower}", max_pin="x") }}}}'),
+                    ('run_exports', f'{{{{ pin_subpackage("bioconductor-{self.package_lower}", max_pin="x.x") }}}}'),
                 )),
             ),
             (
