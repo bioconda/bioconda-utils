@@ -104,6 +104,10 @@ class BuildFailureRecord:
                 i += 1
             if self.reason:
                 commented_map.insert(i, "reason", LiteralScalarString(self.reason))
+                i += 1
+            if self.category:
+                commented_map.insert(i, "category", LiteralScalarString(self.category))
+                i += 1
             yaml.dump(commented_map, f)
 
     def remove(self):
