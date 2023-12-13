@@ -12,7 +12,7 @@ class repodata_patches_no_version_bump(LintCheck):
             return
         repodata = utils.RepoData()
         old_versions = repodata.get_versions("bioconda-repodata-patches")
-        if recipe.get('version') in old_versions:
+        if recipe.get('package/version') in old_versions:
             self.message()
 
 
