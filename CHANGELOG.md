@@ -1,5 +1,13 @@
 # Changelog
 
+### [2.11.1](https://www.github.com/bioconda/bioconda-utils/compare/v2.11.0...v2.11.1) (2023-12-13)
+
+
+### Bug Fixes
+
+* add local channel for docker builds ([#945](https://www.github.com/bioconda/bioconda-utils/issues/945)) ([de8ce00](https://www.github.com/bioconda/bioconda-utils/commit/de8ce00d1ccf6a395ff6adce97f71b5c6059500f))
+* Fix version number check in repodata_patches_no_version_bump() ([#946](https://www.github.com/bioconda/bioconda-utils/issues/946)) ([73e69b2](https://www.github.com/bioconda/bioconda-utils/commit/73e69b2f9aabb06f693518b8ee195c7fa897bc76))
+
 ## [2.11.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.10.0...v2.11.0) (2023-11-30)
 
 
