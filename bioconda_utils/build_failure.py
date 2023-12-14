@@ -14,7 +14,7 @@ import conda.base.constants
 import pandas as pd
 import networkx as nx
 
-from .githandler import BiocondaRepo, install_gpg_key
+from .githandler import BiocondaRepo
 
 from bioconda_utils.recipe import Recipe
 from bioconda_utils import graph, utils
