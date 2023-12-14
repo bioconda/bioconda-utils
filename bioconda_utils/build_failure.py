@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 from typing import Optional, Union
 import subprocess as sp
@@ -12,6 +13,8 @@ import conda.exports
 import conda.base.constants
 import pandas as pd
 import networkx as nx
+
+from .githandler import BiocondaRepo, install_gpg_key
 
 from bioconda_utils.recipe import Recipe
 from bioconda_utils import graph, utils
@@ -179,7 +182,7 @@ class BuildFailureRecord:
         self.inner["category"] = value
 
 
-def collect_build_failure_dataframe(recipe_folder, config, channel, link_fmt="txt", link_prefix=""):
+def collect_build_failure_dataframe(recipe_folder, config, channel, link_fmt="txt", link_prefix="", git_range=None):
     def get_build_failure_records(recipe):
         return filter(
             BuildFailureRecord.exists, 
@@ -190,6 +193,21 @@ def collect_build_failure_dataframe(recipe_folder, config, channel, link_fmt="tx
         return any(get_build_failure_records(recipe))
     
     recipes = list(utils.get_recipes(recipe_folder))
+
+    if git_range:
+        if not git_range or len(git_range) > 2:
+            sys.exit("--git-range may have only one or two arguments")
+        other = git_range[0]
+        ref = "HEAD" if len(git_range) == 1 else git_range[1]
+        repo = BiocondaRepo(recipe_folder)
+        changed_recipes = repo.get_recipes_to_build(ref, other)
+        logger.info("Constraining to %s git modified recipes%s.", len(changed_recipes),
+                    utils.ellipsize_recipes(changed_recipes, recipe_folder))
+        recipes = [recipe for recipe in recipes if recipe in set(changed_recipes)]
+        if len(recipes) != len(changed_recipes):
+            logger.info("Overlap was %s recipes%s.", len(recipes),
+                        utils.ellipsize_recipes(recipes, recipe_folder))
+
     dag, _ = graph.build(recipes, config)
 
     def get_data():
