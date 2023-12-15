@@ -232,10 +232,11 @@ def collect_build_failure_dataframe(recipe_folder, config, channel, link_fmt="tx
             recs = list(get_build_failure_records(recipe))
 
             failures = ", ".join(utils.format_link(rec.path, link_fmt, prefix=link_prefix, label=rec.platform) for rec in recs)
+            categories = ", ".join(rec.category for rec in recs)
             skiplisted = any(rec.skiplist for rec in recs)
             prs = utils.format_link(f"https://github.com/bioconda/bioconda-recipes/pulls?q=is%3Apr+is%3Aopen+{package}", link_fmt, label="show")
-            yield (recipe, downloads, descendants, skiplisted, failures, prs)
+            yield (recipe, downloads, descendants, skiplisted, categories, failures, prs)
 
-    data = pd.DataFrame(get_data(), columns=["recipe", "downloads", "depending", "skiplisted", "build failures", "pull requests"])
+    data = pd.DataFrame(get_data(), columns=["recipe", "downloads", "depending", "skiplisted", "category", "build failures", "pull requests"])
     data.sort_values(by=["depending", "downloads"], ascending=False, inplace=True)
     return data
