@@ -1,5 +1,12 @@
 # Changelog
 
+### [2.11.2](https://www.github.com/bioconda/bioconda-utils/compare/v2.11.1...v2.11.2) (2023-12-20)
+
+
+### Bug Fixes
+
+* Do not emit cython_needs_compiler if compiler("cxx") is set ([#927](https://www.github.com/bioconda/bioconda-utils/issues/927)) ([8255afd](https://www.github.com/bioconda/bioconda-utils/commit/8255afdd9e5c0fd3cb09cb11269f5ff3397c959e))
+
 ### [2.11.1](https://www.github.com/bioconda/bioconda-utils/compare/v2.11.0...v2.11.1) (2023-12-13)
 
 
