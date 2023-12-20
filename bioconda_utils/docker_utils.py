@@ -105,7 +105,7 @@ conda config --add channels file://{self.container_staging} 2> >(
 # The actual building...
 # we explicitly point to the meta.yaml, in order to keep
 # conda-build from building all subdirectories
-conda mambabuild {self.conda_build_args} {self.container_recipe}/meta.yaml 2>&1
+conda mambabuild -c file://{self.container_staging} {self.conda_build_args} {self.container_recipe}/meta.yaml 2>&1
 
 # copy all built packages to the staging area
 cp /opt/conda/conda-bld/*/*.tar.bz2 {self.container_staging}/{arch}
@@ -402,7 +402,7 @@ class RecipeBuilder(object):
             shutil.rmtree(build_dir)
         return p
 
-    def build_recipe(self, recipe_dir, build_args, env, noarch=False):
+    def build_recipe(self, recipe_dir, build_args, env, noarch=False, live_logs=True):
         """
         Build a single recipe.
 
@@ -474,7 +474,7 @@ class RecipeBuilder(object):
 
         logger.debug('DOCKER: cmd: %s', cmd)
         with utils.Progress():
-            p = utils.run(cmd, mask=False)
+            p = utils.run(cmd, mask=False, live=live_logs)
         return p
 
     def cleanup(self):

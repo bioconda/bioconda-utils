@@ -61,7 +61,8 @@ def build(recipe: str, pkg_paths: List[str] = None,
           mulled_conda_image: str = pkg_test.MULLED_CONDA_IMAGE,
           record_build_failure: bool = False,
           dag: Optional[nx.DiGraph] = None,
-          skiplist_leafs: bool = False) -> BuildResult:
+          skiplist_leafs: bool = False,
+          live_logs: bool = True) -> BuildResult:
     """
     Build a single recipe for a single env
 
@@ -81,6 +82,7 @@ def build(recipe: str, pkg_paths: List[str] = None,
       record_build_failure: If True, record build failures in a file next to the meta.yaml
       dag: optional nx.DiGraph with dependency information
       skiplist_leafs: If True, blacklist leaf packages that fail to build
+      live_logs: If True, enable live logging during the build process
     """
     if record_build_failure and not dag:
         raise ValueError("record_build_failure requires dag to be set")
@@ -122,9 +124,9 @@ def build(recipe: str, pkg_paths: List[str] = None,
     is_noarch = bool(meta.get_value('build/noarch', default=False))
     use_base_image = meta.get_value('extra/container', {}).get('extended-base', False)
     if use_base_image:
-        base_image = 'quay.io/bioconda/base-glibc-debian-bash:2.1.0'
+        base_image = 'quay.io/bioconda/base-glibc-debian-bash:3.0'
     else:
-        base_image = 'quay.io/bioconda/base-glibc-busybox-bash:2.1.0'
+        base_image = 'quay.io/bioconda/base-glibc-busybox-bash:3.0'
 
     build_failure_record = BuildFailureRecord(recipe)
     build_failure_record_existed_before_build = build_failure_record.exists()
@@ -137,7 +139,8 @@ def build(recipe: str, pkg_paths: List[str] = None,
             docker_builder.build_recipe(recipe_dir=os.path.abspath(recipe),
                                         build_args=' '.join(args),
                                         env=whitelisted_env,
-                                        noarch=is_noarch)
+                                        noarch=is_noarch,
+                                        live_logs=live_logs)
             # Use presence of expected packages to check for success
             for pkg_path in pkg_paths:
                 if not os.path.exists(pkg_path):
@@ -156,7 +159,7 @@ def build(recipe: str, pkg_paths: List[str] = None,
                     cmd += [config_file.arg, config_file.path]
                 cmd += [os.path.join(recipe, 'meta.yaml')]
                 with utils.Progress():
-                    utils.run(cmd, mask=False)
+                    utils.run(cmd, mask=False, live=live_logs)
 
         logger.info('BUILD SUCCESS %s',
                     ' '.join(os.path.basename(p) for p in pkg_paths))
@@ -180,7 +183,8 @@ def build(recipe: str, pkg_paths: List[str] = None,
         for pkg_path in pkg_paths:
             try:
                 pkg_test.test_package(pkg_path, base_image=base_image,
-                                      conda_image=mulled_conda_image)
+                                      conda_image=mulled_conda_image,
+                                      live_logs=live_logs)
             except sp.CalledProcessError:
                 logger.error('TEST FAILED: %s', recipe)
                 return BuildResult(False, None)
@@ -295,7 +299,8 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
                   keep_old_work: bool = False,
                   mulled_conda_image: str = pkg_test.MULLED_CONDA_IMAGE,
                   record_build_failures: bool = False,
-                  skiplist_leafs: bool = False):
+                  skiplist_leafs: bool = False,
+                  live_logs: bool = True):
     """
     Build one or many bioconda packages.
 
@@ -322,6 +327,8 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
       worker_offset: If n_workers is >1, then every worker_offset within a given group of
         sub-DAGs will be processed.
       keep_old_work: Do not remove anything from environment, even after successful build and test.
+      skiplist_leafs: If True, blacklist leaf packages that fail to build
+      live_logs: If True, enable live logging during the build process
     """
     if not recipes:
         logger.info("Nothing to be done.")
@@ -421,7 +428,8 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
                     mulled_conda_image=mulled_conda_image,
                     dag=dag,
                     record_build_failure=record_build_failures,
-                    skiplist_leafs=skiplist_leafs)
+                    skiplist_leafs=skiplist_leafs,
+                    live_logs=live_logs)
 
         if not res.success:
             failed.append(recipe)

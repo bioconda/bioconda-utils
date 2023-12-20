@@ -76,12 +76,22 @@ def mulled_upload(image: str, quay_target: str) -> sp.CompletedProcess:
       quary_target: name of image on quay
     """
     cmd = ['mulled-build', 'push', image, '-n', quay_target]
+
+    # galaxy-lib always downloads involucro, unless it's in cwd or its path is
+    # explicitly given.
+    involucro_path = os.path.join(os.path.dirname(__file__), 'involucro')
+    if not os.path.exists(involucro_path):
+        raise RuntimeError('internal involucro wrapper missing')
+    cmd += ['--involucro-path', involucro_path]
+
+    env = os.environ.copy()
+
     mask = []
     if os.environ.get('QUAY_OAUTH_TOKEN', False):
         token = os.environ['QUAY_OAUTH_TOKEN']
         cmd.extend(['--oauth-token', token])
         mask = [token]
-    return utils.run(cmd, mask=mask)
+    return utils.run(cmd, mask=mask, env=env)
 
 
 def skopeo_upload(image_file: str, target: str,

@@ -1606,8 +1606,15 @@ class RepoData:
 def get_github_client():
     """Get a Github client with a robust retry policy.
     """
+    if "GITHUB_TOKEN" in os.environ.keys():
+        return Github(
+            os.environ["GITHUB_TOKEN"],
+            retry=Retry(
+                total=10, status_forcelist=(500, 502, 504), backoff_factor=0.3
+            ),
+        )
+    logger.warn("GITHUB_TOKEN not found, restrictions may be enforced by GitHub API")
     return Github(
-        os.environ["GITHUB_TOKEN"],
         retry=Retry(
             total=10, status_forcelist=(500, 502, 504), backoff_factor=0.3
         ),

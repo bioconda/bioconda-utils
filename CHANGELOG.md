@@ -1,5 +1,56 @@
 # Changelog
 
+### [2.11.1](https://www.github.com/bioconda/bioconda-utils/compare/v2.11.0...v2.11.1) (2023-12-13)
+
+
+### Bug Fixes
+
+* add local channel for docker builds ([#945](https://www.github.com/bioconda/bioconda-utils/issues/945)) ([de8ce00](https://www.github.com/bioconda/bioconda-utils/commit/de8ce00d1ccf6a395ff6adce97f71b5c6059500f))
+* Fix version number check in repodata_patches_no_version_bump() ([#946](https://www.github.com/bioconda/bioconda-utils/issues/946)) ([73e69b2](https://www.github.com/bioconda/bioconda-utils/commit/73e69b2f9aabb06f693518b8ee195c7fa897bc76))
+
+## [2.11.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.10.0...v2.11.0) (2023-11-30)
+
+
+### Features
+
+* make GITHUB_TOKEN optional for fetch ([#942](https://www.github.com/bioconda/bioconda-utils/issues/942)) ([c0eab1d](https://www.github.com/bioconda/bioconda-utils/commit/c0eab1d7224d6b13ebe399e7933460249e4e9a58))
+
+## [2.10.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.9.0...v2.10.0) (2023-11-26)
+
+
+### Features
+
+* live logs for mulled build ([#939](https://www.github.com/bioconda/bioconda-utils/issues/939)) ([7f83d7f](https://www.github.com/bioconda/bioconda-utils/commit/7f83d7f66ab81279a5d7c990b9311d493d416d5b))
+
+
+### Bug Fixes
+
+* specify involucro path when uploading ([#941](https://www.github.com/bioconda/bioconda-utils/issues/941)) ([3086cc0](https://www.github.com/bioconda/bioconda-utils/commit/3086cc083213b9084ba7d0ee5bc12e0d86cebc0b))
+
+
+### Documentation
+
+* run_export -> run_exports plural in help message ([#928](https://www.github.com/bioconda/bioconda-utils/issues/928)) ([2c5d4ad](https://www.github.com/bioconda/bioconda-utils/commit/2c5d4ad754f7bfa17b90495dc602118c7270d4bc))
+
+## [2.9.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.8.0...v2.9.0) (2023-11-05)
+
+
+### Features
+
+* use new container version by default (3.0) ([#935](https://www.github.com/bioconda/bioconda-utils/issues/935)) ([11d53db](https://www.github.com/bioconda/bioconda-utils/commit/11d53dbb18d5edf0a6a546c5a53c6d5e942dfc4a))
+
+## [2.8.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.7.0...v2.8.0) (2023-11-02)
+
+
+### Features
+
+* Enable Live logs and add option to disable ([#930](https://www.github.com/bioconda/bioconda-utils/issues/930)) ([47eaadc](https://www.github.com/bioconda/bioconda-utils/commit/47eaadcd4f0da856733e3fd3170d3451ec9c4b8d))
+
+
+### Bug Fixes
+
+* try locale C.utf8 ([#931](https://www.github.com/bioconda/bioconda-utils/issues/931)) ([584fcdd](https://www.github.com/bioconda/bioconda-utils/commit/584fcddd45854b88cdf4af72df0a1ad5cc3c9fcc))
+
 ## [2.7.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.6.0...v2.7.0) (2023-10-14)
 
 

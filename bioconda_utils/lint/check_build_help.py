@@ -139,7 +139,7 @@ class cython_needs_compiler(LintCheck):
 
 
 class missing_run_exports(LintCheck):
-    """Recipe should have a run_export statement that ensures correct pinning in downstream packages
+    """Recipe should have a run_exports statement that ensures correct pinning in downstream packages
 
     This ensures that the package is automatically pinned to a compatible version if
     it is used as a dependency in another recipe.
@@ -187,7 +187,7 @@ class missing_run_exports(LintCheck):
     https://github.com/bioconda/bioconda-utils/blob/master/bioconda_utils/bioconda_utils-conda_build_config.yaml
 
     Finally, note that conda is unable to conduct such pinnings in case the dependency and the depending recipe
-    are updated within the same pull request. Hence, the pull request adding the run_export statement
+    are updated within the same pull request. Hence, the pull request adding the run_exports statement
     has to be merged before the one updating or creating the depending recipe is created.
 
     **Importantly** note that this shall not be used to pin compatible versions of other recipes in the current recipe.
