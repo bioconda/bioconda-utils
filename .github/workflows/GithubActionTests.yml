@@ -20,6 +20,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          repository: 'bioconda/bioconda-containers'
+          path: 'bioconda-containers'
+
       - name: set path
         run: echo "/opt/mambaforge/bin" >> $GITHUB_PATH
 
@@ -35,7 +41,8 @@ jobs:
 
       - name: Build docker container
         run: |
-          docker build -t quay.io/bioconda/bioconda-utils-build-env-cos7:latest ./
+          sed -i "s#COPY ./bioconda-utils/ ./#COPY ./ ./#" ./bioconda-containers/images/build-env/Dockerfile
+          docker build -t quay.io/bioconda/bioconda-utils-build-env-cos7:latest -f ./bioconda-containers/images/build-env/Dockerfile ./
           docker history quay.io/bioconda/bioconda-utils-build-env-cos7:latest
           docker run --rm -t quay.io/bioconda/bioconda-utils-build-env-cos7:latest sh -lec 'type -t conda && conda info -a && conda list'
           docker build -t quay.io/bioconda/bioconda-utils-test-env-cos7:latest -f ./Dockerfile.test ./
