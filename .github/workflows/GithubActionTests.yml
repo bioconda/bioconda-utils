@@ -41,8 +41,7 @@ jobs:
 
       - name: Build docker container
         run: |
-          sed -i "s#COPY ./bioconda-utils/ ./#COPY ./ ./#" ./bioconda-containers/images/build-env/Dockerfile
-          docker build -t quay.io/bioconda/bioconda-utils-build-env-cos7:latest -f ./bioconda-containers/images/build-env/Dockerfile ./
+          docker build --build-arg BIOCONDA_UTILS_FOLDER=./ -t quay.io/bioconda/bioconda-utils-build-env-cos7:latest -f ./bioconda-containers/images/build-env/Dockerfile ./
           docker history quay.io/bioconda/bioconda-utils-build-env-cos7:latest
           docker run --rm -t quay.io/bioconda/bioconda-utils-build-env-cos7:latest sh -lec 'type -t conda && conda info -a && conda list'
           docker build -t quay.io/bioconda/bioconda-utils-test-env-cos7:latest -f ./Dockerfile.test ./
