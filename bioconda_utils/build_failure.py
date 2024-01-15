@@ -88,7 +88,7 @@ class BuildFailureRecord:
         with open(self.path, "w") as f:
             yaml=YAML()
             commented_map = CommentedMap()
-            commented_map.insert(0, "recipe_sha", self.recipe_sha, comment="The commit at which this recipe failed to build.")
+            commented_map.insert(0, "recipe_sha", self.recipe_sha, comment="The hash of the recipe's meta.yaml at which this recipe failed to build.")
             commented_map.insert(1, "skiplist", self.skiplist, comment="Set to true to skiplist this recipe so that it will be ignored as long as its latest commit is the one given above.")
             i = 2
 
