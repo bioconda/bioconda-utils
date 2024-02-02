@@ -579,7 +579,7 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
         # (too slow) conflicts = self.check_version_pin_conflict(recipe, versions)
 
         # select apropriate most current version
-        latest = self.select_version(recipe.version, versions.keys())
+        latest = self.select_version(recipe.version, versions.keys(), recipe.name)
 
         # add data for respective versions to recipe and recipe.orig
         recipe.version_data = versions[latest] or {}
@@ -671,7 +671,7 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
         return version_map
 
     @staticmethod
-    def select_version(current: str, versions: Sequence[str]) -> str:
+    def select_version(current: str, versions: Sequence[str], recipe_name: str) -> str:
         """Chooses the most recent, acceptable version out of **versions**
 
         - must be newer than current (as defined by conda VersionOrder)
@@ -689,7 +689,12 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
         for vers in versions:
             if "-" in vers:  # ignore versions with local (FIXME)
                 continue
-            vers_version = parse_version(vers)
+            try:
+                # ignore invalid versions
+                vers_version = parse_version(vers)
+            except Exception as error:
+                logger.error("Error parsing version for %s: %s", recipe_name, error)
+                continue
             # allow prerelease only if current is prerelease
             if vers_version.is_prerelease and not current_version.is_prerelease:
                 continue
