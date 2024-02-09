@@ -1,0 +1,39 @@
+ARG base
+FROM "${base}"
+
+# Check if env-activate.sh gets sourced for login shell and in env-execute.
+RUN [ "$( sh -lc 'printf world' )" = 'world' ] \
+    && \
+    [ "$( /usr/local/env-execute sh -c 'printf world' )" = 'world' ] \
+    && \
+    printf '%s\n' \
+      'printf "hello "' \
+      > /usr/local/env-activate.sh \
+    && \
+    [ "$( sh -lc 'printf world' )" = 'hello world' ] \
+    && \
+    [ "$( /usr/local/env-execute sh -c 'printf world' )" = 'hello world' ] \
+    && \
+    printf '' \
+      > /usr/local/env-activate.sh
+
+# Check if all desired locales are there.
+RUN locale -a | grep -i 'c\.utf-\?8' \
+    && \
+    locale -a | grep -i 'en_us\.utf-\?8'
+
+RUN apt-get update -qq \
+    && \
+    DEBIAN_FRONTEND=noninteractive \
+      apt-get install --yes --no-install-recommends \
+      ca-certificates \
+      wget \
+    && \
+    arch=$(uname -m) \
+    && \
+    wget --quiet \
+      "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-${arch}.sh" \
+    && \
+    sh ./Miniforge3-Linux-${arch}.sh -bp /opt/conda \
+    && \
+    /opt/conda/bin/conda info --all

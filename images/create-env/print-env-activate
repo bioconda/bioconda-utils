@@ -1,0 +1,95 @@
+#! /bin/bash -eu
+
+for arg do
+  case "${arg}" in
+    --help )
+      cat <<'end-of-help'
+Usage: print-env-activate [OPTIONS]... [--] [PREFIX]
+Print shell activation script contents conda creates for environment at PREFIX.
+
+  --prefix=PREFIX             Optionally pass on PREFIX path as option-argument
+                              instead of operand.
+  --prefix-is-base[=yes|=no]  Specify if PREFIX is a base environment and use
+                              `PREFIX/bin/conda` to create a full base
+                              environment activation script. (default: no)
+end-of-help
+      exit 0 ;;
+    --prefix=* )
+      prefix="${arg#--prefix=}"
+      shift ;;
+    --prefix-is-base=yes | --prefix-is-base )
+      prefix_is_base=1
+      shift ;;
+    --prefix-is-base=no )
+      prefix_is_base=0
+      shift ;;
+    -- )
+      break ;;
+    -* )
+      printf 'unknown option: %s\n' "${arg}"
+      exit 1 ;;
+    * )
+      break
+  esac
+done
+
+if [ -z "${prefix:-}" ] ; then
+  prefix="${1}"
+  shift
+fi
+
+if [ $# -ne 0 ] ; then
+  printf 'excess argument: %s\n' "${@}"
+  exit
+fi
+
+if [ "${prefix_is_base-}" = 1 ] ; then
+  conda_exe="${prefix}/bin/conda"
+else
+  conda_exe="$( command -v conda )"
+fi
+
+# Deactivate current active env for full `conda shell.posix activate` changes.
+deactivate_script="$(
+  conda shell.posix deactivate
+)"
+if [ "${prefix_is_base-}" = 1 ] ; then
+  deactivate_script="$(
+    printf %s "${deactivate_script}" \
+      | sed "s|/[^\"'=:]*/condabin:||g"
+  )"
+fi
+set +u
+eval "${deactivate_script}"
+set -u
+unset deactivate_script
+
+# NOTE: The following gets a proper PS1 value from an interactive Bash which
+#       `conda shell posix.activate` can reuse.
+# NB: Ideally, conda activate should not use the current PS1 but rather write
+#     out something like PS1="${CONDA_PROMPT_MODIFIER}${PS1}".
+#     (Also, running this in the build instead of final container might not
+#     reflect the actual PS1 the target container image would provide.)
+PS1="$(
+  bash -ic 'printf %s "${PS1}"' 2>/dev/null
+  printf .
+)"
+PS1="${PS1%.}"
+
+activate_script="$(
+  export PS1
+  if [ ! "${prefix_is_base-}" = 1 ] ; then
+    export CONDA_ENV_PROMPT=
+  fi
+  "${conda_exe}" shell.posix activate "${prefix}"
+)"
+
+printf '%s\n' "${activate_script}" \
+  | {
+    if [ "${prefix_is_base-}" = 1 ] ; then
+        cat
+    else
+      grep -vE '^export (_CE_M|_CE_CONDA|CONDA_EXE|CONDA_PYTHON_EXE)=' \
+        | sed "s|/[^\"'=:]*/condabin:||g"
+    fi
+    }
