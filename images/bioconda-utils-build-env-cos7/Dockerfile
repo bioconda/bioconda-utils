@@ -1,9 +1,8 @@
 ARG base_image
-
 FROM ${base_image} as base
 
-# Copy over C.UTF-8 locale from our base image to make it consistently available during build.
-COPY --from=quay.io/bioconda/base-glibc-busybox-bash /usr/lib/locale/C.utf8 /usr/lib/locale/C.utf8
+ARG BUSYBOX_IMAGE
+COPY --from=${BUSYBOX_IMAGE} /usr/lib/locale/C.utf8 /usr/lib/locale/C.utf8
 
 # Provide system deps unconditionally until we are able to offer per-recipe installs.
 # (Addresses, e.g., "ImportError: libGL.so.1" in tests directly invoked by conda-build.)
