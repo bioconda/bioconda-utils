@@ -7,7 +7,8 @@ RUN /opt/conda/bin/conda list \
       > /tmp/requirements.txt
 
 
-FROM quay.io/bioconda/base-glibc-busybox-bash as build
+ARG BUSYBOX_IMAGE
+FROM ${BUSYBOX_IMAGE} as build
 
 WORKDIR /tmp/work
 COPY --from=bioconda-build-env /tmp/requirements.txt ./
@@ -19,10 +20,9 @@ RUN arch="$( uname -m )" \
 
 RUN ./install-conda ./requirements.txt /opt/create-env
 
-
-FROM quay.io/bioconda/base-glibc-busybox-bash
-
+FROM ${BUSYBOX_IMAGE}
 COPY --from=build /opt/create-env /opt/create-env
+
 # Copy (Bioconda-specific) Conda configuration created by the install-conda script.
 COPY --from=build /root/.condarc /root/
 
