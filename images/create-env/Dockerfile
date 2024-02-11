@@ -1,23 +1,17 @@
-# Use the exact conda, mamba versions as used in bioconda-recipes' builds.
-ARG bioconda_utils_version
-FROM quay.io/bioconda/bioconda-utils-build-env-cos7:${bioconda_utils_version} as bioconda-build-env
-RUN /opt/conda/bin/conda list \
-      --export '^(conda|mamba)$' \
-      | sed -n 's/=[^=]*$//p' \
-      > /tmp/requirements.txt
-
-
 ARG BUSYBOX_IMAGE
 FROM ${BUSYBOX_IMAGE} as build
 
 WORKDIR /tmp/work
-COPY --from=bioconda-build-env /tmp/requirements.txt ./
 COPY install-conda print-env-activate create-env ./
 RUN arch="$( uname -m )" \
     && \
     wget --quiet -O ./miniconda.sh \
       "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-${arch}.sh"
 
+# Install exact versions of conda/mamba
+ARG CONDA_VERSION
+ARG MAMBA_VERSION
+RUN echo $CONDA_VERSION > requirements.txt && echo $MAMBA_VERSION >> requirements.txt
 RUN ./install-conda ./requirements.txt /opt/create-env
 
 FROM ${BUSYBOX_IMAGE}
