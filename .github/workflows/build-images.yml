@@ -1,4 +1,4 @@
-name: Build image
+name: Build images
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -10,19 +10,21 @@ on:
     - 'docs/**'
     - 'test/**'
 
+env:
+  BIOCONDA_UTILS_FOLDER: bioconda-utils
+  DEBIAN_VERSION: "12.2"
+  BUSYBOX_VERSION: "1.36.1"
+  BASE_TAGS: "0.1.1 latest"
+  BUILD_ENV_IMAGE_NAME: tmp-build-env
+  CREATE_ENV_IMAGE_NAME: tmp-create-env
+  BASE_DEBIAN_IMAGE_NAME: tmp-debian
+  BASE_BUSYBOX_IMAGE_NAME: tmp-busybox
+
+
 jobs:
   build:
     name: Build image
     runs-on: ubuntu-20.04
-    strategy:
-      matrix:
-        include:
-          - arch: arm64
-            image: bioconda-utils-build-env-cos7-aarch64
-            base_image: quay.io/condaforge/linux-anvil-aarch64
-          - arch: amd64
-            image: bioconda-utils-build-env-cos7
-            base_image: quay.io/condaforge/linux-anvil-cos7-x86_64
     steps:
     - uses: actions/checkout@v4
       with:
@@ -31,9 +33,6 @@ jobs:
     - id: get-tag
       run: |
         tag=${{ github.event.release && github.event.release.tag_name || github.sha }}
-
-        # https://github.blog/changelog/2022-10-11-github-actions-deprecating-save-state-and-set-output-commands/
-        # printf %s "::set-output name=tag::${tag#v}"
         printf %s "tag=${tag#v}" >> $GITHUB_OUTPUT
 
     - name: Install qemu dependency
@@ -41,23 +40,24 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y qemu-user-static
 
-    - name: Build image
-      id: buildah-build
-      uses: redhat-actions/buildah-build@v2
-      with:
-        image: ${{ matrix.image }}
-        arch: ${{ matrix.arch }}
-        build-args: |
-          BASE_IMAGE=${{ matrix.base_image }}
-        tags: >-
-          latest
-          ${{ steps.get-tag.outputs.tag }}
-        dockerfiles: |
-          ./Dockerfile
-
-    - name: Test built image
+    - name: Build base-debian
       run: |
-        image='${{ steps.buildah-build.outputs.image }}'
-        for tag in ${{ steps.buildah-build.outputs.tags }} ; do
-          podman run --rm "${image}:${tag}" bioconda-utils --version
-        done
+        IMAGE_NAME=$BASE_DEBIAN_IMAGE_NAME \
+        IMAGE_DIR=../../images/base-glibc-debian-bash \
+        ARCHS="amd64 arm64" \
+        TYPE="base-debian" \
+        DEBIAN_VERSION=$DEBIAN_VERSION \
+        TAGS=$BASE_TAGS \
+        ./generic_build.bash
+
+    - name: Build base-busybox
+      run: |
+          IMAGE_NAME=$BASE_BUSYBOX_IMAGE_NAME \
+          IMAGE_DIR=../../images/base-glibc-busybox-bash \
+          ARCHS="amd64 arm64" \
+          TYPE="base-busybox" \
+          DEBIAN_VERSION=$DEBIAN_VERSION \
+          BUSYBOX_VERSION=$BUSYBOX_VERSION \
+          TAGS=$BASE_TAGS \
+          ./generic_build.bash
+
