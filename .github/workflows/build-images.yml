@@ -43,7 +43,7 @@ jobs:
     - name: Build base-debian
       run: |
         IMAGE_NAME=$BASE_DEBIAN_IMAGE_NAME \
-        IMAGE_DIR=../../images/base-glibc-debian-bash \
+        IMAGE_DIR=images/base-glibc-debian-bash \
         ARCHS="amd64 arm64" \
         TYPE="base-debian" \
         DEBIAN_VERSION=$DEBIAN_VERSION \
@@ -52,12 +52,12 @@ jobs:
 
     - name: Build base-busybox
       run: |
-          IMAGE_NAME=$BASE_BUSYBOX_IMAGE_NAME \
-          IMAGE_DIR=../../images/base-glibc-busybox-bash \
-          ARCHS="amd64 arm64" \
-          TYPE="base-busybox" \
-          DEBIAN_VERSION=$DEBIAN_VERSION \
-          BUSYBOX_VERSION=$BUSYBOX_VERSION \
-          TAGS=$BASE_TAGS \
-          ./generic_build.bash
+        IMAGE_NAME=$BASE_BUSYBOX_IMAGE_NAME \
+        IMAGE_DIR=images/base-glibc-busybox-bash \
+        ARCHS="amd64 arm64" \
+        TYPE="base-busybox" \
+        DEBIAN_VERSION=$DEBIAN_VERSION \
+        BUSYBOX_VERSION=$BUSYBOX_VERSION \
+        TAGS=$BASE_TAGS \
+        ./generic_build.bash
 
