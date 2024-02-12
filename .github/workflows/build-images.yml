@@ -20,20 +20,18 @@ env:
   BASE_DEBIAN_IMAGE_NAME: tmp-debian
   BASE_BUSYBOX_IMAGE_NAME: tmp-busybox
 
-
 jobs:
-  build:
-    name: Build image
+
+  # NOTE: base-debian can be a separate job since it is independent of the
+  # others. create-env depends on build-env, and both depend on base-busybox,
+  # so we can't split that out.
+  build-debian:
+    name: Build base-debian
     runs-on: ubuntu-20.04
     steps:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
-
-    - id: get-tag
-      run: |
-        tag=${{ github.event.release && github.event.release.tag_name || github.sha }}
-        printf %s "tag=${tag#v}" >> $GITHUB_OUTPUT
 
     - name: Install qemu dependency
       run: |
