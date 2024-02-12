@@ -19,6 +19,7 @@ env:
   CREATE_ENV_IMAGE_NAME: tmp-create-env
   BASE_DEBIAN_IMAGE_NAME: tmp-debian
   BASE_BUSYBOX_IMAGE_NAME: tmp-busybox
+  ARCHS: "amd64 arm64"
 
 jobs:
 
@@ -42,9 +43,9 @@ jobs:
       run: |
         IMAGE_NAME=$BASE_DEBIAN_IMAGE_NAME \
         IMAGE_DIR=images/base-glibc-debian-bash \
-        ARCHS="amd64 arm64" \
         TYPE="base-debian" \
         DEBIAN_VERSION=$DEBIAN_VERSION \
+        ARCHS=$ARCHS \
         TAGS=$BASE_TAGS \
         ./generic_build.bash
 
@@ -52,8 +53,8 @@ jobs:
       run: |
         IMAGE_NAME=$BASE_BUSYBOX_IMAGE_NAME \
         IMAGE_DIR=images/base-glibc-busybox-bash \
-        ARCHS="amd64 arm64" \
         TYPE="base-busybox" \
+        ARCHS=$ARCHS \
         DEBIAN_VERSION=$DEBIAN_VERSION \
         BUSYBOX_VERSION=$BUSYBOX_VERSION \
         TAGS=$BASE_TAGS \
