@@ -94,14 +94,14 @@ jobs:
         IMAGE_DIR=images/bioconda-utils-build-env-cos7 \
         ARCHS=$ARCHS \
         TYPE="build-env" \
-        BIOCONDA_UTILS_VERSION='${{ steps.get-tag.output.tag }}' \
+        BIOCONDA_UTILS_VERSION='${{ github.head_ref || github.ref_name }}' \
         BUSYBOX_IMAGE=localhost/$BASE_BUSYBOX_IMAGE_NAME \
         ./generic_build.bash
 
 
     - name: Build create-env
       run: |
-        BIOCONDA_UTILS_VERSION='${{ steps.get-tag.output.tag }}'
+        BIOCONDA_UTILS_VERSION='${{ github.head_ref || github.ref_name }}' \
 
         # Here we extract the conda and mamba versions from the just-created
         # build-env container. This ensures that when creating environments, we
@@ -125,4 +125,5 @@ jobs:
         ARCHS=$ARCHS \
         TYPE="create-env" \
         BUSYBOX_IMAGE=localhost/$BASE_BUSYBOX_IMAGE_NAME \
+        BIOCONDA_UTILS_VERSION=$BIOCONDA_UTILS_VERSION \
         ./generic_build.bash
