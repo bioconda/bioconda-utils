@@ -49,6 +49,24 @@ jobs:
         TAGS=$BASE_TAGS \
         ./generic_build.bash
 
+  build:
+    name: Build base-busybox, build-env, and create-env images
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - id: get-tag
+      run: |
+        tag=${{ github.event.release && github.event.release.tag_name || github.sha }}
+        printf %s "tag=${tag#v}" >> $GITHUB_OUTPUT
+
+    - name: Install qemu dependency
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y qemu-user-static
+
     - name: Build base-busybox
       run: |
         IMAGE_NAME=$BASE_BUSYBOX_IMAGE_NAME \
@@ -60,3 +78,51 @@ jobs:
         TAGS=$BASE_TAGS \
         ./generic_build.bash
 
+    - name: Build build-env
+      run: |
+        # The Dockerfile expects bioconda-utils to be cloned; even though we're
+        # working in the bioconda-utils repo the code needs to be in the build
+        # context, which is in the respective image dir.
+        if [ ! -e "images/bioconda-utils-build-env-cos7/bioconda-utils" ]; then
+          git clone https://github.com/bioconda/bioconda-utils images/bioconda-utils-build-env-cos7/bioconda-utils
+        else
+          (cd ../../../images/bioconda-utils-build-env-cos7/bioconda-utils && git fetch)
+        fi
+
+        # This expects the busybox image to have been built locally.
+        IMAGE_NAME=$BUILD_ENV_IMAGE_NAME \
+        IMAGE_DIR=images/bioconda-utils-build-env-cos7 \
+        ARCHS=$ARCHS \
+        TYPE="build-env" \
+        BIOCONDA_UTILS_VERSION='${{ steps.get-tag.output.tag }}' \
+        BUSYBOX_IMAGE=localhost/$BASE_BUSYBOX_IMAGE_NAME \
+        ./generic_build.bash
+
+
+    - name: Build create-env
+      run: |
+        BIOCONDA_UTILS_VERSION='${{ steps.get-tag.output.tag }}'
+
+        # Here we extract the conda and mamba versions from the just-created
+        # build-env container. This ensures that when creating environments, we
+        # use the exact same conda/mamba versions used when building the
+        # package.
+        CONDA_VERSION=$(
+                podman run -t localhost/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION} \
+                bash -c "/opt/conda/bin/conda list --export '^conda$'| sed -n 's/=[^=]*$//p'"
+        )
+        MAMBA_VERSION=$(
+                podman run -t localhost/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION} \
+                bash -c "/opt/conda/bin/conda list --export '^mamba$'| sed -n 's/=[^=]*$//p'"
+        )
+
+        # Remove trailing \r with parameter expansion
+        export CONDA_VERSION=${CONDA_VERSION%$'\r'}
+        export MAMBA_VERSION=${MAMBA_VERSION%$'\r'}
+
+        IMAGE_NAME=$CREATE_ENV_IMAGE_NAME \
+        IMAGE_DIR=images/create-env \
+        ARCHS=$ARCHS \
+        TYPE="create-env" \
+        BUSYBOX_IMAGE=localhost/$BASE_BUSYBOX_IMAGE_NAME \
+        ./generic_build.bash
