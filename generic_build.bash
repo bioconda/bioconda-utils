@@ -111,12 +111,14 @@ existing_tags="$(
     | jq -r '.tags[]|select(.end_ts == null or .end_ts >= now)|.name'
   )" \
   || {
-    printf %s\\n \
-      'Could not get list of image tags.' \
-      'Does the repository exist on Quay.io?' \
-      'Quay.io REST API response was:' \
-      "${response}"
-    exit 1
+    if [ ${WARN_IF_MISSING:-true} == "true" ]; then
+      printf %s\\n \
+        'Could not get list of image tags.' \
+        'Does the repository exist on Quay.io?' \
+        'Quay.io REST API response was:' \
+        "${response}"
+      exit 1
+    fi
   }
 for tag in $TAGS ; do
   case "${tag}" in
