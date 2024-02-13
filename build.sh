@@ -33,6 +33,22 @@ CREATE_ENV_IMAGE_NAME=tmp-create-env
 BASE_DEBIAN_IMAGE_NAME=tmp-debian
 BASE_BUSYBOX_IMAGE_NAME=tmp-busybox
 
+REMOVE_MANIFEST=true
+
+# buildah will complain if a manifest already exists.
+if [ ${REMOVE_MANIFEST:-true} == "true" ]; then
+  for imgname in \
+    $BUILD_ENV_IMAGE_NAME \
+    $CREATE_ENV_IMAGE_NAME \
+    $BASE_DEBIAN_IMAGE_NAME \
+    $BASE_BUSYBOX_IMAGE_NAME; do
+    for tag in ${BASE_TAGS} $BIOCONDA_UTILS_VERSION; do
+      buildah manifest rm "${imgname}:${tag}" || true
+    done
+  done
+fi
+
+
 # # Build base-busybox------------------------------------------------------------
 IMAGE_NAME=$BASE_BUSYBOX_IMAGE_NAME \
 IMAGE_DIR=images/base-glibc-busybox-bash \
