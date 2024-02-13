@@ -33,6 +33,11 @@ CREATE_ENV_IMAGE_NAME=tmp-create-env
 BASE_DEBIAN_IMAGE_NAME=tmp-debian
 BASE_BUSYBOX_IMAGE_NAME=tmp-busybox
 
+
+BUILD_BUSYBOX=true
+BUILD_DEBIAN=true
+BUILD_BUILD_ENV=true
+BUILD_CREATE_ENV=true
 REMOVE_MANIFEST=true
 
 # buildah will complain if a manifest already exists.
@@ -50,54 +55,61 @@ fi
 
 
 # # Build base-busybox------------------------------------------------------------
-IMAGE_NAME=$BASE_BUSYBOX_IMAGE_NAME \
-IMAGE_DIR=images/base-glibc-busybox-bash \
-TYPE="base-busybox" \
-TAGS=$BASE_TAGS \
-./generic_build.bash
+if [ $BUILD_BUSYBOX == "true" ]; then
+  IMAGE_NAME=$BASE_BUSYBOX_IMAGE_NAME \
+  IMAGE_DIR=images/base-glibc-busybox-bash \
   ARCHS=$ARCHS \
+  TYPE="base-busybox" \
+  TAGS=$BASE_TAGS \
+  ./generic_build.bash
+fi
 
 # Build base-debian-------------------------------------------------------------
-IMAGE_NAME=$BASE_DEBIAN_IMAGE_NAME \
-IMAGE_DIR=images/base-glibc-debian-bash \
-TYPE="base-debian" \
-TAGS=$BASE_TAGS \
-./generic_build.bash
+if [ $BUILD_DEBIAN == "true" ]; then
+  IMAGE_NAME=$BASE_DEBIAN_IMAGE_NAME \
+  IMAGE_DIR=images/base-glibc-debian-bash \
   ARCHS=$ARCHS \
+  TYPE="base-debian" \
+  TAGS=$BASE_TAGS \
+  ./generic_build.bash
+fi
 
 # Build build-env---------------------------------------------------------------
 
- # Clone bioconda-utils into same directory as Dockerfile
- if [ ! -e "images/bioconda-utils-build-env-cos7/bioconda-utils" ]; then
-         git clone https://github.com/bioconda/bioconda-utils images/bioconda-utils-build-env-cos7/bioconda-utils
- else
-         (cd images/bioconda-utils-build-env-cos7/bioconda-utils && git fetch)
- fi
+if [ $BUILD_BUILD_ENV == "true" ]; then 
+  # Clone bioconda-utils into same directory as Dockerfile
+  if [ ! -e "images/bioconda-utils-build-env-cos7/bioconda-utils" ]; then
+    git clone https://github.com/bioconda/bioconda-utils images/bioconda-utils-build-env-cos7/bioconda-utils
+  else
+    (cd images/bioconda-utils-build-env-cos7/bioconda-utils && git fetch)
+  fi
+  IMAGE_NAME=$BUILD_ENV_IMAGE_NAME \
+  IMAGE_DIR=images/bioconda-utils-build-env-cos7 \
   ARCHS=$ARCHS \
-
- IMAGE_NAME=$BUILD_ENV_IMAGE_NAME \
- IMAGE_DIR=images/bioconda-utils-build-env-cos7 \
- TYPE="build-env" \
- BUSYBOX_IMAGE=localhost/$BASE_BUSYBOX_IMAGE_NAME \
- ./generic_build.bash
-
+  TYPE="build-env" \
+  BUSYBOX_IMAGE=localhost/$BASE_BUSYBOX_IMAGE_NAME \
+  ./generic_build.bash
+fi
 # # Build create-env--------------------------------------------------------------
-# Get the exact versions of mamba and conda that were installed in build-env.
-CONDA_VERSION=$(
-        podman run -t localhost/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION} \
-        bash -c "/opt/conda/bin/conda list --export '^conda$'| sed -n 's/=[^=]*$//p'"
-)
-MAMBA_VERSION=$(
-        podman run -t localhost/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION} \
-        bash -c "/opt/conda/bin/conda list --export '^mamba$'| sed -n 's/=[^=]*$//p'"
-)
-# Remove trailing \r with parameter expansion
-export CONDA_VERSION=${CONDA_VERSION%$'\r'}
-export MAMBA_VERSION=${MAMBA_VERSION%$'\r'}
 
-IMAGE_NAME=$CREATE_ENV_IMAGE_NAME \
-IMAGE_DIR=images/create-env \
-TYPE="create-env" \
-BUSYBOX_IMAGE=localhost/$BASE_BUSYBOX_IMAGE_NAME \
-./generic_build.bash
+if [ $BUILD_CREATE_ENV == "true" ]; then 
+  # Get the exact versions of mamba and conda that were installed in build-env.
+  CONDA_VERSION=$(
+          podman run -t localhost/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION} \
+          bash -c "/opt/conda/bin/conda list --export '^conda$'| sed -n 's/=[^=]*$//p'"
+  )
+  MAMBA_VERSION=$(
+          podman run -t localhost/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION} \
+          bash -c "/opt/conda/bin/conda list --export '^mamba$'| sed -n 's/=[^=]*$//p'"
+  )
+  # Remove trailing \r with parameter expansion
+  export CONDA_VERSION=${CONDA_VERSION%$'\r'}
+  export MAMBA_VERSION=${MAMBA_VERSION%$'\r'}
+
+  IMAGE_NAME=$CREATE_ENV_IMAGE_NAME \
+  IMAGE_DIR=images/create-env \
   ARCHS=$ARCHS \
+  TYPE="create-env" \
+  BUSYBOX_IMAGE=localhost/$BASE_BUSYBOX_IMAGE_NAME \
+  ./generic_build.bash
+fi
