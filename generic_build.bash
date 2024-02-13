@@ -66,7 +66,7 @@ EXAMPLE USAGE
 
 '
 # ------------------------------------------------------------------------------
-# Handle required env vars
+# HANDLE REQUIRED ENV VARS
 [ -z "$IMAGE_NAME" ] && echo -e "$USAGE error: please set IMAGE_NAME" && exit 1
 [ -z "$IMAGE_DIR" ] && echo "error: please set IMAGE_DIR, where Dockerfile is found." && exit 1
 [ -z "$TYPE" ] && echo "error: please set TYPE: [ base-debian | base-busybox | build-env | create-env ]" && exit 1
@@ -98,6 +98,39 @@ if [ "$TYPE" == "base-busybox" ]; then
   [ -z "$BUSYBOX_VERSION" ] && echo "error: please set BUSYBOX_VERSION" && exit 1
 fi
 # ------------------------------------------------------------------------------
+
+
+# ------------------------------------------------------------------------------
+# CHECK FOR EXISTING TAGS. This is because quay.io does not support immutable
+# images and we don't want to clobber existing.
+response="$(curl -sL "https://quay.io/api/v1/repository/bioconda/${IMAGE_NAME}/tag/")"
+
+# Images can be set to expire; the jq query selects only non-expired images.
+existing_tags="$(
+  printf %s "${response}" \
+    | jq -r '.tags[]|select(.end_ts == null or .end_ts >= now)|.name'
+  )" \
+  || {
+    printf %s\\n \
+      'Could not get list of image tags.' \
+      'Does the repository exist on Quay.io?' \
+      'Quay.io REST API response was:' \
+      "${response}"
+    exit 1
+  }
+for tag in $TAGS ; do
+  case "${tag}" in
+    "latest" ) ;;
+    * )
+      if printf %s "${existing_tags}" | grep -qxF "${tag}" ; then
+        printf 'error: tag %s already exists for %s on quay.io!\n' "${tag}" "${IMAGE_NAME}"
+        exit 1
+      fi
+  esac
+done
+
+#-------------------------------------------------------------------------------
+# SETUP
 
 set -xeu
 
@@ -240,6 +273,9 @@ done # archs_and_images
 for tag in ${TAGS}; do
   buildah inspect -t manifest ${IMAGE_NAME}:${tag}
 done
+
+# ------------------------------------------------------------------------------
+# TESTING
 
 # Extract image IDs from the manifest built in the last step
 ids="$(
