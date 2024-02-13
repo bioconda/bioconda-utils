@@ -121,19 +121,16 @@ if [ "$TYPE" == "base-debian" ]; then
   BUILD_ARGS+=("--build-arg=debian_version=$DEBIAN_VERSION")  # version of debian to use as base
 fi
 
-if [ "$TYPE" == "build-env" ] || [ "$TYPE" == "create-env" ]; then
+if [ "$TYPE" == "create-env" ]; then
+  BUILD_ARGS+=("--build-arg=BUSYBOX_IMAGE=$BUSYBOX_IMAGE")  # which image to use as base
+  BUILD_ARGS+=("--build-arg=CONDA_VERSION=$CONDA_VERSION")  # conda version to install
+  BUILD_ARGS+=("--build-arg=MAMBA_VERSION=$MAMBA_VERSION")  # mamba version to install
+fi
 
-  if [ "$TYPE" == "create-env" ]; then
-    BUILD_ARGS+=("--build-arg=BUSYBOX_IMAGE=$BUSYBOX_IMAGE")  # which image to use as base
-    BUILD_ARGS+=("--build-arg=CONDA_VERSION=$CONDA_VERSION")  # conda version to install
-    BUILD_ARGS+=("--build-arg=MAMBA_VERSION=$MAMBA_VERSION")  # mamba version to install
-  fi
-
-  if [ "$TYPE" == "build-env" ]; then
-    BUILD_ARGS+=("--build-arg=BUSYBOX_IMAGE=$BUSYBOX_IMAGE")  # which image to use as base
-    BUILD_ARGS+=("--build-arg=BIOCONDA_UTILS_FOLDER=$BIOCONDA_UTILS_FOLDER")  # git clone, relative to Dockerfile
-    BUILD_ARGS+=("--build-arg=bioconda_utils_version=$BIOCONDA_UTILS_VERSION")  # specify version to checkout and install, also used as tag
-  fi
+if [ "$TYPE" == "build-env" ]; then
+  BUILD_ARGS+=("--build-arg=BUSYBOX_IMAGE=$BUSYBOX_IMAGE")  # which image to use as base
+  BUILD_ARGS+=("--build-arg=BIOCONDA_UTILS_FOLDER=$BIOCONDA_UTILS_FOLDER")  # git clone, relative to Dockerfile
+  BUILD_ARGS+=("--build-arg=bioconda_utils_version=$BIOCONDA_UTILS_VERSION")  # specify version to checkout and install, also used as tag
 fi
 
 if [ "$TYPE" == "base-busybox" ]; then
