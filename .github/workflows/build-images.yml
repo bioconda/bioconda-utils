@@ -86,7 +86,7 @@ jobs:
         if [ ! -e "images/bioconda-utils-build-env-cos7/bioconda-utils" ]; then
           git clone https://github.com/bioconda/bioconda-utils images/bioconda-utils-build-env-cos7/bioconda-utils
         else
-          (cd ../../../images/bioconda-utils-build-env-cos7/bioconda-utils && git fetch)
+          (cd images/bioconda-utils-build-env-cos7/bioconda-utils && git fetch)
         fi
 
         # This expects the busybox image to have been built locally.
