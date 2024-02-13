@@ -66,6 +66,7 @@ RUN set -x && \
         --remove-paths=\*.pyc \
         /opt/conda \
         conda
+ARG BUSYBOX_IMAGE
 FROM ${BUSYBOX_IMAGE}
 COPY --from=build_conda /opt/conda /opt/conda
 COPY --from=build_conda /opt/conda/env-activate.sh /usr/local/
