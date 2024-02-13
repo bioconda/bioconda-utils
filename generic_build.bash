@@ -23,10 +23,10 @@ Set env vars immediately before running.
 
 REQUIRED ARGS FOR ALL TYPES
 ===========================
-TYPE: base-busybox | base-debian | build-env | create-env
-IMAGE_DIR: Location of Dockerfile.
-IMAGE_NAME: Image name to upload.
-ARCHS: Space-separated architectures e.g. "amd64 arm64"
+  TYPE: base-busybox | base-debian | build-env | create-env
+  IMAGE_DIR: Location of Dockerfile.
+  IMAGE_NAME: Image name to upload.
+  ARCHS: Space-separated architectures e.g. "amd64 arm64"
 
 REQUIRED for base-busybox
 -------------------------
@@ -52,6 +52,14 @@ REQUIRED for create-env
   MAMBA_VERSION: mamba version to install, typically of the form "mamba=x.y.z" extracted from build-env
   BUSYBOX_IMAGE: the image to use as a base; typically this will be the results
     of building base-busybox in a previous run of this script.
+
+OPTIONAL args
+-------------
+
+  WARN_IF_MISSING: true | false
+    If true (default), will exit if there is no remote repository yet. Set to
+    false when testing with custom image names.
+
 
 EXAMPLE USAGE
 =============
