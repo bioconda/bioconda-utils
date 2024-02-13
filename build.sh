@@ -25,6 +25,7 @@ export BUSYBOX_VERSION="1.36.1"
 # Use same tags for base-busybox and base-debian
 export BASE_TAGS="0.1.1 0.1 latest"
 export WARN_IF_MISSING=false
+export ARCHS="arm64 amd64"
 
 # Store as separate vars so we can use these for dependencies.
 BUILD_ENV_IMAGE_NAME=tmp-build-env
@@ -35,18 +36,18 @@ BASE_BUSYBOX_IMAGE_NAME=tmp-busybox
 # # Build base-busybox------------------------------------------------------------
 IMAGE_NAME=$BASE_BUSYBOX_IMAGE_NAME \
 IMAGE_DIR=images/base-glibc-busybox-bash \
-ARCHS="arm64" \
 TYPE="base-busybox" \
 TAGS=$BASE_TAGS \
 ./generic_build.bash
+  ARCHS=$ARCHS \
 
 # Build base-debian-------------------------------------------------------------
 IMAGE_NAME=$BASE_DEBIAN_IMAGE_NAME \
 IMAGE_DIR=images/base-glibc-debian-bash \
-ARCHS="amd64" \
 TYPE="base-debian" \
 TAGS=$BASE_TAGS \
 ./generic_build.bash
+  ARCHS=$ARCHS \
 
 # Build build-env---------------------------------------------------------------
 
@@ -56,10 +57,10 @@ TAGS=$BASE_TAGS \
  else
          (cd images/bioconda-utils-build-env-cos7/bioconda-utils && git fetch)
  fi
+  ARCHS=$ARCHS \
 
  IMAGE_NAME=$BUILD_ENV_IMAGE_NAME \
  IMAGE_DIR=images/bioconda-utils-build-env-cos7 \
- ARCHS="amd64" \
  TYPE="build-env" \
  BUSYBOX_IMAGE=localhost/$BASE_BUSYBOX_IMAGE_NAME \
  ./generic_build.bash
@@ -80,7 +81,7 @@ export MAMBA_VERSION=${MAMBA_VERSION%$'\r'}
 
 IMAGE_NAME=$CREATE_ENV_IMAGE_NAME \
 IMAGE_DIR=images/create-env \
-ARCHS="arm64" \
 TYPE="create-env" \
 BUSYBOX_IMAGE=localhost/$BASE_BUSYBOX_IMAGE_NAME \
 ./generic_build.bash
+  ARCHS=$ARCHS \
