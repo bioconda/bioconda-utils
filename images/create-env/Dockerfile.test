@@ -1,5 +1,5 @@
 ARG base
-
+ARG BUSYBOX_IMAGE
 FROM "${base}"
 RUN set -x && \
     CONDA_PKGS_DIRS="/tmp/pkgs" \
@@ -39,8 +39,7 @@ RUN set -x && \
         /usr/local \
         catfasta2phyml
 
-ARG BUSYBOX_IMAGE
-FROM ${BUSYBOX_IMAGE}
+FROM "${BUSYBOX_IMAGE}"
 COPY --from=build_bioconda_package /usr/local /usr/local
 RUN set -x && \
     /usr/local/env-execute \
@@ -66,8 +65,8 @@ RUN set -x && \
         --remove-paths=\*.pyc \
         /opt/conda \
         conda
-ARG BUSYBOX_IMAGE
-FROM ${BUSYBOX_IMAGE}
+
+FROM "${BUSYBOX_IMAGE}"
 COPY --from=build_conda /opt/conda /opt/conda
 COPY --from=build_conda /opt/conda/env-activate.sh /usr/local/
 RUN set -x && \

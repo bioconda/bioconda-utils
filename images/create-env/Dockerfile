@@ -14,6 +14,7 @@ ARG MAMBA_VERSION
 RUN echo $CONDA_VERSION > requirements.txt && echo $MAMBA_VERSION >> requirements.txt
 RUN ./install-conda ./requirements.txt /opt/create-env
 
+ARG BUSYBOX_IMAGE
 FROM ${BUSYBOX_IMAGE}
 COPY --from=build /opt/create-env /opt/create-env
 
