@@ -37,13 +37,13 @@ RUN set -x && \
         --conda=mamba \
         --strip-files=\* \
         /usr/local \
-        catfasta2phyml
+        python
 
 FROM "${BUSYBOX_IMAGE}"
 COPY --from=build_bioconda_package /usr/local /usr/local
 RUN set -x && \
     /usr/local/env-execute \
-      catfasta2phyml --version \
+      python --version \
     && \
     [ ! "${CONDA_PREFIX}" = /usr/local ] \
     && \
@@ -51,7 +51,7 @@ RUN set -x && \
     && \
     [ "${CONDA_PREFIX}" = /usr/local ] \
     && \
-    catfasta2phyml --version
+    python --version
 
 
 FROM "${base}" as build_conda
