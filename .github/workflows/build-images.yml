@@ -1,3 +1,7 @@
+# Build all container images.
+#
+# Most of the work is done in generic_build.bash, so see that file for details.
+
 name: Build images
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -27,6 +31,9 @@ jobs:
   # NOTE: base-debian can be a separate job since it is independent of the
   # others. create-env depends on build-env, and both depend on base-busybox,
   # so we can't split that out.
+  #
+  # Later steps for other containers are similar, so comments are only added to
+  # this first job.
   build-base-debian:
     name: Build base-debian
     runs-on: ubuntu-20.04
@@ -35,6 +42,7 @@ jobs:
       with:
         fetch-depth: 0
 
+    # Required for emulating ARM
     - name: Install qemu dependency
       run: |
         sudo apt-get update
@@ -43,8 +51,9 @@ jobs:
     - name: Build base-debian
       id: base-debian
       run: |
-        # Will exit 64 if the tag exists. We don't want the entire Actions
-        # workflow to fail because of it.
+        # See generic_build.bash for expected env vars. The script will exit 64
+        # if the tag exists. That's OK, and we don't want the entire Actions
+        # workflow to fail because of it, so we check the exit code.
         IMAGE_NAME=$BASE_DEBIAN_IMAGE_NAME \
         IMAGE_DIR=images/base-glibc-debian-bash \
         TYPE="base-debian" \
@@ -53,14 +62,24 @@ jobs:
         TAGS=$BASE_TAGS \
         ./generic_build.bash || [ $? == 64 ]
 
+        # generic_build.bash will write key=val lines to the log ($TYPE.log);
+        # these lines are added to $GITHUB_OUTPUT so that later steps can use
+        # ${{ steps.<id>.outputs.key }} to get the value. See
+        # generic_build.bash for what it's writing to the log (and therefore
+        # which keys are available via the step's outputs).
         cat "base-debian.log" >> $GITHUB_OUTPUT
 
-    # NOTE: a repository must first exist on quay.io/bioconda and that
-    # repository must also be configured to allow write access for the
-    # appropriate service account.
+    # Here, and in the subsequent steps that also push images, a repository
+    # must first exist on quay.io/bioconda AND that repository must also be
+    # configured to allow write access for the appropriate service account.
+    # This must be done by a user with admin access to quay.io/bioconda.
     - name: Push base-debian
       id: push-base-debian
       uses: redhat-actions/push-to-registry@v2
+
+      # generic_build.bash reported whether the tag exists to the log; that was
+      # added to GITHUB_OUTPUT and is used here to determine if we should
+      # upload.
       if: ${{ ! steps.base-debian.outputs.TAG_EXISTS_base-debian }}
       with:
         image: ${{ env.BASE_DEBIAN_IMAGE_NAME }}
@@ -69,6 +88,9 @@ jobs:
         username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
         password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
 
+  # Other containers are interdependent, we so build them sequentially.
+  # The steps are largely similar to base-debian above, so check there for
+  # comments on common parts.
   build-others:
     name: Build base-busybox, build-env, and create-env images
     runs-on: ubuntu-20.04
@@ -115,24 +137,24 @@ jobs:
     - name: Build build-env
       id: build-env
       run: |
-        # The Dockerfile expects bioconda-utils to be cloned; even though we're
-        # working in the bioconda-utils repo the code needs to be in the build
-        # context, which is in the respective image dir.
+        # The build-env Dockerfile expects bioconda-utils to be cloned; even
+        # though this CI is operating in the bioconda-utils repo, the code
+        # needs to be available in the build context, which is in the
+        # respective image dir.
         if [ ! -e "images/bioconda-utils-build-env-cos7/bioconda-utils" ]; then
           git clone https://github.com/bioconda/bioconda-utils images/bioconda-utils-build-env-cos7/bioconda-utils
         else
           (cd images/bioconda-utils-build-env-cos7/bioconda-utils && git fetch)
         fi
 
-        # If the busybox image was not built in this CI run (e.g. if its tags
-        # have not changed) then we'll get it from quay.io.
+        # If the busybox image was not built in this CI run (e.g. if the
+        # specified tags already exist on quay.io) then we'll get it from
+        # quay.io. Otherwise use the just-built one.
         REGISTRY="localhost"
         if [ ${{ steps.base-busybox.outputs.TAG_EXISTS_base-busybox }} ]; then
           REGISTRY="quay.io/bioconda"
         fi
 
-        # This expects the busybox image to have been built locally, as in the
-        # above step.
         IMAGE_NAME=$BUILD_ENV_IMAGE_NAME \
         IMAGE_DIR=images/bioconda-utils-build-env-cos7 \
         ARCHS=$ARCHS \
@@ -160,9 +182,10 @@ jobs:
         BIOCONDA_UTILS_VERSION='${{ github.head_ref || github.ref_name }}' \
 
         # Here we extract the conda and mamba versions from the just-created
-        # build-env container. This ensures that when creating environments, we
-        # use the exact same conda/mamba versions used when building the
-        # package.
+        # build-env container (or, if it was not created in this CI run because
+        # it already exists, then pull from quay.io). This ensures that when
+        # creating environments, we use the exact same conda/mamba versions
+        # that were used when building the package.
         REGISTRY="localhost"
         if [ ${{ steps.build-env.outputs.TAG_EXISTS_build-env }} ]; then
           REGISTRY="quay.io/bioconda"
