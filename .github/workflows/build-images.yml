@@ -50,7 +50,19 @@ jobs:
         TAGS=$BASE_TAGS \
         ./generic_build.bash
 
-  build:
+    - name: Push base-debian
+      if: ${{ github.ref == "refs/heads/unify-containers" }}
+      id: push-base-debian
+      uses: redhat-actions/push-to-registry@v2
+      with:
+        image: ${{ env.BASE_DEBIAN_IMAGE_NAME }}
+        tags: ${{ env.BASE_TAGS }}
+        registry: ${{ secrets.QUAY_BIOCONDA_REPO }}
+        username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
+        password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
+
+  build-others:
+    if: false # disable for now
     name: Build base-busybox, build-env, and create-env images
     runs-on: ubuntu-20.04
     steps:
