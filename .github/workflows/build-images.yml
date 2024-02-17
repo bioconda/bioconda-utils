@@ -124,6 +124,13 @@ jobs:
           (cd images/bioconda-utils-build-env-cos7/bioconda-utils && git fetch)
         fi
 
+        # If the busybox image was not built in this CI run (e.g. if its tags
+        # have not changed) then we'll get it from quay.io.
+        REGISTRY="localhost"
+        if [ ${{ steps.base-busybox.outputs.TAG_EXISTS_base-busybox }} ]; then
+          REGISTRY="quay.io/bioconda"
+        fi
+
         # This expects the busybox image to have been built locally, as in the
         # above step.
         IMAGE_NAME=$BUILD_ENV_IMAGE_NAME \
@@ -131,7 +138,7 @@ jobs:
         ARCHS=$ARCHS \
         TYPE="build-env" \
         BIOCONDA_UTILS_VERSION='${{ github.head_ref || github.ref_name }}' \
-        BUSYBOX_IMAGE=localhost/$BASE_BUSYBOX_IMAGE_NAME \
+        BUSYBOX_IMAGE=$REGISTRY/$BASE_BUSYBOX_IMAGE_NAME \
         ./generic_build.bash || [ $? == 64 ]
 
         cat "build-env.log" >> $GITHUB_OUTPUT
