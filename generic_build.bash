@@ -302,30 +302,71 @@ if [ "$TYPE" == "create-env" ]; then
   TEST_BUILD_ARGS+=("--build-arg=BUSYBOX_IMAGE=$BUSYBOX_IMAGE")
 fi
 
-# Extract image IDs from the manifest built in the last step
-ids="$(
-  for tag in $TAGS ; do
-    buildah manifest inspect "${IMAGE_NAME}:${tag}" \
-      | jq -r '.manifests[]|.digest' \
-      | while read id ; do
-          buildah images --format '{{.ID}}{{.Digest}}' \
-          | sed -n "s/${id}//p"
-        done
-  done
-  )"
-
-# Run the tests; see Dockerfile.test in the relevant image dir for the
-# actual tests run
+# Turns out that buildah cannot use --arch and and provide an image ID as the
+# `base` build-arg at the same time, because we get the error:
 #
-# N.B. need to unique since one image can have multiple tags
-ids="$( printf %s "${ids}" | sort -u )"
-for id in ${ids} ; do
-  podman history "${id}"
+#   "error creating build container: pull policy is always but image has been
+#   referred to by ID".
+#
+# This happens even when using --pull-never. This may be fixed in later
+# versions, in which case we can use the code below in the "EXTRA" section.
+#
+# Since the rest of this script builds a single image and assigns possibly
+# multiple tags, we just use the first tag to use as the `base` build-arg.
+
+tag=$(echo $TAGS | cut -f1 -d " ")
+for arch in $ARCHS; do
+  echo "[LOG] Starting test for ${IMAGE_NAME}:${tag}, $arch."
   buildah bud \
-    --build-arg=base="${id}" \
+    --arch="$arch" \
+    --build-arg=base="localhost/${IMAGE_NAME}:${tag}" \
     ${TEST_BUILD_ARGS[@]} \
     --file=Dockerfile.test
 done
+
+
+# EXTRA ------------------------------------------------------------------------
+# The following demonstrates how to extract images from corresponding manifest
+# digests. This may be a better approach in the future, but as noted above we
+# cannot use FROM <IMAGE_ID> and --arch and instead use name:tag.
+#
+# It may be useful in the future but it is disabled for now.
+#
+if [ "" ] ; then
+  # Manifests provide a digest; we then need to look up the corresponding image
+  # name for that digest.
+  ids="$(
+    for tag in $TAGS ; do
+      buildah manifest inspect "${IMAGE_NAME}:${tag}" \
+        | jq -r '.manifests[]|.digest' \
+        | while read id ; do
+            buildah images --format '{{.ID}}{{.Digest}}' \
+            | sed -n "s/${id}//p"
+          done
+    done
+    )"
+
+  # N.B. need to unique since one image can have multiple tags. In general,
+  # this should be one image for each arch, no matter how many tags.
+  ids="$( printf %s "${ids}" | sort -u )"
+
+  # Run the tests; see Dockerfile.test in the relevant image dir for the
+  # actual tests that are run.
+  for id in ${ids} ; do
+
+    podman history "${id}"
+
+    # Make sure we're explicit with the arch so that the right image is pulled
+    # from the respective container.
+    arch=$(buildah inspect "${id}" | jq -r '.OCIv1.architecture' | sort -u)
+
+    buildah bud \
+      --arch="$arch" \
+      --build-arg=base="localhost/${IMAGE_NAME}" \
+      ${TEST_BUILD_ARGS[@]} \
+      --file=Dockerfile.test
+  done
+fi
 
 # Clean up
 buildah rmi --prune || true
