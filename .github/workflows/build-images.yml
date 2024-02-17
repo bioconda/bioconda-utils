@@ -70,7 +70,6 @@ jobs:
         password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
 
   build-others:
-    if: false # disable for now
     name: Build base-busybox, build-env, and create-env images
     runs-on: ubuntu-20.04
     steps:
@@ -98,7 +97,20 @@ jobs:
         DEBIAN_VERSION=$DEBIAN_VERSION \
         BUSYBOX_VERSION=$BUSYBOX_VERSION \
         TAGS=$BASE_TAGS \
-        ./generic_build.bash
+        ./generic_build.bash || [ $? == 64 ]
+
+        cat "base-busybox.log" >> $GITHUB_OUTPUT
+
+    - name: Push base-busybox
+      id: push-base-busybox
+      uses: redhat-actions/push-to-registry@v2
+      if: ${{ ! steps.base-busybox.outputs.TAG_EXISTS_base-busybox }}
+      with:
+        image: ${{ env.BASE_BUSYBOX_IMAGE_NAME }}
+        tags: ${{ env.BASE_TAGS }}
+        registry: quay.io/bioconda
+        username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
+        password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
 
     - name: Build build-env
       id: build-env
@@ -120,7 +132,20 @@ jobs:
         TYPE="build-env" \
         BIOCONDA_UTILS_VERSION='${{ github.head_ref || github.ref_name }}' \
         BUSYBOX_IMAGE=localhost/$BASE_BUSYBOX_IMAGE_NAME \
-        ./generic_build.bash
+        ./generic_build.bash || [ $? == 64 ]
+
+        cat "build-env.log" >> $GITHUB_OUTPUT
+
+    - name: Push build-env
+      id: push-build-env
+      uses: redhat-actions/push-to-registry@v2
+      if: ${{ ! steps.build-env.outputs.TAG_EXISTS_build-env }}
+      with:
+        image: ${{ env.BUILD_ENV_IMAGE_NAME }}
+        tags: ${{ github.head_ref || github.ref_name }}
+        registry: quay.io/bioconda
+        username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
+        password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
 
     - name: Build create-env
       id: create-env
@@ -150,4 +175,17 @@ jobs:
         TYPE="create-env" \
         BUSYBOX_IMAGE=localhost/$BASE_BUSYBOX_IMAGE_NAME \
         BIOCONDA_UTILS_VERSION=$BIOCONDA_UTILS_VERSION \
-        ./generic_build.bash
+        ./generic_build.bash || [ $? == 64 ]
+
+        cat "create-env.log" >> $GITHUB_OUTPUT
+
+    - name: Push create-env
+      id: push-create-env
+      uses: redhat-actions/push-to-registry@v2
+      if: ${{ ! steps.create-env.outputs.TAG_EXISTS_create-env }}
+      with:
+        image: ${{ env.CREATE_ENV_IMAGE_NAME }}
+        tags: ${{ github.head_ref || github.ref_name }}
+        registry: quay.io/bioconda
+        username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
+        password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
