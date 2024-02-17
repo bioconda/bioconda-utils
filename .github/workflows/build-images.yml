@@ -20,7 +20,7 @@ env:
   BASE_DEBIAN_IMAGE_NAME: tmp-debian
   BASE_BUSYBOX_IMAGE_NAME: tmp-busybox
   ARCHS: "amd64 arm64"
-  WARN_IF_MISSING: "false"  # Used for testing when the repository is known to be missing on quay.io
+  ERROR_IF_MISSING: "false"  # Used for testing when the repository is known to be missing on quay.io
 
 jobs:
 
