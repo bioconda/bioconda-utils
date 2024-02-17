@@ -226,6 +226,7 @@ for arch in $ARCHS; do
   buildah bud \
     --arch="${arch}" \
     --iidfile="${iidfile}" \
+    --file=Dockerfile \
     ${BUILD_ARGS[@]} \
     $BASE_IMAGE_BUILD_ARG
   image_id="$( cat "${iidfile}" )"
@@ -274,7 +275,17 @@ for arch in $ARCHS; do
       "${IMAGE_NAME}:${tag}" \
       "${image_id}"
 
-    buildah inspect -t image ${IMAGE_NAME}:${tag}-${arch}
+    # Inspect image details, but remove the most verbose (like history) and
+    # redundant (just need one of Docker or OCIv1) fields.
+    buildah inspect -t image ${IMAGE_NAME}:${tag}-$arch} \
+      | jq 'del(
+          .History,
+          .OCIv1.history,
+          .Config,
+          .Manifest,
+          .Docker,
+          .NamespaceOptions)'
+
   done # tags
 done # archs_and_images
 
