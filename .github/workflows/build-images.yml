@@ -51,7 +51,6 @@ jobs:
         ./generic_build.bash
 
     - name: Push base-debian
-      if: ${{ github.ref == "refs/heads/unify-containers" }}
       id: push-base-debian
       uses: redhat-actions/push-to-registry@v2
       with:
