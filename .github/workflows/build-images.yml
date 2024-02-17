@@ -64,9 +64,9 @@ jobs:
 
         # generic_build.bash will write key=val lines to the log ($TYPE.log);
         # these lines are added to $GITHUB_OUTPUT so that later steps can use
-        # ${{ steps.<id>.outputs.key }} to get the value. See
-        # generic_build.bash for what it's writing to the log (and therefore
-        # which keys are available via the step's outputs).
+        # steps.id.outputs.key to get the value. See generic_build.bash for
+        # what it's writing to the log (and therefore which keys are available
+        # via the step's outputs).
         cat "base-debian.log" >> $GITHUB_OUTPUT
 
     # Here, and in the subsequent steps that also push images, a repository
