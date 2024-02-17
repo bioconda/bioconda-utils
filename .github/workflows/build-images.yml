@@ -18,7 +18,7 @@ env:
   BIOCONDA_UTILS_FOLDER: bioconda-utils
   DEBIAN_VERSION: "12.2"
   BUSYBOX_VERSION: "1.36.1"
-  BASE_TAGS: "0.1.3 latest"
+  BASE_TAG: "0.1.3"  # "latest" will always be added during the build.
   BUILD_ENV_IMAGE_NAME: tmp-build-env
   CREATE_ENV_IMAGE_NAME: tmp-create-env
   BASE_DEBIAN_IMAGE_NAME: tmp-debian
@@ -58,7 +58,7 @@ jobs:
         TYPE="base-debian" \
         DEBIAN_VERSION=$DEBIAN_VERSION \
         ARCHS=$ARCHS \
-        TAGS=$BASE_TAGS \
+        TAG=$BASE_TAG \
         ./generic_build.bash || [ $? == 64 ]
 
         # generic_build.bash will write key=val lines to the log ($TYPE.log);
@@ -103,6 +103,7 @@ jobs:
         tag=${{ github.event.release && github.event.release.tag_name || github.sha }}
         printf %s "tag=${tag#v}" >> $GITHUB_OUTPUT
 
+
     - name: Install qemu dependency
       run: |
         sudo apt-get update
@@ -117,7 +118,7 @@ jobs:
         ARCHS=$ARCHS \
         DEBIAN_VERSION=$DEBIAN_VERSION \
         BUSYBOX_VERSION=$BUSYBOX_VERSION \
-        TAGS=$BASE_TAGS \
+        TAG=$BASE_TAG \
         ./generic_build.bash || [ $? == 64 ]
 
         cat "base-busybox.log" >> $GITHUB_OUTPUT
@@ -154,12 +155,15 @@ jobs:
           REGISTRY="quay.io/bioconda"
         fi
 
+        BIOCONDA_UTILS_VERSION='${{ steps.get-tag.outputs.tag }}'
+
         IMAGE_NAME=$BUILD_ENV_IMAGE_NAME \
         IMAGE_DIR=images/bioconda-utils-build-env-cos7 \
         ARCHS=$ARCHS \
         TYPE="build-env" \
-        BIOCONDA_UTILS_VERSION='${{ github.head_ref || github.ref_name }}' \
-        BUSYBOX_IMAGE=$REGISTRY/$BASE_BUSYBOX_IMAGE_NAME \
+        BIOCONDA_UTILS_VERSION=$BIOCONDA_UTILS_VERSION \
+        TAG=$BIOCONDA_UTILS_VERSION-$BASE_TAG \
+        BUSYBOX_IMAGE=$REGISTRY/$BASE_BUSYBOX_IMAGE_NAME:$BASE_TAG \
         ./generic_build.bash || [ $? == 64 ]
 
         cat "build-env.log" >> $GITHUB_OUTPUT
@@ -178,7 +182,7 @@ jobs:
     - name: Build create-env
       id: create-env
       run: |
-        BIOCONDA_UTILS_VERSION='${{ github.head_ref || github.ref_name }}' \
+        BIOCONDA_UTILS_VERSION='${{ steps.get-tag.outputs.tag }}'
 
         # Here we extract the conda and mamba versions from the just-created
         # build-env container (or, if it was not created in this CI run because
@@ -211,8 +215,9 @@ jobs:
         IMAGE_DIR=images/create-env \
         ARCHS=$ARCHS \
         TYPE="create-env" \
-        BUSYBOX_IMAGE=$REGISTRY/$BASE_BUSYBOX_IMAGE_NAME \
         BIOCONDA_UTILS_VERSION=$BIOCONDA_UTILS_VERSION \
+        TAG=$BIOCONDA_UTILS_VERSION-$BASE_TAG \
+        BUSYBOX_IMAGE=$REGISTRY/$BASE_BUSYBOX_IMAGE_NAME:$BASE_TAG \
         ./generic_build.bash || [ $? == 64 ]
 
         cat "create-env.log" >> $GITHUB_OUTPUT

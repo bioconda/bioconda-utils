@@ -27,16 +27,15 @@ REQUIRED ARGS FOR ALL TYPES
   IMAGE_DIR: Location of Dockerfile.
   IMAGE_NAME: Image name to upload.
   ARCHS: Space-separated architectures e.g. "amd64 arm64"
+  TAG: image tag
 
 REQUIRED for base-busybox
 -------------------------
-  TAGS: Space-separated tags.
   DEBIAN_VERSION
   BUSYBOX_VERSION
 
 REQUIRED for base-debian
 ------------------------
-  TAGS: Space-separated tags.
   DEBIAN_VERSION
 
 REQUIRED for build-env
@@ -82,12 +81,10 @@ EXAMPLE USAGE
 [ -z "$IMAGE_DIR" ] && echo "error: please set IMAGE_DIR, where Dockerfile is found." && exit 1
 [ -z "$TYPE" ] && echo "error: please set TYPE: [ base-debian | base-busybox | build-env | create-env ]" && exit 1
 [ -z "$ARCHS" ] && echo "error: please set ARCHS" && exit 1
+[ -z "$TAG" ] && echo "error: please set TAG" && exit 1
 
 if [ "$TYPE" == "build-env" ] || [ "$TYPE" == "create-env" ]; then
-  [ -n "$TAGS" ] && echo "error: TAGS should not be set for build-env or create-env; use BIOCONDA_UTILS_VERSION instead" && exit 1
   [ -z "$BIOCONDA_UTILS_VERSION" ] && echo "error: please set BIOCONDA_UTILS_VERSION for build-env and create-env" && exit 1
-
-  TAGS="$BIOCONDA_UTILS_VERSION"  # Set TAGS to BIOCONDA_UTILS_VERSION from here on
 
   if [ "$TYPE" == "build-env" ]; then
     [ -z "$BIOCONDA_UTILS_FOLDER" ] && echo "error: please set BIOCONDA_UTILS_FOLDER for build-env" && exit 1
@@ -111,6 +108,9 @@ fi
 
 LOG=${LOG:="${TYPE}.log"}
 touch $LOG
+
+# Also add "latest" tag.
+TAGS="$TAG latest"
 
 # ------------------------------------------------------------------------------
 
