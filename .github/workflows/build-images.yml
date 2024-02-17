@@ -56,7 +56,7 @@ jobs:
       with:
         image: ${{ env.BASE_DEBIAN_IMAGE_NAME }}
         tags: ${{ env.BASE_TAGS }}
-        registry: ${{ secrets.QUAY_BIOCONDA_REPO }}
+        registry: quay.io/bioconda
         username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
         password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
 
