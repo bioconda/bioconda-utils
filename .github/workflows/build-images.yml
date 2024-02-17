@@ -51,7 +51,7 @@ jobs:
         TAGS=$BASE_TAGS \
         ./generic_build.bash
 
-        cat "base-debian.log" >> $GITHUB_OUTPUT
+        cat "${TYPE}.log" >> $GITHUB_OUTPUT
 
     # NOTE: a repository must first exist on quay.io/bioconda and that
     # repository must also be configured to allow write access for the
@@ -59,6 +59,7 @@ jobs:
     - name: Push base-debian
       id: push-base-debian
       uses: redhat-actions/push-to-registry@v2
+      if: ${{ steps.base-debian.outputs.TAG_EXISTS_base-debian != "true" }}
       with:
         image: ${{ env.BASE_DEBIAN_IMAGE_NAME }}
         tags: ${{ env.BASE_TAGS }}
