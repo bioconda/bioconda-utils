@@ -51,6 +51,8 @@ jobs:
         TAGS=$BASE_TAGS \
         ./generic_build.bash
 
+        cat "base-debian.log" >> $GITHUB_OUTPUT
+
     # NOTE: a repository must first exist on quay.io/bioconda and that
     # repository must also be configured to allow write access for the
     # appropriate service account.

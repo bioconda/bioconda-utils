@@ -60,6 +60,9 @@ OPTIONAL args
     If true (default), will exit if there is no remote repository yet. Set to
     false when testing with custom image names.
 
+  LOG: filename
+    Write info here so other jobs can read from it. Defaults to $TYPE.log
+
 
 EXAMPLE USAGE
 =============
@@ -105,6 +108,10 @@ fi
 if [ "$TYPE" == "base-busybox" ]; then
   [ -z "$BUSYBOX_VERSION" ] && echo "error: please set BUSYBOX_VERSION" && exit 1
 fi
+
+LOG=${LOG:="${TYPE}.log"}
+touch $LOG
+
 # ------------------------------------------------------------------------------
 
 
@@ -134,6 +141,7 @@ for tag in $TAGS ; do
     * )
       if printf %s "${existing_tags}" | grep -qxF "${tag}" ; then
         printf 'error: tag %s already exists for %s on quay.io!\n' "${tag}" "${IMAGE_NAME}"
+        echo "TAG_EXISTS=true" >> $LOG
         exit 1
       fi
   esac
