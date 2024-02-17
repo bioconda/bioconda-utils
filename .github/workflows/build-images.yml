@@ -61,7 +61,7 @@ jobs:
     - name: Push base-debian
       id: push-base-debian
       uses: redhat-actions/push-to-registry@v2
-      if: ${{ steps.base-debian.outputs.TAG_EXISTS_base-debian == "false" }}
+      if: ${{ steps.base-debian.outputs.TAG_EXISTS_base-debian == 'false' }}
       with:
         image: ${{ env.BASE_DEBIAN_IMAGE_NAME }}
         tags: ${{ env.BASE_TAGS }}
