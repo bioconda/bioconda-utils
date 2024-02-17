@@ -142,10 +142,12 @@ for tag in $TAGS ; do
       if printf %s "${existing_tags}" | grep -qxF "${tag}" ; then
         printf 'error: tag %s already exists for %s on quay.io!\n' "${tag}" "${IMAGE_NAME}"
         echo "TAG_EXISTS_${TYPE}=true" >> $LOG
-        exit 1
+        exit 64
       fi
   esac
 done
+
+echo "TAG_EXISTS_${TYPE}=false"
 
 #-------------------------------------------------------------------------------
 # SETUP

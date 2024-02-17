@@ -43,13 +43,15 @@ jobs:
     - name: Build base-debian
       id: base-debian
       run: |
+        # Will exit 64 if the tag exists. We don't want the entire Actions
+        # workflow to fail because of it.
         IMAGE_NAME=$BASE_DEBIAN_IMAGE_NAME \
         IMAGE_DIR=images/base-glibc-debian-bash \
         TYPE="base-debian" \
         DEBIAN_VERSION=$DEBIAN_VERSION \
         ARCHS=$ARCHS \
         TAGS=$BASE_TAGS \
-        ./generic_build.bash
+        ./generic_build.bash || [ $? == 64 ]
 
         cat "${TYPE}.log" >> $GITHUB_OUTPUT
 
@@ -59,7 +61,7 @@ jobs:
     - name: Push base-debian
       id: push-base-debian
       uses: redhat-actions/push-to-registry@v2
-      if: ${{ steps.base-debian.outputs.TAG_EXISTS_base-debian != "true" }}
+      if: ${{ steps.base-debian.outputs.TAG_EXISTS_base-debian == "false" }}
       with:
         image: ${{ env.BASE_DEBIAN_IMAGE_NAME }}
         tags: ${{ env.BASE_TAGS }}
