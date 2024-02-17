@@ -160,7 +160,6 @@ read -r -a archs_and_images <<<"$ARCHS"
 # were provided. This will eventually be provided to buildah bud.
 #
 BUILD_ARGS=()
-TEST_BUILD_ARGS=()  # specifically used when testing with Dockerfile.test
 if [ "$TYPE" == "base-debian" ]; then
   BUILD_ARGS+=("--build-arg=debian_version=$DEBIAN_VERSION")  # version of debian to use as base
 fi
@@ -169,7 +168,6 @@ if [ "$TYPE" == "create-env" ]; then
   BUILD_ARGS+=("--build-arg=BUSYBOX_IMAGE=$BUSYBOX_IMAGE")  # which image to use as base
   BUILD_ARGS+=("--build-arg=CONDA_VERSION=$CONDA_VERSION")  # conda version to install
   BUILD_ARGS+=("--build-arg=MAMBA_VERSION=$MAMBA_VERSION")  # mamba version to install
-  TEST_BUILD_ARGS+=("--build-arg=BUSYBOX_IMAGE=$BUSYBOX_IMAGE")
 fi
 
 if [ "$TYPE" == "build-env" ]; then
@@ -286,6 +284,12 @@ done
 
 # ------------------------------------------------------------------------------
 # TESTING
+#
+# Args used specifically used when testing with Dockerfile.test
+TEST_BUILD_ARGS=()
+if [ "$TYPE" == "create-env" ]; then
+  TEST_BUILD_ARGS+=("--build-arg=BUSYBOX_IMAGE=$BUSYBOX_IMAGE")
+fi
 
 # Extract image IDs from the manifest built in the last step
 ids="$(
