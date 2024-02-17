@@ -119,7 +119,7 @@ existing_tags="$(
     | jq -r '.tags[]|select(.end_ts == null or .end_ts >= now)|.name'
   )" \
   || {
-    if [ ${WARN_IF_MISSING:-true} == "true" ]; then
+    if [ ${ERROR_IF_MISSING:-true} == "true" ]; then
       printf %s\\n \
         'Could not get list of image tags.' \
         'Does the repository exist on Quay.io?' \
