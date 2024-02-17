@@ -14,8 +14,9 @@
 
 set -euo
 
-# Used for build-env. bioconda-utils will be cloned to this folder inside the
-# image dir (where the Dockerfile is) and the version will be checked out.
+# Used for build-env.
+# bioconda-utils will be cloned to this folder inside the image dir (where the
+# Dockerfile is) and the version will be checked out.
 export BIOCONDA_UTILS_FOLDER=bioconda-utils
 export BIOCONDA_UTILS_VERSION=v2.11.1
 
@@ -23,8 +24,14 @@ export DEBIAN_VERSION="12.2"
 export BUSYBOX_VERSION="1.36.1"
 
 # Use same tags for base-busybox and base-debian
-export BASE_TAGS="0.1.1 0.1 latest"
-export WARN_IF_MISSING=false
+export BASE_TAGS="latest"
+
+# If the repository doesn't already exist on quay.io, by default this is
+# considered an error. Set to false to avoid this (e.g., when building images
+# with new names, or local test ones).
+export ERROR_IF_MISSING=false
+
+# Architectures to build for (under emulation)
 export ARCHS="arm64 amd64"
 
 # Store as separate vars so we can use these for dependencies.
@@ -33,15 +40,17 @@ CREATE_ENV_IMAGE_NAME=tmp-create-env
 BASE_DEBIAN_IMAGE_NAME=tmp-debian
 BASE_BUSYBOX_IMAGE_NAME=tmp-busybox
 
+BUILD_BUSYBOX=false # build busybox image?
+BUILD_DEBIAN=false # build debian image?
+BUILD_BUILD_ENV=false # build build-env image?
+BUILD_CREATE_ENV=true  # build create-env image?
 
-BUILD_BUSYBOX=true
-BUILD_DEBIAN=true
-BUILD_BUILD_ENV=true
-BUILD_CREATE_ENV=true
-REMOVE_MANIFEST=true
-
-# buildah will complain if a manifest already exists.
-if [ ${REMOVE_MANIFEST:-true} == "true" ]; then
+# buildah will complain if a manifest exists for these images. If you do set
+# REMOVE_MANIFEST=true, you'll need to recreate them all again. You can instead
+# remove individual images like `buildah rm $BUILD_ENV_IMAGE_NAME`. You may
+# need to run it several times.
+REMOVE_MANIFEST=false
+if [ ${REMOVE_MANIFEST:-false} == "true" ]; then
   for imgname in \
     $BUILD_ENV_IMAGE_NAME \
     $CREATE_ENV_IMAGE_NAME \
