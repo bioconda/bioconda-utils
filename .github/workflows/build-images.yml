@@ -163,12 +163,16 @@ jobs:
         # build-env container. This ensures that when creating environments, we
         # use the exact same conda/mamba versions used when building the
         # package.
+        REGISTRY="localhost"
+        if [ ${{ steps.build-env.outputs.TAG_EXISTS_build-env }} ]; then
+          REGISTRY="quay.io/bioconda"
+        fi
         CONDA_VERSION=$(
-                podman run -t localhost/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION} \
+                podman run -t $REGISTRY/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION} \
                 bash -c "/opt/conda/bin/conda list --export '^conda$'| sed -n 's/=[^=]*$//p'"
         )
         MAMBA_VERSION=$(
-                podman run -t localhost/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION} \
+                podman run -t $REGISTRY/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION} \
                 bash -c "/opt/conda/bin/conda list --export '^mamba$'| sed -n 's/=[^=]*$//p'"
         )
 
@@ -176,11 +180,16 @@ jobs:
         export CONDA_VERSION=${CONDA_VERSION%$'\r'}
         export MAMBA_VERSION=${MAMBA_VERSION%$'\r'}
 
+        REGISTRY="localhost"
+        if [ ${{ steps.base-busybox.outputs.TAG_EXISTS_base-busybox }} ]; then
+          REGISTRY="quay.io/bioconda"
+        fi
+
         IMAGE_NAME=$CREATE_ENV_IMAGE_NAME \
         IMAGE_DIR=images/create-env \
         ARCHS=$ARCHS \
         TYPE="create-env" \
-        BUSYBOX_IMAGE=localhost/$BASE_BUSYBOX_IMAGE_NAME \
+        BUSYBOX_IMAGE=$REGISTRY/$BASE_BUSYBOX_IMAGE_NAME \
         BIOCONDA_UTILS_VERSION=$BIOCONDA_UTILS_VERSION \
         ./generic_build.bash || [ $? == 64 ]
 
