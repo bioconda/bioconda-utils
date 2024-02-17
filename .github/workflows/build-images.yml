@@ -20,14 +20,14 @@ env:
   BASE_DEBIAN_IMAGE_NAME: tmp-debian
   BASE_BUSYBOX_IMAGE_NAME: tmp-busybox
   ARCHS: "amd64 arm64"
-  ERROR_IF_MISSING: "false"  # Used for testing when the repository is known to be missing on quay.io
+  ERROR_IF_MISSING: "false"  # Set to false when testing when the repository is known to be missing on quay.io
 
 jobs:
 
   # NOTE: base-debian can be a separate job since it is independent of the
   # others. create-env depends on build-env, and both depend on base-busybox,
   # so we can't split that out.
-  build-debian:
+  build-base-debian:
     name: Build base-debian
     runs-on: ubuntu-20.04
     steps:
@@ -41,6 +41,7 @@ jobs:
         sudo apt-get install -y qemu-user-static
 
     - name: Build base-debian
+      id: base-debian
       run: |
         IMAGE_NAME=$BASE_DEBIAN_IMAGE_NAME \
         IMAGE_DIR=images/base-glibc-debian-bash \
@@ -50,6 +51,9 @@ jobs:
         TAGS=$BASE_TAGS \
         ./generic_build.bash
 
+    # NOTE: a repository must first exist on quay.io/bioconda and that
+    # repository must also be configured to allow write access for the
+    # appropriate service account.
     - name: Push base-debian
       id: push-base-debian
       uses: redhat-actions/push-to-registry@v2
@@ -80,6 +84,7 @@ jobs:
         sudo apt-get install -y qemu-user-static
 
     - name: Build base-busybox
+      id: base-busybox
       run: |
         IMAGE_NAME=$BASE_BUSYBOX_IMAGE_NAME \
         IMAGE_DIR=images/base-glibc-busybox-bash \
@@ -91,6 +96,7 @@ jobs:
         ./generic_build.bash
 
     - name: Build build-env
+      id: build-env
       run: |
         # The Dockerfile expects bioconda-utils to be cloned; even though we're
         # working in the bioconda-utils repo the code needs to be in the build
@@ -101,7 +107,8 @@ jobs:
           (cd images/bioconda-utils-build-env-cos7/bioconda-utils && git fetch)
         fi
 
-        # This expects the busybox image to have been built locally.
+        # This expects the busybox image to have been built locally, as in the
+        # above step.
         IMAGE_NAME=$BUILD_ENV_IMAGE_NAME \
         IMAGE_DIR=images/bioconda-utils-build-env-cos7 \
         ARCHS=$ARCHS \
@@ -110,8 +117,8 @@ jobs:
         BUSYBOX_IMAGE=localhost/$BASE_BUSYBOX_IMAGE_NAME \
         ./generic_build.bash
 
-
     - name: Build create-env
+      id: create-env
       run: |
         BIOCONDA_UTILS_VERSION='${{ github.head_ref || github.ref_name }}' \
 

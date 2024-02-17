@@ -15,3 +15,4 @@ docs/source/developer/_autosummary
 
 # Mac OS Files
 .DS_Store
+env
