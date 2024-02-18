@@ -235,7 +235,7 @@ jobs:
           BUILD_ENV_REGISTRY=localhost
         fi
 
-        if [ ${{ needs-build-others.outputs.TAG_EXISTS_create-env }} ]; then
+        if [ ${{ needs.build-others.outputs.TAG_EXISTS_create-env }} ]; then
           BUILD_ENV_REGISTRY='quay.io/bioconda'
         else
           BUILD_ENV_REGISTRY=localhost
