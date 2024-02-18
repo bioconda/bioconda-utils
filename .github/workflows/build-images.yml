@@ -18,7 +18,7 @@ env:
   BIOCONDA_UTILS_FOLDER: bioconda-utils
   DEBIAN_VERSION: "12.2"
   BUSYBOX_VERSION: "1.36.1"
-  BASE_TAG: "0.1.4"  # "latest" will always be added during the build.
+  BASE_TAG: "0.1.5"  # "latest" will always be added during the build.
   BUILD_ENV_IMAGE_NAME: tmp-build-env
   CREATE_ENV_IMAGE_NAME: tmp-create-env
   BASE_DEBIAN_IMAGE_NAME: tmp-debian
