@@ -140,7 +140,7 @@ for tag in $TAGS ; do
     "latest" ) ;;
     * )
       if printf %s "${existing_tags}" | grep -qxF "${tag}" ; then
-        printf 'error: tag %s already exists for %s on quay.io!\n' "${tag}" "${IMAGE_NAME}"
+        printf 'Tag %s already exists for %s on quay.io! Logging, and exiting with code 64\n' "${tag}" "${IMAGE_NAME}" >&2
         echo "TAG_EXISTS_${TYPE}=true" >> $LOG
         exit 64
       fi
