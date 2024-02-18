@@ -27,18 +27,19 @@ env:
 
 jobs:
 
-  # NOTE: base-debian can be a separate job since it is independent of the
-  # others. create-env depends on build-env, and both depend on base-busybox,
-  # so we can't split that out.
-  #
-  # Later steps for other containers are similar, so comments are only added to
-  # this first job.
   build-base-debian:
+    # NOTE: base-debian can be a separate job since it is independent of the
+    # others. create-env depends on build-env, and both depend on base-busybox,
+    # so we can't split that out.
+    #
+    # Later steps for other containers are similar, so comments are only added to
+    # this first job.
     name: Build base-debian
     outputs:
       TAG_EXISTS_base-debian: ${{ steps.base-debian.outputs.TAG_EXISTS_base-debian }}
     runs-on: ubuntu-20.04
     steps:
+
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
@@ -70,11 +71,10 @@ jobs:
         # via the step's outputs).
         cat "base-debian.log" >> $GITHUB_OUTPUT
 
-
-  # Other containers are interdependent, we so build them sequentially.
-  # The steps are largely similar to base-debian above, so check there for
-  # comments on common parts.
   build-others:
+    # Other containers are interdependent, we so build them sequentially.
+    # The steps are largely similar to base-debian above, so check there for
+    # comments on common parts.
     name: Build base-busybox, build-env, and create-env images
     outputs:
       TAG_EXISTS_base-busybox: ${{ steps.base-busybox.outputs.TAG_EXISTS_base-busybox }}
@@ -88,10 +88,10 @@ jobs:
       with:
         fetch-depth: 0
 
-    # Get an appropriate tag to represent the version of bioconda-utils being
-    # used, and make it available to other steps as outputs. This will be used
-    # as BIOCONDA_UTILS_VERSION in later steps.
     - id: get-tag
+      # Get an appropriate tag to represent the version of bioconda-utils being
+      # used, and make it available to other steps as outputs. This will be used
+      # as BIOCONDA_UTILS_VERSION in later steps.
       run: |
         tag=${{ github.event.release && github.event.release.tag_name || github.head_ref || github.ref_name }}
         printf %s "tag=${tag#v}" >> $GITHUB_OUTPUT
@@ -112,9 +112,7 @@ jobs:
         BUSYBOX_VERSION=$BUSYBOX_VERSION \
         TAG=$BASE_TAG \
         ./generic_build.bash || [ $? == 64 ]
-
         cat "base-busybox.log" >> $GITHUB_OUTPUT
-
 
     - name: Build build-env
       id: build-env
@@ -147,20 +145,17 @@ jobs:
         TAG="${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
         BUSYBOX_IMAGE="${REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}" \
         ./generic_build.bash || [ $? == 64 ]
-
         cat "build-env.log" >> $GITHUB_OUTPUT
-
 
     - name: Build create-env
       id: create-env
       run: |
-        BIOCONDA_UTILS_VERSION='${{ steps.get-tag.outputs.tag }}'
-
         # Here we extract the conda and mamba versions from the just-created
         # build-env container (or, if it was not created in this CI run because
         # it already exists, then pull from quay.io). This ensures that when
         # creating environments, we use the exact same conda/mamba versions
         # that were used when building the package.
+        BIOCONDA_UTILS_VERSION='${{ steps.get-tag.outputs.tag }}'
         REGISTRY="localhost"
         if [ ${{ steps.build-env.outputs.TAG_EXISTS_build-env }} ]; then
           REGISTRY="quay.io/bioconda"
