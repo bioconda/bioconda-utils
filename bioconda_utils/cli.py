@@ -1075,7 +1075,11 @@ def annotate_build_failures(recipes, skiplist=False, reason=None, category=None,
 @arg('--channel', help="Channel with packages to check", default="bioconda")
 @arg('--output-format', help="Output format", choices=['txt', 'markdown'], default="txt")
 @arg('--link-prefix', help="Prefix for links to build failures", default='')
-def list_build_failures(recipe_folder, config, channel=None, output_format=None, link_prefix=None):
+@arg('--git-range', nargs='+',
+     help='''Git range (e.g. commits or something like
+     "master HEAD" to check commits in HEAD vs master, or just "HEAD" to
+     include uncommitted changes).''')
+def list_build_failures(recipe_folder, config, channel=None, output_format=None, link_prefix=None, git_range=None):
     """List recipes with build failure records"""
 
     df = collect_build_failure_dataframe(
@@ -1084,6 +1088,7 @@ def list_build_failures(recipe_folder, config, channel=None, output_format=None,
         channel,
         link_fmt=output_format,
         link_prefix=link_prefix,
+        git_range=git_range
     )
     if output_format == "markdown":
         fmt_writer = pandas.DataFrame.to_markdown
