@@ -204,7 +204,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: bioconda/bioconda-recipes
-        path: /recipes
+        path: recipes
 
     - name: set path
       run: echo "/opt/mambaforge/bin" >> $GITHUB_PATH
@@ -243,7 +243,7 @@ jobs:
 
         BIOCONDA_UTILS_VERSION='${{ steps.get-tag.outputs.tag }}'
 
-        cd /recipes
+        cd recipes
 
         # Run a test build, specifying the exact images to use.
         DEST_BASE_IMAGE="${DEST_BASE_IMAGE_REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}" \
