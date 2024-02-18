@@ -197,6 +197,7 @@ jobs:
 
   push:
     needs: [build-base-debian, build-others, test]
+    runs-on: ubuntu-20.04
     steps:
 
     # Here, and in the subsequent steps that also push images, a repository
