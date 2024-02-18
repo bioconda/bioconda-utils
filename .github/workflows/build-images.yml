@@ -251,11 +251,11 @@ jobs:
         conda activate bioconda
 
         # Used to tell mulled-build which image to use
-        export DEST_BASE_IMAGE="${DEST_BASE_IMAGE_REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}"
+        export DEST_BASE_IMAGE="${DEST_BASE_IMAGE_REGISTRY}${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}"
 
         bioconda-utils build \
-        --docker-base-image "${BUILD_ENV_REGISTRY}/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
-        --mulled-conda-image "${CREATE_ENV_REGISTRY}/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
+        --docker-base-image "${BUILD_ENV_REGISTRY}${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
+        --mulled-conda-image "${CREATE_ENV_REGISTRY}${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
         --packages seqtk \
         --docker \
         --mulled-test \
