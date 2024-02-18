@@ -246,6 +246,7 @@ jobs:
         cd recipes
 
         # Run a test build, specifying the exact images to use.
+        eval "$(conda shell.bash hook)"
         conda activate bioconda
         DEST_BASE_IMAGE="${DEST_BASE_IMAGE_REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}" \
         bioconda-utils build \
