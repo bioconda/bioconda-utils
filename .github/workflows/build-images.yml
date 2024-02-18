@@ -77,9 +77,9 @@ jobs:
   build-others:
     name: Build base-busybox, build-env, and create-env images
     outputs:
-      TAG_EXISTS_base-busybox: ${{ steps.base-debian.outputs.TAG_EXISTS_base-busybox }}
-      TAG_EXISTS_build-env: ${{ steps.base-debian.outputs.TAG_EXISTS_build-env }}
-      TAG_EXISTS_create-env: ${{ steps.base-debian.outputs.TAG_EXISTS_create-env }}
+      TAG_EXISTS_base-busybox: ${{ steps.base-busybox.outputs.TAG_EXISTS_base-busybox }}
+      TAG_EXISTS_build-env: ${{ steps.build-env.outputs.TAG_EXISTS_build-env }}
+      TAG_EXISTS_create-env: ${{ steps.create-env.outputs.TAG_EXISTS_create-env }}
 
     runs-on: ubuntu-20.04
     steps:
