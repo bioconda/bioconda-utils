@@ -176,7 +176,7 @@ jobs:
       if: ${{ ! steps.build-env.outputs.TAG_EXISTS_build-env }}
       with:
         image: ${{ env.BUILD_ENV_IMAGE_NAME }}
-        tags: ${{ steps.get-tag.outputs.tag }}-${{ env.BASE_TAG }}
+        tags: ${{ steps.get-tag.outputs.tag }}-base${{ env.BASE_TAG }}
         registry: quay.io/bioconda
         username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
         password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
@@ -231,7 +231,7 @@ jobs:
       if: ${{ ! steps.create-env.outputs.TAG_EXISTS_create-env }}
       with:
         image: ${{ env.CREATE_ENV_IMAGE_NAME }}
-        tags: ${{ steps.get-tag.outputs.tag }}-${{ env.BASE_TAG }}
+        tags: ${{ steps.get-tag.outputs.tag }}-base${{ env.BASE_TAG }}
         registry: quay.io/bioconda
         username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
         password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
