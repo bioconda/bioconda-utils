@@ -246,6 +246,7 @@ jobs:
         cd recipes
 
         # Run a test build, specifying the exact images to use.
+        conda activate bioconda
         DEST_BASE_IMAGE="${DEST_BASE_IMAGE_REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}" \
         bioconda-utils build \
         --docker-base-image "${BUILD_ENV_REGISTRY}/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
