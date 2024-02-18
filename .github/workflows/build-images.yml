@@ -225,21 +225,21 @@ jobs:
         # Decide, for each image, whether it was just built as part of this run
         # (in which case we use localhost) or otherwise pull from quay.io.
         if [ ${{ needs.build-others.outputs.TAG_EXISTS_base-busybox }} ]; then
-          DEST_BASE_IMAGE_REGISTRY='quay.io/bioconda'
+          DEST_BASE_IMAGE_REGISTRY='quay.io/bioconda/'
         else
-          DEST_BASE_IMAGE_REGISTRY=localhost
+          DEST_BASE_IMAGE_REGISTRY=""
         fi
 
         if [ ${{ needs.build-others.outputs.TAG_EXISTS_build-env }} ]; then
-          BUILD_ENV_REGISTRY='quay.io/bioconda'
+          BUILD_ENV_REGISTRY='quay.io/bioconda/'
         else
-          BUILD_ENV_REGISTRY=localhost
+          BUILD_ENV_REGISTRY=""
         fi
 
         if [ ${{ needs.build-others.outputs.TAG_EXISTS_create-env }} ]; then
-          CREATE_ENV_REGISTRY='quay.io/bioconda'
+          CREATE_ENV_REGISTRY='quay.io/bioconda/'
         else
-          CREATE_ENV_REGISTRY=localhost
+          CREATE_ENV_REGISTRY=""
         fi
 
         BIOCONDA_UTILS_VERSION='${{ needs.build-others.outputs.BIOCONDA_UTILS_TAG }}'
