@@ -82,7 +82,7 @@ jobs:
       if: ${{ ! steps.base-debian.outputs.TAG_EXISTS_base-debian }}
       with:
         image: ${{ env.BASE_DEBIAN_IMAGE_NAME }}
-        tags: ${{ env.BASE_TAGS }}
+        tags: ${{ env.BASE_TAG }}
         registry: quay.io/bioconda
         username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
         password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
@@ -98,11 +98,13 @@ jobs:
       with:
         fetch-depth: 0
 
+    # Get an appropriate tag to represent the version of bioconda-utils being
+    # used, and make it available to other steps as outputs. This will be used
+    # as BIOCONDA_UTILS_VERSION in later steps.
     - id: get-tag
       run: |
-        tag=${{ github.event.release && github.event.release.tag_name || github.sha }}
+        tag=${{ github.event.release && github.event.release.tag_name || github.head_ref || github.ref_name }}
         printf %s "tag=${tag#v}" >> $GITHUB_OUTPUT
-
 
     - name: Install qemu dependency
       run: |
@@ -129,7 +131,7 @@ jobs:
       if: ${{ ! steps.base-busybox.outputs.TAG_EXISTS_base-busybox }}
       with:
         image: ${{ env.BASE_BUSYBOX_IMAGE_NAME }}
-        tags: ${{ env.BASE_TAGS }}
+        tags: ${{ env.BASE_TAG }}
         registry: quay.io/bioconda
         username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
         password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
@@ -162,8 +164,8 @@ jobs:
         ARCHS=$ARCHS \
         TYPE="build-env" \
         BIOCONDA_UTILS_VERSION=$BIOCONDA_UTILS_VERSION \
-        TAG=$BIOCONDA_UTILS_VERSION-$BASE_TAG \
-        BUSYBOX_IMAGE=$REGISTRY/$BASE_BUSYBOX_IMAGE_NAME:$BASE_TAG \
+        TAG="${BIOCONDA_UTILS_VERSION}-${BASE_TAG}" \
+        BUSYBOX_IMAGE="${REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}" \
         ./generic_build.bash || [ $? == 64 ]
 
         cat "build-env.log" >> $GITHUB_OUTPUT
@@ -174,7 +176,7 @@ jobs:
       if: ${{ ! steps.build-env.outputs.TAG_EXISTS_build-env }}
       with:
         image: ${{ env.BUILD_ENV_IMAGE_NAME }}
-        tags: ${{ github.head_ref || github.ref_name }}
+        tags: ${{ steps.get-tag.outputs.tag }}-${{ env.BASE_TAG }}
         registry: quay.io/bioconda
         username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
         password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
@@ -194,11 +196,11 @@ jobs:
           REGISTRY="quay.io/bioconda"
         fi
         CONDA_VERSION=$(
-                podman run -t $REGISTRY/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION} \
+                podman run -t "${REGISTRY}/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}" \
                 bash -c "/opt/conda/bin/conda list --export '^conda$'| sed -n 's/=[^=]*$//p'"
         )
         MAMBA_VERSION=$(
-                podman run -t $REGISTRY/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION} \
+                podman run -t "${REGISTRY}/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}" \
                 bash -c "/opt/conda/bin/conda list --export '^mamba$'| sed -n 's/=[^=]*$//p'"
         )
 
@@ -206,6 +208,7 @@ jobs:
         export CONDA_VERSION=${CONDA_VERSION%$'\r'}
         export MAMBA_VERSION=${MAMBA_VERSION%$'\r'}
 
+        # See build-env for explanation
         REGISTRY="localhost"
         if [ ${{ steps.base-busybox.outputs.TAG_EXISTS_base-busybox }} ]; then
           REGISTRY="quay.io/bioconda"
@@ -216,8 +219,8 @@ jobs:
         ARCHS=$ARCHS \
         TYPE="create-env" \
         BIOCONDA_UTILS_VERSION=$BIOCONDA_UTILS_VERSION \
-        TAG=$BIOCONDA_UTILS_VERSION-$BASE_TAG \
-        BUSYBOX_IMAGE=$REGISTRY/$BASE_BUSYBOX_IMAGE_NAME:$BASE_TAG \
+        TAG="${BIOCONDA_UTILS_VERSION}-${BASE_TAG}" \
+        BUSYBOX_IMAGE="${REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}" \
         ./generic_build.bash || [ $? == 64 ]
 
         cat "create-env.log" >> $GITHUB_OUTPUT
@@ -228,7 +231,7 @@ jobs:
       if: ${{ ! steps.create-env.outputs.TAG_EXISTS_create-env }}
       with:
         image: ${{ env.CREATE_ENV_IMAGE_NAME }}
-        tags: ${{ github.head_ref || github.ref_name }}
+        tags: ${{ steps.get-tag.outputs.tag }}-${{ env.BASE_TAG }}
         registry: quay.io/bioconda
         username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
         password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
