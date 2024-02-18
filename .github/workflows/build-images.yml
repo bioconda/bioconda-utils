@@ -187,23 +187,87 @@ jobs:
         TAG="${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
         BUSYBOX_IMAGE="${REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}" \
         ./generic_build.bash || [ $? == 64 ]
-
         cat "create-env.log" >> $GITHUB_OUTPUT
 
-  push:
+  test:
+    name: Test using images
     needs: [build-base-debian, build-others]
     runs-on: ubuntu-20.04
     steps:
 
-    # Here, and in the subsequent steps that also push images, a repository
-    # must first exist on quay.io/bioconda AND that repository must also be
-    # configured to allow write access for the appropriate service account.
-    # This must be done by a user with admin access to quay.io/bioconda.
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    # Clone bioconda-recipes to use as part of the tests.
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        repository: bioconda/bioconda-recipes
+        path: /recipes
+
+    - name: set path
+      run: echo "/opt/mambaforge/bin" >> $GITHUB_PATH
+
+    - name: Install bioconda-utils
+      run: |
+        export BIOCONDA_DISABLE_BUILD_PREP=1
+        wget https://raw.githubusercontent.com/bioconda/bioconda-common/master/{common,install-and-set-up-conda,configure-conda}.sh
+        bash install-and-set-up-conda.sh
+        eval "$(conda shell.bash hook)"
+        mamba create -n bioconda -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
+        conda activate bioconda
+        python setup.py install
+
+    - name: test
+      run: |
+        # Decide, for each image, whether it was just built as part of this run
+        # (in which case we use localhost) or otherwise pull from quay.io.
+        if [ ${{ needs.build-others.outputs.TAG_EXISTS_base-busybox }} ]; then
+          DEST_BASE_IMAGE_REGISTRY='quay.io/bioconda'
+        else
+          DEST_BASE_IMAGE_REGISTRY=localhost
+        fi
+
+        if [ ${{ needs.build-others.outputs.TAG_EXISTS_build-env }} ]; then
+          BUILD_ENV_REGISTRY='quay.io/bioconda'
+        else
+          BUILD_ENV_REGISTRY=localhost
+        fi
+
+        if [ ${{ needs-built-others.outputs.TAG_EXISTS_create-env }} ]; then
+          BUILD_ENV_REGISTRY='quay.io/bioconda'
+        else
+          BUILD_ENV_REGISTRY=localhost
+        fi
+
+        BIOCONDA_UTILS_VERSION='${{ steps.get-tag.outputs.tag }}'
+
+        cd /recipes
+
+        # Run a test build, specifying the exact images to use.
+        DEST_BASE_IMAGE="${DEST_BASE_IMAGE_REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}" \
+        bioconda-utils build \
+        --docker-base-image "${BUILD_ENV_REGISTRY}/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
+        --mulled-conda-image "${CREATE_ENV_REGISTRY}/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
+        --packages seqtk \
+        --docker \
+        --mulled-test \
+        --force
+
+  push:
+    needs: [build-base-debian, build-others, test]
+    runs-on: ubuntu-20.04
+    # For these push steps, a repository must first exist on quay.io/bioconda
+    # AND that repository must also be configured to allow write access for the
+    # appropriate service account. This must be done by a user with admin
+    # access to quay.io/bioconda.
     #
     # generic_build.bash reported whether the tag exists to the log; that was
     # added to GITHUB_OUTPUT, those outputs are exposed to the jobs, and
     # those jobs are dependencies of this job. So now we can use those
     # outputs to determine if we should upload.
+    steps:
 
     - name: Push base-debian
       id: push-base-debian
