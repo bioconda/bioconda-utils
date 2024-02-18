@@ -196,7 +196,7 @@ jobs:
         cat "create-env.log" >> $GITHUB_OUTPUT
 
   push:
-    needs: [build-base-debian, build-others, test]
+    needs: [build-base-debian, build-others]
     runs-on: ubuntu-20.04
     steps:
 
