@@ -164,7 +164,7 @@ jobs:
         ARCHS=$ARCHS \
         TYPE="build-env" \
         BIOCONDA_UTILS_VERSION=$BIOCONDA_UTILS_VERSION \
-        TAG="${BIOCONDA_UTILS_VERSION}-${BASE_TAG}" \
+        TAG="${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
         BUSYBOX_IMAGE="${REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}" \
         ./generic_build.bash || [ $? == 64 ]
 
@@ -196,11 +196,11 @@ jobs:
           REGISTRY="quay.io/bioconda"
         fi
         CONDA_VERSION=$(
-                podman run -t "${REGISTRY}/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-${BASE_TAG}" \
+                podman run -t "${REGISTRY}/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
                 bash -c "/opt/conda/bin/conda list --export '^conda$'| sed -n 's/=[^=]*$//p'"
         )
         MAMBA_VERSION=$(
-                podman run -t "${REGISTRY}/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-${BASE_TAG}" \
+                podman run -t "${REGISTRY}/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
                 bash -c "/opt/conda/bin/conda list --export '^mamba$'| sed -n 's/=[^=]*$//p'"
         )
 
@@ -219,7 +219,7 @@ jobs:
         ARCHS=$ARCHS \
         TYPE="create-env" \
         BIOCONDA_UTILS_VERSION=$BIOCONDA_UTILS_VERSION \
-        TAG="${BIOCONDA_UTILS_VERSION}-${BASE_TAG}" \
+        TAG="${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
         BUSYBOX_IMAGE="${REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}" \
         ./generic_build.bash || [ $? == 64 ]
 
