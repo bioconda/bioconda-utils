@@ -196,11 +196,11 @@ jobs:
           REGISTRY="quay.io/bioconda"
         fi
         CONDA_VERSION=$(
-                podman run -t "${REGISTRY}/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}" \
+                podman run -t "${REGISTRY}/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-${BASE_TAG}" \
                 bash -c "/opt/conda/bin/conda list --export '^conda$'| sed -n 's/=[^=]*$//p'"
         )
         MAMBA_VERSION=$(
-                podman run -t "${REGISTRY}/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}" \
+                podman run -t "${REGISTRY}/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-${BASE_TAG}" \
                 bash -c "/opt/conda/bin/conda list --export '^mamba$'| sed -n 's/=[^=]*$//p'"
         )
 
