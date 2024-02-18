@@ -35,6 +35,8 @@ jobs:
   # this first job.
   build-base-debian:
     name: Build base-debian
+    outputs:
+      TAG_EXISTS_base-debian: ${{ steps.base-debian.outputs.TAG_EXISTS_base-debian }}
     runs-on: ubuntu-20.04
     steps:
     - uses: actions/checkout@v4
@@ -68,32 +70,20 @@ jobs:
         # via the step's outputs).
         cat "base-debian.log" >> $GITHUB_OUTPUT
 
-    # Here, and in the subsequent steps that also push images, a repository
-    # must first exist on quay.io/bioconda AND that repository must also be
-    # configured to allow write access for the appropriate service account.
-    # This must be done by a user with admin access to quay.io/bioconda.
-    - name: Push base-debian
-      id: push-base-debian
-      uses: redhat-actions/push-to-registry@v2
-
-      # generic_build.bash reported whether the tag exists to the log; that was
-      # added to GITHUB_OUTPUT and is used here to determine if we should
-      # upload.
-      if: ${{ ! steps.base-debian.outputs.TAG_EXISTS_base-debian }}
-      with:
-        image: ${{ env.BASE_DEBIAN_IMAGE_NAME }}
-        tags: latest ${{ env.BASE_TAG }}
-        registry: quay.io/bioconda
-        username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
-        password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
 
   # Other containers are interdependent, we so build them sequentially.
   # The steps are largely similar to base-debian above, so check there for
   # comments on common parts.
   build-others:
     name: Build base-busybox, build-env, and create-env images
+    outputs:
+      TAG_EXISTS_base-busybox: ${{ steps.base-debian.outputs.TAG_EXISTS_base-busybox }}
+      TAG_EXISTS_build-env: ${{ steps.base-debian.outputs.TAG_EXISTS_build-env }}
+      TAG_EXISTS_create-env: ${{ steps.base-debian.outputs.TAG_EXISTS_create-env }}
+
     runs-on: ubuntu-20.04
     steps:
+
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
@@ -125,16 +115,6 @@ jobs:
 
         cat "base-busybox.log" >> $GITHUB_OUTPUT
 
-    - name: Push base-busybox
-      id: push-base-busybox
-      uses: redhat-actions/push-to-registry@v2
-      if: ${{ ! steps.base-busybox.outputs.TAG_EXISTS_base-busybox }}
-      with:
-        image: ${{ env.BASE_BUSYBOX_IMAGE_NAME }}
-        tags: latest ${{ env.BASE_TAG }}
-        registry: quay.io/bioconda
-        username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
-        password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
 
     - name: Build build-env
       id: build-env
@@ -170,16 +150,6 @@ jobs:
 
         cat "build-env.log" >> $GITHUB_OUTPUT
 
-    - name: Push build-env
-      id: push-build-env
-      uses: redhat-actions/push-to-registry@v2
-      if: ${{ ! steps.build-env.outputs.TAG_EXISTS_build-env }}
-      with:
-        image: ${{ env.BUILD_ENV_IMAGE_NAME }}
-        tags: latest ${{ steps.get-tag.outputs.tag }}-base${{ env.BASE_TAG }}
-        registry: quay.io/bioconda
-        username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
-        password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
 
     - name: Build create-env
       id: create-env
@@ -225,10 +195,57 @@ jobs:
 
         cat "create-env.log" >> $GITHUB_OUTPUT
 
+  push:
+    needs: [build-base-debian, build-others, test]
+    steps:
+
+    # Here, and in the subsequent steps that also push images, a repository
+    # must first exist on quay.io/bioconda AND that repository must also be
+    # configured to allow write access for the appropriate service account.
+    # This must be done by a user with admin access to quay.io/bioconda.
+    #
+    # generic_build.bash reported whether the tag exists to the log; that was
+    # added to GITHUB_OUTPUT, those outputs are exposed to the jobs, and
+    # those jobs are dependencies of this job. So now we can use those
+    # outputs to determine if we should upload.
+
+    - name: Push base-debian
+      id: push-base-debian
+      uses: redhat-actions/push-to-registry@v2
+      if: ${{ ! needs.build-base-debian.outputs.TAG_EXISTS_base-debian }}
+      with:
+        image: ${{ env.BASE_DEBIAN_IMAGE_NAME }}
+        tags: latest ${{ env.BASE_TAG }}
+        registry: quay.io/bioconda
+        username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
+        password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
+
+    - name: Push base-busybox
+      id: push-base-busybox
+      uses: redhat-actions/push-to-registry@v2
+      if: ${{ ! needs.build-others.outputs.TAG_EXISTS_base-busybox }}
+      with:
+        image: ${{ env.BASE_BUSYBOX_IMAGE_NAME }}
+        tags: latest ${{ env.BASE_TAG }}
+        registry: quay.io/bioconda
+        username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
+        password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
+
+    - name: Push build-env
+      id: push-build-env
+      uses: redhat-actions/push-to-registry@v2
+      if: ${{ ! needs.build-others.outputs.TAG_EXISTS_build-env }}
+      with:
+        image: ${{ env.BUILD_ENV_IMAGE_NAME }}
+        tags: latest ${{ steps.get-tag.outputs.tag }}-base${{ env.BASE_TAG }}
+        registry: quay.io/bioconda
+        username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
+        password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
+
     - name: Push create-env
       id: push-create-env
       uses: redhat-actions/push-to-registry@v2
-      if: ${{ ! steps.create-env.outputs.TAG_EXISTS_create-env }}
+      if: ${{ ! needs.build-others.outputs.TAG_EXISTS_create-env }}
       with:
         image: ${{ env.CREATE_ENV_IMAGE_NAME }}
         tags: latest ${{ steps.get-tag.outputs.tag }}-base${{ env.BASE_TAG }}
