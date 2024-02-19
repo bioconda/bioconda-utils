@@ -190,15 +190,9 @@ jobs:
         ./generic_build.bash || [ $? == 64 ]
         cat "create-env.log" >> $GITHUB_OUTPUT
 
-  test:
-    name: Test using images
-    needs: [build-base-debian, build-others]
-    runs-on: ubuntu-20.04
-    steps:
-
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+    # END OF BUILDING IMAGES
+    # ----------------------------------------------------------------------
+    # START TESTING
 
     # Clone bioconda-recipes to use as part of the tests.
     - uses: actions/checkout@v4
@@ -224,25 +218,25 @@ jobs:
       run: |
         # Decide, for each image, whether it was just built as part of this run
         # (in which case we use localhost) or otherwise pull from quay.io.
-        if [ ${{ needs.build-others.outputs.TAG_EXISTS_base-busybox }} ]; then
+        if [ ${{ steps.base-busybox.outputs.TAG_EXISTS_base-busybox }} ]; then
           DEST_BASE_IMAGE_REGISTRY='quay.io/bioconda/'
         else
           DEST_BASE_IMAGE_REGISTRY=""
         fi
 
-        if [ ${{ needs.build-others.outputs.TAG_EXISTS_build-env }} ]; then
+        if [ ${{ steps.build-env.outputs.TAG_EXISTS_build-env }} ]; then
           BUILD_ENV_REGISTRY='quay.io/bioconda/'
         else
           BUILD_ENV_REGISTRY=""
         fi
 
-        if [ ${{ needs.build-others.outputs.TAG_EXISTS_create-env }} ]; then
+        if [ ${{ steps.create-env.outputs.TAG_EXISTS_create-env }} ]; then
           CREATE_ENV_REGISTRY='quay.io/bioconda/'
         else
           CREATE_ENV_REGISTRY=""
         fi
 
-        BIOCONDA_UTILS_VERSION='${{ needs.build-others.outputs.BIOCONDA_UTILS_TAG }}'
+        BIOCONDA_UTILS_VERSION='${{ steps.get-tag.outputs.BIOCONDA_UTILS_TAG }}'
 
         cd recipes
 
@@ -253,6 +247,7 @@ jobs:
         # Used to tell mulled-build which image to use
         export DEST_BASE_IMAGE="${DEST_BASE_IMAGE_REGISTRY}${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}"
 
+        # Build a package with containers.
         bioconda-utils build \
         --docker-base-image "${BUILD_ENV_REGISTRY}${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
         --mulled-conda-image "${CREATE_ENV_REGISTRY}${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
@@ -261,24 +256,24 @@ jobs:
         --mulled-test \
         --force
 
-  push:
-    needs: [build-base-debian, build-others, test]
-    runs-on: ubuntu-20.04
-    # For these push steps, a repository must first exist on quay.io/bioconda
-    # AND that repository must also be configured to allow write access for the
-    # appropriate service account. This must be done by a user with admin
-    # access to quay.io/bioconda.
-    #
-    # generic_build.bash reported whether the tag exists to the log; that was
-    # added to GITHUB_OUTPUT, those outputs are exposed to the jobs, and
-    # those jobs are dependencies of this job. So now we can use those
-    # outputs to determine if we should upload.
-    steps:
+      # END TESTING
+      # ------------------------------------------------------------------------
+      # START PUSHING IMAGES
+
+      # For these push steps, a repository must first exist on quay.io/bioconda
+      # AND that repository must also be configured to allow write access for the
+      # appropriate service account. This must be done by a user with admin
+      # access to quay.io/bioconda.
+      #
+      # generic_build.bash reported whether the tag exists to the log; that was
+      # added to GITHUB_OUTPUT, those outputs are exposed to the jobs, and
+      # those jobs are dependencies of this job. So now we can use those
+      # outputs to determine if we should upload.
 
     - name: Push base-debian
       id: push-base-debian
       uses: redhat-actions/push-to-registry@v2
-      if: ${{ ! needs.build-base-debian.outputs.TAG_EXISTS_base-debian }}
+      if: ${{ !steps.base-debian.outputs.TAG_EXISTS_base-debian }}
       with:
         image: ${{ env.BASE_DEBIAN_IMAGE_NAME }}
         tags: latest ${{ env.BASE_TAG }}
@@ -289,7 +284,7 @@ jobs:
     - name: Push base-busybox
       id: push-base-busybox
       uses: redhat-actions/push-to-registry@v2
-      if: ${{ ! needs.build-others.outputs.TAG_EXISTS_base-busybox }}
+      if: ${{ ! steps.base-busybox.outputs.TAG_EXISTS_base-busybox }}
       with:
         image: ${{ env.BASE_BUSYBOX_IMAGE_NAME }}
         tags: latest ${{ env.BASE_TAG }}
@@ -300,7 +295,7 @@ jobs:
     - name: Push build-env
       id: push-build-env
       uses: redhat-actions/push-to-registry@v2
-      if: ${{ ! needs.build-others.outputs.TAG_EXISTS_build-env }}
+      if: ${{ ! steps.build-env.outputs.TAG_EXISTS_build-env }}
       with:
         image: ${{ env.BUILD_ENV_IMAGE_NAME }}
         tags: latest ${{ steps.get-tag.outputs.tag }}-base${{ env.BASE_TAG }}
@@ -311,7 +306,7 @@ jobs:
     - name: Push create-env
       id: push-create-env
       uses: redhat-actions/push-to-registry@v2
-      if: ${{ ! needs.build-others.outputs.TAG_EXISTS_create-env }}
+      if: ${{ ! steps.create-env.outputs.TAG_EXISTS_create-env }}
       with:
         image: ${{ env.CREATE_ENV_IMAGE_NAME }}
         tags: latest ${{ steps.get-tag.outputs.tag }}-base${{ env.BASE_TAG }}
