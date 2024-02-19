@@ -77,10 +77,10 @@ jobs:
           ghcr.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}
 
   test-pull:
+    name: test pulling
     runs-on: ubuntu-20.04
     steps:
-  
-    - test-pull:
+    - name: test-pull
       run: |
         echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
         podman pull ghcr.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}
