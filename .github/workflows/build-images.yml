@@ -73,7 +73,10 @@ jobs:
 
     - name: push to ghcr
       run: |
-        podman push ghcr.io/bioconda/$BASE_DEBIAN_IMAGE_NAME:${BASE_TAG}
+        echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
+        podman push \
+          localhost/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG} \
+          ghcr.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}
 
   build-others:
     if: false
