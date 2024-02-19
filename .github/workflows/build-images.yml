@@ -250,8 +250,6 @@ jobs:
             docker-daemon:${CREATE_ENV_IMAGE_NAME}:${BASE_TAG}
         fi
 
-        BIOCONDA_UTILS_VERSION='${{ steps.get-tag.outputs.BIOCONDA_UTILS_TAG }}'
-
         cd recipes
 
         # Run a test build, specifying the exact images to use.
