@@ -80,7 +80,6 @@ jobs:
           ghcr.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}
 
   build-others:
-    if: false
     # Other containers are interdependent, we so build them sequentially.
     # The steps are largely similar to base-debian above, so check there for
     # comments on common parts.
