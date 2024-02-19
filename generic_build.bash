@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# This single script builds the following containers depending on the value of
-# the env var TYPE:
+# This single script builds the following images depending on the value of the
+# env var TYPE:
 #
 # - build-env: contains conda + conda-build + bioconda-utils, used for building
 #    package
@@ -9,12 +9,16 @@
 #    expected to have been built beforehand). Used for creating env from
 #    package + depdendencies
 # - base-busybox: the minimal container into which created conda envs are
-#     copied. This is the container uploaded to quay.io
-# - base-debian: an extended version of the busybox container for special cases
+#     copied. This is the image uploaded to quay.io
+# - base-debian: an extended version of the busybox image for special cases
 #
-# Built containers are added to a manifest. If multiple architectures are
-# provided, they will all be added to a manifest which can be subsequently
-# uploaded to a registry.
+# Built images are added to a manifest. If multiple architectures are provided,
+# they will all be added to a manifest which can be subsequently uploaded to
+# a registry.
+#
+# After images are built, they are tested.
+#
+# This script does NOT upload anything, that must be handled separately.
 
 USAGE='
 Builds various containers.
@@ -117,7 +121,10 @@ TAGS="$TAG latest"
 
 # ------------------------------------------------------------------------------
 # CHECK FOR EXISTING TAGS. This is because quay.io does not support immutable
-# images and we don't want to clobber existing.
+# images and we don't want to clobber existing. `latest` will likely always be
+# present though, so don't consider that existing. If you know that the
+# repository doesn't exist (e.g., you're testing using different names) then
+# set ERROR_IF_MISSING=false.
 response="$(curl -sL "https://quay.io/api/v1/repository/bioconda/${IMAGE_NAME}/tag/")"
 
 # Images can be set to expire; the jq query selects only non-expired images.
@@ -157,7 +164,7 @@ set -xeu
 # Dockerfile lives here
 cd $IMAGE_DIR
 
-# One manifest per tag
+# One manifest per tag; multiple archs will go in the same manifest.
 for tag in ${TAGS} ; do
   buildah manifest create "${IMAGE_NAME}:${tag}"
 done
@@ -183,7 +190,7 @@ fi
 if [ "$TYPE" == "build-env" ]; then
   BUILD_ARGS+=("--build-arg=BUSYBOX_IMAGE=$BUSYBOX_IMAGE")  # which image to use as base
   BUILD_ARGS+=("--build-arg=BIOCONDA_UTILS_FOLDER=$BIOCONDA_UTILS_FOLDER")  # git clone, relative to Dockerfile
-  BUILD_ARGS+=("--build-arg=bioconda_utils_version=$BIOCONDA_UTILS_VERSION")  # specify version to checkout and install, also used as tag
+  BUILD_ARGS+=("--build-arg=bioconda_utils_version=$BIOCONDA_UTILS_VERSION")  # specify version to checkout and install, also used as part of tag
 fi
 
 if [ "$TYPE" == "base-busybox" ]; then
@@ -192,7 +199,7 @@ if [ "$TYPE" == "base-busybox" ]; then
 
   # Make a busybox image that we'll use further below. As shown in the
   # Dockerfile.busybox, this uses the build-busybox script which in turn
-  # cross-compiles for x86_64 and aarch64, and these execuables are later
+  # cross-compiles for x86_64 and aarch64, and these executables are later
   # copied into an arch-specific container.
   #
   # Note that --iidfile (used here and in later commands) prints the built
@@ -271,11 +278,11 @@ for arch in $ARCHS; do
   buildah config "${LABELS[@]}" "${container}"
 
   # ...then store the container (now with labels) as a new image.
-  # This is what we'll use to eventually upload.
+  # This is what we'll eventually upload.
   image_id="$( buildah commit "${container}" )"
   buildah rm "${container}"
 
-  # Add images to manifest. Note that individual image tags include arch;
+  # Add images to manifest. Note that individual **image** tags include arch;
   # manifest does not.
   for tag in ${TAGS} ; do
     buildah tag \
@@ -306,7 +313,7 @@ done
 # ------------------------------------------------------------------------------
 # TESTING
 #
-# Args used specifically used when testing with Dockerfile.test
+# Args to be used specifically when testing with Dockerfile.test
 TEST_BUILD_ARGS=()
 if [ "$TYPE" == "create-env" ]; then
   TEST_BUILD_ARGS+=("--build-arg=BUSYBOX_IMAGE=$BUSYBOX_IMAGE")
@@ -377,6 +384,7 @@ if [ "" ] ; then
       --file=Dockerfile.test
   done
 fi
+# -------------------------------------------------------------------------------
 
 # Clean up
 buildah rmi --prune || true
