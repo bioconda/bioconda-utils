@@ -24,7 +24,7 @@ export DEBIAN_VERSION="12.2"
 export BUSYBOX_VERSION="1.36.1"
 
 # Use same tags for base-busybox and base-debian
-export BASE_TAGS="latest"
+export BASE_TAG="0.1"
 
 # If the repository doesn't already exist on quay.io, by default this is
 # considered an error. Set to false to avoid this (e.g., when building images
@@ -40,46 +40,36 @@ CREATE_ENV_IMAGE_NAME=tmp-create-env
 BASE_DEBIAN_IMAGE_NAME=tmp-debian
 BASE_BUSYBOX_IMAGE_NAME=tmp-busybox
 
-BUILD_BUSYBOX=false # build busybox image?
-BUILD_DEBIAN=false # build debian image?
-BUILD_BUILD_ENV=false # build build-env image?
+BUILD_BUSYBOX=true # build busybox image?
+BUILD_DEBIAN=true # build debian image?
+BUILD_BUILD_ENV=true # build build-env image?
 BUILD_CREATE_ENV=true  # build create-env image?
-
-# buildah will complain if a manifest exists for these images. If you do set
-# REMOVE_MANIFEST=true, you'll need to recreate them all again. You can instead
-# remove individual images like `buildah rm $BUILD_ENV_IMAGE_NAME`. You may
-# need to run it several times.
-REMOVE_MANIFEST=false
-if [ ${REMOVE_MANIFEST:-false} == "true" ]; then
-  for imgname in \
-    $BUILD_ENV_IMAGE_NAME \
-    $CREATE_ENV_IMAGE_NAME \
-    $BASE_DEBIAN_IMAGE_NAME \
-    $BASE_BUSYBOX_IMAGE_NAME; do
-    for tag in ${BASE_TAGS} $BIOCONDA_UTILS_VERSION; do
-      buildah manifest rm "${imgname}:${tag}" || true
-    done
-  done
-fi
-
 
 # # Build base-busybox------------------------------------------------------------
 if [ $BUILD_BUSYBOX == "true" ]; then
+
+  buildah manifest rm "${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}" || true
+  buildah manifest rm "${BASE_BUSYBOX_IMAGE_NAME}:latest" || true
+
   IMAGE_NAME=$BASE_BUSYBOX_IMAGE_NAME \
   IMAGE_DIR=images/base-glibc-busybox-bash \
   ARCHS=$ARCHS \
   TYPE="base-busybox" \
-  TAGS=$BASE_TAGS \
+  TAG=$BASE_TAG \
   ./generic_build.bash
 fi
 
 # Build base-debian-------------------------------------------------------------
 if [ $BUILD_DEBIAN == "true" ]; then
+
+  buildah manifest rm "${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}" || true
+  buildah manifest rm "${BASE_DEBIAN_IMAGE_NAME}:latest" || true
+
   IMAGE_NAME=$BASE_DEBIAN_IMAGE_NAME \
   IMAGE_DIR=images/base-glibc-debian-bash \
   ARCHS=$ARCHS \
   TYPE="base-debian" \
-  TAGS=$BASE_TAGS \
+  TAG=$BASE_TAG \
   ./generic_build.bash
 fi
 
@@ -92,16 +82,25 @@ if [ $BUILD_BUILD_ENV == "true" ]; then
   else
     (cd images/bioconda-utils-build-env-cos7/bioconda-utils && git fetch)
   fi
+
+  buildah manifest rm "${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" || true
+  buildah manifest rm "${BUILD_ENV_IMAGE_NAME}:latest" || true
+
   IMAGE_NAME=$BUILD_ENV_IMAGE_NAME \
   IMAGE_DIR=images/bioconda-utils-build-env-cos7 \
   ARCHS=$ARCHS \
   TYPE="build-env" \
+  TAG=$BASE_TAG \
   BUSYBOX_IMAGE=localhost/$BASE_BUSYBOX_IMAGE_NAME \
   ./generic_build.bash
 fi
 # # Build create-env--------------------------------------------------------------
 
 if [ $BUILD_CREATE_ENV == "true" ]; then 
+
+  buildah manifest rm "${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" || true
+  buildah manifest rm "${CREATE_ENV_IMAGE_NAME}:latest" || true
+
   # Get the exact versions of mamba and conda that were installed in build-env.
   CONDA_VERSION=$(
           podman run -t localhost/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION} \
@@ -119,6 +118,7 @@ if [ $BUILD_CREATE_ENV == "true" ]; then
   IMAGE_DIR=images/create-env \
   ARCHS=$ARCHS \
   TYPE="create-env" \
+  TAG=$BASE_TAG \
   BUSYBOX_IMAGE=localhost/$BASE_BUSYBOX_IMAGE_NAME \
   ./generic_build.bash
 fi
