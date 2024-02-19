@@ -218,22 +218,35 @@ jobs:
       run: |
         # Decide, for each image, whether it was just built as part of this run
         # (in which case we use localhost) or otherwise pull from quay.io.
+        #
+        # If localhost, we need to get the container from podman to docker,
+        # using podman push, so that bioconda-utils (which uses docker) can see
+        # the local image.
         if [ ${{ steps.base-busybox.outputs.TAG_EXISTS_base-busybox }} ]; then
           DEST_BASE_IMAGE_REGISTRY='quay.io/bioconda/'
         else
           DEST_BASE_IMAGE_REGISTRY=""
+          podman push \
+            localhost/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} \
+            docker-daemon:${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}
         fi
 
         if [ ${{ steps.build-env.outputs.TAG_EXISTS_build-env }} ]; then
           BUILD_ENV_REGISTRY='quay.io/bioconda/'
         else
           BUILD_ENV_REGISTRY=""
+          podman push \
+            localhost/${BUILD_ENV_IMAGE_NAME}:${BASE_TAG} \
+            docker-daemon:${BUILD_ENV_IMAGE_NAME}:${BASE_TAG}
         fi
 
         if [ ${{ steps.create-env.outputs.TAG_EXISTS_create-env }} ]; then
           CREATE_ENV_REGISTRY='quay.io/bioconda/'
         else
           CREATE_ENV_REGISTRY=""
+          podman push \
+            localhost/${CREATE_ENV_IMAGE_NAME}:${BASE_TAG} \
+            docker-daemon:${CREATE_ENV_IMAGE_NAME}:${BASE_TAG}
         fi
 
         BIOCONDA_UTILS_VERSION='${{ steps.get-tag.outputs.BIOCONDA_UTILS_TAG }}'
