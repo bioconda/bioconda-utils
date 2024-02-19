@@ -386,5 +386,8 @@ if [ "" ] ; then
 fi
 # -------------------------------------------------------------------------------
 
+podman manifest push --all localhost/${IMAGE_NAME} docker-daemon:${IMAGE_NAME}
+docker run ${IMAGE_NAME} ls -l
+
 # Clean up
 buildah rmi --prune || true
