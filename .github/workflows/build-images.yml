@@ -71,6 +71,10 @@ jobs:
         # via the step's outputs).
         cat "base-debian.log" >> $GITHUB_OUTPUT
 
+    - name: push to ghcr
+      run: |
+        podman push ghcr.io/bioconda/$BASE_DEBIAN_IMAGE_NAME:${BASE_TAG}
+
   build-others:
     if: false
     # Other containers are interdependent, we so build them sequentially.
