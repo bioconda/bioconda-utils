@@ -35,8 +35,6 @@ jobs:
     # Later steps for other containers are similar, so comments are only added to
     # this first job.
     name: Build base-debian
-    outputs:
-      TAG_EXISTS_base-debian: ${{ steps.base-debian.outputs.TAG_EXISTS_base-debian }}
     runs-on: ubuntu-20.04
     steps:
 
@@ -73,10 +71,25 @@ jobs:
 
     - name: push to ghcr
       run: |
-        echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
+        echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
         podman push \
           localhost/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG} \
           ghcr.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}
+
+  test-pull:
+    runs-on: ubuntu-20.04
+    steps:
+  
+    - test-pull:
+      run: |
+        echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
+        podman pull ghcr.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}
+        podman run ghcr.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}
+
+        echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+        docker pull ghcr.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}
+        docker run ghcr.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}
+
 
   build-others:
     if: false
