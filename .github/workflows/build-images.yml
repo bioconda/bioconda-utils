@@ -35,6 +35,8 @@ jobs:
     # Later steps for other containers are similar, so comments are only added to
     # this first job.
     name: Build base-debian
+    outputs:
+      TAG_EXISTS_base-debian: ${{ steps.base-debian.outputs.TAG_EXISTS_base-debian }}
     runs-on: ubuntu-20.04
     steps:
 
@@ -70,26 +72,12 @@ jobs:
         cat "base-debian.log" >> $GITHUB_OUTPUT
 
     - name: push to ghcr
+      if: '${{ ! steps.base-debian.outputs.TAG_EXISTS_base-debian }}'
       run: |
         echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
         podman push \
           localhost/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG} \
           ghcr.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}
-
-  test-pull:
-    name: test pulling
-    runs-on: ubuntu-20.04
-    steps:
-    - name: test-pull
-      run: |
-        echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
-        podman pull ghcr.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}
-        podman run ghcr.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}
-
-        echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
-        docker pull ghcr.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}
-        docker run ghcr.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}
-
 
   build-others:
     if: false
@@ -136,6 +124,14 @@ jobs:
         ./generic_build.bash || [ $? == 64 ]
         cat "base-busybox.log" >> $GITHUB_OUTPUT
 
+    - name: push base-busybox to ghcr
+      if: '${{ ! steps.base-busybox.outputs.TAG_EXISTS_base-busybox }}'
+      run: |
+        echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
+        podman push \
+          localhost/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} \
+          ghcr.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}
+
     - name: Build build-env
       id: build-env
       run: |
@@ -168,6 +164,14 @@ jobs:
         BUSYBOX_IMAGE="${REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}" \
         ./generic_build.bash || [ $? == 64 ]
         cat "build-env.log" >> $GITHUB_OUTPUT
+
+    - name: push build-env to ghcr
+      if: '${{ ! steps.build-env.outputs.TAG_EXISTS_build-env }}'
+      run: |
+        echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
+        podman push \
+          "localhost/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
+          "ghcr.io/bioconda/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}"
 
     - name: Build create-env
       id: create-env
@@ -211,9 +215,27 @@ jobs:
         ./generic_build.bash || [ $? == 64 ]
         cat "create-env.log" >> $GITHUB_OUTPUT
 
+    - name: push create-env to ghcr
+      if: '${{ ! steps.create-env.outputs.TAG_EXISTS_create-env }}'
+      run: |
+        echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
+        podman push \
+          "localhost/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
+          "ghcr.io/bioconda/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}"
+
     # END OF BUILDING IMAGES
     # ----------------------------------------------------------------------
     # START TESTING
+
+  test:
+    name: test bioconda-utils with images
+    runs-on: ubuntu-20.04
+    needs: [build-base-debian, build-others]
+    steps:
+
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     # Clone bioconda-recipes to use as part of the tests.
     - uses: actions/checkout@v4
@@ -237,38 +259,46 @@ jobs:
 
     - name: test
       run: |
+
         BIOCONDA_UTILS_VERSION='${{ steps.get-tag.outputs.tag }}'
+
+        # bioconda-utils uses docker, so log in to ghcr.io with docker.
+        echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+
+        # we also want to use podman to push to quay.io, but we need the images
+        # locally to this runner to do so, hence also logging in with podman.
+        echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
+
         # Decide, for each image, whether it was just built as part of this run
-        # (in which case we use localhost) or otherwise pull from quay.io.
+        # (in which case it would have been just uploaded to ghcr.io) or
+        # otherwise pull from quay.io.
         #
-        # If localhost, we need to get the container from podman to docker,
-        # using podman push, so that bioconda-utils (which uses docker) can see
-        # the local image.
-        if [ ${{ steps.base-busybox.outputs.TAG_EXISTS_base-busybox }} ]; then
-          DEST_BASE_IMAGE_REGISTRY='quay.io/bioconda/'
-        else
-          DEST_BASE_IMAGE_REGISTRY=""
-          podman push \
-            localhost/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} \
-            docker-daemon:${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}
+        # If ghcr.io, then also pull the image with podman so it will be
+        # available to upload to quay.io in subsequent steps. We do this even
+        # for base-debian, even if it's not used for the test.
+        if [ ${{ ! needs.base-debian.outputs.TAG_EXISTS_base-debian }} ]; then
+          podman pull "ghcr.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}"
         fi
 
-        if [ ${{ steps.build-env.outputs.TAG_EXISTS_build-env }} ]; then
-          BUILD_ENV_REGISTRY='quay.io/bioconda/'
+        if [ ${{ needs.build-others.outputs.TAG_EXISTS_base-busybox }} ]; then
+          DEST_BASE_IMAGE_REGISTRY='quay.io/bioconda'
         else
-          BUILD_ENV_REGISTRY=""
-          podman push \
-            localhost/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG} \
-            docker-daemon:${BUILD_ENV_IMAGE_NAME}:${BASE_TAG}
+          DEST_BASE_IMAGE_REGISTRY="ghcr.io/bioconda"
+          podman pull "${DEST_BASE_IMAGE_REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}"
         fi
 
-        if [ ${{ steps.create-env.outputs.TAG_EXISTS_create-env }} ]; then
-          CREATE_ENV_REGISTRY='quay.io/bioconda/'
+        if [ ${{ needs.build-others.outputs.TAG_EXISTS_build-env }} ]; then
+          BUILD_ENV_REGISTRY='quay.io/bioconda'
         else
-          CREATE_ENV_REGISTRY=""
-          podman push \
-            localhost/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG} \
-            docker-daemon:${CREATE_ENV_IMAGE_NAME}:${BASE_TAG}
+          BUILD_ENV_REGISTRY="ghcr.io/bioconda"
+          podman pull "${BUILD_ENV_REGISTRY}/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}"
+        fi
+
+        if [ ${{ needs.build-others.outputs.TAG_EXISTS_create-env }} ]; then
+          CREATE_ENV_REGISTRY='quay.io/bioconda'
+        else
+          CREATE_ENV_REGISTRY="ghcr.io/bioconda"
+          podman pull "${CREATE_ENV_REGISTRY}/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}"
         fi
 
         cd recipes
@@ -278,12 +308,12 @@ jobs:
         conda activate bioconda
 
         # Used to tell mulled-build which image to use
-        export DEST_BASE_IMAGE="${DEST_BASE_IMAGE_REGISTRY}${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}"
+        export DEST_BASE_IMAGE="${DEST_BASE_IMAGE_REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}"
 
         # Build a package with containers.
         bioconda-utils build \
-        --docker-base-image "${BUILD_ENV_REGISTRY}${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
-        --mulled-conda-image "${CREATE_ENV_REGISTRY}${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
+        --docker-base-image "${BUILD_ENV_REGISTRY}/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
+        --mulled-conda-image "${CREATE_ENV_REGISTRY}/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
         --packages seqtk \
         --docker \
         --mulled-test \
@@ -302,11 +332,14 @@ jobs:
       # added to GITHUB_OUTPUT, those outputs are exposed to the jobs, and
       # those jobs are dependencies of this job. So now we can use those
       # outputs to determine if we should upload.
+      #
+      # Note that "latest" is built by generic_build.bash as well, and we're
+      # including it here in the upload.
 
     - name: Push base-debian
       id: push-base-debian
       uses: redhat-actions/push-to-registry@v2
-      if: ${{ !steps.base-debian.outputs.TAG_EXISTS_base-debian }}
+      if: ${{ ! steps.base-debian.outputs.TAG_EXISTS_base-debian }}
       with:
         image: ${{ env.BASE_DEBIAN_IMAGE_NAME }}
         tags: latest ${{ env.BASE_TAG }}
