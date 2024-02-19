@@ -216,6 +216,7 @@ jobs:
 
     - name: test
       run: |
+        BIOCONDA_UTILS_VERSION='${{ steps.get-tag.outputs.tag }}'
         # Decide, for each image, whether it was just built as part of this run
         # (in which case we use localhost) or otherwise pull from quay.io.
         #
@@ -236,7 +237,7 @@ jobs:
         else
           BUILD_ENV_REGISTRY=""
           podman push \
-            localhost/${BUILD_ENV_IMAGE_NAME}:${BASE_TAG} \
+            localhost/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG} \
             docker-daemon:${BUILD_ENV_IMAGE_NAME}:${BASE_TAG}
         fi
 
@@ -245,7 +246,7 @@ jobs:
         else
           CREATE_ENV_REGISTRY=""
           podman push \
-            localhost/${CREATE_ENV_IMAGE_NAME}:${BASE_TAG} \
+            localhost/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG} \
             docker-daemon:${CREATE_ENV_IMAGE_NAME}:${BASE_TAG}
         fi
 
