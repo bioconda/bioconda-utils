@@ -221,8 +221,8 @@ jobs:
         echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
         BIOCONDA_UTILS_VERSION='${{ steps.get-tag.outputs.tag }}'
         podman push \
-          "localhost/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
-          "ghcr.io/bioconda/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}"
+          "localhost/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
+          "ghcr.io/bioconda/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}"
 
     # END OF BUILDING IMAGES
     # ----------------------------------------------------------------------
