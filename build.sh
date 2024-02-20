@@ -40,10 +40,10 @@ CREATE_ENV_IMAGE_NAME=tmp-create-env
 BASE_DEBIAN_IMAGE_NAME=tmp-debian
 BASE_BUSYBOX_IMAGE_NAME=tmp-busybox
 
-BUILD_BUSYBOX=true # build busybox image?
+BUILD_BUSYBOX=false # build busybox image?
 BUILD_DEBIAN=true # build debian image?
-BUILD_BUILD_ENV=true # build build-env image?
-BUILD_CREATE_ENV=true  # build create-env image?
+BUILD_BUILD_ENV=false # build build-env image?
+BUILD_CREATE_ENV=false  # build create-env image?
 
 # # Build base-busybox------------------------------------------------------------
 if [ $BUILD_BUSYBOX == "true" ]; then
