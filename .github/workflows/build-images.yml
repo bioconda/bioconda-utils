@@ -25,16 +25,20 @@ jobs:
     steps:
     - name: build
       run: |
-
+        set -x
         echo $BIOCONDA_UTILS_VERSION
         echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
         mkdir img
         cd img
         echo "FROM debian:12.1-slim" > Dockerfile
+
+        for tag in $tags; do
+          buildah manifest create "test:$tag"
+        done
+
         for arch in amd64 arm64; do
           buildah bud --arch $arch --file Dockerfile --iidfile=$arch.id
           image_id="$(cat $arch.id)"
-
           container="$( buildah from ${image_id} )"
           buildah config --label=org.opencontainers.image.source=https://github.com/bioconda/bioconda-utils "${container}"
           image_id="$( buildah commit "${container}" )"
@@ -44,6 +48,7 @@ jobs:
             buildah tag "${image_id}" "test:$tag-$arch"
             buildah manifest add "test:$tag" "${image_id}"
           done
+
         done
 
         for tag in $tags; do
