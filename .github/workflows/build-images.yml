@@ -273,7 +273,7 @@ jobs:
         # If ghcr.io, then also pull the image with podman so it will be
         # available to upload to quay.io in subsequent steps. We do this even
         # for base-debian, even if it's not used for the test.
-        if [ ${{ ! needs.base-debian.outputs.TAG_EXISTS_base-debian }} ]; then
+        if [ ${{ ! needs.build-base-debian.outputs.TAG_EXISTS_base-debian }} ]; then
           podman pull "ghcr.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}"
           podman pull "ghcr.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:latest"
         fi
@@ -340,7 +340,7 @@ jobs:
     - name: Push base-debian
       id: push-base-debian
       uses: redhat-actions/push-to-registry@v2
-      if: ${{ ! steps.base-debian.outputs.TAG_EXISTS_base-debian }}
+      if: ${{ ! needs.base-debian.outputs.TAG_EXISTS_base-debian }}
       with:
         image: ${{ env.BASE_DEBIAN_IMAGE_NAME }}
         tags: latest ${{ env.BASE_TAG }}
@@ -351,7 +351,7 @@ jobs:
     - name: Push base-busybox
       id: push-base-busybox
       uses: redhat-actions/push-to-registry@v2
-      if: ${{ ! steps.base-busybox.outputs.TAG_EXISTS_base-busybox }}
+      if: ${{ ! needs.build-others.outputs.TAG_EXISTS_base-busybox }}
       with:
         image: ${{ env.BASE_BUSYBOX_IMAGE_NAME }}
         tags: latest ${{ env.BASE_TAG }}
@@ -362,7 +362,7 @@ jobs:
     - name: Push build-env
       id: push-build-env
       uses: redhat-actions/push-to-registry@v2
-      if: ${{ ! steps.build-env.outputs.TAG_EXISTS_build-env }}
+      if: ${{ ! needs.build-others.outputs.TAG_EXISTS_build-env }}
       with:
         image: ${{ env.BUILD_ENV_IMAGE_NAME }}
         tags: latest ${{ needs.build-others.outputs.BIOCONDA_UTILS_TAG }}-base${{ env.BASE_TAG }}
@@ -373,7 +373,7 @@ jobs:
     - name: Push create-env
       id: push-create-env
       uses: redhat-actions/push-to-registry@v2
-      if: ${{ ! steps.create-env.outputs.TAG_EXISTS_create-env }}
+      if: ${{ ! needs.build-others.outputs.TAG_EXISTS_create-env }}
       with:
         image: ${{ env.CREATE_ENV_IMAGE_NAME }}
         tags: latest ${{ needs.build-others.outputs.BIOCONDA_UTILS_TAG }}-base${{ env.BASE_TAG }}
