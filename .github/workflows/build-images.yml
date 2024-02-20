@@ -261,7 +261,7 @@ jobs:
     - name: test
       run: |
 
-        BIOCONDA_UTILS_VERSION='${{ needs.build-others.outputs.get-tag.outputs.tag }}'
+        BIOCONDA_UTILS_VERSION='${{ needs.build-others.outputs.BIOCONDA_UTILS_TAG }}'
 
         # bioconda-utils uses docker, so log in to ghcr.io with docker.
         echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
