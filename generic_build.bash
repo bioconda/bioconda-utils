@@ -260,7 +260,7 @@ for arch in $ARCHS; do
    # https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry;
    # this allows the container visibility to inherit that of the linked repo
    # (public in the case of bioconda-utils)
-  LABELS+=("org.opencontainers.image.source=https://github.com/bioconda/bioconda-utils")
+  LABELS+=("--label=org.opencontainers.image.source=https://github.com/bioconda/bioconda-utils")
   LABELS+=("--label=deb-list=$( run cat /.deb.lst | tr '\n' '|' | sed 's/|$//' )")
   LABELS+=("--label=pkg-list=$( run cat /.pkg.lst | tr '\n' '|' | sed 's/|$//' )")
   LABELS+=("--label=glibc=$( run sh -c 'exec "$( find -xdev -name libc.so.6 -print -quit )"' | sed '1!d' )")
