@@ -58,6 +58,7 @@ jobs:
 
   pull-image:
     runs-on: ubuntu-20.04
+    needs: [build]
     steps:
     - name: pull
       run: |
