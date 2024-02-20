@@ -30,7 +30,7 @@ jobs:
         echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
         mkdir img
         cd img
-        cat "FROM debian:12.1-slim" > Dockerfile
+        echo "FROM debian:12.1-slim" > Dockerfile
         for arch in amd64 arm64; do
           buildah bud --arch $arch --file Dockerfile --iidfile=$arch.id
           image_id="$(cat $arch.id)"
