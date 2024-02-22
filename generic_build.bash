@@ -95,7 +95,7 @@ if [ "$TYPE" == "build-env" ] || [ "$TYPE" == "create-env" ]; then
     [ -z "$BUSYBOX_IMAGE" ] && echo "error: please set BUSYBOX_IMAGE for create-env" && exit 1
   fi
 
-  if [ "$TEYPE" == "create-env" ]; then
+  if [ "$TYPE" == "create-env" ]; then
     [ -z "$BUSYBOX_IMAGE" ] && echo "error: please set BUSYBOX_IMAGE for create-env" && exit 1
     [ -z "$CONDA_VERSION" ] && echo "error: please set CONDA_VERSION for create-env" && exit 1
     [ -z "$MAMBA_VERSION" ] && echo "error: please set MAMBA_VERSION for create-env" && exit 1
