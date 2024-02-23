@@ -17,7 +17,7 @@ from conda_build.metadata import MetaData
 
 logger = logging.getLogger(__name__)
 
-MULLED_CONDA_IMAGE = "quay.io/bioconda/create-env:latest"
+MULLED_CONDA_IMAGE = os.getenv("MULLED_CONDA_IMAGE", "quay.io/bioconda/create-env:latest")
 
 
 def get_tests(path):
