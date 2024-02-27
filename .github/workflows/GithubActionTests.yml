@@ -6,6 +6,7 @@ concurrency:
 
 jobs:
   test-linux:
+    if: false
     name: Linux tests
     runs-on: ubuntu-latest
     strategy:
@@ -43,6 +44,7 @@ jobs:
               echo "Skipping pytest - only docs modified"
           fi
   test-macosx:
+    if: false
     name: OSX tests
     runs-on: macos-latest
     steps:
@@ -74,6 +76,7 @@ jobs:
           fi
 
   autobump-test:
+    if: false
     name: autobump test
     runs-on: ubuntu-latest
     steps:

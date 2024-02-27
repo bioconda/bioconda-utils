@@ -118,7 +118,7 @@ jobs:
 
   build-create-env:
     name: Build create-env
-    needs: [build-env base-busybox]
+    needs: [build-env, base-busybox]
     outputs:
       TAG_EXISTS_create-env: ${{ steps.create-env.outputs.TAG_EXISTS_create-env }}
     runs-on: ubuntu-22.04
