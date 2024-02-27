@@ -139,6 +139,7 @@ jobs:
       id: create-env
       run: |
         source images/versions.sh
+        echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
         if [ $(tag_exists $CREATE_ENV_IMAGE_NAME $BIOCONDA_IMAGE_TAG) ]; then
           echo "TAG_EXISTS_create-env=true" >> $GITHUB_OUTPUT
         else

@@ -13,7 +13,7 @@ BUILD_ARGS=()
 if [ $(tag_exists $BUILD_ENV_IMAGE_NAME $BIOCONDA_IMAGE_TAG) ]; then
   REGISTRY=quay.io/bioconda
 else
-  REGISTRY=localhost
+  REGISTRY=ghcr.io/bioconda
 fi
 
 CONDA_VERSION=$(
@@ -35,7 +35,7 @@ BUILD_ARGS+=("--build-arg=MAMBA_VERSION=$MAMBA_VERSION")
 if [ $(tag_exists $BASE_BUSYBOX_IMAGE_NAME $TAG) ]; then
   REGISTRY=quay.io/bioconda
 else
-  REGISTRY=localhost
+  REGISTRY=ghcr.io/bioconda
 fi
 
 BUILD_ARGS+=("--build-arg=BUSYBOX_IMAGE=${REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}:${TAG}")
