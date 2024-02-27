@@ -1645,4 +1645,6 @@ def yaml_remove_invalid_chars(text: str, valid_chars_re=re.compile(r"[^ \t\n\w\d
 def get_package_downloads(channel, package):
     """Use anaconda API to obtain download counts."""
     data = requests.get(f"https://api.anaconda.org/package/{channel}/{package}").json()
-    return sum(rec["ndownloads"] for rec in data["files"])
+    if "files" in data:
+        return sum(rec["ndownloads"] for rec in data["files"])
+    return 0
