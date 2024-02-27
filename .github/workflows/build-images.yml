@@ -158,7 +158,6 @@ jobs:
     name: test bioconda-utils with images
     runs-on: ubuntu-20.04
     needs: [build-base-debian, build-base-busybox, build-build-env, build-create-env]
-    if: false
     steps:
 
     - uses: actions/checkout@v4
