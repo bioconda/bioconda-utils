@@ -57,7 +57,5 @@ function tag_exists () {
 }
 
 function push_to_ghcr () {
-  # Log in to GitHub container registry and push image
-  echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
   podman push localhost/${1}:${2} ghcr.io/bioconda/${1}:${2}
 }

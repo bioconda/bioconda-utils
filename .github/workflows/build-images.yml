@@ -47,6 +47,7 @@ jobs:
     - name: push to ghcr
       if: '${{ ! steps.base-debian.outputs.TAG_EXISTS_base-debian }}'
       run: |
+        echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
         source images/versions.sh
         push_to_ghcr $BASE_DEBIAN_IMAGE_NAME $BASE_TAG
         push_to_ghcr $BASE_DEBIAN_IMAGE_NAME latest
@@ -80,6 +81,7 @@ jobs:
     - name: push to ghcr
       if: '${{ ! steps.base-busybox.outputs.TAG_EXISTS_base-busybox }}'
       run: |
+        echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
         source images/versions.sh
         push_to_ghcr $BASE_BUSYBOX_IMAGE_NAME $BASE_TAG
         push_to_ghcr $BASE_BUSYBOX_IMAGE_NAME latest
@@ -112,6 +114,7 @@ jobs:
     - name: push to ghcr
       if: '${{ ! steps.build-env.outputs.TAG_EXISTS_build-env }}'
       run: |
+        echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
         source images/versions.sh
         push_to_ghcr $BUILD_ENV_IMAGE_NAME $BIOCONDA_IMAGE_TAG
         push_to_ghcr $BUILD_ENV_IMAGE_NAME latest
@@ -145,6 +148,7 @@ jobs:
     - name: push to ghcr
       if: '${{ ! steps.create-env.outputs.TAG_EXISTS_create-env }}'
       run: |
+        echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
         source images/versions.sh
         push_to_ghcr $CREATE_ENV_IMAGE_NAME $BIOCONDA_IMAGE_TAG
         push_to_ghcr $CREATE_ENV_IMAGE_NAME latest
