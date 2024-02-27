@@ -1,8 +1,7 @@
 ARG base_image
 FROM ${base_image} as base
 
-ARG BUSYBOX_IMAGE
-COPY --from=${BUSYBOX_IMAGE} /usr/lib/locale/C.utf8 /usr/lib/locale/C.utf8
+COPY ./C.utf8 /usr/lib/locale/C.utf8
 
 # Provide system deps unconditionally until we are able to offer per-recipe installs.
 # (Addresses, e.g., "ImportError: libGL.so.1" in tests directly invoked by conda-build.)
