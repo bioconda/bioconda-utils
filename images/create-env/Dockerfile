@@ -11,7 +11,7 @@ RUN arch="$( uname -m )" \
 # Install exact versions of conda/mamba
 ARG CONDA_VERSION
 ARG MAMBA_VERSION
-RUN echo $CONDA_VERSION > requirements.txt && echo $MAMBA_VERSION >> requirements.txt
+RUN echo -e "$CONDA_VERSION\n$MAMBA_VERSION" > requirements.txt
 RUN ./install-conda ./requirements.txt /opt/create-env
 
 ARG BUSYBOX_IMAGE
