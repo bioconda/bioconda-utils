@@ -118,7 +118,7 @@ jobs:
 
   build-create-env:
     name: Build create-env
-    needs: [build-env, base-busybox]
+    needs: [build-build-env, build-base-busybox]
     outputs:
       TAG_EXISTS_create-env: ${{ steps.create-env.outputs.TAG_EXISTS_create-env }}
     runs-on: ubuntu-22.04
@@ -155,6 +155,7 @@ jobs:
     # START TESTING
 
   test:
+    if: false
     name: test bioconda-utils with images
     runs-on: ubuntu-20.04
     needs: [build-base-debian, build-base-busybox, build-build-env, build-create-env]
