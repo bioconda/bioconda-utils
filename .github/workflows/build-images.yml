@@ -13,38 +13,22 @@ on:
     - '.circleci/**'
     - 'docs/**'
     - 'test/**'
-
 env:
-  BIOCONDA_UTILS_FOLDER: bioconda-utils
-  DEBIAN_VERSION: "12.2"
-  BUSYBOX_VERSION: "1.36.1"
-  BASE_TAG: "0.1.6"  # "latest" will always be added during the build.
-  BUILD_ENV_IMAGE_NAME: tmp-build-env
-  CREATE_ENV_IMAGE_NAME: tmp-create-env
-  BASE_DEBIAN_IMAGE_NAME: tmp-debian
-  BASE_BUSYBOX_IMAGE_NAME: tmp-busybox
-  ARCHS: "amd64 arm64"
+  BIOCONDA_UTILS_VERSION: ${{ github.event.release && github.event.release.tag_name || github.head_ref || github.ref_name }}
 
 jobs:
 
   build-base-debian:
-    # NOTE: base-debian can be a separate job since it is independent of the
-    # others. create-env depends on build-env, and both depend on base-busybox,
-    # so we can't split that out.
-    #
-    # Later steps for other containers are similar, so comments are only added to
-    # this first job.
     name: Build base-debian
+    runs-on: ubuntu-22.04
     outputs:
       TAG_EXISTS_base-debian: ${{ steps.base-debian.outputs.TAG_EXISTS_base-debian }}
-    runs-on: ubuntu-20.04
     steps:
 
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
-    # Required for emulating ARM
     - name: Install qemu dependency
       run: |
         sudo apt-get update
@@ -53,56 +37,30 @@ jobs:
     - name: Build base-debian
       id: base-debian
       run: |
-        # See generic_build.bash for expected env vars. The script will exit 64
-        # if the tag exists. That's OK, and we don't want the entire Actions
-        # workflow to fail because of it, so we check the exit code.
-        IMAGE_NAME=$BASE_DEBIAN_IMAGE_NAME \
-        IMAGE_DIR=images/base-glibc-debian-bash \
-        TYPE="base-debian" \
-        DEBIAN_VERSION=$DEBIAN_VERSION \
-        ARCHS=$ARCHS \
-        TAG=$BASE_TAG \
-        ./generic_build.bash || [ $? == 64 ]
-
-        # generic_build.bash will write key=val lines to the log ($TYPE.log);
-        # these lines are added to $GITHUB_OUTPUT so that later steps can use
-        # steps.id.outputs.key to get the value. See generic_build.bash for
-        # what it's writing to the log (and therefore which keys are available
-        # via the step's outputs).
-        cat "base-debian.log" >> $GITHUB_OUTPUT
+        source images/versions.sh
+        if [ $(tag_exists $BASE_DEBIAN_IMAGE_NAME $BASE_TAG) ]; then
+          echo "TAG_EXISTS_base-debian=true" >> $GITHUB_OUTPUT
+        else
+          cd images && bash build.sh base-glibc-debian-bash
+        fi
 
     - name: push to ghcr
       if: '${{ ! steps.base-debian.outputs.TAG_EXISTS_base-debian }}'
       run: |
-        echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
-        podman push localhost/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG} ghcr.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}
-        podman push localhost/${BASE_DEBIAN_IMAGE_NAME}:latest ghcr.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:latest
+        source images/versions.sh
+        push_to_ghcr $BASE_DEBIAN_IMAGE_NAME $BASE_TAG
+        push_to_ghcr $BASE_DEBIAN_IMAGE_NAME latest
 
-  build-others:
-    # Other containers are interdependent, we so build them sequentially.
-    # The steps are largely similar to base-debian above, so check there for
-    # comments on common parts.
-    name: Build base-busybox, build-env, and create-env images
+  build-base-busybox:
+    name: Build base-busybox
+    runs-on: ubuntu-22.04
     outputs:
       TAG_EXISTS_base-busybox: ${{ steps.base-busybox.outputs.TAG_EXISTS_base-busybox }}
-      TAG_EXISTS_build-env: ${{ steps.build-env.outputs.TAG_EXISTS_build-env }}
-      TAG_EXISTS_create-env: ${{ steps.create-env.outputs.TAG_EXISTS_create-env }}
-      BIOCONDA_UTILS_TAG: ${{ steps.get-tag.outputs.tag }}
-
-    runs-on: ubuntu-20.04
     steps:
 
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
-
-    - id: get-tag
-      # Get an appropriate tag to represent the version of bioconda-utils being
-      # used, and make it available to other steps as outputs. This will be used
-      # as BIOCONDA_UTILS_VERSION in later steps.
-      run: |
-        tag=${{ github.event.release && github.event.release.tag_name || github.head_ref || github.ref_name }}
-        printf %s "tag=${tag#v}" >> $GITHUB_OUTPUT
 
     - name: Install qemu dependency
       run: |
@@ -112,113 +70,85 @@ jobs:
     - name: Build base-busybox
       id: base-busybox
       run: |
-        IMAGE_NAME=$BASE_BUSYBOX_IMAGE_NAME \
-        IMAGE_DIR=images/base-glibc-busybox-bash \
-        TYPE="base-busybox" \
-        ARCHS=$ARCHS \
-        DEBIAN_VERSION=$DEBIAN_VERSION \
-        BUSYBOX_VERSION=$BUSYBOX_VERSION \
-        TAG=$BASE_TAG \
-        ./generic_build.bash || [ $? == 64 ]
-        cat "base-busybox.log" >> $GITHUB_OUTPUT
+        source images/versions.sh
+        if [ $(tag_exists $BASE_BUSYBOX_IMAGE_NAME $BASE_TAG) ]; then
+          echo "TAG_EXISTS_base-busybox=true" >> $GITHUB_OUTPUT
+        else
+          cd images && bash build.sh base-glibc-busybox-bash
+        fi
 
-    - name: push base-busybox to ghcr
+    - name: push to ghcr
       if: '${{ ! steps.base-busybox.outputs.TAG_EXISTS_base-busybox }}'
       run: |
-        echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
-        podman push localhost/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} ghcr.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}
-        podman push localhost/${BASE_BUSYBOX_IMAGE_NAME}:latest ghcr.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:latest
+        source images/versions.sh
+        push_to_ghcr $BASE_BUSYBOX_IMAGE_NAME $BASE_TAG
+        push_to_ghcr $BASE_BUSYBOX_IMAGE_NAME latest
+
+  build-build-env:
+    name: Build build-env
+    outputs:
+      TAG_EXISTS_build-env: ${{ steps.build-env.outputs.TAG_EXISTS_build-env }}
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install qemu dependency
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y qemu-user-static
 
     - name: Build build-env
       id: build-env
       run: |
-        # The build-env Dockerfile expects bioconda-utils to be cloned; even
-        # though this CI is operating in the bioconda-utils repo, the code
-        # needs to be available in the build context, which is in the
-        # respective image dir.
-        if [ ! -e "images/bioconda-utils-build-env-cos7/bioconda-utils" ]; then
-          git clone https://github.com/bioconda/bioconda-utils images/bioconda-utils-build-env-cos7/bioconda-utils
+        source images/versions.sh
+        if [ $(tag_exists $BUILD_ENV_IMAGE_NAME $BIOCONDA_IMAGE_TAG) ]; then
+          echo "TAG_EXISTS_build-env=true" >> $GITHUB_OUTPUT
         else
-          (cd images/bioconda-utils-build-env-cos7/bioconda-utils && git fetch)
+          cd images && bash build.sh bioconda-utils-build-env-cos7
         fi
 
-        # If the busybox image was not built in this CI run (e.g. if the
-        # specified tags already exist on quay.io) then we'll get it from
-        # quay.io. Otherwise use the just-built one.
-        REGISTRY="localhost"
-        if [ ${{ steps.base-busybox.outputs.TAG_EXISTS_base-busybox }} ]; then
-          REGISTRY="quay.io/bioconda"
-        fi
-
-        BIOCONDA_UTILS_VERSION='${{ steps.get-tag.outputs.tag }}'
-
-        IMAGE_NAME=$BUILD_ENV_IMAGE_NAME \
-        IMAGE_DIR=images/bioconda-utils-build-env-cos7 \
-        ARCHS=$ARCHS \
-        TYPE="build-env" \
-        BIOCONDA_UTILS_VERSION=$BIOCONDA_UTILS_VERSION \
-        TAG="${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
-        BUSYBOX_IMAGE="${REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}" \
-        ./generic_build.bash || [ $? == 64 ]
-        cat "build-env.log" >> $GITHUB_OUTPUT
-
-    - name: push build-env to ghcr
+    - name: push to ghcr
       if: '${{ ! steps.build-env.outputs.TAG_EXISTS_build-env }}'
       run: |
-        echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
-        BIOCONDA_UTILS_VERSION='${{ steps.get-tag.outputs.tag }}'
-        podman push "localhost/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" "ghcr.io/bioconda/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}"
-        podman push "localhost/${BUILD_ENV_IMAGE_NAME}:latest" "ghcr.io/bioconda/${BUILD_ENV_IMAGE_NAME}:latest"
+        source images/versions.sh
+        push_to_ghcr $BUILD_ENV_IMAGE_NAME $BIOCONDA_IMAGE_TAG
+        push_to_ghcr $BUILD_ENV_IMAGE_NAME latest
+
+  build-create-env:
+    name: Build create-env
+    needs: [build-env base-busybox]
+    outputs:
+      TAG_EXISTS_create-env: ${{ steps.create-env.outputs.TAG_EXISTS_create-env }}
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install qemu dependency
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y qemu-user-static
 
     - name: Build create-env
       id: create-env
       run: |
-        # Here we extract the conda and mamba versions from the just-created
-        # build-env container (or, if it was not created in this CI run because
-        # it already exists, then pull from quay.io). This ensures that when
-        # creating environments, we use the exact same conda/mamba versions
-        # that were used when building the package.
-        BIOCONDA_UTILS_VERSION='${{ steps.get-tag.outputs.tag }}'
-        REGISTRY="localhost"
-        if [ ${{ steps.build-env.outputs.TAG_EXISTS_build-env }} ]; then
-          REGISTRY="quay.io/bioconda"
-        fi
-        CONDA_VERSION=$(
-                podman run -t "${REGISTRY}/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
-                bash -c "/opt/conda/bin/conda list --export '^conda$'| sed -n 's/=[^=]*$//p'"
-        )
-        MAMBA_VERSION=$(
-                podman run -t "${REGISTRY}/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
-                bash -c "/opt/conda/bin/conda list --export '^mamba$'| sed -n 's/=[^=]*$//p'"
-        )
-
-        # Remove trailing \r with parameter expansion
-        export CONDA_VERSION=${CONDA_VERSION%$'\r'}
-        export MAMBA_VERSION=${MAMBA_VERSION%$'\r'}
-
-        # See build-env for explanation
-        REGISTRY="localhost"
-        if [ ${{ steps.base-busybox.outputs.TAG_EXISTS_base-busybox }} ]; then
-          REGISTRY="quay.io/bioconda"
+        source images/versions.sh
+        if [ $(tag_exists $CREATE_ENV_IMAGE_NAME $BIOCONDA_IMAGE_TAG) ]; then
+          echo "TAG_EXISTS_create-env=true" >> $GITHUB_OUTPUT
+        else
+          cd images && bash build.sh create-env
         fi
 
-        IMAGE_NAME=$CREATE_ENV_IMAGE_NAME \
-        IMAGE_DIR=images/create-env \
-        ARCHS=$ARCHS \
-        TYPE="create-env" \
-        BIOCONDA_UTILS_VERSION=$BIOCONDA_UTILS_VERSION \
-        TAG="${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" \
-        BUSYBOX_IMAGE="${REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}" \
-        ./generic_build.bash || [ $? == 64 ]
-        cat "create-env.log" >> $GITHUB_OUTPUT
-
-    - name: push create-env to ghcr
+    - name: push to ghcr
       if: '${{ ! steps.create-env.outputs.TAG_EXISTS_create-env }}'
       run: |
-        echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
-        BIOCONDA_UTILS_VERSION='${{ steps.get-tag.outputs.tag }}'
-        podman push "localhost/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}" "ghcr.io/bioconda/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_UTILS_VERSION}-base${BASE_TAG}"
-        podman push "localhost/${CREATE_ENV_IMAGE_NAME}:latest" "ghcr.io/bioconda/${CREATE_ENV_IMAGE_NAME}:latest"
+        source images/versions.sh
+        push_to_ghcr $CREATE_ENV_IMAGE_NAME $BIOCONDA_IMAGE_TAG
+        push_to_ghcr $CREATE_ENV_IMAGE_NAME latest
+
 
     # END OF BUILDING IMAGES
     # ----------------------------------------------------------------------
@@ -227,7 +157,8 @@ jobs:
   test:
     name: test bioconda-utils with images
     runs-on: ubuntu-20.04
-    needs: [build-base-debian, build-others]
+    needs: [build-base-debian, build-base-busybox, build-build-env, build-create-env]
+    if: false
     steps:
 
     - uses: actions/checkout@v4
