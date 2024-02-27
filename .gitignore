@@ -17,3 +17,8 @@ docs/source/developer/_autosummary
 .DS_Store
 env
 recipes/
+
+# files created when building images
+images/*/metadata.txt
+images/bioconda-utils-build-env-cos7/bioconda-utils
+images/bioconda-utils-build-env-cos7/C.utf8
