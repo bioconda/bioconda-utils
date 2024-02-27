@@ -32,9 +32,6 @@ WORKDIR /tmp/repo
 ARG BIOCONDA_UTILS_FOLDER=./bioconda-utils
 COPY ${BIOCONDA_UTILS_FOLDER} ./
 
-# Make sure we're using the configured version of bioconda-utils for this
-# build.
-RUN git checkout ${bioconda_utils_version}
 RUN . /opt/conda/etc/profile.d/conda.sh  && conda list
 RUN . /opt/conda/etc/profile.d/conda.sh  && conda activate base && \
     pip wheel . && \
