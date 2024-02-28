@@ -1,6 +1,5 @@
 source ../versions.sh
 IMAGE_NAME="${CREATE_ENV_IMAGE_NAME}"
-TAG="${BIOCONDA_UTILS_VERSION}_base$BASE_TAG"
 BUILD_ARGS=()
 
 
@@ -17,11 +16,11 @@ else
 fi
 
 CONDA_VERSION=$(
-        podman run -t $REGISTRY/${BUILD_ENV_IMAGE_NAME}:${TAG} \
+        podman run -t $REGISTRY/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} \
         bash -c "/opt/conda/bin/conda list --export '^conda$'| sed -n 's/=[^=]*$//p'"
 )
 MAMBA_VERSION=$(
-        podman run -t $REGISTRY/${BUILD_ENV_IMAGE_NAME}:${TAG} \
+        podman run -t $REGISTRY/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} \
         bash -c "/opt/conda/bin/conda list --export '^mamba$'| sed -n 's/=[^=]*$//p'"
 )
 # Remove trailing \r with parameter expansion
@@ -32,13 +31,13 @@ BUILD_ARGS+=("--build-arg=CONDA_VERSION=$CONDA_VERSION")
 BUILD_ARGS+=("--build-arg=MAMBA_VERSION=$MAMBA_VERSION")
 
 # Needs busybox image to copy some items over
-if [ $(tag_exists $BASE_BUSYBOX_IMAGE_NAME $TAG) ]; then
+if [ $(tag_exists $BASE_BUSYBOX_IMAGE_NAME $BASE_TAG) ]; then
   REGISTRY=quay.io/bioconda
 else
   REGISTRY=ghcr.io/bioconda
 fi
 
-BUILD_ARGS+=("--build-arg=BUSYBOX_IMAGE=${REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}:${TAG}")
+BUILD_ARGS+=("--build-arg=BUSYBOX_IMAGE=${REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}")
 
 # TEST_BUILD_ARGS=()
 # TEST_BUILD_ARGS+=("--build-arg=BUSYBOX_IMAGE=$BUSYBOX_IMAGE")
