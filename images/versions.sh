@@ -57,5 +57,5 @@ function tag_exists () {
 }
 
 function push_to_ghcr () {
-  podman push localhost/${1}:${2} ghcr.io/bioconda/${1}:${2}
+  podman manifest push localhost/${1}:${2} ghcr.io/bioconda/${1}:${2}
 }
