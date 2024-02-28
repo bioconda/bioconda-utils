@@ -21,7 +21,7 @@ CONDA_VERSION=$(
         bash -c "/opt/conda/bin/conda list --export '^conda$'| sed -n 's/=[^=]*$//p'"
 )
 MAMBA_VERSION=$(
-        podman run -t localhost/${BUILD_ENV_IMAGE_NAME}:${TAG} \
+        podman run -t $REGISTRY/${BUILD_ENV_IMAGE_NAME}:${TAG} \
         bash -c "/opt/conda/bin/conda list --export '^mamba$'| sed -n 's/=[^=]*$//p'"
 )
 # Remove trailing \r with parameter expansion
