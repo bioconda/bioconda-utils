@@ -1,6 +1,8 @@
 source ../versions.sh
 IMAGE_NAME="${CREATE_ENV_IMAGE_NAME}"
+TAG=$BIOCONDA_IMAGE_TAG
 BUILD_ARGS=()
+
 
 
 # Get the exact versions of mamba and conda that were installed in build-env.
