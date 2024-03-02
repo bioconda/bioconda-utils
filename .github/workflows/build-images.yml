@@ -240,27 +240,28 @@ jobs:
     - name: push base-debian
       if: ${{ ! needs.base-debian.outputs.TAG_EXISTS_base-debian }}
       run: |
-        echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
+        echo '${{ secrets.GITHUB_TOKEN }}' | podman login quay.io -u '${{ github.actor }}' --password-stdin
         source images/versions.sh
         move_from_ghcr_to_quay ${BASE_DEBIAN_IMAGE_NAME} ${BASE_TAG}
+
 
     - name: push base-busybox
       if: ${{ ! needs.base-busybox.outputs.TAG_EXISTS_base-busybox }}
       run: |
-        echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
+        echo '${{ secrets.GITHUB_TOKEN }}' | podman login quay.io -u '${{ github.actor }}' --password-stdin
         source images/versions.sh
         move_from_ghcr_to_quay ${BASE_BUSYBOX_IMAGE_NAME} ${BASE_TAG}
 
     - name: push create-env
       if: ${{ ! needs.create-env.outputs.TAG_EXISTS_create-env }}
       run: |
-        echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
+        echo '${{ secrets.GITHUB_TOKEN }}' | podman login quay.io -u '${{ github.actor }}' --password-stdin
         source images/versions.sh
         move_from_ghcr_to_quay ${CREATE_ENV_IMAGE_NAME} ${BIOCONDA_IMAGE_TAG}
 
     - name: push build-env
       if: ${{ ! needs.build-env.outputs.TAG_EXISTS_build-env }}
       run: |
-        echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
+        echo '${{ secrets.GITHUB_TOKEN }}' | podman login quay.io -u '${{ github.actor }}' --password-stdin
         source images/versions.sh
         move_from_ghcr_to_quay ${BUILD_ENV_IMAGE_NAME} ${BIOCONDA_IMAGE_TAG}
