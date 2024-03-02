@@ -190,7 +190,7 @@ jobs:
         eval "$(conda shell.bash hook)"
         conda activate bioconda
 
-        source versions.sh
+        source images/versions.sh
 
         # Figure out which registry to use for each image, based on what was built.
         [ ${{ needs.build-build-env.outputs.TAG_EXISTS_build-env }} ] && BUILD_ENV_REGISTRY='quay.io/bioconda' || BUILD_ENV_REGISTRY="ghcr.io/bioconda"
