@@ -18,10 +18,6 @@
 # ARCHS: space-separated string of archs to build
 # IMAGE_NAME: name of image; created manifest will be IMAGE_NAME:tag
 # BUILD_ARGS: array of arguments like ("--build-arg=argument1=the-value", "--build-arg=arg2=a")
-#
-# After successfully building, a metadata.txt file will be created in the image
-# directory containing the manifest names that can be used to upload to
-# a registry.
 
 set -xeu
 
@@ -31,13 +27,8 @@ cd $IMAGE_DIR
 
 [ -e prepare.sh ] && source prepare.sh
 
-# Add "latest" to tags
-TAGS=$(echo "$TAG latest")
-
-for tag in ${TAGS} ; do
-  buildah manifest rm "${IMAGE_NAME}:${tag}" || true
-  buildah manifest create "${IMAGE_NAME}:${tag}"
-done
+buildah manifest rm "${IMAGE_NAME}:${TAG}" || true
+buildah manifest create "${IMAGE_NAME}:${TAG}"
 
 for arch in $ARCHS; do
 
@@ -74,14 +65,7 @@ for arch in $ARCHS; do
   image_id="$( buildah commit "${container}" )"
   buildah rm "${container}"
 
-  # Add image to respective manifests.
-  for tag in ${TAGS} ; do
-    buildah tag "${image_id}" "${IMAGE_NAME}:${tag}-${arch}"
-    buildah manifest add "${IMAGE_NAME}:${tag}" "${image_id}"
-  done
-done
-
-cat /dev/null > metadata.txt
-for tag in ${TAGS} ; do
-  echo $IMAGE_NAME:$tag >> metadata.txt
+  # Add image to manifest
+  buildah tag "${image_id}" "${IMAGE_NAME}:${TAG}-${arch}"
+  buildah manifest add "${IMAGE_NAME}:${TAG}" "${image_id}"
 done

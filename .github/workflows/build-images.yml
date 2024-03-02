@@ -50,7 +50,6 @@ jobs:
         echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
         source images/versions.sh
         push_to_ghcr $BASE_DEBIAN_IMAGE_NAME $BASE_TAG
-        push_to_ghcr $BASE_DEBIAN_IMAGE_NAME latest
 
   build-base-busybox:
     name: Build base-busybox
@@ -84,7 +83,6 @@ jobs:
         echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
         source images/versions.sh
         push_to_ghcr $BASE_BUSYBOX_IMAGE_NAME $BASE_TAG
-        push_to_ghcr $BASE_BUSYBOX_IMAGE_NAME latest
 
   build-build-env:
     name: Build build-env
@@ -117,7 +115,6 @@ jobs:
         echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
         source images/versions.sh
         push_to_ghcr $BUILD_ENV_IMAGE_NAME $BIOCONDA_IMAGE_TAG
-        push_to_ghcr $BUILD_ENV_IMAGE_NAME latest
 
   build-create-env:
     name: Build create-env
@@ -152,7 +149,6 @@ jobs:
         echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
         source images/versions.sh
         push_to_ghcr $CREATE_ENV_IMAGE_NAME $BIOCONDA_IMAGE_TAG
-        push_to_ghcr $CREATE_ENV_IMAGE_NAME latest
 
 
     # END OF BUILDING IMAGES
