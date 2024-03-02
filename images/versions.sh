@@ -57,5 +57,16 @@ function tag_exists () {
 }
 
 function push_to_ghcr () {
-  podman manifest push localhost/${1}:${2} ghcr.io/bioconda/${1}:${2}
+  buildah manifest push localhost/${1}:${2} ghcr.io/bioconda/${1}:${2}
+}
+
+function move_from_ghcr_to_quay () {
+  local image_name=$1
+  local tag=$2
+  buildah manifest create "local_${image_name}:${tag}"
+  for arch in $ARCHS; do
+    imgid=$(buildah pull --arch=$arch "ghcr.io/bioconda/${image_name}:${tag}")
+    buildah manifest add "local_${image_name}:${tag}" "${imgid}"
+  done
+  buildah manifest push "local_${image_name}:${tag}" "quay.io/bioconda/${image_name}:${tag}"
 }
