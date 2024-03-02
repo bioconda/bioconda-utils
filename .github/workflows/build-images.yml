@@ -232,6 +232,11 @@ jobs:
     runs-on: ubuntu-20.04
     needs: [build-base-debian, build-base-busybox, build-build-env, build-create-env, test]
     steps:
+
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
     - name: push base-debian
       if: ${{ ! needs.base-debian.outputs.TAG_EXISTS_base-debian }}
       run: |
