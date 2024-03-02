@@ -236,26 +236,26 @@ jobs:
       if: ${{ ! needs.base-debian.outputs.TAG_EXISTS_base-debian }}
       run: |
         echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
-        source versions.sh
+        source images/versions.sh
         push_to_ghcr ${BASE_DEBIAN_IMAGE_NAME}:${TAG}
 
     - name: push base-busybox
       if: ${{ ! needs.base-busybox.outputs.TAG_EXISTS_base-busybox }}
       run: |
         echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
-        source versions.sh
+        source images/versions.sh
         push_to_ghcr ${BASE_BUSYBOX_IMAGE_NAME}:${TAG}
 
     - name: push create-env
       if: ${{ ! needs.create-env.outputs.TAG_EXISTS_create-env }}
       run: |
         echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
-        source versions.sh
+        source images/versions.sh
         push_to_ghcr ${CREATE_ENV_IMAGE_NAME}:${TAG}
 
     - name: push build-env
       if: ${{ ! needs.build-env.outputs.TAG_EXISTS_build-env }}
       run: |
         echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
-        source versions.sh
+        source images/versions.sh
         push_to_ghcr ${BUILD_ENV_IMAGE_NAME}:${TAG}
