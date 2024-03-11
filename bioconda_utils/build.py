@@ -300,7 +300,9 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
                   mulled_conda_image: str = pkg_test.MULLED_CONDA_IMAGE,
                   record_build_failures: bool = False,
                   skiplist_leafs: bool = False,
-                  live_logs: bool = True):
+                  live_logs: bool = True,
+                  exclude = List[str] = None,
+                  ):
     """
     Build one or many bioconda packages.
 
@@ -329,6 +331,8 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
       keep_old_work: Do not remove anything from environment, even after successful build and test.
       skiplist_leafs: If True, blacklist leaf packages that fail to build
       live_logs: If True, enable live logging during the build process
+      exclude: list of recipes to exclude. Typically used for
+        temporary exclusion; otherwise consider adding recipe to skiplist.
     """
     if not recipes:
         logger.info("Nothing to be done.")
@@ -354,6 +358,8 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
         linter = lint.Linter(config, recipe_folder, lint_exclude)
     else:
         linter = None
+    if not exclude:
+        exclude = []
 
     failed = []
 
@@ -384,6 +390,8 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
     failed_uploads = []
 
     for recipe, name in recipes:
+        if recipe in exclude:
+            continue
         platform = utils.RepoData().native_platform()
         if not force and do_not_consider_for_additional_platform(recipe_folder, recipe, platform):
             logger.info("BUILD SKIP: skipping %s for additional platform %s", recipe, platform)
