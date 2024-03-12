@@ -572,9 +572,7 @@ def dag(recipe_folder, config, packages="*", format='gml', hide_singletons=False
     """
     Export the DAG of packages to a graph format file for visualization
     """
-    dag, name2recipes = graph.build(utils.get_recipes(recipe_folder, "*"), config)
-    if packages != "*":
-        dag = graph.filter(dag, packages)
+    dag, name2recipes = graph.build(utils.get_recipes(recipe_folder, packages), config)
     if hide_singletons:
         for node in nx.nodes(dag):
             if dag.degree(node) == 0:
@@ -1104,15 +1102,11 @@ def list_build_failures(recipe_folder, config, channel=None, output_format=None,
     fmt_writer(df, sys.stdout, index=False)
 
 
-@arg(
-    'message',
-     help="The commit message. Will be prepended with [ci skip] to avoid that commits accidentally trigger a rerun while bulk is already running"
-)
-def bulk_commit(message):
-    bulk.commit(message)
-
-
 def bulk_trigger_ci():
+    """
+    Create an empty commit with the string "[ci run]" and push, which
+    triggers a bulk CI run. Must be on the `bulk` branch.
+    """
     bulk.trigger_ci()
 
 
@@ -1124,5 +1118,5 @@ def main():
         build, dag, dependent, do_lint, duplicates, update_pinning,
         bioconductor_skeleton, clean_cran_skeleton, autobump,
         handle_merged_pr, annotate_build_failures, list_build_failures,
-        bulk_commit, bulk_trigger_ci
+        bulk_trigger_ci
     ])

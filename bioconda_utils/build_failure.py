@@ -38,6 +38,8 @@ class BuildFailureRecord:
         self.platform = platform
 
         def load(path):
+            if os.path.getsize(path) == 0:
+                raise IOError("Unable to read build failure record {path}: empty file")
             with open(path, "r") as f:
                 yaml=YAML()
                 try:
@@ -89,20 +91,26 @@ class BuildFailureRecord:
         with open(self.path, "w") as f:
             yaml=YAML()
             commented_map = CommentedMap()
-            commented_map.insert(0, "recipe_sha", self.recipe_sha, comment="The commit at which this recipe failed to build.")
+            commented_map.insert(0, "recipe_sha", self.recipe_sha, comment="The hash of the recipe's meta.yaml at which this recipe failed to build.")
             commented_map.insert(1, "skiplist", self.skiplist, comment="Set to true to skiplist this recipe so that it will be ignored as long as its latest commit is the one given above.")
             i = 2
-            if self.log:
+
+            _log = self.inner.get("log", "")
+            if _log:
                 commented_map.insert(
                     i,
                     "log", 
                     # remove invalid chars and keep only the last 100 lines
-                    LiteralScalarString("\n".join(utils.yaml_remove_invalid_chars(self.log).splitlines()[-100:])),
+                    LiteralScalarString("\n".join(utils.yaml_remove_invalid_chars(_log).splitlines()[-100:])),
                     comment="Last 100 lines of the build log."
                 )
                 i += 1
             if self.reason:
                 commented_map.insert(i, "reason", LiteralScalarString(self.reason))
+                i += 1
+            if self.category:
+                commented_map.insert(i, "category", LiteralScalarString(self.category))
+                i += 1
             yaml.dump(commented_map, f)
 
     def remove(self):

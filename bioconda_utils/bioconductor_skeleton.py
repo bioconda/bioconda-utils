@@ -774,7 +774,7 @@ class BioCProjectPage(object):
                 dependency_mapping[prefix + name.lower() + version] = name
 
         # Check SystemRequirements in the DESCRIPTION file to make sure
-        # packages with such reqquirements are provided correct recipes.
+        # packages with such requirements are provided correct recipes.
         if (self.packages[self.package].get('SystemRequirements') is not None):
             logger.warning(
                 "The 'SystemRequirements' {} are needed".format(
@@ -940,7 +940,7 @@ class BioCProjectPage(object):
         additional_run_deps = []
         if self.is_data_package:
             additional_run_deps.append('curl')
-            additional_run_deps.append('bioconductor-data-packages>={}'.format(date.today().strftime('%Y%m%d')))
+            additional_run_deps.append('bioconductor-data-packages >={}'.format(date.today().strftime('%Y%m%d')))
 
         d = OrderedDict((
             (
@@ -959,6 +959,7 @@ class BioCProjectPage(object):
                 'build', OrderedDict((
                     ('number', self.build_number),
                     ('rpaths', ['lib/R/lib/', 'lib/']),
+                    ('run_exports', f'{{{{ pin_subpackage("bioconductor-{self.package_lower}", max_pin="x.x") }}}}'),
                 )),
             ),
             (
@@ -1248,7 +1249,19 @@ def write_recipe(package, recipe_dir, config, bioc_data_packages=None, force=Fal
             (updated_version == current_version) and
             (updated_meta != current_meta)
         ):
-            proj.build_number = int(current_build_number) + 1
+            # Sometimes when updating all packages, the updating process fails
+            # partway. Re-running the updating process should not bump the
+            # build number if no builds for this version exist yet in the repo.
+            existing_bldnos = utils.RepoData().get_package_data(
+                key="build_number",
+                name="bioconductor-" + proj.package.lower(),
+                version=updated_version
+            )
+            if not existing_bldnos:
+                proj.build_number = 0
+            else:
+                proj.build_number = sorted([int(i) for i in existing_bldnos]) [-1] + 1
+
         if 'extra' in current_meta:
             exclude = set(['final', 'copy_test_source_files'])
             proj.extra = {x: y for x, y in current_meta['extra'].items() if x not in exclude}
