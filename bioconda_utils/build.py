@@ -301,7 +301,7 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
                   record_build_failures: bool = False,
                   skiplist_leafs: bool = False,
                   live_logs: bool = True,
-                  exclude = List[str] = None,
+                  exclude: List[str] = None,
                   ):
     """
     Build one or many bioconda packages.
