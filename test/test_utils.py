@@ -262,6 +262,16 @@ def test_multi_build(multi_build):
             assert os.path.exists(pkg)
 
 
+@pytest.mark.long_running_1
+def test_multi_build_exclude(multi_build_exclude):
+    for (k, v) in multi_build_exclude.items():
+        for pkg in v:
+            if k == 'three':
+                assert not os.path.exists(pkg)
+            else:
+                assert os.path.exists(pkg)
+
+
 @pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
 def test_docker_bioconda_utils_version():
     """
