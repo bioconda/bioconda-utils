@@ -390,7 +390,7 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
     failed_uploads = []
 
     for recipe, name in recipes:
-        if recipe in exclude:
+        if name in exclude:
             continue
         platform = utils.RepoData().native_platform()
         if not force and do_not_consider_for_additional_platform(recipe_folder, recipe, platform):
