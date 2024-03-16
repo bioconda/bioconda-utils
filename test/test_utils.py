@@ -255,6 +255,7 @@ def test_single_build_with_post_test(single_build):
         pkg_test.test_package(pkg)
 
 
+@pytest.mark.tmp
 @pytest.mark.long_running_1
 def test_multi_build(multi_build):
     for v in multi_build.values():
@@ -262,6 +263,7 @@ def test_multi_build(multi_build):
             assert os.path.exists(pkg)
 
 
+@pytest.mark.tmp
 @pytest.mark.long_running_1
 def test_multi_build_exclude(multi_build_exclude):
     for (k, v) in multi_build_exclude.items():
