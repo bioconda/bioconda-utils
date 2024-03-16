@@ -358,7 +358,7 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
         linter = lint.Linter(config, recipe_folder, lint_exclude)
     else:
         linter = None
-    if not exclude:
+    if exclude:
         if isinstance(exclude, str):
             exclude = [exclude]
         blacklist.global_list.update(exclude)
