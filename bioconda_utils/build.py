@@ -359,7 +359,9 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
     else:
         linter = None
     if not exclude:
-        exclude = []
+        if isinstance(exclude, str):
+            exclude = [exclude]
+        blacklist.global_list.update(exclude)
 
     failed = []
 
@@ -390,8 +392,6 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
     failed_uploads = []
 
     for recipe, name in recipes:
-        if name in exclude:
-            continue
         platform = utils.RepoData().native_platform()
         if not force and do_not_consider_for_additional_platform(recipe_folder, recipe, platform):
             logger.info("BUILD SKIP: skipping %s for additional platform %s", recipe, platform)
