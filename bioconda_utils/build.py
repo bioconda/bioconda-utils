@@ -358,14 +358,14 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
         linter = lint.Linter(config, recipe_folder, lint_exclude)
     else:
         linter = None
-    if exclude:
-        if isinstance(exclude, str):
-            exclude = [exclude]
-        blacklist.global_list.update(exclude)
 
     failed = []
 
     dag, name2recipes = graph.build(recipes, config=config_path, blacklist=blacklist)
+    if exclude:
+        for name in exclude:
+            dag.remove_node(name)
+
     if not dag:
         logger.info("Nothing to be done.")
         return True
