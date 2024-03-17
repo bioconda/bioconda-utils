@@ -11,10 +11,9 @@ jobs:
     strategy:
       matrix:
         py_test_marker:
-          # - not long_running_1 and not long_running_2
-          # - long_running_1
-          # - long_running_2
-          - tmp
+          - not long_running_1 and not long_running_2
+          - long_running_1
+          - long_running_2
 
     steps:
       - uses: actions/checkout@v4
@@ -51,7 +50,6 @@ jobs:
               echo "Skipping pytest - only docs modified"
           fi
   test-macosx:
-    if: false
     name: OSX tests
     runs-on: macos-latest
     steps:
