@@ -247,6 +247,7 @@ def test_upload(single_upload):
 def test_single_build_only(single_build):
     for pkg in single_build:
         assert os.path.exists(pkg)
+        ensure_missing(pkg)
 
 
 @pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
@@ -311,6 +312,7 @@ def test_docker_builder_build(recipes_fixture):
                                 build_args='', env={})
     for pkg in pkgs:
         assert os.path.exists(pkg)
+        ensure_missing(pkg)
 
 
 @pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
