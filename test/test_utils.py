@@ -261,6 +261,7 @@ def test_multi_build(multi_build):
     for v in multi_build.values():
         for pkg in v:
             assert os.path.exists(pkg)
+            ensure_missing(pkg)
 
 
 @pytest.mark.tmp
@@ -272,6 +273,7 @@ def test_multi_build_exclude(multi_build_exclude):
                 assert not os.path.exists(pkg)
             else:
                 assert os.path.exists(pkg)
+                ensure_missing(pkg)
 
 
 @pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
