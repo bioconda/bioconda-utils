@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 def check_branch():
     branch = utils.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], mask=False).stdout
     if branch != "bulk":
-        logger.error("bulk-run-ci has to be executed on a checkout of the bulk branch")
+        logger.error("bulk-trigger-ci has to be executed on a checkout of the bulk branch")
         exit(1)
 
 
