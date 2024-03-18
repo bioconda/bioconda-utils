@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.12.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.11.1...v2.12.0) (2024-03-18)
+
+
+### Features
+
+* add support for excluding otherwise-selected recipes ([#962](https://www.github.com/bioconda/bioconda-utils/issues/962)) ([3946732](https://www.github.com/bioconda/bioconda-utils/commit/3946732eb6129f6905e53b62d76287e09d4bef36))
+* bioconductor improvements ([#944](https://www.github.com/bioconda/bioconda-utils/issues/944)) ([b007d34](https://www.github.com/bioconda/bioconda-utils/commit/b007d34e6c723f7f9d6fcb5a6f58e072d4618cdf))
+* Bulk build failure wiki ([#948](https://www.github.com/bioconda/bioconda-utils/issues/948)) ([18f988d](https://www.github.com/bioconda/bioconda-utils/commit/18f988d70966f6f6296170d96cc1ced51ad10392))
+
+
+### Bug Fixes
+
+* Do not emit cython_needs_compiler if compiler("cxx") is set ([#927](https://www.github.com/bioconda/bioconda-utils/issues/927)) ([8255afd](https://www.github.com/bioconda/bioconda-utils/commit/8255afdd9e5c0fd3cb09cb11269f5ff3397c959e))
+
 ### [2.11.1](https://www.github.com/bioconda/bioconda-utils/compare/v2.11.0...v2.11.1) (2023-12-13)
 
 
