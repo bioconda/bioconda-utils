@@ -300,7 +300,9 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
                   mulled_conda_image: str = pkg_test.MULLED_CONDA_IMAGE,
                   record_build_failures: bool = False,
                   skiplist_leafs: bool = False,
-                  live_logs: bool = True):
+                  live_logs: bool = True,
+                  exclude: List[str] = None,
+                  ):
     """
     Build one or many bioconda packages.
 
@@ -329,6 +331,8 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
       keep_old_work: Do not remove anything from environment, even after successful build and test.
       skiplist_leafs: If True, blacklist leaf packages that fail to build
       live_logs: If True, enable live logging during the build process
+      exclude: list of recipes to exclude. Typically used for
+        temporary exclusion; otherwise consider adding recipe to skiplist.
     """
     if not recipes:
         logger.info("Nothing to be done.")
@@ -358,6 +362,10 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
     failed = []
 
     dag, name2recipes = graph.build(recipes, config=config_path, blacklist=blacklist)
+    if exclude:
+        for name in exclude:
+            dag.remove_node(name)
+
     if not dag:
         logger.info("Nothing to be done.")
         return True

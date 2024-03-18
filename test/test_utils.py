@@ -156,6 +156,37 @@ def multi_build(request, recipes_fixture, config_fixture):
             ensure_missing(pkg)
 
 
+@pytest.fixture(scope='module', params=PARAMS, ids=IDS)
+def multi_build_exclude(request, recipes_fixture, config_fixture):
+    """
+    Builds the "one" and "two" recipes; provides (but then excludes) the
+    "three" recipe.
+    """
+    if request.param:
+        docker_builder = docker_utils.RecipeBuilder(
+            use_host_conda_bld=True,
+            docker_base_image=DOCKER_BASE_IMAGE)
+        mulled_test = True
+    else:
+        docker_builder = None
+        mulled_test = False
+    logger.error("Fixture: Building one/two (and not three) %s",
+                 "within docker" if docker_builder else "locally")
+    build.build_recipes(recipes_fixture.basedir, config_fixture,
+                        recipes_fixture.recipe_dirnames,
+                        docker_builder=docker_builder,
+                        mulled_test=mulled_test,
+                        exclude=['three'],
+                        )
+    logger.error("Fixture: Building one/two (and not three) %s -- DONE",
+                 "within docker" if docker_builder else "locally")
+    built_packages = recipes_fixture.pkgs
+    yield built_packages
+    for pkgs in built_packages.values():
+        for pkg in pkgs:
+            ensure_missing(pkg)
+
+
 @pytest.fixture(scope='module')
 def single_upload():
     """
@@ -216,6 +247,7 @@ def test_upload(single_upload):
 def test_single_build_only(single_build):
     for pkg in single_build:
         assert os.path.exists(pkg)
+        ensure_missing(pkg)
 
 
 @pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
@@ -229,6 +261,18 @@ def test_multi_build(multi_build):
     for v in multi_build.values():
         for pkg in v:
             assert os.path.exists(pkg)
+            ensure_missing(pkg)
+
+
+@pytest.mark.long_running_1
+def test_multi_build_exclude(multi_build_exclude):
+    for (k, v) in multi_build_exclude.items():
+        for pkg in v:
+            if k == 'three':
+                assert not os.path.exists(pkg)
+            else:
+                assert os.path.exists(pkg)
+                ensure_missing(pkg)
 
 
 @pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
@@ -268,6 +312,7 @@ def test_docker_builder_build(recipes_fixture):
                                 build_args='', env={})
     for pkg in pkgs:
         assert os.path.exists(pkg)
+        ensure_missing(pkg)
 
 
 @pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')

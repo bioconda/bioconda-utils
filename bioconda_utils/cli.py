@@ -435,6 +435,7 @@ from environment, even after successful build and test.''')
 @arg("--record-build-failures", action="store_true", help="Record build failures in build_failure.yaml next to the recipe.")
 @arg("--skiplist-leafs", action="store_true", help="Skiplist leaf recipes (i.e. ones that are not depended on by any other recipes) that fail to build.")
 @arg('--disable-live-logs', action='store_true', help="Disable live logging during the build process")
+@arg('--exclude', nargs='+', help='Packages to exclude during this run')
 @enable_logging()
 def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
           force=False, docker=None, mulled_test=False, build_script_template=None,
@@ -445,7 +446,8 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
           docker_base_image=None,
           record_build_failures=False,
           skiplist_leafs=False,
-          disable_live_logs=False):
+          disable_live_logs=False,
+          exclude=None):
     cfg = utils.load_config(config)
     setup = cfg.get('setup', None)
     if setup:
@@ -506,7 +508,9 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
                             mulled_conda_image=mulled_conda_image,
                             record_build_failures=record_build_failures,
                             skiplist_leafs=skiplist_leafs,
-                            live_logs=(not disable_live_logs))
+                            live_logs=(not disable_live_logs),
+                            exclude=exclude,
+                            )
     exit(0 if success else 1)
 
 
