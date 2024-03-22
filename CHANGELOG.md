@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.13.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.12.0...v2.13.0) (2024-03-22)
+
+
+### Features
+
+* add osx-arm64 to platform checks ([#965](https://www.github.com/bioconda/bioconda-utils/issues/965)) ([9f6df10](https://www.github.com/bioconda/bioconda-utils/commit/9f6df10bfecd048956acc80e7bb3d57952585529))
+
 ## [2.12.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.11.1...v2.12.0) (2024-03-18)
 
 ### Features
