@@ -962,7 +962,7 @@ def test_native_platform_skipping():
         two:
           meta.yaml: |
             package:
-              name: one
+              name: two
               version: "0.1"
             extra:
               additional-platforms:
@@ -970,7 +970,7 @@ def test_native_platform_skipping():
         three:
           meta.yaml: |
             package:
-              name: one
+              name: three
               version: "0.1"
             extra:
               additional-platforms:
@@ -978,7 +978,7 @@ def test_native_platform_skipping():
         four:
           meta.yaml: |
             package:
-              name: one
+              name: four
               version: "0.1"
             extra:
               additional-platforms:
