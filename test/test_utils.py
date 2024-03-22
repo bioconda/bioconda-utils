@@ -939,14 +939,18 @@ def test_native_platform_skipping():
         # Don't skip linux-x86 for any recipes
         ["one", "linux", False],
         ["two", "linux", False],
-        # Skip recipe without linux aarch64 enabled on linux-aarch64 platform
+        ["three", "linux", False],
+        ["four", "linux", False],
+        # Skip recipes without linux aarch64 enable on linux-aarch64 platform
         ["one", "linux-aarch64", True],
-        # Don't skip recipe with linux aarch64 enabled on linux-aarch64 platform
+        ["three", "linux-aarch64", True],
+        # Don't skip recipes with linux aarch64 enable on linux-aarch64 platform
         ["two", "linux-aarch64", False],
-        # Skip recipe without osx-arm64 enabled on osx-arm64 platform
+        ["four", "linux-aarch64", False],
         ["one", "osx-arm64", True],
-        # Don't skip recipe with osx-arm64 enabled on osx-arm64 platform
-        ["two", "osx-arm64", False],
+        ["two", "osx-arm64", True],
+        ["three", "osx-arm64", False],
+        ["four", "osx-arm64", False],
     ]
     r = Recipes(
         """
@@ -956,6 +960,22 @@ def test_native_platform_skipping():
               name: one
               version: "0.1"
         two:
+          meta.yaml: |
+            package:
+              name: one
+              version: "0.1"
+            extra:
+              additional-platforms:
+                - linux-aarch64
+        three:
+          meta.yaml: |
+            package:
+              name: one
+              version: "0.1"
+            extra:
+              additional-platforms:
+                - osx-arm64
+        four:
           meta.yaml: |
             package:
               name: one
