@@ -939,10 +939,14 @@ def test_native_platform_skipping():
         # Don't skip linux-x86 for any recipes
         ["one", "linux", False],
         ["two", "linux", False],
-        # Skip recipe without linux aarch64 enable on linux-aarch64 platform
+        # Skip recipe without linux aarch64 enabled on linux-aarch64 platform
         ["one", "linux-aarch64", True],
-        # Don't skip recipe with linux aarch64 enable on linux-aarch64 platform
+        # Don't skip recipe with linux aarch64 enabled on linux-aarch64 platform
         ["two", "linux-aarch64", False],
+        # Skip recipe without osx-arm64 enabled on osx-arm64 platform
+        ["one", "osx-arm64", True],
+        # Don't skip recipe with osx-arm64 enabled on osx-arm64 platform
+        ["two", "osx-arm64", False],
     ]
     r = Recipes(
         """
@@ -959,6 +963,7 @@ def test_native_platform_skipping():
             extra:
               additional-platforms:
                 - linux-aarch64
+                - osx-arm64
         """, from_string=True)
     r.write_recipes()
     # Make sure RepoData singleton init

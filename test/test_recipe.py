@@ -264,6 +264,29 @@ def test_recipe_extra_additional_platforms(recipe):
     recipe.meta_yaml += [
         'extra:',
         '  additional-platforms:',
+        '    - linux-aarch64',
+        '    - osx-arm64'
+    ]
+    recipe.render()
+    assert recipe.extra_additional_platforms == ["linux-aarch64", "osx-arm64"]
+
+@with_recipes
+def test_recipe_extra_additional_platform_osx(recipe):
+    assert recipe.extra_additional_platforms == []
+    recipe.meta_yaml += [
+        'extra:',
+        '  additional-platforms:',
+        '    - osx-arm64'
+    ]
+    recipe.render()
+    assert recipe.extra_additional_platforms == ["osx-arm64"]
+
+@with_recipes
+def test_recipe_extra_additional_platform_linux(recipe):
+    assert recipe.extra_additional_platforms == []
+    recipe.meta_yaml += [
+        'extra:',
+        '  additional-platforms:',
         '    - linux-aarch64'
     ]
     recipe.render()
