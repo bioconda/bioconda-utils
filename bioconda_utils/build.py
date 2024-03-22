@@ -277,9 +277,12 @@ def do_not_consider_for_additional_platform(recipe_folder: str, recipe: str, pla
       Return True if current native platform are not included in recipe's additional platforms (no need to build).
     """
     recipe_obj = _recipe.Recipe.from_file(recipe_folder, recipe)
-    # On linux-aarch64 env, only build recipe with linux-aarch64 extra_additional_platforms
+    # On linux-aarch64 or osx-arm64 env, only build recipe with matching extra_additional_platforms
     if platform == "linux-aarch64":
         if "linux-aarch64" not in recipe_obj.extra_additional_platforms:
+            return True
+    if platform == "osx-arm64":
+        if "osx-arm64" not in recipe_obj.extra_additional_platforms:
             return True
     return False
 
