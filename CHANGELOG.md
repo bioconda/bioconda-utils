@@ -9,6 +9,7 @@
 
 ## [2.12.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.11.1...v2.12.0) (2024-03-18)
 
+
 ### Features
 
 * add support for excluding otherwise-selected recipes ([#962](https://www.github.com/bioconda/bioconda-utils/issues/962)) ([3946732](https://www.github.com/bioconda/bioconda-utils/commit/3946732eb6129f6905e53b62d76287e09d4bef36))
