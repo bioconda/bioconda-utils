@@ -40,6 +40,7 @@ def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_targe
         logger.info("No artifacts found.")
         return False
     else:
+        success = []
         for artifact in artifacts:
             with tempfile.TemporaryDirectory() as tmpdir:
                 # download the artifact
@@ -67,7 +68,7 @@ def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_targe
                         else:
                             logger.info(f"Uploading {pkg} to anaconda.org.")
                             # upload the package
-                            anaconda_upload(pkg, label=label)
+                            success.append(anaconda_upload(pkg, label=label))
 
                 if mulled_upload_target:
                     quay_login = os.environ['QUAY_LOGIN']
@@ -90,8 +91,8 @@ def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_targe
                         else:
                             # upload the image
                             logger.info(f"Uploading {img} to {target}.")
-                            skopeo_upload(fixed_img_name, target, creds=quay_login)
-        return True
+                            success.append(skopeo_upload(fixed_img_name, target, creds=quay_login))
+        return all(success)
 
 
 @backoff.on_exception(
