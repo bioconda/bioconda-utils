@@ -28,7 +28,7 @@ class UploadResult(Enum):
     NO_PR = 4
 
 
-def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_target=None, label=None, artifact_source="azure") -> UplaodResult:
+def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_target=None, label=None, artifact_source="azure") -> UploadResult:
     _config = utils.load_config(config)
     repodata = utils.RepoData()
 
