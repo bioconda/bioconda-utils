@@ -1,0 +1,9 @@
+ARG base
+FROM "${base}"
+RUN . /usr/local/env-activate.sh && \
+    ls -lA /usr/local/conda-meta/*.json && \
+    bioconda-bot --help && \
+    bioconda-bot comment --help && \
+    bioconda-bot merge --help && \
+    bioconda-bot update --help && \
+    bioconda-bot change --help
