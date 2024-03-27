@@ -12,8 +12,8 @@ import logging
 
 from . import utils
 
-import conda_build.api
 from conda_build.metadata import MetaData
+from conda_index.index import update_index
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +130,7 @@ def test_package(
 
     conda_bld_dir = os.path.abspath(os.path.dirname(os.path.dirname(path)))
 
-    conda_build.api.update_index([conda_bld_dir])
+    update_index(conda_bld_dir)
 
     spec = get_image_name(path)
 
