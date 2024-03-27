@@ -6,7 +6,7 @@ import shutil
 import tempfile
 from copy import deepcopy
 
-from ruamel_yaml import YAML
+from ruamel.yaml import YAML
 import pandas as pd
 import pytest
 import py

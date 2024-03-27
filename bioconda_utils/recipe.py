@@ -28,14 +28,9 @@ from boa.cli.mambabuild import prepare as insert_mambabuild
 
 import jinja2
 
-try:
-    from ruamel.yaml import YAML
-    from ruamel.yaml.constructor import DuplicateKeyError
-    from ruamel.yaml.error import YAMLError
-except ModuleNotFoundError:
-    from ruamel_yaml import YAML
-    from ruamel_yaml.constructor import DuplicateKeyError
-    from ruamel_yaml.error import YAMLError
+from ruamel.yaml import YAML
+from ruamel.yaml.constructor import DuplicateKeyError
+from ruamel.yaml.error import YAMLError
 
 from . import utils
 from .aiopipe import EndProcessingItem
