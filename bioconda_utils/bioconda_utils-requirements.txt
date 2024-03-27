@@ -40,7 +40,7 @@ aiohttp-jinja2                # jinja2 renderer for aiohttp.web
 aiohttp-session               #
 aiohttp-security              #
 aiofiles=23.*                 # async open
-aioftp=0.22.*                 # FTP lib
+aioftp=0.21.*                 # FTP lib
 backoff=2.2.*                 # retrying of failed API calls
 cachetools=5.3.*              # request caching (NEEDED?)
 
