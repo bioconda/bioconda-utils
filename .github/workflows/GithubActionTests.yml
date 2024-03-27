@@ -29,7 +29,7 @@ jobs:
           wget https://raw.githubusercontent.com/bioconda/bioconda-common/master/{common,install-and-set-up-conda,configure-conda}.sh
           bash install-and-set-up-conda.sh
           eval "$(conda shell.bash hook)"
-          mamba create -n bioconda -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
+          conda create -n bioconda -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
           conda activate bioconda
           python setup.py install
 
@@ -66,7 +66,7 @@ jobs:
           wget https://raw.githubusercontent.com/bioconda/bioconda-common/master/{common,install-and-set-up-conda,configure-conda}.sh
           bash install-and-set-up-conda.sh
           eval "$(conda shell.bash hook)"
-          mamba create -n bioconda -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
+          conda create -n bioconda -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
           conda activate bioconda
           python setup.py install
 
@@ -94,7 +94,7 @@ jobs:
           wget https://raw.githubusercontent.com/bioconda/bioconda-common/master/{common,install-and-set-up-conda,configure-conda}.sh
           bash install-and-set-up-conda.sh
           eval "$(conda shell.bash hook)"
-          mamba create -n bioconda -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
+          conda create -n bioconda -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
           conda activate bioconda
           python setup.py install
 
