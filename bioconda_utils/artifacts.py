@@ -1,5 +1,6 @@
 
 
+from enum import Enum
 import glob
 import os
 import re
@@ -20,7 +21,14 @@ logger = logging.getLogger(__name__)
 IMAGE_RE = re.compile(r"(.+)(?::|%3A)(.+)\.tar\.gz$")
 
 
-def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_target=None, label=None, artifact_source="azure") -> bool:
+class UploadResult(Enum):
+    SUCCESS = 1
+    FAILURE = 2
+    NO_ARTIFACTS = 3
+    NO_PR = 4
+
+
+def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_target=None, label=None, artifact_source="azure") -> UploadResult:
     _config = utils.load_config(config)
     repodata = utils.RepoData()
 
@@ -32,14 +40,15 @@ def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_targe
     prs = commit.get_pulls()
     if not prs:
         # no PR found for the commit
-        return True
+        return UploadResult.NO_PR
     pr = prs[0]
     artifacts = set(fetch_artifacts(pr, artifact_source))
     if not artifacts:
         # no artifacts found, fail and rebuild packages
         logger.info("No artifacts found.")
-        return False
+        return UploadResult.NO_ARTIFACTS
     else:
+        success = []
         for artifact in artifacts:
             with tempfile.TemporaryDirectory() as tmpdir:
                 # download the artifact
@@ -67,7 +76,7 @@ def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_targe
                         else:
                             logger.info(f"Uploading {pkg} to anaconda.org.")
                             # upload the package
-                            anaconda_upload(pkg, label=label)
+                            success.append(anaconda_upload(pkg, label=label))
 
                 if mulled_upload_target:
                     quay_login = os.environ['QUAY_LOGIN']
@@ -90,8 +99,11 @@ def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_targe
                         else:
                             # upload the image
                             logger.info(f"Uploading {img} to {target}.")
-                            skopeo_upload(fixed_img_name, target, creds=quay_login)
-        return True
+                            success.append(skopeo_upload(fixed_img_name, target, creds=quay_login))
+        if all(success):
+            return UploadResult.SUCCESS
+        else:
+            return UploadResult.FAILURE
 
 
 @backoff.on_exception(
