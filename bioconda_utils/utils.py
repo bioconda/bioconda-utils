@@ -34,7 +34,7 @@ import requests
 from yaspin import yaspin, Spinner
 from yaspin.spinners import Spinners
 from urllib3 import Retry
-import appdirs
+import platformdirs
 import diskcache
 
 from github import Github
@@ -66,7 +66,7 @@ from boltons.funcutils import FunctionBuilder
 
 logger = logging.getLogger(__name__)
 
-disk_cache = diskcache.Cache(appdirs.user_cache_dir("bioconda-utils"))
+disk_cache = diskcache.Cache(platformdirs.user_cache_dir("bioconda-utils"))
 
 
 class TqdmHandler(logging.StreamHandler):
@@ -120,7 +120,7 @@ def ensure_list(obj):
     return [obj]
 
 
-def wraps(func):
+def wraps(func, hide_wrapped=False):
     """Custom wraps() function for decorators
 
     This one differs from functiools.wraps and boltons.funcutils.wraps in
@@ -148,7 +148,10 @@ def wraps(func):
         fb.body = 'return _call(%s)' % fb.get_invocation_str()
         execdict = dict(_call=wrapper_func, _func=func)
         fully_wrapped = fb.get_func(execdict)
-        fully_wrapped.__wrapped__ = func
+        if not hide_wrapped:
+            fully_wrapped.__wrapped__ = func
+        elif hasattr(fully_wrapped, '__wrapped__'):
+            del fully_wrapped.__dict__['__wrapped__']
         return fully_wrapped
 
     return wrapper_wrapper
