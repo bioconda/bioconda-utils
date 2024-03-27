@@ -26,7 +26,7 @@ pyopenssl>=22.1      # Stay compatible with cryptography
 conda-forge-pinning=2023.05.06.13.08.41
 
 # tools
-anaconda-client=1.6.*  # anaconda_upload
+anaconda-client=1.12.*  # anaconda_upload
 involucro=1.1.*        # mulled test and container build
 skopeo=1.11.*          # docker upload
 git=2.*                # well - git
