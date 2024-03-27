@@ -17,7 +17,7 @@ from conda.exports import UnsatisfiableError
 from conda_build.exceptions import DependencyNeedsBuildingError
 import networkx as nx
 import pandas
-from ruamel_yaml import YAML
+from ruamel.yaml import YAML
 
 from . import utils
 from . import docker_utils

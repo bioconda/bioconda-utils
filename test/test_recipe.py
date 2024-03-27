@@ -3,7 +3,7 @@ import os
 
 import pytest
 
-from ruamel_yaml import YAML
+from ruamel.yaml import YAML
 yaml = YAML(typ="rt")  # pylint: disable=invalid-name
 
 from bioconda_utils.recipe import (
