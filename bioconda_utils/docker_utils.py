@@ -97,7 +97,7 @@ set -eo pipefail
 mkdir -p {self.container_staging}/linux-64
 mkdir -p {self.container_staging}/linux-aarch64
 mkdir -p {self.container_staging}/noarch
-touch {self.container_staging}/noarch/repodata.json
+conda index {self.container_staging}
 conda config --add channels file://{self.container_staging} 2> >(
     grep -vF "Warning: 'file://{self.container_staging}' already in 'channels' list, moving to the top" >&2
 )
