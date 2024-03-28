@@ -1,5 +1,19 @@
 # Changelog
 
+### [2.13.2](https://www.github.com/bioconda/bioconda-utils/compare/v2.13.1...v2.13.2) (2024-03-27)
+
+
+### Bug Fixes
+
+* update anaconda-client=1.12 to fix uploads ([#970](https://www.github.com/bioconda/bioconda-utils/issues/970)) ([06dcacc](https://www.github.com/bioconda/bioconda-utils/commit/06dcacca60c17c1a97770e14ae6348ac7acbe9a6))
+
+### [2.13.1](https://www.github.com/bioconda/bioconda-utils/compare/v2.13.0...v2.13.1) (2024-03-27)
+
+
+### Bug Fixes
+
+* detect errors when uploading artifacts ([#968](https://www.github.com/bioconda/bioconda-utils/issues/968)) ([d0a79cd](https://www.github.com/bioconda/bioconda-utils/commit/d0a79cdd5aeed30c4da88e2135329d66b336832f))
+
 ## [2.13.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.12.0...v2.13.0) (2024-03-22)
 
 

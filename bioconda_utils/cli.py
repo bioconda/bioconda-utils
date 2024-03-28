@@ -9,7 +9,7 @@ Bioconda Utils Command Line Interface
 import warnings
 from bioconda_utils import bulk
 
-from bioconda_utils.artifacts import upload_pr_artifacts
+from bioconda_utils.artifacts import UploadResult, upload_pr_artifacts
 from bioconda_utils.skiplist import Skiplist
 from bioconda_utils.build_failure import BuildFailureRecord, collect_build_failure_dataframe
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
@@ -538,10 +538,12 @@ def handle_merged_pr(
 ):
     label = os.getenv('BIOCONDA_LABEL', None) or None
 
-    success = upload_pr_artifacts(
-        config, repo, git_range[1], dryrun=dryrun, mulled_upload_target=quay_upload_target, label=label, artifact_source=artifact_source
+    res = upload_pr_artifacts(
+        config, repo, git_range[1], dryrun=dryrun,
+        mulled_upload_target=quay_upload_target, label=label,
+        artifact_source=artifact_source
     )
-    if not success and fallback == 'build':
+    if res == UploadResult.NO_ARTIFACTS and fallback == 'build':
         success = build(
             recipe_folder,
             config,
@@ -551,6 +553,8 @@ def handle_merged_pr(
             mulled_test=True,
             label=label,
         )
+    else:
+        success = res != UploadResult.FAILURE
     exit(0 if success else 1)
 
 @recipe_folder_and_config()
