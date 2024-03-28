@@ -6,7 +6,7 @@ import shutil
 import tempfile
 from copy import deepcopy
 
-from ruamel_yaml import YAML
+from ruamel.yaml import YAML
 import pandas as pd
 import pytest
 import py
@@ -65,22 +65,25 @@ def mock_repodata(repodata, case):
     else:
         data = repodata
 
-    dataframe = pd.DataFrame(columns=utils.RepoData.columns)
-    for channel, packages in data.items():
-        for name, versions in packages.items():
-            for item in versions:
-                pkg = {
-                    'channel': channel,
-                    'name': name,
-                    'build': '',
-                    'build_number': 0,
-                    'version': 0,
-                    'depends': [],
-                    'subdir': '',
-                    'platform': 'noarch',
-                }
-                pkg.update(item)
-                dataframe = dataframe.append(pkg, ignore_index=True)
+    dataframe = pd.DataFrame(
+        (
+            {
+                'channel': channel,
+                'name': name,
+                'build': '',
+                'build_number': 0,
+                'version': 0,
+                'depends': [],
+                'subdir': '',
+                'platform': 'noarch',
+                **item,
+            }
+            for channel, packages in data.items()
+            for name, versions in packages.items()
+            for item in versions
+        ),
+        columns=utils.RepoData.columns,
+    )
 
     backup = utils.RepoData()._df, utils.RepoData()._df_ts
     utils.RepoData()._df = dataframe

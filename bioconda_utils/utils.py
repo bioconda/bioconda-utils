@@ -34,7 +34,7 @@ import requests
 from yaspin import yaspin, Spinner
 from yaspin.spinners import Spinners
 from urllib3 import Retry
-import appdirs
+import platformdirs
 import diskcache
 
 from github import Github
@@ -57,7 +57,6 @@ conda.gateways.logging.initialize_logging = lambda: None
 from conda_build import api
 from conda.exports import VersionOrder
 from conda.exports import subdir as conda_subdir
-from boa.cli.mambabuild import prepare as insert_mambabuild
 
 from jsonschema import validate
 from colorlog import ColoredFormatter
@@ -66,7 +65,7 @@ from boltons.funcutils import FunctionBuilder
 
 logger = logging.getLogger(__name__)
 
-disk_cache = diskcache.Cache(appdirs.user_cache_dir("bioconda-utils"))
+disk_cache = diskcache.Cache(platformdirs.user_cache_dir("bioconda-utils"))
 
 
 class TqdmHandler(logging.StreamHandler):
@@ -120,7 +119,7 @@ def ensure_list(obj):
     return [obj]
 
 
-def wraps(func):
+def wraps(func, hide_wrapped=False):
     """Custom wraps() function for decorators
 
     This one differs from functiools.wraps and boltons.funcutils.wraps in
@@ -148,7 +147,10 @@ def wraps(func):
         fb.body = 'return _call(%s)' % fb.get_invocation_str()
         execdict = dict(_call=wrapper_func, _func=func)
         fully_wrapped = fb.get_func(execdict)
-        fully_wrapped.__wrapped__ = func
+        if not hide_wrapped:
+            fully_wrapped.__wrapped__ = func
+        elif hasattr(fully_wrapped, '__wrapped__'):
+            del fully_wrapped.__dict__['__wrapped__']
         return fully_wrapped
 
     return wrapper_wrapper
@@ -433,8 +435,6 @@ def load_all_meta(recipe, config=None, finalize=True):
         via conda and also download of those packages (to inspect possible
         run_exports). For fast-running tasks like linting, set to False.
     """
-    insert_mambabuild()
-
     if config is None:
         config = load_conda_build_config()
     # `bypass_env_check=True` prevents evaluating (=environment solving) the

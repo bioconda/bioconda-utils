@@ -19,7 +19,7 @@ from conda.exports import UnsatisfiableError
 from conda_build.exceptions import DependencyNeedsBuildingError
 import networkx as nx
 import pandas
-from ruamel_yaml import YAML
+from ruamel.yaml import YAML
 
 from . import utils
 from . import docker_utils
@@ -149,7 +149,7 @@ def build(recipe: str, pkg_paths: List[str] = None,
                         "cannot be found", pkg_path)
                     return BuildResult(False, None)
         else:
-            conda_build_cmd = [utils.bin_for('conda'), 'mambabuild']
+            conda_build_cmd = [utils.bin_for('conda-build')]
             # - Temporarily reset os.environ to avoid leaking env vars
             # - Also pass filtered env to run()
             # - Point conda-build to meta.yaml, to avoid building subdirs
