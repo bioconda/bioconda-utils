@@ -219,13 +219,16 @@ def get_circleci_artifacts(check_run, platform):
                             yield artifact_url
 
 def parse_gha_build_id(url: str) -> str:
+    # Get workflow run id from URL
     return re.search("runs/(\d+)/", url).group(1)
 
 def get_gha_artifacts(check_run, platform, repo):
     gha_workflow_id = parse_gha_build_id(check_run.details_url)
     if (gha_workflow_id) :
+        # The workflow run is different from the check run
         run = repo.get_workflow_run(int(gha_workflow_id))
         artifacts = run.get_artifacts()
         for artifact in artifacts:
+            # This URL is valid for 1 min and requires a token
             artifact_url = artifact.archive_download_url
             yield artifact_url
