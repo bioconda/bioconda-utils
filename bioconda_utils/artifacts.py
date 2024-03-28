@@ -106,12 +106,13 @@ def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_targe
 )
 def download_artifact(url, to_path, artifact_source):
     logger.info(f"Downloading artifact {url}.")
+    headers = {}
     if artifact_source == "github-actions":
         token = os.environ.get("GITHUB_TOKEN")
         if not token:
             logger.critical("GITHUB_TOKEN required to download GitHub Actions artifacts")
             exit(1)
-    headers = {"Authorization": f"token {token}"}
+        headers = {"Authorization": f"token {token}"}
     resp = requests.get(url, stream=True, allow_redirects=True, headers=headers)
     resp.raise_for_status()
     with open(to_path, "wb") as f:
