@@ -34,7 +34,7 @@ def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_targe
         # no PR found for the commit
         return True
     pr = prs[0]
-    artifacts = set(fetch_artifacts(pr, artifact_source))
+    artifacts = set(fetch_artifacts(pr, artifact_source, repo))
     if not artifacts:
         # no artifacts found, fail and rebuild packages
         logger.info("No artifacts found.")
@@ -45,13 +45,19 @@ def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_targe
                 # download the artifact
                 if artifact_source == "azure":
                     artifact_path = os.path.join(tmpdir, os.path.basename(artifact))
-                    download_artifact(artifact, artifact_path)
+                    download_artifact(artifact, artifact_path, artifact_source)
                     zipfile.ZipFile(artifact_path).extractall(tmpdir)
                 elif artifact_source == "circleci":
                     artifact_dir = os.path.join(tmpdir, *(artifact.split("/")[-4:-1]))
                     artifact_path = os.path.join(tmpdir, artifact_dir, os.path.basename(artifact))
-                    Path(artifact_dir).mkdir(parents=True, exist_ok=True) 
-                    download_artifact(artifact, artifact_path)
+                    Path(artifact_dir).mkdir(parents=True, exist_ok=True)
+                    download_artifact(artifact, artifact_path, artifact_source)
+                elif artifact_source == "github-actions":
+                    artifact_dir = os.path.join(tmpdir, "artifacts")
+                    artifact_path = os.path.join(artifact_dir, os.path.basename(artifact))
+                    Path(artifact_dir).mkdir(parents=True, exist_ok=True)
+                    download_artifact(artifact, artifact_path, artifact_source)
+                    zipfile.ZipFile(artifact_path).extractall(artifact_dir)
 
                 # get all the contained packages and images and upload them
                 platform_patterns = [repodata.platform2subdir(repodata.native_platform())]
@@ -98,9 +104,15 @@ def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_targe
     backoff.expo,
     requests.exceptions.RequestException
 )
-def download_artifact(url, to_path):
+def download_artifact(url, to_path, artifact_source):
     logger.info(f"Downloading artifact {url}.")
-    resp = requests.get(url, stream=True, allow_redirects=True)
+    if artifact_source == "github-actions":
+        token = os.environ.get("GITHUB_TOKEN")
+        if not token:
+            logger.critical("GITHUB_TOKEN required to download GitHub Actions artifacts")
+            exit(1)
+    headers = {"Authorization": f"token {token}"}
+    resp = requests.get(url, stream=True, allow_redirects=True, headers=headers)
     resp.raise_for_status()
     with open(to_path, "wb") as f:
         for chunk in resp.iter_content(chunk_size=1024):
@@ -108,7 +120,7 @@ def download_artifact(url, to_path):
                 f.write(chunk)
 
 
-def fetch_artifacts(pr, artifact_source):
+def fetch_artifacts(pr, artifact_source, repo):
     """
     Fetch artifacts from a PR.
 
@@ -142,6 +154,13 @@ def fetch_artifacts(pr, artifact_source):
         ):
             # Circle CI builds
             artifact_url = get_circleci_artifacts(check_run, platform)
+            yield from artifact_url
+        elif (
+            artifact_source == "github-actions" and
+            check_run.app.slug == "github-actions"
+        ):
+            # GitHubActions builds
+            artifact_url = get_gha_artifacts(check_run, platform, repo)
             yield from artifact_url
 
 
@@ -185,3 +204,15 @@ def get_circleci_artifacts(check_run, platform):
                             continue
                         else:
                             yield artifact_url
+
+def parse_gha_build_id(url: str) -> str:
+    return re.search("runs/(\d+)/", url).group(1)
+
+def get_gha_artifacts(check_run, platform, repo):
+    gha_workflow_id = parse_gha_build_id(check_run.details_url)
+    if (gha_workflow_id) :
+        run = repo.get_workflow_run(int(gha_workflow_id))
+        artifacts = run.get_artifacts()
+        for artifact in artifacts:
+            artifact_url = artifact.archive_download_url
+            yield artifact_url
