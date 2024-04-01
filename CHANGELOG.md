@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.14.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.13.2...v2.14.0) (2024-04-01)
+
+
+### Features
+
+* fetch artifacts from GitHub Actions ([#973](https://www.github.com/bioconda/bioconda-utils/issues/973)) ([858e1cf](https://www.github.com/bioconda/bioconda-utils/commit/858e1cfdd4435aca16c9978df5463db845ff9fe3))
+* update deployment target for osx-arm64 ([#967](https://www.github.com/bioconda/bioconda-utils/issues/967)) ([a7c591e](https://www.github.com/bioconda/bioconda-utils/commit/a7c591ea51fdf3308a0075951e8f5efee783c8d1))
+
 ### [2.13.2](https://www.github.com/bioconda/bioconda-utils/compare/v2.13.1...v2.13.2) (2024-03-27)
 
 
