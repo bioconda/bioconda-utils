@@ -524,7 +524,7 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
 @arg('--dryrun', action='store_true', help='''Do not actually upload anything.''')
 @arg('--fallback', choices=['build', 'ignore'], default='build', help="What to do if no artifacts are found in the PR.")
 @arg('--quay-upload-target', help="Provide a quay.io target to push docker images to.")
-@arg('--artifact-source', choices=['azure', 'circleci'], default='azure', help="Application hosting build artifacts (e.g., Azure or Circle CI).")
+@arg('--artifact-source', choices=['azure', 'circleci','github-actions'], default='azure', help="Application hosting build artifacts (e.g., Azure, Circle CI, or GitHub Actions).")
 @enable_logging()
 def handle_merged_pr(
     recipe_folder,
