@@ -9,7 +9,7 @@ Bioconda Utils Command Line Interface
 import warnings
 from bioconda_utils import bulk
 
-from bioconda_utils.artifacts import upload_pr_artifacts
+from bioconda_utils.artifacts import UploadResult, upload_pr_artifacts
 from bioconda_utils.skiplist import Skiplist
 from bioconda_utils.build_failure import BuildFailureRecord, collect_build_failure_dataframe
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
@@ -524,7 +524,7 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
 @arg('--dryrun', action='store_true', help='''Do not actually upload anything.''')
 @arg('--fallback', choices=['build', 'ignore'], default='build', help="What to do if no artifacts are found in the PR.")
 @arg('--quay-upload-target', help="Provide a quay.io target to push docker images to.")
-@arg('--artifact-source', choices=['azure', 'circleci'], default='azure', help="Application hosting build artifacts (e.g., Azure or Circle CI).")
+@arg('--artifact-source', choices=['azure', 'circleci','github-actions'], default='azure', help="Application hosting build artifacts (e.g., Azure, Circle CI, or GitHub Actions).")
 @enable_logging()
 def handle_merged_pr(
     recipe_folder,
@@ -538,10 +538,12 @@ def handle_merged_pr(
 ):
     label = os.getenv('BIOCONDA_LABEL', None) or None
 
-    success = upload_pr_artifacts(
-        config, repo, git_range[1], dryrun=dryrun, mulled_upload_target=quay_upload_target, label=label, artifact_source=artifact_source
+    res = upload_pr_artifacts(
+        config, repo, git_range[1], dryrun=dryrun,
+        mulled_upload_target=quay_upload_target, label=label,
+        artifact_source=artifact_source
     )
-    if not success and fallback == 'build':
+    if res == UploadResult.NO_ARTIFACTS and fallback == 'build':
         success = build(
             recipe_folder,
             config,
@@ -551,6 +553,8 @@ def handle_merged_pr(
             mulled_test=True,
             label=label,
         )
+    else:
+        success = res != UploadResult.FAILURE
     exit(0 if success else 1)
 
 @recipe_folder_and_config()
