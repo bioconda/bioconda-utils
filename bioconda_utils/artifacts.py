@@ -38,7 +38,7 @@ def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_targe
 
     commit = repo.get_commit(git_sha)
     prs = commit.get_pulls()
-    if not prs:
+    if not prs or prs.totalCount < 1:
         # no PR found for the commit
         return UploadResult.NO_PR
     pr = prs[0]
