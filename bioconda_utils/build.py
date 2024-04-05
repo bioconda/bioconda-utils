@@ -228,7 +228,7 @@ def remove_cycles(dag, name2recipes, failed, skip_dependent):
     return dag.subgraph(name for name in dag if name not in nodes_in_cycles)
 
 
-def get_subdags(dag, n_workers, worker_offset, subdag_depth = 0):
+def get_subdags(dag, n_workers, worker_offset, subdag_depth):
     if n_workers > 1 and worker_offset >= n_workers:
         raise ValueError(
             "n-workers is less than the worker-offset given! "
