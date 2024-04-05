@@ -436,6 +436,7 @@ from environment, even after successful build and test.''')
 @arg("--skiplist-leafs", action="store_true", help="Skiplist leaf recipes (i.e. ones that are not depended on by any other recipes) that fail to build.")
 @arg('--disable-live-logs', action='store_true', help="Disable live logging during the build process")
 @arg('--exclude', nargs='+', help='Packages to exclude during this run')
+@arg('--subdag-depth', type=int, help="Number of levels of root nodes to skip. (Optional, and only if using n_workers)")
 @enable_logging()
 def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
           force=False, docker=None, mulled_test=False, build_script_template=None,
@@ -447,7 +448,8 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
           record_build_failures=False,
           skiplist_leafs=False,
           disable_live_logs=False,
-          exclude=None):
+          exclude=None,
+          subdag_depth=None):
     cfg = utils.load_config(config)
     setup = cfg.get('setup', None)
     if setup:
@@ -510,6 +512,7 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
                             skiplist_leafs=skiplist_leafs,
                             live_logs=(not disable_live_logs),
                             exclude=exclude,
+                            subdag_depth=subdag_depth
                             )
     exit(0 if success else 1)
 
