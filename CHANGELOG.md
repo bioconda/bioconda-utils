@@ -1,5 +1,12 @@
 # Changelog
 
+### [2.14.1](https://www.github.com/bioconda/bioconda-utils/compare/v2.14.0...v2.14.1) (2024-04-05)
+
+
+### Bug Fixes
+
+* handle PR list with no items ([#975](https://www.github.com/bioconda/bioconda-utils/issues/975)) ([869577a](https://www.github.com/bioconda/bioconda-utils/commit/869577a76933c2d7bcf386c1179ef454bdc18543))
+
 ## [2.14.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.13.2...v2.14.0) (2024-04-01)
 
 
