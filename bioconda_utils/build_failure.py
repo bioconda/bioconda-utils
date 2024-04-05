@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 from typing import Optional, Union
 import subprocess as sp
@@ -12,6 +13,8 @@ import conda.exports
 import conda.base.constants
 import pandas as pd
 import networkx as nx
+
+from .githandler import BiocondaRepo
 
 from bioconda_utils.recipe import Recipe
 from bioconda_utils import graph, utils
@@ -35,6 +38,8 @@ class BuildFailureRecord:
         self.platform = platform
 
         def load(path):
+            if os.path.getsize(path) == 0:
+                raise IOError("Unable to read build failure record {path}: empty file")
             with open(path, "r") as f:
                 yaml=YAML()
                 try:
@@ -86,20 +91,26 @@ class BuildFailureRecord:
         with open(self.path, "w") as f:
             yaml=YAML()
             commented_map = CommentedMap()
-            commented_map.insert(0, "recipe_sha", self.recipe_sha, comment="The commit at which this recipe failed to build.")
+            commented_map.insert(0, "recipe_sha", self.recipe_sha, comment="The hash of the recipe's meta.yaml at which this recipe failed to build.")
             commented_map.insert(1, "skiplist", self.skiplist, comment="Set to true to skiplist this recipe so that it will be ignored as long as its latest commit is the one given above.")
             i = 2
-            if self.log:
+
+            _log = self.inner.get("log", "")
+            if _log:
                 commented_map.insert(
                     i,
                     "log", 
                     # remove invalid chars and keep only the last 100 lines
-                    LiteralScalarString("\n".join(utils.yaml_remove_invalid_chars(self.log).splitlines()[-100:])),
+                    LiteralScalarString("\n".join(utils.yaml_remove_invalid_chars(_log).splitlines()[-100:])),
                     comment="Last 100 lines of the build log."
                 )
                 i += 1
             if self.reason:
                 commented_map.insert(i, "reason", LiteralScalarString(self.reason))
+                i += 1
+            if self.category:
+                commented_map.insert(i, "category", LiteralScalarString(self.category))
+                i += 1
             yaml.dump(commented_map, f)
 
     def remove(self):
@@ -179,7 +190,7 @@ class BuildFailureRecord:
         self.inner["category"] = value
 
 
-def collect_build_failure_dataframe(recipe_folder, config, channel, link_fmt="txt", link_prefix=""):
+def collect_build_failure_dataframe(recipe_folder, config, channel, link_fmt="txt", link_prefix="", git_range=None):
     def get_build_failure_records(recipe):
         return filter(
             BuildFailureRecord.exists, 
@@ -190,6 +201,21 @@ def collect_build_failure_dataframe(recipe_folder, config, channel, link_fmt="tx
         return any(get_build_failure_records(recipe))
     
     recipes = list(utils.get_recipes(recipe_folder))
+
+    if git_range:
+        if not git_range or len(git_range) > 2:
+            sys.exit("--git-range may have only one or two arguments")
+        other = git_range[0]
+        ref = "HEAD" if len(git_range) == 1 else git_range[1]
+        repo = BiocondaRepo(recipe_folder)
+        changed_recipes = repo.get_recipes_to_build(ref, other)
+        logger.info("Constraining to %s git modified recipes%s.", len(changed_recipes),
+                    utils.ellipsize_recipes(changed_recipes, recipe_folder))
+        recipes = [recipe for recipe in recipes if recipe in set(changed_recipes)]
+        if len(recipes) != len(changed_recipes):
+            logger.info("Overlap was %s recipes%s.", len(recipes),
+                        utils.ellipsize_recipes(recipes, recipe_folder))
+
     dag, _ = graph.build(recipes, config)
 
     def get_data():
@@ -214,10 +240,11 @@ def collect_build_failure_dataframe(recipe_folder, config, channel, link_fmt="tx
             recs = list(get_build_failure_records(recipe))
 
             failures = ", ".join(utils.format_link(rec.path, link_fmt, prefix=link_prefix, label=rec.platform) for rec in recs)
+            categories = ", ".join(rec.category for rec in recs)
             skiplisted = any(rec.skiplist for rec in recs)
             prs = utils.format_link(f"https://github.com/bioconda/bioconda-recipes/pulls?q=is%3Apr+is%3Aopen+{package}", link_fmt, label="show")
-            yield (recipe, downloads, descendants, skiplisted, failures, prs)
+            yield (recipe, downloads, descendants, skiplisted, categories, failures, prs)
 
-    data = pd.DataFrame(get_data(), columns=["recipe", "downloads", "depending", "skiplisted", "build failures", "pull requests"])
+    data = pd.DataFrame(get_data(), columns=["recipe", "downloads", "depending", "skiplisted", "category", "build failures", "pull requests"])
     data.sort_values(by=["depending", "downloads"], ascending=False, inplace=True)
     return data

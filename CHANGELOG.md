@@ -1,5 +1,48 @@
 # Changelog
 
+## [2.14.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.13.2...v2.14.0) (2024-04-01)
+
+
+### Features
+
+* fetch artifacts from GitHub Actions ([#973](https://www.github.com/bioconda/bioconda-utils/issues/973)) ([858e1cf](https://www.github.com/bioconda/bioconda-utils/commit/858e1cfdd4435aca16c9978df5463db845ff9fe3))
+* update deployment target for osx-arm64 ([#967](https://www.github.com/bioconda/bioconda-utils/issues/967)) ([a7c591e](https://www.github.com/bioconda/bioconda-utils/commit/a7c591ea51fdf3308a0075951e8f5efee783c8d1))
+
+### [2.13.2](https://www.github.com/bioconda/bioconda-utils/compare/v2.13.1...v2.13.2) (2024-03-27)
+
+
+### Bug Fixes
+
+* update anaconda-client=1.12 to fix uploads ([#970](https://www.github.com/bioconda/bioconda-utils/issues/970)) ([06dcacc](https://www.github.com/bioconda/bioconda-utils/commit/06dcacca60c17c1a97770e14ae6348ac7acbe9a6))
+
+### [2.13.1](https://www.github.com/bioconda/bioconda-utils/compare/v2.13.0...v2.13.1) (2024-03-27)
+
+
+### Bug Fixes
+
+* detect errors when uploading artifacts ([#968](https://www.github.com/bioconda/bioconda-utils/issues/968)) ([d0a79cd](https://www.github.com/bioconda/bioconda-utils/commit/d0a79cdd5aeed30c4da88e2135329d66b336832f))
+
+## [2.13.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.12.0...v2.13.0) (2024-03-22)
+
+
+### Features
+
+* add osx-arm64 to platform checks ([#965](https://www.github.com/bioconda/bioconda-utils/issues/965)) ([9f6df10](https://www.github.com/bioconda/bioconda-utils/commit/9f6df10bfecd048956acc80e7bb3d57952585529))
+
+## [2.12.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.11.1...v2.12.0) (2024-03-18)
+
+
+### Features
+
+* add support for excluding otherwise-selected recipes ([#962](https://www.github.com/bioconda/bioconda-utils/issues/962)) ([3946732](https://www.github.com/bioconda/bioconda-utils/commit/3946732eb6129f6905e53b62d76287e09d4bef36))
+* bioconductor improvements ([#944](https://www.github.com/bioconda/bioconda-utils/issues/944)) ([b007d34](https://www.github.com/bioconda/bioconda-utils/commit/b007d34e6c723f7f9d6fcb5a6f58e072d4618cdf))
+* Bulk build failure wiki ([#948](https://www.github.com/bioconda/bioconda-utils/issues/948)) ([18f988d](https://www.github.com/bioconda/bioconda-utils/commit/18f988d70966f6f6296170d96cc1ced51ad10392))
+
+
+### Bug Fixes
+
+* Do not emit cython_needs_compiler if compiler("cxx") is set ([#927](https://www.github.com/bioconda/bioconda-utils/issues/927)) ([8255afd](https://www.github.com/bioconda/bioconda-utils/commit/8255afdd9e5c0fd3cb09cb11269f5ff3397c959e))
+
 ### [2.11.1](https://www.github.com/bioconda/bioconda-utils/compare/v2.11.0...v2.11.1) (2023-12-13)
 
 

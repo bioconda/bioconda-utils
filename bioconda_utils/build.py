@@ -294,9 +294,12 @@ def do_not_consider_for_additional_platform(recipe_folder: str, recipe: str, pla
       Return True if current native platform are not included in recipe's additional platforms (no need to build).
     """
     recipe_obj = _recipe.Recipe.from_file(recipe_folder, recipe)
-    # On linux-aarch64 env, only build recipe with linux-aarch64 extra_additional_platforms
+    # On linux-aarch64 or osx-arm64 env, only build recipe with matching extra_additional_platforms
     if platform == "linux-aarch64":
         if "linux-aarch64" not in recipe_obj.extra_additional_platforms:
+            return True
+    if platform == "osx-arm64":
+        if "osx-arm64" not in recipe_obj.extra_additional_platforms:
             return True
     return False
 
@@ -318,7 +321,9 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
                   record_build_failures: bool = False,
                   skiplist_leafs: bool = False,
                   live_logs: bool = True,
-                  subdag_depth: int = None):
+                  exclude: List[str] = None,
+                  subdag_depth: int = None
+                  ):
     """
     Build one or many bioconda packages.
 
@@ -347,6 +352,8 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
       keep_old_work: Do not remove anything from environment, even after successful build and test.
       skiplist_leafs: If True, blacklist leaf packages that fail to build
       live_logs: If True, enable live logging during the build process
+      exclude: list of recipes to exclude. Typically used for
+        temporary exclusion; otherwise consider adding recipe to skiplist.
       subdag_depth: Number of levels of nodes to skip. (Optional, only if using n_workers)
     """
     if not recipes:
@@ -377,6 +384,10 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
     failed = []
 
     dag, name2recipes = graph.build(recipes, config=config_path, blacklist=blacklist)
+    if exclude:
+        for name in exclude:
+            dag.remove_node(name)
+
     if not dag:
         logger.info("Nothing to be done.")
         return True

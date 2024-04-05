@@ -1520,6 +1520,8 @@ class RepoData:
             return "linux-aarch64"
         if sys.platform.startswith("linux"):
             return "linux"
+        if sys.platform.startswith("darwin") and arch == "arm64":
+            return "osx-arm64"
         if sys.platform.startswith("darwin"):
             return "osx"
         raise ValueError("Running on unsupported platform")
@@ -1532,11 +1534,13 @@ class RepoData:
             return 'linux-aarch64'
         elif platform == 'osx':
             return 'osx-64'
+        elif platform == 'osx-arm64':
+            return 'osx-arm64'
         elif platform == 'noarch':
             return 'noarch'
         else:
             raise ValueError(
-                'Unsupported platform: bioconda only supports linux, linux-aarch64, osx and noarch.')
+                'Unsupported platform: bioconda only supports linux, linux-aarch64, osx, osx-arm64 and noarch.')
 
 
     def get_versions(self, name):
@@ -1645,4 +1649,6 @@ def yaml_remove_invalid_chars(text: str, valid_chars_re=re.compile(r"[^ \t\n\w\d
 def get_package_downloads(channel, package):
     """Use anaconda API to obtain download counts."""
     data = requests.get(f"https://api.anaconda.org/package/{channel}/{package}").json()
-    return sum(rec["ndownloads"] for rec in data["files"])
+    if "files" in data:
+        return sum(rec["ndownloads"] for rec in data["files"])
+    return 0

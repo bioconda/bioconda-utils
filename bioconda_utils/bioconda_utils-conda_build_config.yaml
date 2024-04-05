@@ -9,8 +9,9 @@
 # clear hard-coded default value for CONDA_BUILD_SYSROOT
 CONDA_BUILD_SYSROOT:
   - ""
-MACOSX_DEPLOYMENT_TARGET:
-  - "10.9"
+MACOSX_DEPLOYMENT_TARGET:      # [osx]
+  - 11.0                       # [osx and arm64]
+  - 10.9                       # [osx and x86_64]
 
 pin_run_as_build:
   htslib:
