@@ -51,7 +51,38 @@ jobs:
           fi
   test-macosx:
     name: OSX tests
-    runs-on: macos-latest
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: set path
+        run: echo "/opt/mambaforge/bin" >> $GITHUB_PATH
+
+      - name: Install bioconda-utils
+        run: |
+          export BIOCONDA_DISABLE_BUILD_PREP=1
+          wget https://raw.githubusercontent.com/bioconda/bioconda-common/master/{common,install-and-set-up-conda,configure-conda}.sh
+          bash install-and-set-up-conda.sh
+          eval "$(conda shell.bash hook)"
+          mamba create -n bioconda -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
+          conda activate bioconda
+          python setup.py install
+
+      - name: Run tests
+        run: |
+          eval "$(conda shell.bash hook)"
+          conda activate bioconda
+          if git diff --name-only origin/master...HEAD | grep -vE ^docs; then
+              py.test --durations=0 test/ -v --log-level=DEBUG -k "not docker" --tb=native
+          else
+              echo "Skipping pytest - only docs modified"
+          fi
+
+  test-macosx-arm64:
+    name: OSX-ARM64 tests
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
         with:
