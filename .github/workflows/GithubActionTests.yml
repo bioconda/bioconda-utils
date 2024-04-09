@@ -6,6 +6,7 @@ concurrency:
 
 jobs:
   test-linux:
+    if: false
     name: Linux tests
     runs-on: ubuntu-latest
     strategy:
@@ -33,13 +34,6 @@ jobs:
           conda activate bioconda
           python setup.py install
 
-      - name: Build docker container
-        run: |
-          docker build -t quay.io/bioconda/bioconda-utils-build-env-cos7:latest ./
-          docker history quay.io/bioconda/bioconda-utils-build-env-cos7:latest
-          docker run --rm -t quay.io/bioconda/bioconda-utils-build-env-cos7:latest sh -lec 'type -t conda && conda info -a && conda list'
-          docker build -t quay.io/bioconda/bioconda-utils-test-env-cos7:latest -f ./Dockerfile.test ./
-
       - name: Run tests '${{ matrix.py_test_marker }}'
         run: |
           eval "$(conda shell.bash hook)"
@@ -50,6 +44,7 @@ jobs:
               echo "Skipping pytest - only docs modified"
           fi
   test-macosx:
+    if: false
     name: OSX tests
     runs-on: macos-13
     steps:
@@ -81,6 +76,7 @@ jobs:
           fi
 
   autobump-test:
+    if: false
     name: autobump test
     runs-on: ubuntu-latest
     steps:

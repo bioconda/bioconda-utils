@@ -1,0 +1,124 @@
+#! /bin/bash -eux
+
+requirements_file="${1}"
+conda_install_prefix="${2}"
+
+# Install a bootstrap Miniconda installation.
+miniconda_boostrap_prefix="$( pwd )/miniconda"
+# Run the following in a subshell to avoid environment changes from bootstrap.
+(
+
+  # Use the base image-provided tools if they work for us:
+  tools=''
+  find -print0 -maxdepth 0 && xargs -0 true < /dev/null \
+    || tools="${tools} findutils"
+  sed -e '' < /dev/null \
+    || tools="${tools} sed"
+
+  sh ./miniconda.sh \
+    -b \
+    -p "${miniconda_boostrap_prefix}"
+
+  # Install the base Conda installation.
+  . "${miniconda_boostrap_prefix}/etc/profile.d/conda.sh"
+
+  # Install conda, mamba and some additional tools:
+  #  - tini: init program,
+  #  - binutils, findutils: tools to strip down image/environment size,
+
+  # Only need `strip` executable from binutils. Other binaries from the package
+  # and especially the "sysroot" dependency is only bloat for this container
+  # image. (NOTE: The binary needs libgcc-ng which is explicitly added later.)
+  mamba create --yes \
+    --prefix="${conda_install_prefix}" \
+    --channel=conda-forge \
+    binutils
+  cp -aL "${conda_install_prefix}/bin/strip" ./strip
+  conda run --prefix="${conda_install_prefix}" strip -- ./strip
+  mamba remove --yes --all \
+    --prefix="${conda_install_prefix}"
+
+  mamba create --yes \
+    --prefix="${conda_install_prefix}" \
+    --channel=conda-forge \
+    \
+    --file="${requirements_file}" \
+    \
+    tini \
+    \
+    libgcc-ng \
+    ${tools} \
+    ;
+
+  mv \
+    ./print-env-activate \
+    ./create-env \
+    ./strip \
+    "${conda_install_prefix}/bin/"
+)
+
+# Activate the new base environment.
+activate_script="$(
+  "${conda_install_prefix}/bin/conda" shell.posix activate base
+)"
+set +u
+eval "${activate_script}"
+set -u
+unset activate_script
+
+# Strip find/xargs/sed beforehand as they are excluded in the strip pipeline.
+for prog in find xargs sed ; do
+  case "$( command -v "${prog}" )" in
+    "${conda_install_prefix%%/}"/* )
+      strip -- "$( command -v "${prog}" )"
+  esac
+done
+
+# Use --conda=: to turn the `conda create` into a no-op, but do continue to
+# run strip, remove files and output the activate/execute scripts.
+CONDA_PKGS_DIRS="${miniconda_boostrap_prefix}/pkgs" \
+  create-env \
+    --conda=: \
+    --strip-files=\* \
+    --remove-paths=\*.a \
+    --remove-paths=\*.pyc \
+    --env-activate-args=--prefix-is-base \
+    "${conda_install_prefix}"
+
+# Remove bootstrap Miniconda files.
+rm -rf "${miniconda_boostrap_prefix}"
+
+# Add standard Bioconda config to root's Conda config.
+conda config \
+  --append channels conda-forge \
+  --append channels bioconda \
+  ;
+conda config \
+  --remove channels defaults \
+  2> /dev/null \
+  || true
+conda config \
+  --remove repodata_fns current_repodata.json \
+  2> /dev/null \
+  || true
+conda config \
+  --prepend repodata_fns repodata.json
+
+# Use `always_copy` to cut links to package cache.
+# (Which is esp. important if files are manipulated via --strip-files !)
+conda config \
+  --set always_copy true \
+  --set allow_softlinks false
+
+
+# Log information of the newly created Conda installation.
+# NB: Running conda after the .pyc removal will recreate some .pyc files.
+#     This is intentional as it speeds up conda startup time.
+conda list --name=base
+conda info --all
+mamba --version
+# Make sure we have the requested conda, mamba versions installed.
+conda list \
+  --export '^(conda|mamba)$' \
+  | sed -n 's/=[^=]*$//p' \
+  | diff "${requirements_file}" -

@@ -1,0 +1,68 @@
+# Build all container images.
+#
+# Most of the work is done in generic_build.bash, so see that file for details.
+
+name: Build images
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    paths-ignore:
+    - '.circleci/**'
+    - 'docs/**'
+    - 'test/**'
+
+env:
+  BIOCONDA_UTILS_VERSION: ${{ github.event.release && github.event.release.tag_name || github.head_ref || github.ref_name }}
+  tags: "0.1 latest"
+
+jobs:
+
+  build-image:
+    runs-on: ubuntu-20.04
+    steps:
+    - name: build
+      run: |
+        set -x
+        echo $BIOCONDA_UTILS_VERSION
+        echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
+        mkdir img
+        cd img
+        echo "FROM debian:12.1-slim" > Dockerfile
+
+        for tag in $tags; do
+          buildah manifest create "test:$tag"
+        done
+
+        for arch in amd64 arm64; do
+          buildah bud --arch $arch --file Dockerfile --iidfile=$arch.id
+          image_id="$(cat $arch.id)"
+          container="$( buildah from ${image_id} )"
+          buildah config --label=org.opencontainers.image.source=https://github.com/bioconda/bioconda-utils "${container}"
+          image_id="$( buildah commit "${container}" )"
+          buildah rm "${container}"
+
+          for tag in $tags; do
+            buildah tag "${image_id}" "test:$tag-$arch"
+            buildah manifest add "test:$tag" "${image_id}"
+          done
+
+        done
+
+        for tag in $tags; do
+          podman push "localhost/test:$tag" "ghcr.io/bioconda/test:$tag"
+        done
+
+
+  pull-image:
+    runs-on: ubuntu-20.04
+    needs: [build-image]
+    steps:
+    - name: pull
+      run: |
+        for tag in $tags; do
+          podman pull "ghcr.io/bioconda/test:$tag"
+          docker pull "ghcr.io/bioconda/test:$tag"
+        done
