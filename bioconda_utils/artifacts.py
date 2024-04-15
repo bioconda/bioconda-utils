@@ -214,7 +214,7 @@ def get_circleci_artifacts(check_run, platform):
                 else:
                     for artifact in json_job["items"]:
                         artifact_url = artifact["url"]
-                        if artifact_url.endswith(".html") or artifact_url.endswith(".json") or artifact_url.endswith(".json.bz2"):
+                        if artifact_url.endswith((".html", ".json", ".json.bz2", ".json.zst")):
                             continue
                         else:
                             yield artifact_url
