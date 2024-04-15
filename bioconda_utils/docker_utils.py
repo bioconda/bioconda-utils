@@ -94,10 +94,13 @@ set -eo pipefail
 # will exist in the container but will be empty.  Channels expect at least
 # a linux-64/linux-aarch64 and noarch directory within that directory, so we
 # make sure it exists before adding the channel.
-mkdir -p {self.container_staging}/linux-64
-mkdir -p {self.container_staging}/linux-aarch64
-mkdir -p {self.container_staging}/noarch
-conda index {self.container_staging}
+# Also ensure conda-build's local channel directory exists the same way.
+for local_channel in '/opt/conda/conda-bld' '{self.container_staging}'; do
+  mkdir -p "${{local_channel}}"/linux-64
+  mkdir -p "${{local_channel}}"/linux-aarch64
+  mkdir -p "${{local_channel}}"/noarch
+  conda index "${{local_channel}}"
+done
 conda config --add channels file://{self.container_staging} 2> >(
     grep -vF "Warning: 'file://{self.container_staging}' already in 'channels' list, moving to the top" >&2
 )
