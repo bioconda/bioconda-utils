@@ -74,15 +74,16 @@ def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_targe
                     platform_patterns.append("noarch")
 
                 for platform_pattern in platform_patterns:
-                    pattern = f"{tmpdir}/*/packages/{platform_pattern}/*.tar.bz2"
-                    logger.info(f"Checking for packages at {pattern}.")
-                    for pkg in glob.glob(pattern):
-                        if dryrun:
-                            logger.info(f"Would upload {pkg} to anaconda.org.")
-                        else:
-                            logger.info(f"Uploading {pkg} to anaconda.org.")
-                            # upload the package
-                            success.append(anaconda_upload(pkg, label=label))
+                    for ext in (".tar.bz2", ".conda"):
+                        pattern = f"{tmpdir}/*/packages/{platform_pattern}/*{ext}"
+                        logger.info(f"Checking for packages at {pattern}.")
+                        for pkg in glob.glob(pattern):
+                            if dryrun:
+                                logger.info(f"Would upload {pkg} to anaconda.org.")
+                            else:
+                                logger.info(f"Uploading {pkg} to anaconda.org.")
+                                # upload the package
+                                success.append(anaconda_upload(pkg, label=label))
 
                 if mulled_upload_target:
                     quay_login = os.environ['QUAY_LOGIN']

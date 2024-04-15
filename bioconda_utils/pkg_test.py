@@ -70,12 +70,17 @@ def get_image_name(path):
     ----------
 
     path : str
-        Path to .tar.by2 package build by conda-build
+        Path to .tar.bz2 or .conda package build by conda-build
 
     """
-    assert path.endswith('.tar.bz2')
+    if path.endswith(".tar.bz2"):
+        ext = ".tar.bz2"
+    elif path.endswith(".conda"):
+        ext = ".conda"
+    else:
+        raise ValueError()
 
-    pkg = os.path.basename(path).replace('.tar.bz2', '')
+    pkg = os.path.basename(path).removesuffix(ext)
     toks = pkg.split('-')
     build_string = toks[-1]
     version = toks[-2]
@@ -100,7 +105,7 @@ def test_package(
     Parameters
     ----------
     path : str
-        Path to a .tar.bz2 package built by conda-build
+        Path to a .tar.bz2 or .conda package built by conda-build
 
     name_override : str
         Passed as the --name-override argument to mulled-build
@@ -125,7 +130,7 @@ def test_package(
         If True, enable live logging during the build process
     """
 
-    assert path.endswith('.tar.bz2'), "Unrecognized path {0}".format(path)
+    assert path.endswith((".tar.bz2", ".conda")), "Unrecognized path {0}".format(path)
     # assert os.path.exists(path), '{0} does not exist'.format(path)
 
     conda_bld_dir = os.path.abspath(os.path.dirname(os.path.dirname(path)))

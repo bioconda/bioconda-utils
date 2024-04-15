@@ -31,6 +31,7 @@ anaconda-client=1.12.*        # anaconda_upload
 galaxy-tool-util=24.*         # mulled test and container build
 involucro=1.1.*               # mulled test and container build
 skopeo=1.15.*                 # docker upload
+findutils                     # find/xargs copy built packages from container
 git=2.*                       # well - git
 
 # hosters - special regex not supported by RE

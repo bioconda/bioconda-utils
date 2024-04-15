@@ -238,23 +238,25 @@ def duplicates(config,
         check_fields += ['build']
 
     def remove_package(spec):
-        fn = '{}-{}-{}.tar.bz2'.format(*spec)
-        name, version = spec[:2]
-        subcmd = [
-            'remove', '-f',
-            '{channel}/{name}/{version}/{fn}'.format(
-                name=name, version=version, fn=fn, channel=our_channel
-            )
-        ]
-        if dryrun:
-            logger.info(" ".join([utils.bin_for('anaconda')] + subcmd))
-        else:
-            token = os.environ.get('ANACONDA_TOKEN')
-            if token is None:
-                token = []
+        for ext in (".tar.bz2", ".conda"):
+            name, version = spec[:2]
+            dist = '{}-{}-{}'.format(*spec)
+            fn = f"{dist}{ext}"
+            subcmd = [
+                'remove', '-f',
+                '{channel}/{name}/{version}/{fn}'.format(
+                    name=name, version=version, fn=fn, channel=our_channel
+                )
+            ]
+            if dryrun:
+                logger.info(" ".join([utils.bin_for('anaconda')] + subcmd))
             else:
-                token = ['-t', token]
-            logger.info(utils.run([utils.bin_for('anaconda')] + token + subcmd, mask=[token]).stdout)
+                token = os.environ.get('ANACONDA_TOKEN')
+                if token is None:
+                    token = []
+                else:
+                    token = ['-t', token]
+                logger.info(utils.run([utils.bin_for('anaconda')] + token + subcmd, mask=[token]).stdout)
 
     # packages in our channel
     repodata = utils.RepoData()
