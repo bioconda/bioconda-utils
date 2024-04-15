@@ -24,7 +24,6 @@ from typing import Any, Dict, List, Sequence, Tuple, Optional, Pattern
 
 import conda_build.api
 from conda_build.metadata import MetaData
-from boa.cli.mambabuild import prepare as insert_mambabuild
 
 import jinja2
 
@@ -769,8 +768,6 @@ class Recipe():
             def new_exit(args=None):
                 raise SystemExit(args)
             sys.exit = new_exit
-
-        insert_mambabuild()
 
         try:
             with open("/dev/null", "w") as devnull:
