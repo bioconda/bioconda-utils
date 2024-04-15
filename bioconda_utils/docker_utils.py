@@ -111,7 +111,9 @@ conda config --add channels file://{self.container_staging} 2> >(
 conda-build -c file://{self.container_staging} {self.conda_build_args} {self.container_recipe}/meta.yaml 2>&1
 
 # copy all built packages to the staging area
-find /opt/conda/conda-bld -type f \( -name '*.tar.bz2' -o -name '*.conda' \) -print0 |
+find /opt/conda/conda-bld \
+  -name src_cache -prune -o \
+  -type f \( -name '*.tar.bz2' -o -name '*.conda' \) -print0 |
   xargs -0 -- cp -t '{self.container_staging}/{arch}' --
 #While technically better, this is slower and more prone to breaking
 #cp `conda-build {self.conda_build_args} {self.container_recipe}/meta.yaml --output | grep -e '\.tar\.bz2$' -e '\.conda$')` {self.container_staging}/{arch}
