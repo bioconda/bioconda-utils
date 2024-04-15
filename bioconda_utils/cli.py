@@ -56,7 +56,7 @@ def enable_logging(default_loglevel='info', default_file_loglevel='debug'):
         @arg('--logfile', help="Write log to file")
         @arg('--logfile-level', help="Log level for log file")
         @arg('--log-command-max-lines', help="Limit lines emitted for commands executed")
-        @utils.wraps(func)
+        @utils.wraps(func, hide_wrapped=True)
         def wrapper(*args, loglevel=default_loglevel, logfile=None,
                     logfile_level=default_file_loglevel,
                     log_command_max_lines=None, **kwargs):
@@ -125,7 +125,7 @@ def recipe_folder_and_config(allow_missing_for=None):
                                  for field in allow_missing_for or []]
         except ValueError:
             sys.exit(f"Function {func} must have 'recipe_folder' and 'config' args")
-        @arg('recipe_folder', nargs='?',
+        @arg('recipe-folder', nargs='?',
              help='Path to folder containing recipes (default: recipes/)')
         @arg('config', nargs='?',
              help='Path to Bioconda config (default: config.yml)')
@@ -763,7 +763,7 @@ def dependent(recipe_folder, config, restrict=False,
      is specified, then all packages in a given bioconductor release will be
      created/updated (--force is then implied).''')
 @recipe_folder_and_config()
-@arg('bioc_data_packages', nargs='?',
+@arg('bioc-data-packages', nargs='?',
      help='''Path to folder containing the recipe for the bioconductor-data-packages
      (default: recipes/bioconductor-data-packages)''')
 @arg('--versioned', action='store_true', help='''If specified, recipe will be
@@ -854,8 +854,6 @@ def clean_cran_skeleton(recipe, no_windows=False):
     cran_skeleton.clean_skeleton_files(recipe, no_windows=no_windows)
 
 
-@arg('recipe_folder', help='Path to recipes directory')
-@arg('config', help='Path to yaml file specifying the configuration')
 @recipe_folder_and_config()
 @arg('--packages', nargs="+",
      help='Glob(s) for package[s] to scan. Can be specified more than once')

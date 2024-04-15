@@ -105,7 +105,6 @@ from typing import Any, Dict, List, NamedTuple, Set, Tuple
 
 import pandas as pd
 from bioconda_utils.skiplist import Skiplist
-import ruamel_yaml as yaml
 import networkx as nx
 
 from .. import utils
