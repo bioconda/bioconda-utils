@@ -29,8 +29,9 @@ jobs:
           wget https://raw.githubusercontent.com/bioconda/bioconda-common/master/{common,install-and-set-up-conda,configure-conda}.sh
           bash install-and-set-up-conda.sh
           eval "$(conda shell.bash hook)"
-          conda create -n bioconda -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
+          conda create -n bioconda --quiet --yes --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
           conda activate bioconda
+          conda list
           python setup.py install
 
       - name: Build docker container
@@ -66,7 +67,8 @@ jobs:
           wget https://raw.githubusercontent.com/bioconda/bioconda-common/master/{common,install-and-set-up-conda,configure-conda}.sh
           bash install-and-set-up-conda.sh
           eval "$(conda shell.bash hook)"
-          conda create -n bioconda -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
+          conda create -n bioconda --quiet --yes --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
+          conda list
           conda activate bioconda
           python setup.py install
 
@@ -94,8 +96,9 @@ jobs:
           wget https://raw.githubusercontent.com/bioconda/bioconda-common/master/{common,install-and-set-up-conda,configure-conda}.sh
           bash install-and-set-up-conda.sh
           eval "$(conda shell.bash hook)"
-          conda create -n bioconda -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
+          conda create -n bioconda --quiet --yes --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
           conda activate bioconda
+          conda list
           python setup.py install
 
       - name: Test autobump
