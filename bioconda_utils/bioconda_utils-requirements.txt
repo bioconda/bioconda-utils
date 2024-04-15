@@ -20,15 +20,15 @@ tqdm=4.66.*                   # Progress monitor
 yaspin=2.*                    #
 ruamel.yaml=0.18.*            # Recipe YAML parsing
 pyaml=23.12.*                 # Faster YAML parser (deprecate?)
-networkx=3.2.*                #
+networkx=3.3.*                # (networkx>3.3 needs python>=3.10)
 pandas=2.2.*                  #
 libblas=*=*openblas           # Avoid large mkl package (pulled in by pandas)
-boltons=23.*                  #
+boltons=24.0.*                #
 jsonschema=4.21.*             # JSON schema verification
 jinja2=3.1.*                  #
 
 anaconda-client=1.12.*        # anaconda_upload
-galaxy-tool-util=23.*         # mulled test and container build
+galaxy-tool-util=24.*         # mulled test and container build
 involucro=1.1.*               # mulled test and container build
 skopeo=1.15.*                 # docker upload
 git=2.*                       # well - git
@@ -42,7 +42,7 @@ aiohttp-jinja2                # jinja2 renderer for aiohttp.web
 aiohttp-session               #
 aiohttp-security              #
 aiofiles=23.*                 # async open
-aioftp=0.21.*                 # FTP lib
+aioftp=0.22.*                 # FTP lib
 backoff=2.2.*                 # retrying of failed API calls
 cachetools=5.3.*              # request caching (NEEDED?)
 
