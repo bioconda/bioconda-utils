@@ -83,7 +83,7 @@ logger = logging.getLogger(__name__)
 # filled in here.
 #
 BUILD_SCRIPT_TEMPLATE = \
-"""
+r"""
 #!/bin/bash
 set -eo pipefail
 
@@ -111,9 +111,12 @@ conda config --add channels file://{self.container_staging} 2> >(
 conda-build -c file://{self.container_staging} {self.conda_build_args} {self.container_recipe}/meta.yaml 2>&1
 
 # copy all built packages to the staging area
-cp /opt/conda/conda-bld/*/*.tar.bz2 {self.container_staging}/{arch}
+find /opt/conda/conda-bld \
+  -name src_cache -prune -o \
+  -type f \( -name '*.tar.bz2' -o -name '*.conda' \) -print0 |
+  xargs -0 -- cp -t '{self.container_staging}/{arch}' --
 #While technically better, this is slower and more prone to breaking
-#cp `conda-build {self.conda_build_args} {self.container_recipe}/meta.yaml --output | grep tar.bz2` {self.container_staging}/{arch}
+#cp `conda-build {self.conda_build_args} {self.container_recipe}/meta.yaml --output | grep -e '\.tar\.bz2$' -e '\.conda$')` {self.container_staging}/{arch}
 conda index {self.container_staging}
 # Ensure permissions are correct on the host.
 HOST_USER={self.user_info[uid]}
