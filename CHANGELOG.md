@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.15.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.14.0...v2.15.0) (2024-05-03)
+
+
+### Features
+
+* Add support for .conda format ([#981](https://www.github.com/bioconda/bioconda-utils/issues/981)) ([125c9ea](https://www.github.com/bioconda/bioconda-utils/commit/125c9ea5e362b7e5e63dfcbfae995fa3eeb58ce8))
+* choose worker recipes by depth level ([#950](https://www.github.com/bioconda/bioconda-utils/issues/950)) ([4c51ae3](https://www.github.com/bioconda/bioconda-utils/commit/4c51ae31158b0154cf3ed381c4a3ad8b9bff7f14))
+* Update dependencies to latest versions ([#972](https://www.github.com/bioconda/bioconda-utils/issues/972)) ([dc6ca07](https://www.github.com/bioconda/bioconda-utils/commit/dc6ca07a977dfbf7cbc2d25f884dc0333d611116))
+* Use conda/conda-build instead of mamba/conda-mambabuild ([#980](https://www.github.com/bioconda/bioconda-utils/issues/980)) ([17cbc7f](https://www.github.com/bioconda/bioconda-utils/commit/17cbc7fb411864c7c22ff33b40682c0f43e016cc))
+
+
+### Bug Fixes
+
+* handle PR list with no items ([#975](https://www.github.com/bioconda/bioconda-utils/issues/975)) ([869577a](https://www.github.com/bioconda/bioconda-utils/commit/869577a76933c2d7bcf386c1179ef454bdc18543))
+* Ignore src_cache for container-built packages ([125c9ea](https://www.github.com/bioconda/bioconda-utils/commit/125c9ea5e362b7e5e63dfcbfae995fa3eeb58ce8))
+* Ignore Zstandard-packed repodata artifact ([125c9ea](https://www.github.com/bioconda/bioconda-utils/commit/125c9ea5e362b7e5e63dfcbfae995fa3eeb58ce8))
+* use circleci api v1.1 to avoid login error ([#982](https://www.github.com/bioconda/bioconda-utils/issues/982)) ([ebafe92](https://www.github.com/bioconda/bioconda-utils/commit/ebafe92ae01dc4a573e861764a4e837bd1321af3))
+
 ## [2.14.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.13.2...v2.14.0) (2024-04-01)
 
 
