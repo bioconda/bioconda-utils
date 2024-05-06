@@ -14,6 +14,7 @@ from . import utils
 
 from conda_build.metadata import MetaData
 from conda_index.index import update_index
+from conda_package_streaming.package_streaming import stream_conda_info
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +24,9 @@ MULLED_CONDA_IMAGE = "quay.io/bioconda/create-env:latest"
 def get_tests(path):
     "Extract tests from a built package"
     tmp = tempfile.mkdtemp()
-    t = tarfile.open(path)
-    t.extractall(tmp)
+    for tar, member in stream_conda_info(path):
+        if member.name.startswith("info/recipe/"):
+            tar.extract(member, tmp)
     input_dir = os.path.join(tmp, 'info', 'recipe')
 
     tests = [
