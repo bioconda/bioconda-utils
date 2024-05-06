@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import subprocess as sp
 import pytest
@@ -10,9 +11,10 @@ import contextlib
 import tarfile
 import logging
 import shutil
+from pathlib import Path
 from textwrap import dedent
 
-from conda_build import metadata
+from conda_build import api, metadata
 
 from bioconda_utils import __version__
 from bioconda_utils import utils
@@ -1246,3 +1248,73 @@ def test_skip_unsatisfiable_pin_compatible(config_fixture):
     )
     assert build_result
     assert len(utils.load_all_meta(r.recipe_dirs["two"])) == 1
+
+
+@pytest.mark.parametrize('mulled_test', PARAMS, ids=IDS)
+@pytest.mark.parametrize('pkg_format', ["1", "2"])
+def test_pkg_test_conda_package_format(
+    config_fixture, pkg_format, mulled_test, tmp_path, monkeypatch
+):
+    """
+    Running a mulled-build test with .tar.bz2/.conda package formats
+    """
+    # ("1" is .tar.bz2 and "2" is .conda)
+    try:
+        from conda_build.conda_interface import cc_conda_build
+    except ImportError:
+        pass
+    else:
+        monkeypatch.setitem(cc_conda_build, "pkg_format", pkg_format)
+    from conda.base.context import context
+    monkeypatch.setitem(context.conda_build, "pkg_format", pkg_format)
+    condarc = Path(tmp_path, ".condarc")
+    condarc.write_text(f"conda_build:\n  pkg_format: {pkg_format}\n")
+    monkeypatch.setenv("CONDARC", str(condarc))
+    monkeypatch.setattr(utils, "ENV_VAR_WHITELIST", ["CONDARC", *utils.ENV_VAR_WHITELIST])
+
+    r = Recipes(
+        f"""
+        one:
+          meta.yaml: |
+            package:
+              name: one
+              version: 1.1
+            build:
+              script:
+               - touch "${{PREFIX}}/one-file"
+            test:
+              commands:
+                - test -f "${{PREFIX}}/one-file"
+        """,
+        from_string=True,
+    )
+    r.write_recipes()
+    docker_builder = None
+    if mulled_test:
+        # Override conda_build.pkg_format in build_script_template.
+        build_script_template = re.sub(
+            "^(conda config.*)",
+            f"conda config --set conda_build.pkg_format {pkg_format}\n\\1",
+            docker_utils.BUILD_SCRIPT_TEMPLATE,
+            count=1,
+            flags=re.M,
+        )
+        docker_builder = docker_utils.RecipeBuilder(
+            use_host_conda_bld=True,
+            docker_base_image=DOCKER_BASE_IMAGE,
+            build_script_template=build_script_template,
+        )
+    build_result = build.build_recipes(
+        r.basedir,
+        config_fixture,
+        r.recipe_dirnames,
+        docker_builder=docker_builder,
+        mulled_test=mulled_test,
+    )
+    assert build_result
+
+    for recipe_dir in r.recipe_dirnames:
+        for pkg_file in utils.built_package_paths(recipe_dir):
+            assert pkg_file.endswith({"1": ".tar.bz2", "2": ".conda"}[pkg_format])
+            assert os.path.exists(pkg_file)
+            ensure_missing(pkg_file)
