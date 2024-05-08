@@ -1,5 +1,12 @@
 # Changelog
 
+### [2.15.1](https://www.github.com/bioconda/bioconda-utils/compare/v2.15.0...v2.15.1) (2024-05-08)
+
+
+### Bug Fixes
+
+* test_package for .tar.bz2 and .conda ([#983](https://www.github.com/bioconda/bioconda-utils/issues/983)) ([c683290](https://www.github.com/bioconda/bioconda-utils/commit/c683290319d4f148644972b6caf626be6d1c6c99))
+
 ## [2.15.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.14.0...v2.15.0) (2024-05-03)
 
 
