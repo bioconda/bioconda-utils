@@ -55,7 +55,7 @@ numpy:
   - 1.21.*
 
 channel_sources:
-  - conda-forge,bioconda,defaults
+  - conda-forge,bioconda
 
 channel_targets:
   - bioconda main

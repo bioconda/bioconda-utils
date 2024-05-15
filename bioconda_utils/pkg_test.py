@@ -95,7 +95,7 @@ def get_image_name(path):
 def test_package(
     path,
     name_override=None,
-    channels=("conda-forge", "local", "bioconda", "defaults"),
+    channels=("conda-forge", "local", "bioconda"),
     mulled_args="",
     base_image=None,
     conda_image=MULLED_CONDA_IMAGE,
