@@ -68,13 +68,3 @@ platformdirs=4.*              #
 
 # build failure output
 tabulate=0.9.*                #
-
-# TODO: Remove these from general requirements into a doc-only-requirements file.
-# docs
-sphinx>=4.1
-celery
-sphinx-autodoc-typehints
-alabaster=0.7.*
-docutils
-markdown
-graphviz
