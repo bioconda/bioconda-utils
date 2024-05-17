@@ -15,7 +15,7 @@ from bioconda_utils import utils
 
 
 config = {
-    'channels': ['conda-forge', 'bioconda', 'defaults']
+    'channels': ['conda-forge', 'bioconda']
 }
 
 
@@ -78,7 +78,7 @@ def test_bioc_write_recipe_no_skipping(tmpdir, bioc_fetch):
 @pytest.mark.skip(reason="Does not work since new bioconductor release?")
 def test_meta_contents(tmpdir, bioc_fetch):
     config = {
-        'channels': ['conda-forge', 'bioconda', 'defaults']
+        'channels': ['conda-forge', 'bioconda']
     }
     bioconductor_skeleton.write_recipe(
         'edgeR', recipe_dir=str(tmpdir), config=config, recursive=False, packages=bioc_fetch)
