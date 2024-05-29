@@ -20,15 +20,6 @@ MACOSX_DEPLOYMENT_TARGET:      # [osx]
   - 11.0                       # [osx and arm64]
   - 10.13                      # [osx and x86_64]
 
-pin_run_as_build:
-  htslib:
-    max_pin: x.x
-  bamtools:
-    max_pin: x.x.x
-  r-base:
-    max_pin: x.x
-    min_pin: x.x
-
 bamtools:
   - "2.5.1"
 
