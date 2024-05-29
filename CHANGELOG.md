@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.0.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.15.1...v3.0.0) (2024-05-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* Separate docs-only requirements (#986)
+* Remove defaults channel dependency (#985)
+
+### Miscellaneous Chores
+
+* Remove defaults channel dependency ([#985](https://www.github.com/bioconda/bioconda-utils/issues/985)) ([eb043dc](https://www.github.com/bioconda/bioconda-utils/commit/eb043dc2649bcdf63c11f19993660b58ec215cb7))
+* Separate docs-only requirements ([#986](https://www.github.com/bioconda/bioconda-utils/issues/986)) ([09d108e](https://www.github.com/bioconda/bioconda-utils/commit/09d108e796cb4fce317c475b7d26bbaea124619c))
+
 ### [2.15.1](https://www.github.com/bioconda/bioconda-utils/compare/v2.15.0...v2.15.1) (2024-05-08)
 
 
