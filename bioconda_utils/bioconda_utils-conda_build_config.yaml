@@ -28,13 +28,6 @@ bamtools:
 r_base:
   - "4.3.*"
 
-# Note: this is a (hopefully) temporary fix for the r-base 4.3 migration. That package was built 
-# with libxml2 2.11, but that migration on conda-forge isn't yet complete. Consequently conda-forge-pinning
-# still has libxml2 2.10. That means that there are a number of R and Bioconductor packages we can't currently
-# build without manually changing out libxml2 pinning.
-libxml2:
-  - "2.11.*"
-
 python:
   - 3.10.*  *_cpython
   - 3.9.*  *_cpython
