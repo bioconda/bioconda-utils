@@ -21,7 +21,7 @@ MACOSX_DEPLOYMENT_TARGET:      # [osx]
   - 10.13                      # [osx and x86_64]
 
 bamtools:
-  - "2.5.1"
+  - "2.5.2"
 
 # NOTE: Workaround https://github.com/conda/conda-build/issues/3974 we slightly alter the values
 #       from conda-forge-pinnings here (inserting '.*' or ' ' which should be ignored later on).
