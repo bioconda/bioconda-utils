@@ -7,9 +7,9 @@ conda-forge-pinning=2023.05.06.13.08.41
 
 # basics
 python=3.10.*
-conda=24.3.*
+conda=24.5.*
 conda-libmamba-solver=24.1.*
-conda-build=24.3.*
+conda-build=24.5.*
 conda-index=0.4.*
 conda-package-streaming=0.9.*
 mamba=1.5.*
@@ -20,12 +20,12 @@ colorlog=6.*                  # Logging
 tqdm=4.66.*                   # Progress monitor
 yaspin=2.*                    #
 ruamel.yaml=0.18.*            # Recipe YAML parsing
-pyaml=23.12.*                 # Faster YAML parser (deprecate?)
+pyaml=24.04.*                 # Faster YAML parser (deprecate?)
 networkx=3.3.*                # (networkx>3.3 needs python>=3.10)
 pandas=2.2.*                  #
 libblas=*=*openblas           # Avoid large mkl package (pulled in by pandas)
 boltons=24.0.*                #
-jsonschema=4.21.*             # JSON schema verification
+jsonschema=4.22.*             # JSON schema verification
 jinja2=3.1.*                  #
 
 anaconda-client=1.12.*        # anaconda_upload
@@ -36,7 +36,7 @@ findutils                     # find/xargs copy built packages from container
 git=2.*                       # well - git
 
 # hosters - special regex not supported by RE
-regex=2023.*                  #
+regex=2024.*                  #
 
 # asyncio
 aiohttp=3.9.*                 # HTTP lib
@@ -57,7 +57,7 @@ pyjwt>=2.4.0                  # githubhandler (JWT signing), needs >=2.4.0, CVE-
 beautifulsoup4=4.*            #
 
 # The bioconductor skeleton needs this
-requests=2.31.*               #
+requests=2.32.*               #
 
 # merge handling
 pygithub                      #
