@@ -3,7 +3,7 @@
 # so please keep that documentation up to date as they change
 
 # pinnings
-conda-forge-pinning=2023.05.06.13.08.41
+conda-forge-pinning=2024.05.28.17.08.08
 
 # basics
 python=3.10.*
