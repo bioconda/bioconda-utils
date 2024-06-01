@@ -105,6 +105,9 @@ conda config --add channels file://{self.container_staging} 2> >(
     grep -vF "Warning: 'file://{self.container_staging}' already in 'channels' list, moving to the top" >&2
 )
 
+# Pass on conda_pkg_format ("2" for .conda instead of .tar.bz2) from host's conda-build config.
+test -n '{self.conda_pkg_format}' && conda config --set conda_build.pkg_format '{self.conda_pkg_format}'
+
 # The actual building...
 # we explicitly point to the meta.yaml, in order to keep
 # conda-build from building all subdirectories
@@ -153,18 +156,6 @@ class DockerCalledProcessError(sp.CalledProcessError):
 class DockerBuildError(Exception):
     pass
 
-
-
-def get_host_conda_bld():
-    """
-    Identifies the conda-bld directory on the host.
-
-    Assumes that conda-build is installed.
-    """
-    # v0.16.2: this used to have a side effect, calling conda build purge
-    # hopefully, it's not actually needed.
-    build_conf = utils.load_conda_build_config()
-    return build_conf.build_folder
 
 
 class RecipeBuilder(object):
@@ -286,7 +277,11 @@ class RecipeBuilder(object):
         self.container_recipe = container_recipe
         self.container_staging = container_staging
 
-        self.host_conda_bld = get_host_conda_bld()
+        conda_build_config = utils.load_conda_build_config()
+        # Identify conda-bld directory on the host.
+        self.host_conda_bld = conda_build_config.croot
+        # Pass on config to choose wheter to build .tar.bz2 or .conda format.
+        self.conda_pkg_format = conda_build_config.conda_pkg_format or ""
 
         if use_host_conda_bld:
             self.pkg_dir = self.host_conda_bld
