@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.1.0](https://www.github.com/bioconda/bioconda-utils/compare/v3.0.0...v3.1.0) (2024-06-01)
+
+
+### Features
+
+* Update dependencies to latest versions ([#992](https://www.github.com/bioconda/bioconda-utils/issues/992)) ([8c0fe35](https://www.github.com/bioconda/bioconda-utils/commit/8c0fe3548e8087a82050d8cefcfe01e909e61c01))
+
 ## [3.0.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.15.1...v3.0.0) (2024-05-17)
 
 
