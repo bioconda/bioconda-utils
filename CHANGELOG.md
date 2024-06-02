@@ -1,5 +1,12 @@
 # Changelog
 
+### [3.1.1](https://www.github.com/bioconda/bioconda-utils/compare/v3.1.0...v3.1.1) (2024-06-02)
+
+
+### Bug Fixes
+
+* Pass pkg_format to container-based build ([#994](https://www.github.com/bioconda/bioconda-utils/issues/994)) ([e3f23ed](https://www.github.com/bioconda/bioconda-utils/commit/e3f23ed70300d97a8f99c5bace7dbba0f559bd19))
+
 ## [3.1.0](https://www.github.com/bioconda/bioconda-utils/compare/v3.0.0...v3.1.0) (2024-06-01)
 
 
