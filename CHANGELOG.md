@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.2.0](https://www.github.com/bioconda/bioconda-utils/compare/v3.1.0...v3.2.0) (2024-06-02)
+
+
+### Features
+
+* Update base-glibc-*-bash images to 3.1 ([#996](https://www.github.com/bioconda/bioconda-utils/issues/996)) ([e7c6ca0](https://www.github.com/bioconda/bioconda-utils/commit/e7c6ca0bf7bf2a0815c694634e45d7dff0aa483a))
+
+
+### Bug Fixes
+
+* Pass pkg_format to container-based build ([#994](https://www.github.com/bioconda/bioconda-utils/issues/994)) ([e3f23ed](https://www.github.com/bioconda/bioconda-utils/commit/e3f23ed70300d97a8f99c5bace7dbba0f559bd19))
+
 ## [3.1.0](https://www.github.com/bioconda/bioconda-utils/compare/v3.0.0...v3.1.0) (2024-06-01)
 
 
