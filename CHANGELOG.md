@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.3.0](https://www.github.com/bioconda/bioconda-utils/compare/v3.2.0...v3.3.0) (2024-06-03)
+
+
+### Features
+
+* Update pinning 2024-05 ([#991](https://www.github.com/bioconda/bioconda-utils/issues/991)) ([d48d6e4](https://www.github.com/bioconda/bioconda-utils/commit/d48d6e4f09046bf4142a63805e1366f655cefd71))
+
 ## [3.2.0](https://www.github.com/bioconda/bioconda-utils/compare/v3.1.0...v3.2.0) (2024-06-02)
 
 
