@@ -9,50 +9,46 @@
 # clear hard-coded default value for CONDA_BUILD_SYSROOT
 CONDA_BUILD_SYSROOT:
   - ""
+c_stdlib:
+  - sysroot                    # [linux]
+  - macosx_deployment_target   # [osx]
+c_stdlib_version:
+  - 2.17                       # [linux]
+  - 11.0                       # [osx and arm64]
+  - 10.13                      # [osx and x86_64]
 MACOSX_DEPLOYMENT_TARGET:      # [osx]
   - 11.0                       # [osx and arm64]
-  - 10.9                       # [osx and x86_64]
-
-pin_run_as_build:
-  htslib:
-    max_pin: x.x
-  bamtools:
-    max_pin: x.x.x
-  r-base:
-    max_pin: x.x
-    min_pin: x.x
+  - 10.13                      # [osx and x86_64]
 
 bamtools:
-  - "2.5.1"
+  - "2.5.2"
 
 # NOTE: Workaround https://github.com/conda/conda-build/issues/3974 we slightly alter the values
 #       from conda-forge-pinnings here (inserting '.*' or ' ' which should be ignored later on).
 r_base:
   - "4.3.*"
 
-# Note: this is a (hopefully) temporary fix for the r-base 4.3 migration. That package was built 
-# with libxml2 2.11, but that migration on conda-forge isn't yet complete. Consequently conda-forge-pinning
-# still has libxml2 2.10. That means that there are a number of R and Bioconductor packages we can't currently
-# build without manually changing out libxml2 pinning.
-libxml2:
-  - "2.11.*"
-
-python:
-  - 3.10.*  *_cpython
-  - 3.9.*  *_cpython
-  - 3.8.*  *_cpython
-
-# conda-forge only has 3 python versions, so we need to modify the length of the other zip_keys in its group
-python_impl:
-  - cpython
-  - cpython
-  - cpython
-
-# Warning! This needs to both match the length of python and python_impl but ALSO match what conda-forge is using/has used!
-numpy:
-  - 1.21.*
-  - 1.21.*
-  - 1.21.*
+# # conda-forge-pinning just got updated to build for Py 3.12 by default.
+# # In case we want to drop 3.8 before conda-forge does, we can use the following:
+# python:
+#   - 3.12.*  *_cpython
+#   - 3.11.*  *_cpython
+#   - 3.10.*  *_cpython
+#   - 3.9.*  *_cpython
+#
+# # Needs to match the length of the other zip_keys in its group (python, python_impl, numpy).
+# python_impl:
+#   - cpython
+#   - cpython
+#   - cpython
+#   - cpython
+#
+# # Warning! This needs to both match the length of python and python_impl but ALSO match what conda-forge is using/has used!
+# numpy:
+#   - 1.26.*
+#   - 1.23.*
+#   - 1.22.*
+#   - 1.22.*
 
 channel_sources:
   - conda-forge,bioconda
