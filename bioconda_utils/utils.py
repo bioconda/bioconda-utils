@@ -1400,7 +1400,7 @@ class RepoData:
     #: Columns available in internal dataframe
     columns = _load_columns + ['channel', 'subdir', 'platform']
     #: Platforms loaded
-    platforms = ['linux', 'osx', 'noarch']
+    platforms = ['linux', 'linux-aarch64', 'osx', 'osx-arm64', 'noarch']
     # config object
     config = None
 
