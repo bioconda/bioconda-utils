@@ -1,5 +1,12 @@
 # Changelog
 
+### [3.3.1](https://www.github.com/bioconda/bioconda-utils/compare/v3.3.0...v3.3.1) (2024-06-06)
+
+
+### Bug Fixes
+
+* add missing Arm platforms to skip existing builds ([#999](https://www.github.com/bioconda/bioconda-utils/issues/999)) ([bbc8758](https://www.github.com/bioconda/bioconda-utils/commit/bbc87583db660ccabdbd0d6fc4e14a8e9721551d))
+
 ## [3.3.0](https://www.github.com/bioconda/bioconda-utils/compare/v3.2.0...v3.3.0) (2024-06-03)
 
 
