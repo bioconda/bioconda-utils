@@ -196,9 +196,16 @@ def parse_azure_build_id(url: str) -> str:
 
 def get_circleci_artifacts(check_run, platform):
     circleci_workflow_id = json.loads(check_run.external_id)["workflow-id"]
+    # Must use a Personal token for API v2
+    token = os.environ.get("CIRCLECI_TOKEN")
+    if not token:
+        logger.critical("CIRCLECI_TOKEN required to download CircleCI artifacts list.")
+        exit(1)
+    headers = {"Circle-Token": token}
+
     # Use API v2 because v1.1 does not have a workflow endpoint
     url_wf = f"https://circleci.com/api/v2/workflow/{circleci_workflow_id}/job"
-    res_wf = requests.get(url_wf)
+    res_wf = requests.get(url_wf, headers=headers)
     json_wf = json.loads(res_wf.text)
 
     if len(json_wf["items"]) == 0:
@@ -207,15 +214,14 @@ def get_circleci_artifacts(check_run, platform):
         for job in json_wf["items"]:
             if job["name"].startswith(f"build_and_test-{platform}"):
                 circleci_job_num = job["job_number"]
-                # Use API v1.1 because v2 requires authentication
-                url = f"https://circleci.com/api/v1.1/project/gh/bioconda/bioconda-recipes/{circleci_job_num}/artifacts"
-                res = requests.get(url)
+                url = f"https://circleci.com/api/v2/project/gh/bioconda/bioconda-recipes/{circleci_job_num}/artifacts"
+                res = requests.get(url, headers=headers)
                 res.raise_for_status()
                 json_job = json.loads(res.text)
-                if len(json_job) == 0:
+                if len(json_job["items"]) == 0:
                     raise ValueError("No artifacts found!")
                 else:
-                    for artifact in json_job:
+                    for artifact in json_job["items"]:
                         artifact_url = artifact["url"]
                         if artifact_url.endswith((".html", ".json", ".json.bz2", ".json.zst")):
                             continue
