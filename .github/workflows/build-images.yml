@@ -1,7 +1,5 @@
 # Build all container images.
 #
-# Most of the work is done in generic_build.bash, so see that file for details.
-
 name: Build images
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -14,14 +12,24 @@ on:
     - 'docs/**'
     - 'test/**'
 env:
+  # Used to override BIOCONDA_UTILS_VERSION in images/versions.sh
   BIOCONDA_UTILS_VERSION: ${{ github.event.release && github.event.release.tag_name || github.head_ref || github.ref_name }}
 
 jobs:
+
+  # JOBS FOR BUILDING IMAGES
+  # ----------------------------------------------------------------------
+  # These jobs will build images for archs, put them into a manifest, and push
+  # that to GitHub Container Registry. Later, the testing jobs will test and
+  # push to quay.io.
 
   build-base-debian:
     name: Build base-debian
     runs-on: ubuntu-22.04
     outputs:
+      # A note on these TAG_EXISTS_* outputs: these allow subsequent jobs to
+      # change behavior (e.g., skip building or skip pushing to ghcr) depending
+      # on whether an image has already been created.
       TAG_EXISTS_base-debian: ${{ steps.base-debian.outputs.TAG_EXISTS_base-debian }}
     steps:
 
@@ -34,7 +42,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y qemu-user-static
 
-    - name: Build base-debian
+    - name: base-debian
       id: base-debian
       run: |
         source images/versions.sh
@@ -67,7 +75,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y qemu-user-static
 
-    - name: Build base-busybox
+    - name: base-busybox
       id: base-busybox
       run: |
         source images/versions.sh
@@ -99,7 +107,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y qemu-user-static
 
-    - name: Build build-env
+    - name: build-env
       id: build-env
       run: |
         source images/versions.sh
@@ -151,9 +159,11 @@ jobs:
         push_to_ghcr $CREATE_ENV_IMAGE_NAME $BIOCONDA_IMAGE_TAG
 
 
-    # END OF BUILDING IMAGES
-    # ----------------------------------------------------------------------
-    # START TESTING
+  # END OF BUILDING IMAGES
+  # ----------------------------------------------------------------------
+  # START TESTING
+  # These testing jobs will run the respective Dockerfile.test in each image
+  # directory.
 
   test:
     name: test bioconda-utils with images
@@ -210,22 +220,17 @@ jobs:
         --mulled-test \
         --force
 
-      # END TESTING
-      # ------------------------------------------------------------------------
-      # START PUSHING IMAGES
+    # END TESTING
+    # ------------------------------------------------------------------------
+    # START PUSHING IMAGES
 
-      # For these push steps, a repository must first exist on quay.io/bioconda
-      # AND that repository must also be configured to allow write access for the
-      # appropriate service account. This must be done by a user with admin
-      # access to quay.io/bioconda.
-      #
-      # generic_build.bash reported whether the tag exists to the log; that was
-      # added to GITHUB_OUTPUT, those outputs are exposed to the jobs, and
-      # those jobs are dependencies of this job. So now we can use those
-      # outputs to determine if we should upload.
-      #
-      # Note that "latest" is built by generic_build.bash as well, and we're
-      # including it here in the upload.
+    # For these push steps, a repository must first exist on quay.io/bioconda
+    # AND that repository must also be configured to allow write access for the
+    # appropriate service account. This must be done by a user with admin
+    # access to quay.io/bioconda.
+    #
+    # This uses the TAG_EXISTS_* outputs from previous jobs to determine if
+    # a push to quay.io should happen.
 
   push:
     name: push images

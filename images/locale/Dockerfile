@@ -1,3 +1,5 @@
+# Generate UTF-8 local to be used in other images
+
 FROM "debian:12.1-slim"
 RUN apt-get update -qq \
     && \

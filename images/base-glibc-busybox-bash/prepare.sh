@@ -2,12 +2,14 @@ source ../versions.sh
 IMAGE_NAME="${BASE_BUSYBOX_IMAGE_NAME}"
 TAG="$BASE_TAG"
 
+# Build busybox binaries for each arch.
+#
+# The respective busybox base containers for each arch will later extract the
+# relevant binary from this image.
+
 BUILD_ARGS=()
 BUILD_ARGS+=("--build-arg=debian_version=${DEBIAN_VERSION}")
 BUILD_ARGS+=("--build-arg=busybox_version=${BUSYBOX_VERSION}")
-
-# Build busybox binaries for each arch; respective busybox base containers will
-# extract the relevant binary from this image.
 iidfile="$( mktemp )"
 buildah bud \
   --iidfile="${iidfile}" \

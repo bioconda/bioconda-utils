@@ -10,13 +10,12 @@ BUILD_ENV_IMAGE_NAME="tmp-build-env"
 CREATE_ENV_IMAGE_NAME="tmp-create-env"
 BASE_TAG="0.1"
 
-# This assumes you've already checked out whatever branch/commit to use.
-#
-# Respects setting outside this script, if e.g. you want GitHub Actions to
-# handle naming based on branch.
+# Inspect this repo to get the currently-checked-out version, but if
+# BIOCONDA_UTILS_VERSION was set outside this script, use that instead.
 BIOCONDA_UTILS_VERSION=${BIOCONDA_UTILS_VERSION:-$(git describe --tags --dirty --always)}
 
-# Used as the tag for create-env and build-env, which depend on bioconda-utils
+# This will be used as the tag for create-env and build-env images, which
+# depend on bioconda-utils
 BIOCONDA_IMAGE_TAG=${BIOCONDA_UTILS_VERSION}_base${BASE_TAG}
 
 # FUNCTIONS --------------------------------------------------------------------
@@ -56,17 +55,26 @@ function tag_exists () {
   done
 }
 
+# Helper function to push a just-built image to GitHub Container
+# Respository, which is used as a temporary storage mechanism.
 function push_to_ghcr () {
   podman manifest push localhost/${1}:${2} ghcr.io/bioconda/${1}:${2}
 }
 
+# Helper function to move an image from gchr to quay.io for public use.
 function move_from_ghcr_to_quay () {
   local image_name=$1
   local tag=$2
+
+  # Locally-named manifest to which we'll add the different archs.
   buildah manifest create "local_${image_name}:${tag}"
+
+  # Expects images for archs to be built already; add them to local manifest.
   for arch in $ARCHS; do
     imgid=$(buildah pull --arch=$arch "ghcr.io/bioconda/${image_name}:${tag}")
     buildah manifest add "local_${image_name}:${tag}" "${imgid}"
   done
+
+  # Publish
   podman manifest push "local_${image_name}:${tag}" "quay.io/bioconda/${image_name}:${tag}"
 }
