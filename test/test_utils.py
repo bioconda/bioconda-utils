@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import subprocess as sp
 import pytest
@@ -10,9 +11,10 @@ import contextlib
 import tarfile
 import logging
 import shutil
+from pathlib import Path
 from textwrap import dedent
 
-from conda_build import metadata
+from conda_build import api, metadata
 
 from bioconda_utils import __version__
 from bioconda_utils import utils
@@ -939,10 +941,18 @@ def test_native_platform_skipping():
         # Don't skip linux-x86 for any recipes
         ["one", "linux", False],
         ["two", "linux", False],
-        # Skip recipe without linux aarch64 enable on linux-aarch64 platform
+        ["three", "linux", False],
+        ["four", "linux", False],
+        # Skip recipes without linux aarch64 enable on linux-aarch64 platform
         ["one", "linux-aarch64", True],
-        # Don't skip recipe with linux aarch64 enable on linux-aarch64 platform
+        ["three", "linux-aarch64", True],
+        # Don't skip recipes with linux aarch64 enable on linux-aarch64 platform
         ["two", "linux-aarch64", False],
+        ["four", "linux-aarch64", False],
+        ["one", "osx-arm64", True],
+        ["two", "osx-arm64", True],
+        ["three", "osx-arm64", False],
+        ["four", "osx-arm64", False],
     ]
     r = Recipes(
         """
@@ -954,11 +964,28 @@ def test_native_platform_skipping():
         two:
           meta.yaml: |
             package:
-              name: one
+              name: two
               version: "0.1"
             extra:
               additional-platforms:
                 - linux-aarch64
+        three:
+          meta.yaml: |
+            package:
+              name: three
+              version: "0.1"
+            extra:
+              additional-platforms:
+                - osx-arm64
+        four:
+          meta.yaml: |
+            package:
+              name: four
+              version: "0.1"
+            extra:
+              additional-platforms:
+                - linux-aarch64
+                - osx-arm64
         """, from_string=True)
     r.write_recipes()
     # Make sure RepoData singleton init
@@ -1221,3 +1248,64 @@ def test_skip_unsatisfiable_pin_compatible(config_fixture):
     )
     assert build_result
     assert len(utils.load_all_meta(r.recipe_dirs["two"])) == 1
+
+
+@pytest.mark.parametrize('mulled_test', PARAMS, ids=IDS)
+@pytest.mark.parametrize('pkg_format', ["1", "2"])
+def test_pkg_test_conda_package_format(
+    config_fixture, pkg_format, mulled_test, tmp_path, monkeypatch
+):
+    """
+    Running a mulled-build test with .tar.bz2/.conda package formats
+    """
+    # ("1" is .tar.bz2 and "2" is .conda)
+    try:
+        from conda_build.conda_interface import cc_conda_build
+    except ImportError:
+        pass
+    else:
+        monkeypatch.setitem(cc_conda_build, "pkg_format", pkg_format)
+    from conda.base.context import context
+    monkeypatch.setitem(context.conda_build, "pkg_format", pkg_format)
+    condarc = Path(tmp_path, ".condarc")
+    condarc.write_text(f"conda_build:\n  pkg_format: {pkg_format}\n")
+    monkeypatch.setenv("CONDARC", str(condarc))
+    monkeypatch.setattr(utils, "ENV_VAR_WHITELIST", ["CONDARC", *utils.ENV_VAR_WHITELIST])
+
+    r = Recipes(
+        f"""
+        one:
+          meta.yaml: |
+            package:
+              name: one
+              version: 1.1
+            build:
+              script:
+               - touch "${{PREFIX}}/one-file"
+            test:
+              commands:
+                - test -f "${{PREFIX}}/one-file"
+        """,
+        from_string=True,
+    )
+    r.write_recipes()
+    docker_builder = None
+    if mulled_test:
+        docker_builder = docker_utils.RecipeBuilder(
+            use_host_conda_bld=True,
+            docker_base_image=DOCKER_BASE_IMAGE,
+        )
+    build_result = build.build_recipes(
+        r.basedir,
+        config_fixture,
+        r.recipe_dirnames,
+        docker_builder=docker_builder,
+        mulled_test=mulled_test,
+    )
+    assert build_result
+
+    for recipe_dir in r.recipe_dirnames:
+        for pkg_file in utils.built_package_paths(recipe_dir):
+            assert pkg_file.endswith({"1": ".tar.bz2", "2": ".conda"}[pkg_format])
+            assert os.path.exists(pkg_file)
+            ensure_missing(pkg_file)

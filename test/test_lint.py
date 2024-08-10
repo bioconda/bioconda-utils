@@ -1,5 +1,5 @@
 import os.path as op
-from ruamel_yaml import YAML
+from ruamel.yaml import YAML
 
 import pytest
 

@@ -1,6 +1,107 @@
 # Changelog
 
+### [3.3.1](https://www.github.com/bioconda/bioconda-utils/compare/v3.3.0...v3.3.1) (2024-06-06)
+
+
+### Bug Fixes
+
+* add missing Arm platforms to skip existing builds ([#999](https://www.github.com/bioconda/bioconda-utils/issues/999)) ([bbc8758](https://www.github.com/bioconda/bioconda-utils/commit/bbc87583db660ccabdbd0d6fc4e14a8e9721551d))
+
+## [3.3.0](https://www.github.com/bioconda/bioconda-utils/compare/v3.2.0...v3.3.0) (2024-06-03)
+
+
+### Features
+
+* Update pinning 2024-05 ([#991](https://www.github.com/bioconda/bioconda-utils/issues/991)) ([d48d6e4](https://www.github.com/bioconda/bioconda-utils/commit/d48d6e4f09046bf4142a63805e1366f655cefd71))
+
+## [3.2.0](https://www.github.com/bioconda/bioconda-utils/compare/v3.1.0...v3.2.0) (2024-06-02)
+
+
+### Features
+
+* Update base-glibc-*-bash images to 3.1 ([#996](https://www.github.com/bioconda/bioconda-utils/issues/996)) ([e7c6ca0](https://www.github.com/bioconda/bioconda-utils/commit/e7c6ca0bf7bf2a0815c694634e45d7dff0aa483a))
+
+
+### Bug Fixes
+
+* Pass pkg_format to container-based build ([#994](https://www.github.com/bioconda/bioconda-utils/issues/994)) ([e3f23ed](https://www.github.com/bioconda/bioconda-utils/commit/e3f23ed70300d97a8f99c5bace7dbba0f559bd19))
+
+## [3.1.0](https://www.github.com/bioconda/bioconda-utils/compare/v3.0.0...v3.1.0) (2024-06-01)
+
+
+### Features
+
+* Update dependencies to latest versions ([#992](https://www.github.com/bioconda/bioconda-utils/issues/992)) ([8c0fe35](https://www.github.com/bioconda/bioconda-utils/commit/8c0fe3548e8087a82050d8cefcfe01e909e61c01))
+
+## [3.0.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.15.1...v3.0.0) (2024-05-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* Separate docs-only requirements (#986)
+* Remove defaults channel dependency (#985)
+
+### Miscellaneous Chores
+
+* Remove defaults channel dependency ([#985](https://www.github.com/bioconda/bioconda-utils/issues/985)) ([eb043dc](https://www.github.com/bioconda/bioconda-utils/commit/eb043dc2649bcdf63c11f19993660b58ec215cb7))
+* Separate docs-only requirements ([#986](https://www.github.com/bioconda/bioconda-utils/issues/986)) ([09d108e](https://www.github.com/bioconda/bioconda-utils/commit/09d108e796cb4fce317c475b7d26bbaea124619c))
+
+### [2.15.1](https://www.github.com/bioconda/bioconda-utils/compare/v2.15.0...v2.15.1) (2024-05-08)
+
+
+### Bug Fixes
+
+* test_package for .tar.bz2 and .conda ([#983](https://www.github.com/bioconda/bioconda-utils/issues/983)) ([c683290](https://www.github.com/bioconda/bioconda-utils/commit/c683290319d4f148644972b6caf626be6d1c6c99))
+
+## [2.15.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.14.0...v2.15.0) (2024-05-03)
+
+
+### Features
+
+* Add support for .conda format ([#981](https://www.github.com/bioconda/bioconda-utils/issues/981)) ([125c9ea](https://www.github.com/bioconda/bioconda-utils/commit/125c9ea5e362b7e5e63dfcbfae995fa3eeb58ce8))
+* choose worker recipes by depth level ([#950](https://www.github.com/bioconda/bioconda-utils/issues/950)) ([4c51ae3](https://www.github.com/bioconda/bioconda-utils/commit/4c51ae31158b0154cf3ed381c4a3ad8b9bff7f14))
+* Update dependencies to latest versions ([#972](https://www.github.com/bioconda/bioconda-utils/issues/972)) ([dc6ca07](https://www.github.com/bioconda/bioconda-utils/commit/dc6ca07a977dfbf7cbc2d25f884dc0333d611116))
+* Use conda/conda-build instead of mamba/conda-mambabuild ([#980](https://www.github.com/bioconda/bioconda-utils/issues/980)) ([17cbc7f](https://www.github.com/bioconda/bioconda-utils/commit/17cbc7fb411864c7c22ff33b40682c0f43e016cc))
+
+
+### Bug Fixes
+
+* handle PR list with no items ([#975](https://www.github.com/bioconda/bioconda-utils/issues/975)) ([869577a](https://www.github.com/bioconda/bioconda-utils/commit/869577a76933c2d7bcf386c1179ef454bdc18543))
+* Ignore src_cache for container-built packages ([125c9ea](https://www.github.com/bioconda/bioconda-utils/commit/125c9ea5e362b7e5e63dfcbfae995fa3eeb58ce8))
+* Ignore Zstandard-packed repodata artifact ([125c9ea](https://www.github.com/bioconda/bioconda-utils/commit/125c9ea5e362b7e5e63dfcbfae995fa3eeb58ce8))
+* use circleci api v1.1 to avoid login error ([#982](https://www.github.com/bioconda/bioconda-utils/issues/982)) ([ebafe92](https://www.github.com/bioconda/bioconda-utils/commit/ebafe92ae01dc4a573e861764a4e837bd1321af3))
+
+## [2.14.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.13.2...v2.14.0) (2024-04-01)
+
+
+### Features
+
+* fetch artifacts from GitHub Actions ([#973](https://www.github.com/bioconda/bioconda-utils/issues/973)) ([858e1cf](https://www.github.com/bioconda/bioconda-utils/commit/858e1cfdd4435aca16c9978df5463db845ff9fe3))
+* update deployment target for osx-arm64 ([#967](https://www.github.com/bioconda/bioconda-utils/issues/967)) ([a7c591e](https://www.github.com/bioconda/bioconda-utils/commit/a7c591ea51fdf3308a0075951e8f5efee783c8d1))
+
+### [2.13.2](https://www.github.com/bioconda/bioconda-utils/compare/v2.13.1...v2.13.2) (2024-03-27)
+
+
+### Bug Fixes
+
+* update anaconda-client=1.12 to fix uploads ([#970](https://www.github.com/bioconda/bioconda-utils/issues/970)) ([06dcacc](https://www.github.com/bioconda/bioconda-utils/commit/06dcacca60c17c1a97770e14ae6348ac7acbe9a6))
+
+### [2.13.1](https://www.github.com/bioconda/bioconda-utils/compare/v2.13.0...v2.13.1) (2024-03-27)
+
+
+### Bug Fixes
+
+* detect errors when uploading artifacts ([#968](https://www.github.com/bioconda/bioconda-utils/issues/968)) ([d0a79cd](https://www.github.com/bioconda/bioconda-utils/commit/d0a79cdd5aeed30c4da88e2135329d66b336832f))
+
+## [2.13.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.12.0...v2.13.0) (2024-03-22)
+
+
+### Features
+
+* add osx-arm64 to platform checks ([#965](https://www.github.com/bioconda/bioconda-utils/issues/965)) ([9f6df10](https://www.github.com/bioconda/bioconda-utils/commit/9f6df10bfecd048956acc80e7bb3d57952585529))
+
 ## [2.12.0](https://www.github.com/bioconda/bioconda-utils/compare/v2.11.1...v2.12.0) (2024-03-18)
+
 
 ### Features
 

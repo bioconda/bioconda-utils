@@ -1,5 +1,6 @@
 
 
+from enum import Enum
 import glob
 import os
 import re
@@ -20,7 +21,14 @@ logger = logging.getLogger(__name__)
 IMAGE_RE = re.compile(r"(.+)(?::|%3A)(.+)\.tar\.gz$")
 
 
-def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_target=None, label=None, artifact_source="azure") -> bool:
+class UploadResult(Enum):
+    SUCCESS = 1
+    FAILURE = 2
+    NO_ARTIFACTS = 3
+    NO_PR = 4
+
+
+def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_target=None, label=None, artifact_source="azure") -> UploadResult:
     _config = utils.load_config(config)
     repodata = utils.RepoData()
 
@@ -30,28 +38,35 @@ def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_targe
 
     commit = repo.get_commit(git_sha)
     prs = commit.get_pulls()
-    if not prs:
+    if not prs or prs.totalCount < 1:
         # no PR found for the commit
-        return True
+        return UploadResult.NO_PR
     pr = prs[0]
-    artifacts = set(fetch_artifacts(pr, artifact_source))
+    artifacts = set(fetch_artifacts(pr, artifact_source, repo))
     if not artifacts:
         # no artifacts found, fail and rebuild packages
         logger.info("No artifacts found.")
-        return False
+        return UploadResult.NO_ARTIFACTS
     else:
+        success = []
         for artifact in artifacts:
             with tempfile.TemporaryDirectory() as tmpdir:
                 # download the artifact
                 if artifact_source == "azure":
                     artifact_path = os.path.join(tmpdir, os.path.basename(artifact))
-                    download_artifact(artifact, artifact_path)
+                    download_artifact(artifact, artifact_path, artifact_source)
                     zipfile.ZipFile(artifact_path).extractall(tmpdir)
                 elif artifact_source == "circleci":
                     artifact_dir = os.path.join(tmpdir, *(artifact.split("/")[-4:-1]))
                     artifact_path = os.path.join(tmpdir, artifact_dir, os.path.basename(artifact))
-                    Path(artifact_dir).mkdir(parents=True, exist_ok=True) 
-                    download_artifact(artifact, artifact_path)
+                    Path(artifact_dir).mkdir(parents=True, exist_ok=True)
+                    download_artifact(artifact, artifact_path, artifact_source)
+                elif artifact_source == "github-actions":
+                    artifact_dir = os.path.join(tmpdir, "artifacts")
+                    artifact_path = os.path.join(artifact_dir, os.path.basename(artifact))
+                    Path(artifact_dir).mkdir(parents=True, exist_ok=True)
+                    download_artifact(artifact, artifact_path, artifact_source)
+                    zipfile.ZipFile(artifact_path).extractall(artifact_dir)
 
                 # get all the contained packages and images and upload them
                 platform_patterns = [repodata.platform2subdir(repodata.native_platform())]
@@ -59,15 +74,16 @@ def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_targe
                     platform_patterns.append("noarch")
 
                 for platform_pattern in platform_patterns:
-                    pattern = f"{tmpdir}/*/packages/{platform_pattern}/*.tar.bz2"
-                    logger.info(f"Checking for packages at {pattern}.")
-                    for pkg in glob.glob(pattern):
-                        if dryrun:
-                            logger.info(f"Would upload {pkg} to anaconda.org.")
-                        else:
-                            logger.info(f"Uploading {pkg} to anaconda.org.")
-                            # upload the package
-                            anaconda_upload(pkg, label=label)
+                    for ext in (".tar.bz2", ".conda"):
+                        pattern = f"{tmpdir}/*/packages/{platform_pattern}/*{ext}"
+                        logger.info(f"Checking for packages at {pattern}.")
+                        for pkg in glob.glob(pattern):
+                            if dryrun:
+                                logger.info(f"Would upload {pkg} to anaconda.org.")
+                            else:
+                                logger.info(f"Uploading {pkg} to anaconda.org.")
+                                # upload the package
+                                success.append(anaconda_upload(pkg, label=label))
 
                 if mulled_upload_target:
                     quay_login = os.environ['QUAY_LOGIN']
@@ -90,17 +106,27 @@ def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_targe
                         else:
                             # upload the image
                             logger.info(f"Uploading {img} to {target}.")
-                            skopeo_upload(fixed_img_name, target, creds=quay_login)
-        return True
+                            success.append(skopeo_upload(fixed_img_name, target, creds=quay_login))
+        if all(success):
+            return UploadResult.SUCCESS
+        else:
+            return UploadResult.FAILURE
 
 
 @backoff.on_exception(
     backoff.expo,
     requests.exceptions.RequestException
 )
-def download_artifact(url, to_path):
+def download_artifact(url, to_path, artifact_source):
     logger.info(f"Downloading artifact {url}.")
-    resp = requests.get(url, stream=True, allow_redirects=True)
+    headers = {}
+    if artifact_source == "github-actions":
+        token = os.environ.get("GITHUB_TOKEN")
+        if not token:
+            logger.critical("GITHUB_TOKEN required to download GitHub Actions artifacts")
+            exit(1)
+        headers = {"Authorization": f"token {token}"}
+    resp = requests.get(url, stream=True, allow_redirects=True, headers=headers)
     resp.raise_for_status()
     with open(to_path, "wb") as f:
         for chunk in resp.iter_content(chunk_size=1024):
@@ -108,7 +134,7 @@ def download_artifact(url, to_path):
                 f.write(chunk)
 
 
-def fetch_artifacts(pr, artifact_source):
+def fetch_artifacts(pr, artifact_source, repo):
     """
     Fetch artifacts from a PR.
 
@@ -143,6 +169,13 @@ def fetch_artifacts(pr, artifact_source):
             # Circle CI builds
             artifact_url = get_circleci_artifacts(check_run, platform)
             yield from artifact_url
+        elif (
+            artifact_source == "github-actions" and
+            check_run.app.slug == "github-actions"
+        ):
+            # GitHubActions builds
+            artifact_url = get_gha_artifacts(check_run, platform, repo)
+            yield from artifact_url
 
 
 def get_azure_artifacts(check_run):
@@ -163,8 +196,16 @@ def parse_azure_build_id(url: str) -> str:
 
 def get_circleci_artifacts(check_run, platform):
     circleci_workflow_id = json.loads(check_run.external_id)["workflow-id"]
+    # Must use a Personal token for API v2
+    token = os.environ.get("CIRCLECI_TOKEN")
+    if not token:
+        logger.critical("CIRCLECI_TOKEN required to download CircleCI artifacts list.")
+        exit(1)
+    headers = {"Circle-Token": token}
+
+    # Use API v2 because v1.1 does not have a workflow endpoint
     url_wf = f"https://circleci.com/api/v2/workflow/{circleci_workflow_id}/job"
-    res_wf = requests.get(url_wf)
+    res_wf = requests.get(url_wf, headers=headers)
     json_wf = json.loads(res_wf.text)
 
     if len(json_wf["items"]) == 0:
@@ -174,14 +215,30 @@ def get_circleci_artifacts(check_run, platform):
             if job["name"].startswith(f"build_and_test-{platform}"):
                 circleci_job_num = job["job_number"]
                 url = f"https://circleci.com/api/v2/project/gh/bioconda/bioconda-recipes/{circleci_job_num}/artifacts"
-                res = requests.get(url)
+                res = requests.get(url, headers=headers)
+                res.raise_for_status()
                 json_job = json.loads(res.text)
                 if len(json_job["items"]) == 0:
                     raise ValueError("No artifacts found!")
                 else:
                     for artifact in json_job["items"]:
                         artifact_url = artifact["url"]
-                        if artifact_url.endswith(".html") or artifact_url.endswith(".json") or artifact_url.endswith(".json.bz2"):
+                        if artifact_url.endswith((".html", ".json", ".json.bz2", ".json.zst")):
                             continue
                         else:
                             yield artifact_url
+
+def parse_gha_build_id(url: str) -> str:
+    # Get workflow run id from URL
+    return re.search("runs/(\d+)/", url).group(1)
+
+def get_gha_artifacts(check_run, platform, repo):
+    gha_workflow_id = parse_gha_build_id(check_run.details_url)
+    if (gha_workflow_id) :
+        # The workflow run is different from the check run
+        run = repo.get_workflow_run(int(gha_workflow_id))
+        artifacts = run.get_artifacts()
+        for artifact in artifacts:
+            # This URL is valid for 1 min and requires a token
+            artifact_url = artifact.archive_download_url
+            yield artifact_url

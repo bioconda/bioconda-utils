@@ -24,18 +24,12 @@ from typing import Any, Dict, List, Sequence, Tuple, Optional, Pattern
 
 import conda_build.api
 from conda_build.metadata import MetaData
-from boa.cli.mambabuild import prepare as insert_mambabuild
 
 import jinja2
 
-try:
-    from ruamel.yaml import YAML
-    from ruamel.yaml.constructor import DuplicateKeyError
-    from ruamel.yaml.error import YAMLError
-except ModuleNotFoundError:
-    from ruamel_yaml import YAML
-    from ruamel_yaml.constructor import DuplicateKeyError
-    from ruamel_yaml.error import YAMLError
+from ruamel.yaml import YAML
+from ruamel.yaml.constructor import DuplicateKeyError
+from ruamel.yaml.error import YAMLError
 
 from . import utils
 from .aiopipe import EndProcessingItem
@@ -774,8 +768,6 @@ class Recipe():
             def new_exit(args=None):
                 raise SystemExit(args)
             sys.exit = new_exit
-
-        insert_mambabuild()
 
         try:
             with open("/dev/null", "w") as devnull:

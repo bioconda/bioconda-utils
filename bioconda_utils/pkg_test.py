@@ -12,8 +12,9 @@ import logging
 
 from . import utils
 
-import conda_build.api
 from conda_build.metadata import MetaData
+from conda_index.index import update_index
+from conda_package_streaming.package_streaming import stream_conda_info
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +24,9 @@ MULLED_CONDA_IMAGE = "quay.io/bioconda/create-env:latest"
 def get_tests(path):
     "Extract tests from a built package"
     tmp = tempfile.mkdtemp()
-    t = tarfile.open(path)
-    t.extractall(tmp)
+    for tar, member in stream_conda_info(path):
+        if member.name.startswith("info/recipe/"):
+            tar.extract(member, tmp)
     input_dir = os.path.join(tmp, 'info', 'recipe')
 
     tests = [
@@ -70,12 +72,17 @@ def get_image_name(path):
     ----------
 
     path : str
-        Path to .tar.by2 package build by conda-build
+        Path to .tar.bz2 or .conda package build by conda-build
 
     """
-    assert path.endswith('.tar.bz2')
+    if path.endswith(".tar.bz2"):
+        ext = ".tar.bz2"
+    elif path.endswith(".conda"):
+        ext = ".conda"
+    else:
+        raise ValueError()
 
-    pkg = os.path.basename(path).replace('.tar.bz2', '')
+    pkg = os.path.basename(path).removesuffix(ext)
     toks = pkg.split('-')
     build_string = toks[-1]
     version = toks[-2]
@@ -88,7 +95,7 @@ def get_image_name(path):
 def test_package(
     path,
     name_override=None,
-    channels=("conda-forge", "local", "bioconda", "defaults"),
+    channels=("conda-forge", "local", "bioconda"),
     mulled_args="",
     base_image=None,
     conda_image=MULLED_CONDA_IMAGE,
@@ -100,7 +107,7 @@ def test_package(
     Parameters
     ----------
     path : str
-        Path to a .tar.bz2 package built by conda-build
+        Path to a .tar.bz2 or .conda package built by conda-build
 
     name_override : str
         Passed as the --name-override argument to mulled-build
@@ -125,12 +132,12 @@ def test_package(
         If True, enable live logging during the build process
     """
 
-    assert path.endswith('.tar.bz2'), "Unrecognized path {0}".format(path)
+    assert path.endswith((".tar.bz2", ".conda")), "Unrecognized path {0}".format(path)
     # assert os.path.exists(path), '{0} does not exist'.format(path)
 
     conda_bld_dir = os.path.abspath(os.path.dirname(os.path.dirname(path)))
 
-    conda_build.api.update_index([conda_bld_dir])
+    update_index(conda_bld_dir)
 
     spec = get_image_name(path)
 
@@ -162,8 +169,6 @@ def test_package(
     # galaxy-lib always downloads involucro, unless it's in cwd or its path is explicitly given.
     # We inject a POSTINSTALL to the involucro command with a small wrapper to
     # create activation / entrypoint scripts for the container.
-    # We also inject a PREINSTALL to alias conda to mamba so `mamba install` is
-    # used instead of `conda install` in the container builds.
     involucro_path = os.path.join(os.path.dirname(__file__), 'involucro')
     if not os.path.exists(involucro_path):
         raise RuntimeError('internal involucro wrapper missing')

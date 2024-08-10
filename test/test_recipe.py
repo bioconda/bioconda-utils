@@ -3,7 +3,7 @@ import os
 
 import pytest
 
-from ruamel_yaml import YAML
+from ruamel.yaml import YAML
 yaml = YAML(typ="rt")  # pylint: disable=invalid-name
 
 from bioconda_utils.recipe import (
@@ -260,6 +260,29 @@ def test_recipe_package_names(recipe):
 
 @with_recipes
 def test_recipe_extra_additional_platforms(recipe):
+    assert recipe.extra_additional_platforms == []
+    recipe.meta_yaml += [
+        'extra:',
+        '  additional-platforms:',
+        '    - linux-aarch64',
+        '    - osx-arm64'
+    ]
+    recipe.render()
+    assert recipe.extra_additional_platforms == ["linux-aarch64", "osx-arm64"]
+
+@with_recipes
+def test_recipe_extra_additional_platform_osx(recipe):
+    assert recipe.extra_additional_platforms == []
+    recipe.meta_yaml += [
+        'extra:',
+        '  additional-platforms:',
+        '    - osx-arm64'
+    ]
+    recipe.render()
+    assert recipe.extra_additional_platforms == ["osx-arm64"]
+
+@with_recipes
+def test_recipe_extra_additional_platform_linux(recipe):
     assert recipe.extra_additional_platforms == []
     recipe.meta_yaml += [
         'extra:',

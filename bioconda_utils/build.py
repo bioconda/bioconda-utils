@@ -7,19 +7,17 @@ from collections import defaultdict, namedtuple
 import os
 import logging
 import itertools
-import time
 
 from typing import List, Optional
 from bioconda_utils.skiplist import Skiplist
 from bioconda_utils.build_failure import BuildFailureRecord
 from bioconda_utils.githandler import GitHandler
 
-import conda
 from conda.exports import UnsatisfiableError
 from conda_build.exceptions import DependencyNeedsBuildingError
 import networkx as nx
 import pandas
-from ruamel_yaml import YAML
+from ruamel.yaml import YAML
 
 from . import utils
 from . import docker_utils
@@ -124,9 +122,9 @@ def build(recipe: str, pkg_paths: List[str] = None,
     is_noarch = bool(meta.get_value('build/noarch', default=False))
     use_base_image = meta.get_value('extra/container', {}).get('extended-base', False)
     if use_base_image:
-        base_image = 'quay.io/bioconda/base-glibc-debian-bash:3.0'
+        base_image = 'quay.io/bioconda/base-glibc-debian-bash:3.1'
     else:
-        base_image = 'quay.io/bioconda/base-glibc-busybox-bash:3.0'
+        base_image = 'quay.io/bioconda/base-glibc-busybox-bash:3.1'
 
     build_failure_record = BuildFailureRecord(recipe)
     build_failure_record_existed_before_build = build_failure_record.exists()
@@ -149,7 +147,7 @@ def build(recipe: str, pkg_paths: List[str] = None,
                         "cannot be found", pkg_path)
                     return BuildResult(False, None)
         else:
-            conda_build_cmd = [utils.bin_for('conda'), 'mambabuild']
+            conda_build_cmd = [utils.bin_for('conda-build')]
             # - Temporarily reset os.environ to avoid leaking env vars
             # - Also pass filtered env to run()
             # - Point conda-build to meta.yaml, to avoid building subdirs
@@ -230,20 +228,38 @@ def remove_cycles(dag, name2recipes, failed, skip_dependent):
     return dag.subgraph(name for name in dag if name not in nodes_in_cycles)
 
 
-def get_subdags(dag, n_workers, worker_offset):
+def get_subdags(dag, n_workers, worker_offset, subdag_depth):
     if n_workers > 1 and worker_offset >= n_workers:
         raise ValueError(
             "n-workers is less than the worker-offset given! "
             "Either decrease --n-workers or decrease --worker-offset!")
 
     # Get connected subdags and sort by nodes
+    # If subdag_depth is None, each root node and all children (not previously assigned) are assigned to the same worker. 
+    #   This may fail when attempting to build child nodes with parents assigned to other workers.
+    # If subdag_depth is set, only nodes of a certain depth will be built (i.e., 0: only root nodes, 
+    #   1: only nodes with parents that are root nodes, etc.). They are assigned evenly across workers.
     if n_workers > 1:
         root_nodes = sorted([k for (k, v) in dag.in_degree() if v == 0])
         nodes = set()
         found = set()
+        children = []
+
+        if subdag_depth is not None:
+            working_dag = nx.DiGraph(dag)
+            # Only build the current "root" nodes after removing 
+            for i in range(0, subdag_depth + 1):
+                print("{} recipes at depth {}".format(len(root_nodes), i))
+                if len(root_nodes) == 0:
+                    break
+                if i < subdag_depth:
+                    working_dag.remove_nodes_from(root_nodes)
+                    root_nodes = sorted([k for (k, v) in working_dag.in_degree() if v == 0])
+
         for idx, root_node in enumerate(root_nodes):
-            # Flatten the nested list
-            children = itertools.chain(*nx.dfs_successors(dag, root_node).values())
+            if subdag_depth is None:
+                # Flatten the nested list
+                children = itertools.chain(*nx.dfs_successors(dag, root_node).values())
             # This is the only obvious way of ensuring that all nodes are included
             # in exactly 1 subgraph
             found.add(root_node)
@@ -256,6 +272,7 @@ def get_subdags(dag, n_workers, worker_offset):
             else:
                 for child in children:
                     found.add(child)
+
         subdags = dag.subgraph(list(nodes))
         logger.info("Building and testing sub-DAGs %i in each group of %i, which is %i packages", worker_offset, n_workers, len(subdags.nodes()))
     else:
@@ -277,9 +294,12 @@ def do_not_consider_for_additional_platform(recipe_folder: str, recipe: str, pla
       Return True if current native platform are not included in recipe's additional platforms (no need to build).
     """
     recipe_obj = _recipe.Recipe.from_file(recipe_folder, recipe)
-    # On linux-aarch64 env, only build recipe with linux-aarch64 extra_additional_platforms
+    # On linux-aarch64 or osx-arm64 env, only build recipe with matching extra_additional_platforms
     if platform == "linux-aarch64":
         if "linux-aarch64" not in recipe_obj.extra_additional_platforms:
+            return True
+    if platform == "osx-arm64":
+        if "osx-arm64" not in recipe_obj.extra_additional_platforms:
             return True
     return False
 
@@ -302,6 +322,7 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
                   skiplist_leafs: bool = False,
                   live_logs: bool = True,
                   exclude: List[str] = None,
+                  subdag_depth: int = None
                   ):
     """
     Build one or many bioconda packages.
@@ -333,6 +354,7 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
       live_logs: If True, enable live logging during the build process
       exclude: list of recipes to exclude. Typically used for
         temporary exclusion; otherwise consider adding recipe to skiplist.
+      subdag_depth: Number of levels of nodes to skip. (Optional, only if using n_workers)
     """
     if not recipes:
         logger.info("Nothing to be done.")
@@ -372,7 +394,7 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
 
     skip_dependent = defaultdict(list)
     dag = remove_cycles(dag, name2recipes, failed, skip_dependent)
-    subdag = get_subdags(dag, n_workers, worker_offset)
+    subdag = get_subdags(dag, n_workers, worker_offset, subdag_depth)
     if not subdag:
         logger.info("Nothing to be done.")
         return True

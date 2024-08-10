@@ -1,0 +1,7 @@
+sphinx>=4.1
+celery
+sphinx-autodoc-typehints
+alabaster=0.7.*
+docutils
+markdown
+graphviz
