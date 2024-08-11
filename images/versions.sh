@@ -8,7 +8,7 @@ BASE_DEBIAN_IMAGE_NAME="tmp-debian"
 BASE_BUSYBOX_IMAGE_NAME="tmp-busybox"
 BUILD_ENV_IMAGE_NAME="tmp-build-env"
 CREATE_ENV_IMAGE_NAME="tmp-create-env"
-BASE_TAG="0.1"
+BASE_TAG="0.2"
 
 # Inspect this repo to get the currently-checked-out version, but if
 # BIOCONDA_UTILS_VERSION was set outside this script, use that instead.
