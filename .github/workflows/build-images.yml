@@ -175,15 +175,15 @@ jobs:
       with:
         fetch-depth: 0
 
-    # Clone bioconda-recipes to use as part of the tests.
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        repository: bioconda/bioconda-recipes
-        path: recipes
+    # # Clone bioconda-recipes to use as part of the tests.
+    # - uses: actions/checkout@v4
+    #   with:
+    #     fetch-depth: 0
+    #     repository: bioconda/bioconda-recipes
+    #     path: recipes
 
-    - name: set path
-      run: echo "/opt/mambaforge/bin" >> $GITHUB_PATH
+    # - name: set path
+    #   run: echo "/opt/mambaforge/bin" >> $GITHUB_PATH
 
     - name: Install bioconda-utils
       run: |
@@ -225,7 +225,6 @@ jobs:
         # --mulled-test \
         # --force
 
-        cd recipes
         py.test --durations=0 test/ -v --log-level=DEBUG -k "docker" --tb=native
 
     # END TESTING
