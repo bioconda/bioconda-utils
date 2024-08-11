@@ -205,20 +205,28 @@ jobs:
         # Figure out which registry to use for each image, based on what was built.
         [ ${{ needs.build-build-env.outputs.TAG_EXISTS_build-env }} ] && BUILD_ENV_REGISTRY='quay.io/bioconda' || BUILD_ENV_REGISTRY="ghcr.io/bioconda"
         [ ${{ needs.build-create-env.outputs.TAG_EXISTS_create-env }} ] && CREATE_ENV_REGISTRY='quay.io/bioconda' || CREATE_ENV_REGISTRY="ghcr.io/bioconda"
-        [ ${{ needs.build-base-busybox.outputs.TAG_EXISTS_base_busybox }} ] && DEST_BASE_IMAGE_REGISTRY='quay.io/bioconda' || DEST_BASE_REGISTRY="ghcr.io/bioconda"
+        [ ${{ needs.build-base-busybox.outputs.TAG_EXISTS_base_busybox }} ] && DEST_BASE_REGISTRY='quay.io/bioconda' || DEST_BASE_REGISTRY="ghcr.io/bioconda"
+        [ ${{ needs.build-base-debian.outputs.TAG_EXISTS_base_debian }} ] && DEST_EXTENDED_BASE_REGISTRY='quay.io/bioconda' || DEST_EXTENDED_BASE_REGISTRY="ghcr.io/bioconda"
 
         # Tell mulled-build which image to use
         export DEST_BASE_IMAGE="${DEST_BASE_IMAGE_REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}"
+        export DEFAULT_BASE_IMAGE="${DEST_BASE_REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}"
+        export DEFAULT_EXTENDED_BASE_IMAGE="${DEST_EXTENDED_BASE_REGISTRY}/${BASE_DEBIAN_IMAGE_NAME}"
+        export BUILD_ENV_IMAGE="${BUILD_ENV_REGISTRY}/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
+        export CREATE_ENV_IMAGE="${CREATE_ENV_REGISTRY}/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
 
-        # Build a package with containers.
+        # # Build a package with containers.
+        # cd recipes
+        # bioconda-utils build \
+        # --docker-base-image "${BUILD_ENV_REGISTRY}/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}" \
+        # --mulled-conda-image "${CREATE_ENV_REGISTRY}/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}" \
+        # --packages seqtk \
+        # --docker \
+        # --mulled-test \
+        # --force
+
         cd recipes
-        bioconda-utils build \
-        --docker-base-image "${BUILD_ENV_REGISTRY}/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}" \
-        --mulled-conda-image "${CREATE_ENV_REGISTRY}/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}" \
-        --packages seqtk \
-        --docker \
-        --mulled-test \
-        --force
+        py.test --durations=0 test/ -v --log-level=DEBUG -k "docker" --tb=native
 
     # END TESTING
     # ------------------------------------------------------------------------
