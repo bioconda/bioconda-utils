@@ -50,14 +50,14 @@ RUN . /opt/conda/etc/profile.d/conda.sh  && conda activate base && \
     sed -nE \
     '/^conda([><!=~ ].+)?$/p' \
     /opt/bioconda-utils/bioconda_utils-requirements.txt \
-    | xargs -r conda install --yes && \
+    | xargs -r mamba install --yes && \
     # FIXME: "remove truststore" only necessary due to python downgrade.
     #        Updating requirements should fix that.
     #        (Also this removal will break in future.)
-    conda remove --yes truststore && \
-    conda install --yes --file /opt/bioconda-utils/bioconda_utils-requirements.txt && \
+    mamba remove --yes truststore && \
+    mamba install --yes --file /opt/bioconda-utils/bioconda_utils-requirements.txt && \
     pip install --no-deps --find-links /opt/bioconda-utils bioconda_utils && \
-    conda clean --yes --index --tarballs && \
+    mamba clean --yes --index --tarballs && \
     # Find files that are not already in group "lucky" and change their group and mode.
     find /opt/conda \
     \! -group lucky \

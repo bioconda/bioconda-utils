@@ -29,16 +29,16 @@ miniconda_boostrap_prefix="$( pwd )/miniconda"
   # Only need `strip` executable from binutils. Other binaries from the package
   # and especially the "sysroot" dependency is only bloat for this container
   # image. (NOTE: The binary needs libgcc-ng which is explicitly added later.)
-  conda create --yes \
+  mamba create --yes \
     --prefix="${conda_install_prefix}" \
     --channel=conda-forge \
     binutils
   cp -aL "${conda_install_prefix}/bin/strip" ./strip
   conda run --prefix="${conda_install_prefix}" strip -- ./strip
-  conda remove --yes --all \
+  mamba remove --yes --all \
     --prefix="${conda_install_prefix}"
 
-  conda create --yes \
+  mamba create --yes \
     --prefix="${conda_install_prefix}" \
     --channel=conda-forge \
     \
@@ -116,7 +116,8 @@ conda config \
 #     This is intentional as it speeds up conda startup time.
 conda list --name=base
 conda info --all
-# Make sure we have the requested conda version
+mamba --version
+# Make sure we have the requested conda, mamba versions installed.
 conda list \
   --export '^(conda|mamba)$' \
   | sed -n 's/=[^=]*$//p' \
