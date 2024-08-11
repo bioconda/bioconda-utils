@@ -476,7 +476,12 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
             logger.warning(f"Using tag {image_tag} for docker image, since there is no image for a not yet release version ({VERSION}).")
         else:
             image_tag = VERSION
-        docker_base_image = docker_base_image or f"quay.io/bioconda/bioconda-utils-build-env-cos7:{image_tag}"
+
+        docker_base_image = (
+            docker_base_image or
+            os.getenv("BUILD_ENV_IMAGE", None) or
+            docker_base_image or f"quay.io/bioconda/bioconda-utils-build-env-cos7:{image_tag}"
+        )
         logger.info(f"Using docker image {docker_base_image} for building.")
 
         docker_builder = docker_utils.RecipeBuilder(
