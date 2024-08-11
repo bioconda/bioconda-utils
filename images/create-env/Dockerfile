@@ -8,10 +8,9 @@ RUN arch="$( uname -m )" \
     wget --quiet -O ./miniconda.sh \
       "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-${arch}.sh"
 
-# Install exact versions of conda/mamba
+# Install exact versions of condaa
 ARG CONDA_VERSION
-ARG MAMBA_VERSION
-RUN echo -e "$CONDA_VERSION\n$MAMBA_VERSION" > requirements.txt
+RUN echo -e "$CONDA_VERSION" > requirements.txt
 RUN ./install-conda ./requirements.txt /opt/create-env
 
 ARG BUSYBOX_IMAGE
