@@ -1,6 +1,6 @@
 # bioconda/create-env
 
-The `create-env` container image, available as [`quay.io/bioconda/create-env`](https://quay.io/repository/bioconda/create-env?tab=tags), provides [`conda`](https://github.com/conda/conda/) (and [`mamba`](https://github.com/mamba-org/mamba)) alongside a convenience wrapper `create-env` to create small container images based on Conda packages.
+The `create-env` container image, available as [`quay.io/bioconda/create-env`](https://quay.io/repository/bioconda/create-env?tab=tags), provides [`conda`](https://github.com/conda/conda/) alongside a convenience wrapper `create-env` to create small container images based on Conda packages.
 
 
 ## Options
@@ -37,13 +37,12 @@ Post-processing steps are triggered by arguments to `create-env`:
 ## Usage example:
 ```Dockerfile
 FROM quay.io/bioconda/create-env:2.1.0 as build
-# Create an environment containing python=3.9 at /usr/local using mamba, strip
+# Create an environment containing python=3.9 at /usr/local, strip
 # files and remove some less important files:
 RUN export CONDA_ADD_PIP_AS_PYTHON_DEPENDENCY=0 \
     && \
     /opt/create-env/env-execute \
       create-env \
-        --conda=mamba \
         --strip-files='bin/*' \
         --strip-files='lib/*' \
         --remove-paths='*.a' \
@@ -87,8 +86,6 @@ RUN /usr/local/env-activate.sh && python -c 'import sys; print(sys.version)'
   ```sh
   . /opt/create-env/env-activate.sh
   export CONDA_ALWAYS_COPY=0
-  create-env --conda=mamba /opt/python-3.8 python=3.8
-  create-env --conda=mamba /opt/python-3.9 python=3.9
   create-env --conda=: --strip-files=\* /opt/python-3.8
   create-env --conda=: --strip-files=\* /opt/python-3.9
   ```

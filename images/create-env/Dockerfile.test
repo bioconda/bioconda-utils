@@ -5,7 +5,6 @@ RUN set -x && \
     CONDA_PKGS_DIRS="/tmp/pkgs" \
       /opt/create-env/env-execute \
         create-env \
-          --conda=mamba \
           /usr/local \
           file findutils grep
 RUN set -x && \
@@ -34,7 +33,6 @@ FROM "${base}" as build_bioconda_package
 RUN set -x && \
     /opt/create-env/env-execute \
       create-env \
-        --conda=mamba \
         --strip-files=\* \
         /usr/local \
         python
@@ -58,7 +56,6 @@ FROM "${base}" as build_conda
 RUN set -x && \
     /opt/create-env/env-execute \
       create-env \
-        --conda=mamba \
         --env-activate-args='--prefix-is-base' \
         --strip-files=\* \
         --remove-paths=\*.a \
