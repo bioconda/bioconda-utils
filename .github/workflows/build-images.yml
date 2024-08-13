@@ -188,7 +188,13 @@ jobs:
     - name: Install bioconda-utils
       run: |
         export BIOCONDA_DISABLE_BUILD_PREP=1
-        wget https://raw.githubusercontent.com/bioconda/bioconda-common/master/{common,install-and-set-up-conda,configure-conda}.sh
+        BRANCH=simplify-unify-containers
+        wget https://raw.githubusercontent.com/bioconda/bioconda-common/${BRANCH}/{common,install-and-set-up-conda,configure-conda}.sh
+        source images/versions.sh
+
+        # Ensure install-and-set-up-conda uses same version as in the container
+        # (which uses images/versions.sh
+        export BIOCONDA_UTILS_TAG=$BIOCONDA_UTILS_VERSION
         bash install-and-set-up-conda.sh
         eval "$(conda shell.bash hook)"
         conda create -n bioconda -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
