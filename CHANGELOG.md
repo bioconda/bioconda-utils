@@ -1,5 +1,12 @@
 # Changelog
 
+### [3.3.2](https://www.github.com/bioconda/bioconda-utils/compare/v3.3.1...v3.3.2) (2024-08-28)
+
+
+### Bug Fixes
+
+* token for CircleCI artifacts ([#1001](https://www.github.com/bioconda/bioconda-utils/issues/1001)) ([a5882cc](https://www.github.com/bioconda/bioconda-utils/commit/a5882cc87c0e451483d19f8bba701496cc058883))
+
 ### [3.3.1](https://www.github.com/bioconda/bioconda-utils/compare/v3.3.0...v3.3.1) (2024-06-06)
 
 
