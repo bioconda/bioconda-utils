@@ -11,7 +11,7 @@ version: 2
 jobs:
   autobump:
     machine:
-      image: ubuntu-2204:current
+      image: ubuntu-2204:2024.05.1
     steps:
       - add_ssh_keys:
           fingerprints:
