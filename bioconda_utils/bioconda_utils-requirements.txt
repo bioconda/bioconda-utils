@@ -7,21 +7,21 @@ conda-forge-pinning=2024.06.01.05.54.15
 
 # basics
 python=3.10.*
-conda=24.5.*
+conda=24.9.*
 conda-libmamba-solver=24.1.*
-conda-build=24.5.*
-conda-index=0.4.*
-conda-package-streaming=0.9.*
+conda-build=24.9.*
+conda-index=0.5.*
+conda-package-streaming=0.11.*
 mamba=1.5.*
-boa=0.17.*
+#boa=0.17.*
 
 argh=0.31.*                   # CLI
 colorlog=6.*                  # Logging
 tqdm=4.66.*                   # Progress monitor
 yaspin=2.*                    #
 ruamel.yaml=0.18.*            # Recipe YAML parsing
-pyaml=24.04.*                 # Faster YAML parser (deprecate?)
-networkx=3.3.*                # (networkx>3.3 needs python>=3.10)
+pyaml=24.09.*                 # Faster YAML parser (deprecate?)
+networkx=3.4.*                # (networkx>3.3 needs python>=3.10)
 pandas=2.2.*                  #
 libblas=*=*openblas           # Avoid large mkl package (pulled in by pandas)
 boltons=24.0.*                #
@@ -43,10 +43,10 @@ aiohttp=3.9.*                 # HTTP lib
 aiohttp-jinja2                # jinja2 renderer for aiohttp.web
 aiohttp-session               #
 aiohttp-security              #
-aiofiles=23.*                 # async open
-aioftp=0.22.*                 # FTP lib
+aiofiles=24.*                 # async open
+aioftp=0.23.*                 # FTP lib
 backoff=2.2.*                 # retrying of failed API calls
-cachetools=5.3.*              # request caching (NEEDED?)
+cachetools=5.5.*              # request caching (NEEDED?)
 
 # client API wrappers
 gitpython=3.1.*               # githandler
