@@ -14,7 +14,7 @@ import shutil
 from pathlib import Path
 from textwrap import dedent
 
-from conda_build import api, metadata
+from conda_build import api, metadata, exceptions
 
 from bioconda_utils import __version__
 from bioconda_utils import utils
@@ -652,7 +652,7 @@ def test_rendering_sandboxing():
         assert ("'GITHUB_TOKEN' is undefined" in str(excinfo.value.stdout))
     else:
         # recipe for "one" should fail because GITHUB_TOKEN is not a jinja var.
-        with pytest.raises(SystemExit) as excinfo:
+        with pytest.raises(exceptions.CondaBuildUserError) as excinfo:
             pkg_paths = utils.built_package_paths(r.recipe_dirs['one'])
             build.build(
                 recipe=r.recipe_dirs['one'],
