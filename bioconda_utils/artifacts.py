@@ -18,7 +18,7 @@ from bioconda_utils.upload import anaconda_upload, skopeo_upload
 logger = logging.getLogger(__name__)
 
 
-IMAGE_RE = re.compile(r"(.+)(?::|%3A)(.+)\.tar\.gz$")
+IMAGE_RE = re.compile(r"(.+)(?::|%3A|---)(.+)\.tar\.gz$")
 
 
 class UploadResult(Enum):
