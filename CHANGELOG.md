@@ -1,5 +1,12 @@
 # Changelog
 
+### [3.4.1](https://www.github.com/bioconda/bioconda-utils/compare/v3.4.0...v3.4.1) (2024-10-28)
+
+
+### Bug Fixes
+
+* fix image artifact regex to match GitHub Actions filename ([#1013](https://www.github.com/bioconda/bioconda-utils/issues/1013)) ([c1adeea](https://www.github.com/bioconda/bioconda-utils/commit/c1adeeac7125a1483cd3ab57c2dd034a0f6978e3))
+
 ## [3.4.0](https://www.github.com/bioconda/bioconda-utils/compare/v3.3.2...v3.4.0) (2024-10-21)
 
 
