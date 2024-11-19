@@ -1,5 +1,12 @@
 # Changelog
 
+### [3.4.2](https://www.github.com/bioconda/bioconda-utils/compare/v3.4.1...v3.4.2) (2024-11-19)
+
+
+### Bug Fixes
+
+* success check does not consider pkg_dir [#836](https://www.github.com/bioconda/bioconda-utils/issues/836) ([#838](https://www.github.com/bioconda/bioconda-utils/issues/838)) ([6240d31](https://www.github.com/bioconda/bioconda-utils/commit/6240d31e706b91b4b217ab10305fb84aabd8a147))
+
 ### [3.4.1](https://www.github.com/bioconda/bioconda-utils/compare/v3.4.0...v3.4.1) (2024-10-28)
 
 
