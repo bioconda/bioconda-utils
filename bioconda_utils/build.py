@@ -142,7 +142,7 @@ def build(recipe: str, pkg_paths: List[str] = None,
                                         noarch=is_noarch,
                                         live_logs=live_logs)
             # Use presence of expected packages to check for success
-            if (docker_builder.pkg_dir is not None):
+            if docker_builder.pkg_dir is not None:
                 platform = utils.RepoData.native_platform()
                 subfolder = utils.RepoData.platform2subdir(platform)
                 conda_build_config = utils.load_conda_build_config(platform=subfolder)
