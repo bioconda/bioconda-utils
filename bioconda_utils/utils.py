@@ -11,6 +11,7 @@ import fnmatch
 import glob
 import logging
 import os
+import platform
 import re
 import subprocess as sp
 import sys
@@ -33,7 +34,7 @@ import requests
 from yaspin import yaspin, Spinner
 from yaspin.spinners import Spinners
 from urllib3 import Retry
-import appdirs
+import platformdirs
 import diskcache
 
 from github import Github
@@ -56,7 +57,6 @@ conda.gateways.logging.initialize_logging = lambda: None
 from conda_build import api
 from conda.exports import VersionOrder
 from conda.exports import subdir as conda_subdir
-from boa.cli.mambabuild import prepare as insert_mambabuild
 
 from jsonschema import validate
 from colorlog import ColoredFormatter
@@ -65,7 +65,7 @@ from boltons.funcutils import FunctionBuilder
 
 logger = logging.getLogger(__name__)
 
-disk_cache = diskcache.Cache(appdirs.user_cache_dir("bioconda-utils"))
+disk_cache = diskcache.Cache(platformdirs.user_cache_dir("bioconda-utils"))
 
 
 class TqdmHandler(logging.StreamHandler):
@@ -119,7 +119,7 @@ def ensure_list(obj):
     return [obj]
 
 
-def wraps(func):
+def wraps(func, hide_wrapped=False):
     """Custom wraps() function for decorators
 
     This one differs from functiools.wraps and boltons.funcutils.wraps in
@@ -147,7 +147,10 @@ def wraps(func):
         fb.body = 'return _call(%s)' % fb.get_invocation_str()
         execdict = dict(_call=wrapper_func, _func=func)
         fully_wrapped = fb.get_func(execdict)
-        fully_wrapped.__wrapped__ = func
+        if not hide_wrapped:
+            fully_wrapped.__wrapped__ = func
+        elif hasattr(fully_wrapped, '__wrapped__'):
+            del fully_wrapped.__dict__['__wrapped__']
         return fully_wrapped
 
     return wrapper_wrapper
@@ -405,19 +408,18 @@ def sandboxed_env(env):
     the existing `os.environ` or the provided **env** that match
     ENV_VAR_WHITELIST globs.
     """
+    os_environ = os.environ
+    orig = os_environ.copy()
     env = dict(env)
-    orig = os.environ.copy()
-
-    _env = {k: v for k, v in orig.items() if allowed_env_var(k)}
-    _env.update({k: str(v) for k, v in env.items() if allowed_env_var(k)})
-
-    os.environ = _env
 
     try:
+        os_environ.clear()
+        os_environ.update({k: v for k, v in orig.items() if allowed_env_var(k)})
+        os_environ.update({k: str(v) for k, v in env.items() if allowed_env_var(k)})
         yield
     finally:
-        os.environ.clear()
-        os.environ.update(orig)
+        os_environ.clear()
+        os_environ.update(orig)
 
 
 def load_all_meta(recipe, config=None, finalize=True):
@@ -432,8 +434,6 @@ def load_all_meta(recipe, config=None, finalize=True):
         via conda and also download of those packages (to inspect possible
         run_exports). For fast-running tasks like linting, set to False.
     """
-    insert_mambabuild()
-
     if config is None:
         config = load_conda_build_config()
     # `bypass_env_check=True` prevents evaluating (=environment solving) the
@@ -1195,7 +1195,7 @@ def load_config(path):
 
     default_config = {
         'blacklists': [],
-        'channels': ['conda-forge', 'bioconda', 'defaults'],
+        'channels': ['conda-forge', 'bioconda'],
         'requirements': None,
         'upload_channel': 'bioconda'
     }
@@ -1400,7 +1400,7 @@ class RepoData:
     #: Columns available in internal dataframe
     columns = _load_columns + ['channel', 'subdir', 'platform']
     #: Platforms loaded
-    platforms = ['linux', 'osx', 'noarch']
+    platforms = ['linux', 'linux-aarch64', 'osx', 'osx-arm64', 'noarch']
     # config object
     config = None
 
@@ -1491,13 +1491,16 @@ class RepoData:
         def to_dataframe(json_data, meta_data):
             channel, platform = meta_data
             repo = json.loads(json_data)
-            df = pd.DataFrame.from_dict(repo['packages'], 'index',
-                                        columns=self._load_columns)
+            subdir = repo["info"]["subdir"]
+            packages = repo["packages"]
+            packages.update(repo.get("packages.conda", {}))
+
+            df = pd.DataFrame.from_dict(packages, 'index', columns=self._load_columns)
             # Ensure that version is always a string.
             df['version'] = df['version'].astype(str)
             df['channel'] = channel
             df['platform'] = platform
-            df['subdir'] = repo['info']['subdir']
+            df['subdir'] = subdir
             return df
 
         if urls:
@@ -1514,8 +1517,13 @@ class RepoData:
 
     @staticmethod
     def native_platform():
+        arch = platform.machine()
+        if sys.platform.startswith("linux") and arch == "aarch64":
+            return "linux-aarch64"
         if sys.platform.startswith("linux"):
             return "linux"
+        if sys.platform.startswith("darwin") and arch == "arm64":
+            return "osx-arm64"
         if sys.platform.startswith("darwin"):
             return "osx"
         raise ValueError("Running on unsupported platform")
@@ -1524,14 +1532,17 @@ class RepoData:
     def platform2subdir(platform):
         if platform == 'linux':
             return 'linux-64'
+        elif platform == 'linux-aarch64':
+            return 'linux-aarch64'
         elif platform == 'osx':
             return 'osx-64'
+        elif platform == 'osx-arm64':
+            return 'osx-arm64'
         elif platform == 'noarch':
             return 'noarch'
         else:
             raise ValueError(
-                'Unsupported platform: bioconda only supports linux, osx and noarch.')
-
+                'Unsupported platform: bioconda only supports linux, linux-aarch64, osx, osx-arm64 and noarch.')
 
 
     def get_versions(self, name):
@@ -1601,8 +1612,15 @@ class RepoData:
 def get_github_client():
     """Get a Github client with a robust retry policy.
     """
+    if "GITHUB_TOKEN" in os.environ.keys():
+        return Github(
+            os.environ["GITHUB_TOKEN"],
+            retry=Retry(
+                total=10, status_forcelist=(500, 502, 504), backoff_factor=0.3
+            ),
+        )
+    logger.warn("GITHUB_TOKEN not found, restrictions may be enforced by GitHub API")
     return Github(
-        os.environ["GITHUB_TOKEN"],
         retry=Retry(
             total=10, status_forcelist=(500, 502, 504), backoff_factor=0.3
         ),
@@ -1633,4 +1651,6 @@ def yaml_remove_invalid_chars(text: str, valid_chars_re=re.compile(r"[^ \t\n\w\d
 def get_package_downloads(channel, package):
     """Use anaconda API to obtain download counts."""
     data = requests.get(f"https://api.anaconda.org/package/{channel}/{package}").json()
-    return sum(rec["ndownloads"] for rec in data["files"])
+    if "files" in data:
+        return sum(rec["ndownloads"] for rec in data["files"])
+    return 0

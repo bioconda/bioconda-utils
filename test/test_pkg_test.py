@@ -10,7 +10,6 @@ from bioconda_utils import utils
 from bioconda_utils import build
 
 from conda import __version__ as conda_version
-from mamba import __version__ as mamba_version
 
 # TODO:
 # need tests for channel order and extra channels (see

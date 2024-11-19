@@ -105,7 +105,6 @@ from typing import Any, Dict, List, NamedTuple, Set, Tuple
 
 import pandas as pd
 from bioconda_utils.skiplist import Skiplist
-import ruamel_yaml as yaml
 import networkx as nx
 
 from .. import utils
@@ -487,7 +486,7 @@ class Linter:
         try:
             self.checks_ordered = reversed(list(nx.topological_sort(dag)))
         except nx.NetworkXUnfeasible:
-            raise RunTimeError("Cycle in LintCheck requirements!")
+            raise RuntimeError("Cycle in LintCheck requirements!")
         self.reload_checks()
 
     def reload_checks(self):

@@ -6,7 +6,7 @@ ARG BASE_IMAGE=quay.io/condaforge/linux-anvil-cos7-x86_64
 FROM ${BASE_IMAGE} as base
 
 # Copy over C.UTF-8 locale from our base image to make it consistently available during build.
-COPY --from=quay.io/bioconda/base-glibc-busybox-bash /usr/lib/locale/C.UTF-8 /usr/lib/locale/C.UTF-8
+COPY --from=quay.io/bioconda/base-glibc-busybox-bash /usr/lib/locale/C.utf8 /usr/lib/locale/C.utf8
 
 # Provide system deps unconditionally until we are able to offer per-recipe installs.
 # (Addresses, e.g., "ImportError: libGL.so.1" in tests directly invoked by conda-build.)
@@ -21,9 +21,11 @@ RUN yum install -y mesa-libGL-devel \
 # This changes root's .condarc which ENTRYPOINT copies to /home/conda/.condarc later.
 RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda config \
-    --add channels defaults \
     --add channels bioconda \
     --add channels conda-forge \
+    && \
+    conda config \
+    --remove channels defaults || true \
     && \
     { conda config --remove repodata_fns current_repodata.json 2> /dev/null || true ; } && \
     conda config --prepend repodata_fns repodata.json && \
@@ -51,10 +53,10 @@ RUN . /opt/conda/etc/profile.d/conda.sh  && conda activate base && \
     sed -nE \
     '/^conda([><!=~ ].+)?$/p' \
     /opt/bioconda-utils/bioconda_utils-requirements.txt \
-    | xargs -r mamba install --yes && \
-    mamba install --yes --file /opt/bioconda-utils/bioconda_utils-requirements.txt && \
+    | xargs -r conda install --yes && \
+    conda install --yes --file /opt/bioconda-utils/bioconda_utils-requirements.txt && \
     pip install --no-deps --find-links /opt/bioconda-utils bioconda_utils && \
-    mamba clean --yes --index --tarballs && \
+    conda clean --yes --index --tarballs && \
     # Find files that are not already in group "lucky" and change their group and mode.
     find /opt/conda \
     \! -group lucky \

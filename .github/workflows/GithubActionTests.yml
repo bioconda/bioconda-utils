@@ -16,7 +16,9 @@ jobs:
           - long_running_2
 
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: set path
         run: echo "/opt/mambaforge/bin" >> $GITHUB_PATH
@@ -27,15 +29,16 @@ jobs:
           wget https://raw.githubusercontent.com/bioconda/bioconda-common/master/{common,install-and-set-up-conda,configure-conda}.sh
           bash install-and-set-up-conda.sh
           eval "$(conda shell.bash hook)"
-          mamba create -n bioconda -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
+          conda create -n bioconda --quiet --yes --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
           conda activate bioconda
+          conda list
           python setup.py install
 
       - name: Build docker container
         run: |
           docker build -t quay.io/bioconda/bioconda-utils-build-env-cos7:latest ./
           docker history quay.io/bioconda/bioconda-utils-build-env-cos7:latest
-          docker run --rm -t quay.io/bioconda/bioconda-utils-build-env-cos7:latest sh -lec 'type -t conda && conda info -a && conda list'
+          docker run --rm -t quay.io/bioconda/bioconda-utils-build-env-cos7:latest sh -lec 'type -t conda && conda info --verbose && conda list'
           docker build -t quay.io/bioconda/bioconda-utils-test-env-cos7:latest -f ./Dockerfile.test ./
 
       - name: Run tests '${{ matrix.py_test_marker }}'
@@ -49,9 +52,11 @@ jobs:
           fi
   test-macosx:
     name: OSX tests
-    runs-on: macos-latest
+    runs-on: macos-13
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: set path
         run: echo "/opt/mambaforge/bin" >> $GITHUB_PATH
@@ -62,7 +67,8 @@ jobs:
           wget https://raw.githubusercontent.com/bioconda/bioconda-common/master/{common,install-and-set-up-conda,configure-conda}.sh
           bash install-and-set-up-conda.sh
           eval "$(conda shell.bash hook)"
-          mamba create -n bioconda -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
+          conda create -n bioconda --quiet --yes --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
+          conda list
           conda activate bioconda
           python setup.py install
 
@@ -80,7 +86,7 @@ jobs:
     name: autobump test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v4
       - name: set path
         run: echo "/opt/mambaforge/bin" >> $GITHUB_PATH
 
@@ -90,8 +96,9 @@ jobs:
           wget https://raw.githubusercontent.com/bioconda/bioconda-common/master/{common,install-and-set-up-conda,configure-conda}.sh
           bash install-and-set-up-conda.sh
           eval "$(conda shell.bash hook)"
-          mamba create -n bioconda -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
+          conda create -n bioconda --quiet --yes --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
           conda activate bioconda
+          conda list
           python setup.py install
 
       - name: Test autobump

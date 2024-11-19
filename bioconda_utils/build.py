@@ -15,12 +15,11 @@ from bioconda_utils.skiplist import Skiplist
 from bioconda_utils.build_failure import BuildFailureRecord
 from bioconda_utils.githandler import GitHandler
 
-import conda
 from conda.exports import UnsatisfiableError
 from conda_build.exceptions import DependencyNeedsBuildingError
 import networkx as nx
 import pandas
-from ruamel_yaml import YAML
+from ruamel.yaml import YAML
 
 from . import utils
 from . import docker_utils
@@ -28,6 +27,7 @@ from . import pkg_test
 from . import upload
 from . import lint
 from . import graph
+from . import recipe as _recipe
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,8 @@ def build(recipe: str, pkg_paths: List[str] = None,
           mulled_conda_image: str = pkg_test.MULLED_CONDA_IMAGE,
           record_build_failure: bool = False,
           dag: Optional[nx.DiGraph] = None,
-          skiplist_leafs: bool = False) -> BuildResult:
+          skiplist_leafs: bool = False,
+          live_logs: bool = True) -> BuildResult:
     """
     Build a single recipe for a single env
 
@@ -81,6 +82,7 @@ def build(recipe: str, pkg_paths: List[str] = None,
       record_build_failure: If True, record build failures in a file next to the meta.yaml
       dag: optional nx.DiGraph with dependency information
       skiplist_leafs: If True, blacklist leaf packages that fail to build
+      live_logs: If True, enable live logging during the build process
     """
     if record_build_failure and not dag:
         raise ValueError("record_build_failure requires dag to be set")
@@ -122,9 +124,9 @@ def build(recipe: str, pkg_paths: List[str] = None,
     is_noarch = bool(meta.get_value('build/noarch', default=False))
     use_base_image = meta.get_value('extra/container', {}).get('extended-base', False)
     if use_base_image:
-        base_image = 'quay.io/bioconda/base-glibc-debian-bash:2.1.0'
+        base_image = 'quay.io/bioconda/base-glibc-debian-bash:3.1'
     else:
-        base_image = 'quay.io/bioconda/base-glibc-busybox-bash:2.1.0'
+        base_image = 'quay.io/bioconda/base-glibc-busybox-bash:3.1'
 
     build_failure_record = BuildFailureRecord(recipe)
     build_failure_record_existed_before_build = build_failure_record.exists()
@@ -137,7 +139,8 @@ def build(recipe: str, pkg_paths: List[str] = None,
             docker_builder.build_recipe(recipe_dir=os.path.abspath(recipe),
                                         build_args=' '.join(args),
                                         env=whitelisted_env,
-                                        noarch=is_noarch)
+                                        noarch=is_noarch,
+                                        live_logs=live_logs)
             # Use presence of expected packages to check for success
             if (docker_builder.pkg_dir is not None):
                 platform = utils.RepoData.native_platform()
@@ -152,7 +155,7 @@ def build(recipe: str, pkg_paths: List[str] = None,
                         "cannot be found", pkg_path)
                     return BuildResult(False, None)
         else:
-            conda_build_cmd = [utils.bin_for('conda'), 'mambabuild']
+            conda_build_cmd = [utils.bin_for('conda-build')]
             # - Temporarily reset os.environ to avoid leaking env vars
             # - Also pass filtered env to run()
             # - Point conda-build to meta.yaml, to avoid building subdirs
@@ -162,7 +165,7 @@ def build(recipe: str, pkg_paths: List[str] = None,
                     cmd += [config_file.arg, config_file.path]
                 cmd += [os.path.join(recipe, 'meta.yaml')]
                 with utils.Progress():
-                    utils.run(cmd, mask=False)
+                    utils.run(cmd, mask=False, live=live_logs)
 
         logger.info('BUILD SUCCESS %s',
                     ' '.join(os.path.basename(p) for p in pkg_paths))
@@ -186,7 +189,8 @@ def build(recipe: str, pkg_paths: List[str] = None,
         for pkg_path in pkg_paths:
             try:
                 pkg_test.test_package(pkg_path, base_image=base_image,
-                                      conda_image=mulled_conda_image)
+                                      conda_image=mulled_conda_image,
+                                      live_logs=live_logs)
             except sp.CalledProcessError:
                 logger.error('TEST FAILED: %s', recipe)
                 return BuildResult(False, None)
@@ -232,20 +236,38 @@ def remove_cycles(dag, name2recipes, failed, skip_dependent):
     return dag.subgraph(name for name in dag if name not in nodes_in_cycles)
 
 
-def get_subdags(dag, n_workers, worker_offset):
+def get_subdags(dag, n_workers, worker_offset, subdag_depth):
     if n_workers > 1 and worker_offset >= n_workers:
         raise ValueError(
             "n-workers is less than the worker-offset given! "
             "Either decrease --n-workers or decrease --worker-offset!")
 
     # Get connected subdags and sort by nodes
+    # If subdag_depth is None, each root node and all children (not previously assigned) are assigned to the same worker. 
+    #   This may fail when attempting to build child nodes with parents assigned to other workers.
+    # If subdag_depth is set, only nodes of a certain depth will be built (i.e., 0: only root nodes, 
+    #   1: only nodes with parents that are root nodes, etc.). They are assigned evenly across workers.
     if n_workers > 1:
         root_nodes = sorted([k for (k, v) in dag.in_degree() if v == 0])
         nodes = set()
         found = set()
+        children = []
+
+        if subdag_depth is not None:
+            working_dag = nx.DiGraph(dag)
+            # Only build the current "root" nodes after removing 
+            for i in range(0, subdag_depth + 1):
+                print("{} recipes at depth {}".format(len(root_nodes), i))
+                if len(root_nodes) == 0:
+                    break
+                if i < subdag_depth:
+                    working_dag.remove_nodes_from(root_nodes)
+                    root_nodes = sorted([k for (k, v) in working_dag.in_degree() if v == 0])
+
         for idx, root_node in enumerate(root_nodes):
-            # Flatten the nested list
-            children = itertools.chain(*nx.dfs_successors(dag, root_node).values())
+            if subdag_depth is None:
+                # Flatten the nested list
+                children = itertools.chain(*nx.dfs_successors(dag, root_node).values())
             # This is the only obvious way of ensuring that all nodes are included
             # in exactly 1 subgraph
             found.add(root_node)
@@ -258,12 +280,36 @@ def get_subdags(dag, n_workers, worker_offset):
             else:
                 for child in children:
                     found.add(child)
+
         subdags = dag.subgraph(list(nodes))
         logger.info("Building and testing sub-DAGs %i in each group of %i, which is %i packages", worker_offset, n_workers, len(subdags.nodes()))
     else:
         subdags = dag
 
     return subdags
+
+
+def do_not_consider_for_additional_platform(recipe_folder: str, recipe: str, platform: str):
+    """
+    Given a recipe, check this recipe should skip in current platform or not.
+
+    Arguments:
+      recipe_folder: Directory containing possibly many, and possibly nested, recipes.
+      recipe: Relative path to recipe
+      platform: current native platform
+
+    Returns:
+      Return True if current native platform are not included in recipe's additional platforms (no need to build).
+    """
+    recipe_obj = _recipe.Recipe.from_file(recipe_folder, recipe)
+    # On linux-aarch64 or osx-arm64 env, only build recipe with matching extra_additional_platforms
+    if platform == "linux-aarch64":
+        if "linux-aarch64" not in recipe_obj.extra_additional_platforms:
+            return True
+    if platform == "osx-arm64":
+        if "osx-arm64" not in recipe_obj.extra_additional_platforms:
+            return True
+    return False
 
 
 def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
@@ -281,7 +327,11 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
                   keep_old_work: bool = False,
                   mulled_conda_image: str = pkg_test.MULLED_CONDA_IMAGE,
                   record_build_failures: bool = False,
-                  skiplist_leafs: bool = False):
+                  skiplist_leafs: bool = False,
+                  live_logs: bool = True,
+                  exclude: List[str] = None,
+                  subdag_depth: int = None
+                  ):
     """
     Build one or many bioconda packages.
 
@@ -308,6 +358,11 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
       worker_offset: If n_workers is >1, then every worker_offset within a given group of
         sub-DAGs will be processed.
       keep_old_work: Do not remove anything from environment, even after successful build and test.
+      skiplist_leafs: If True, blacklist leaf packages that fail to build
+      live_logs: If True, enable live logging during the build process
+      exclude: list of recipes to exclude. Typically used for
+        temporary exclusion; otherwise consider adding recipe to skiplist.
+      subdag_depth: Number of levels of nodes to skip. (Optional, only if using n_workers)
     """
     if not recipes:
         logger.info("Nothing to be done.")
@@ -337,13 +392,17 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
     failed = []
 
     dag, name2recipes = graph.build(recipes, config=config_path, blacklist=blacklist)
+    if exclude:
+        for name in exclude:
+            dag.remove_node(name)
+
     if not dag:
         logger.info("Nothing to be done.")
         return True
 
     skip_dependent = defaultdict(list)
     dag = remove_cycles(dag, name2recipes, failed, skip_dependent)
-    subdag = get_subdags(dag, n_workers, worker_offset)
+    subdag = get_subdags(dag, n_workers, worker_offset, subdag_depth)
     if not subdag:
         logger.info("Nothing to be done.")
         return True
@@ -363,6 +422,11 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
     failed_uploads = []
 
     for recipe, name in recipes:
+        platform = utils.RepoData().native_platform()
+        if not force and do_not_consider_for_additional_platform(recipe_folder, recipe, platform):
+            logger.info("BUILD SKIP: skipping %s for additional platform %s", recipe, platform)
+            continue
+
         if name in skip_dependent:
             logger.info('BUILD SKIP: skipping %s because it depends on %s '
                         'which had a failed build.',
@@ -402,7 +466,8 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
                     mulled_conda_image=mulled_conda_image,
                     dag=dag,
                     record_build_failure=record_build_failures,
-                    skiplist_leafs=skiplist_leafs)
+                    skiplist_leafs=skiplist_leafs,
+                    live_logs=live_logs)
 
         if not res.success:
             failed.append(recipe)
