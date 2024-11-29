@@ -7,7 +7,7 @@ These checks catch errors relating to the use of ``-
 
 import os
 
-from . import LintCheck, ERROR, WARNING, INFO
+from . import INFO, WARNING, LintCheck
 
 
 class should_use_compilers(LintCheck):
@@ -21,7 +21,7 @@ class should_use_compilers(LintCheck):
            build:
              - {{ compiler('language') }}
 
-    Where language is one of ``c``, ``cxx``, ``fortran``, ``go`` or
+    Where language is one of ``c``, ``cxx``, ``fortran``, ``rust``, ``go`` or
     ``cgo``. You can specify multiple compilers if needed.
 
     There is no need to add ``libgfortran``, ``libgcc``, or
@@ -29,8 +29,17 @@ class should_use_compilers(LintCheck):
     conda-build itself.
 
     """
-    compilers = ('gcc', 'llvm', 'libgfortran', 'libgcc', 'go', 'cgo',
-                 'toolchain')
+
+    compilers = (
+        "gcc",
+        "llvm",
+        "libgfortran",
+        "libgcc",
+        "go",
+        "cgo",
+        "toolchain",
+        "rust",
+    )
 
     def check_deps(self, deps):
         for compiler in self.compilers:
@@ -45,13 +54,13 @@ class compilers_must_be_in_build(LintCheck):
     ``requirements: build:`` section.
 
     """
+
     def check_deps(self, deps):
         for dep in deps:
-            if dep.startswith('compiler_'):
+            if dep.startswith("compiler_"):
                 for location in deps[dep]:
-                    if 'run' in location or 'host' in location:
+                    if "run" in location or "host" in location:
                         self.message(section=location)
-
 
 
 class uses_setuptools(LintCheck):
@@ -62,10 +71,11 @@ class uses_setuptools(LintCheck):
     pkg_resources or setuptools console scripts).
 
     """
+
     severity = INFO
 
     def check_recipe(self, recipe):
-        if 'setuptools' in recipe.get_deps('run'):
+        if "setuptools" in recipe.get_deps("run"):
             self.message()
 
 
@@ -81,27 +91,28 @@ class setup_py_install_args(LintCheck):
     requires defines entrypoints in its ``setup.py``.
 
     """
+
     @staticmethod
     def _check_line(line: str) -> bool:
         """Check a line for a broken call to setup.py"""
-        if 'setup.py install' not in line:
+        if "setup.py install" not in line:
             return True
-        if '--single-version-externally-managed' in line:
+        if "--single-version-externally-managed" in line:
             return True
         return False
 
     def check_deps(self, deps):
-        if 'setuptools' not in deps:
+        if "setuptools" not in deps:
             return  # no setuptools, no problem
 
-        if not self._check_line(self.recipe.get('build/script', '')):
-            self.message(section='build/script')
+        if not self._check_line(self.recipe.get("build/script", "")):
+            self.message(section="build/script")
 
         try:
-            with open(os.path.join(self.recipe.dir, 'build.sh')) as buildsh:
+            with open(os.path.join(self.recipe.dir, "build.sh")) as buildsh:
                 for num, line in enumerate(buildsh):
                     if not self._check_line(line):
-                        self.message(fname='build.sh', line=num)
+                        self.message(fname="build.sh", line=num)
         except FileNotFoundError:
             pass
 
@@ -115,10 +126,10 @@ class cython_must_be_in_host(LintCheck):
         host:
           - cython
     """
+
     def check_deps(self, deps):
-        if 'cython' in deps:
-            if any('host' not in location
-                   for location in deps['cython']):
+        if "cython" in deps:
+            if any("host" not in location for location in deps["cython"]):
                 self.message()
 
 
@@ -132,9 +143,11 @@ class cython_needs_compiler(LintCheck):
           - {{ compiler('c') }}
 
     """
+
     severity = WARNING
+
     def check_deps(self, deps):
-        if 'cython' in deps and 'compiler_c' not in deps and 'compiler_cxx' not in deps:
+        if "cython" in deps and "compiler_c" not in deps and "compiler_cxx" not in deps:
             self.message()
 
 
@@ -143,15 +156,15 @@ class missing_run_exports(LintCheck):
 
     This ensures that the package is automatically pinned to a compatible version if
     it is used as a dependency in another recipe.
-    This is a conservative strategy to avoid breakage. We came to the 
+    This is a conservative strategy to avoid breakage. We came to the
     conclusion that it is better to require this little overhead instead
     of trying to fix things when they break later on.
     This holds for compiled packages (in particular those with shared
     libraries) but also for e.g. Python packages, as those might also
     introduce breaking changes in their APIs or command line interfaces.
 
-    We distinguish between four cases. 
-    
+    We distinguish between four cases.
+
     **Case 1:** If the software follows semantic versioning (or it has at least a normal version string (like 1.2.3) and the actual strategy of the devs is unknown), add run_exports to the recipe like this::
 
       build:
@@ -159,7 +172,7 @@ class missing_run_exports(LintCheck):
           - {{ pin_subpackage('myrecipe', max_pin="x") }}
 
     with ``myrecipe`` being the name of the recipe (you can also use the name variable).
-    This will by default pin the package to ``>=1.2.0,<2.0.0`` where ``1.2.0`` is the 
+    This will by default pin the package to ``>=1.2.0,<2.0.0`` where ``1.2.0`` is the
     version of the package at build time of the one depending on it and ``<2.0.0`` constrains
     it to be less than the next major (i.e. potentially not backward compatible) version.
 
@@ -168,15 +181,15 @@ class missing_run_exports(LintCheck):
       build:
         run_exports:
           - {{ pin_subpackage('myrecipe', max_pin="x.x") }}
-    
+
     **Case 3:** If the software has a normal versioning (like 1.2.3) but does reportedly not follow semantic versioning, please choose the ``max_pin`` argument such that it captures the potential next version that will introduce a breaking change.
     E.g. if you expect breaking changes to occur with the next minor release, choose ``max_pin="x.x"``, if they even can occur with the next patch release, choose ``max_pin="x.x.x"``.
-    
+
     **Case 4:** If the software does have a non-standard versioning (e.g. calendar versioning like 20220602), we cannot really protect well against breakages. However, we can at least pin to the current version as a minimum and skip the max_pin constraint. This works by setting ``max_pin=None``.
 
     In the recipe depending on this one, one just needs to specify the package name
     and no version at all.
-    
+
     Also check out the possible arguments of `pin_subpackage` here:
     https://docs.conda.io/projects/conda-build/en/stable/resources/define-metadata.html#export-runtime-requirements
 
@@ -195,6 +208,7 @@ class missing_run_exports(LintCheck):
     Usually, there is no need to use ``pin_compatible``, just use ``pin_subpackage`` as shown above, and fix
     run_exports in upstream packages as well if needed.
     """
+
     def check_recipe(self, recipe):
         build = recipe.meta.get("build", dict())
         if "run_exports" not in build:

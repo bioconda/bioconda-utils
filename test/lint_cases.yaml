@@ -338,6 +338,9 @@ tests:
   - name: compiler_old_3
     expect: should_use_compilers
     add: { requirements: { build: ["llvm  # [osx]"] } }
+  - name: compiler_old_4
+    expect: should_use_compilers
+    add: { requirements: { build: ["rust >=1.56"] } }
   - name: compiler_in_host
     expect: compilers_must_be_in_build
     remove: build/noarch
