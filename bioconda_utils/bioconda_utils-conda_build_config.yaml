@@ -26,7 +26,7 @@ bamtools:
 # NOTE: Workaround https://github.com/conda/conda-build/issues/3974 we slightly alter the values
 #       from conda-forge-pinnings here (inserting '.*' or ' ' which should be ignored later on).
 r_base:
-  - "4.3.*"
+  - "4.4.*"
 
 # # conda-forge-pinning just got updated to build for Py 3.12 by default.
 # # In case we want to drop 3.8 before conda-forge does, we can use the following:
