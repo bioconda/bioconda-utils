@@ -234,7 +234,7 @@ def parse_gha_build_id(url: str) -> str:
 
 def get_gha_artifacts(check_run, platform, repo):
     gha_workflow_id = parse_gha_build_id(check_run.details_url)
-    if (gha_workflow_id) :
+    if gha_workflow_id:
         # The workflow run is different from the check run
         run = repo.get_workflow_run(int(gha_workflow_id))
         artifacts = run.get_artifacts()

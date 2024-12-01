@@ -1163,31 +1163,7 @@ class CreatePullRequest(GitFilter):
         # check if we already have an open PR (=> update in progress)
         pullreqs = await self.ghub.get_prs(from_branch=branch_name, from_user="bioconda")
         if pullreqs:
-            if len(pullreqs) > 1:
-                logger.error("Multiple PRs updating %s: %s",
-                             recipe,
-                             ", ".join(str(pull['number']) for pull in pullreqs))
-            for pull in pullreqs:
-                logger.debug("Found PR %i updating %s: %s",
-                             pull["number"], recipe, pull["title"])
-            # update the PR if title or body changed
-            pull = pullreqs[0]
-            if body == pull["body"]:
-                body = None
-            if title == pull["title"]:
-                title = None
-            if not (body is None and title is None):
-                if await self.ghub.modify_issue(number=pull['number'], body=body, title=title):
-                    logger.info("Updated PR %i updating %s to %s",
-                                pull['number'], recipe, recipe.version)
-                else:
-                    logger.error("Failed to update PR %i with title=%s and body=%s",
-                                 pull['number'], title, body)
-            else:
-                logger.debug("Not updating PR %i updating %s - no changes",
-                             pull['number'], recipe)
-
-            raise self.UpdateInProgress(recipe)
+            title, body = await self._handle_open_PRs(recipe, title, body, pullreqs)
 
         # check for matching closed PR (=> update rejected)
         pullreqs = await self.ghub.get_prs(from_branch=branch_name, state=self.ghub.STATE.closed)
@@ -1205,6 +1181,34 @@ class CreatePullRequest(GitFilter):
         await self.ghub.modify_issue(number=pull['number'], labels=labels)
 
         logger.info("Created PR %i: %s", pull['number'], title)
+
+    async def _handle_open_PRs(self, recipe, title, body, pullreqs):
+        if len(pullreqs) > 1:
+            logger.error("Multiple PRs updating %s: %s",
+                             recipe,
+                             ", ".join(str(pull['number']) for pull in pullreqs))
+        for pull in pullreqs:
+            logger.debug("Found PR %i updating %s: %s",
+                             pull["number"], recipe, pull["title"])
+            # update the PR if title or body changed
+        pull = pullreqs[0]
+        if body == pull["body"]:
+            body = None
+        if title == pull["title"]:
+            title = None
+        if not (body is None and title is None):
+            if await self.ghub.modify_issue(number=pull['number'], body=body, title=title):
+                logger.info("Updated PR %i updating %s to %s",
+                                pull['number'], recipe, recipe.version)
+            else:
+                logger.error("Failed to update PR %i with title=%s and body=%s",
+                                 pull['number'], title, body)
+        else:
+            logger.debug("Not updating PR %i updating %s - no changes",
+                             pull['number'], recipe)
+
+        raise self.UpdateInProgress(recipe)
+        return title,body
 
 
 class MaxUpdates(Filter):

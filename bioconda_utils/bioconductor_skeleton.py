@@ -775,7 +775,7 @@ class BioCProjectPage(object):
 
         # Check SystemRequirements in the DESCRIPTION file to make sure
         # packages with such requirements are provided correct recipes.
-        if (self.packages[self.package].get('SystemRequirements') is not None):
+        if self.packages[self.package].get('SystemRequirements') is not None:
             logger.warning(
                 "The 'SystemRequirements' {} are needed".format(
                     self.packages[self.package].get('SystemRequirements')) +

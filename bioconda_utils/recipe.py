@@ -313,6 +313,18 @@ class Recipe():
             # can't handle "[py2k or osx]" style things
             return None
 
+        new_lines = Recipe._compute_new_lines(block_left, variants)
+
+        logger.debug("Replacing: lines %i - %i with %i lines:\n%s\n---\n%s",
+                     block_top, block_top+block_height, len(new_lines),
+                     "\n".join(lines[block_top:block_top+block_height]),
+                     "\n".join(new_lines))
+
+        lines[block_top:block_top+block_height] = new_lines
+        return "\n".join(lines)
+
+    @staticmethod
+    def _compute_new_lines(block_left, variants):
         new_lines = []
         for variant in variants.values():
             first = True
@@ -322,14 +334,7 @@ class Recipe():
                     first = False
                 else:
                     new_lines.append("".join((" " * (block_left + 2), line)))
-
-        logger.debug("Replacing: lines %i - %i with %i lines:\n%s\n---\n%s",
-                     block_top, block_top+block_height, len(new_lines),
-                     "\n".join(lines[block_top:block_top+block_height]),
-                     "\n".join(new_lines))
-
-        lines[block_top:block_top+block_height] = new_lines
-        return "\n".join(lines)
+        return new_lines
 
     def get_template(self):
         """Create a Jinja2 template from the current raw recipe"""
@@ -636,7 +641,11 @@ class Recipe():
             re_before = re.compile(before_pattern)
             re_select = re.compile(before_pattern + r".*#.*\[")
 
-        # replace within those lines, erroring on "# [asd]" selectors
+        
+        return self._handle_replacements(lines, re_before, re_select, after)
+
+    def _handle_replacements(self, lines, re_before, re_select, after):
+       # replace within those lines, erroring on "# [asd]" selectors
         replacements = 0
         for lineno in sorted(lines):
             line = self.meta_yaml[lineno]

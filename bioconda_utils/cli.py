@@ -466,10 +466,7 @@ def build(recipe_folder, config, packages="*", git_range=None, testonly=False,
             build_script_template = open(build_script_template).read()
         else:
             build_script_template = docker_utils.BUILD_SCRIPT_TEMPLATE
-        if pkg_dir is None:
-            use_host_conda_bld = True
-        else:
-            use_host_conda_bld = False
+        use_host_conda_bld = pkg_dir is None
 
         if not utils.is_stable_version(VERSION):
             image_tag = utils.extract_stable_version(VERSION)

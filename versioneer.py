@@ -1427,18 +1427,10 @@ def get_versions(verbose=False):
     # and for users of a tarball/zipball created by 'git archive' or github's
     # download-from-tag feature or the equivalent in other VCSes.
 
-    get_keywords_f = handlers.get("get_keywords")
-    from_keywords_f = handlers.get("keywords")
-    if get_keywords_f and from_keywords_f:
-        try:
-            keywords = get_keywords_f(versionfile_abs)
-            ver = from_keywords_f(keywords, cfg.tag_prefix, verbose)
-            if verbose:
-                print("got version from expanded keyword %s" % ver)
-            return ver
-        except NotThisMethod:
-            pass
-
+    found, ver = _handle_keywords(cfg, handlers, versionfile_abs, verbose)
+    if found:
+        return ver
+    
     try:
         ver = versions_from_file(versionfile_abs)
         if verbose:
@@ -1474,6 +1466,24 @@ def get_versions(verbose=False):
             "dirty": None, "error": "unable to compute version",
             "date": None}
 
+
+def _handle_keywords(cfg, handlers, versionfile_abs, verbose):
+    found = False
+    ver = None
+
+    get_keywords_f = handlers.get("get_keywords")
+    from_keywords_f = handlers.get("keywords")
+    if get_keywords_f and from_keywords_f:
+        try:
+            keywords = get_keywords_f(versionfile_abs)
+            ver = from_keywords_f(keywords, cfg.tag_prefix, verbose)
+            if verbose:
+                print("got version from expanded keyword %s" % ver)
+            return True, ver
+        except NotThisMethod:
+            pass
+
+    return False, ver
 
 def get_version():
     """Get the short version string for this project."""
@@ -1719,23 +1729,7 @@ def do_setup():
                         "VERSIONFILE_SOURCE": cfg.versionfile_source,
                         })
 
-    ipy = os.path.join(os.path.dirname(cfg.versionfile_source),
-                       "__init__.py")
-    if os.path.exists(ipy):
-        try:
-            with open(ipy, "r") as f:
-                old = f.read()
-        except EnvironmentError:
-            old = ""
-        if INIT_PY_SNIPPET not in old:
-            print(" appending to %s" % ipy)
-            with open(ipy, "a") as f:
-                f.write(INIT_PY_SNIPPET)
-        else:
-            print(" %s unmodified" % ipy)
-    else:
-        print(" %s doesn't exist, ok" % ipy)
-        ipy = None
+    ipy = _compute_ipy(cfg)
 
     # Make sure both the top-level "versioneer.py" and versionfile_source
     # (PKG/_version.py, used by runtime code) are in MANIFEST.in, so
@@ -1774,6 +1768,26 @@ def do_setup():
     # substitution.
     do_vcs_install(manifest_in, cfg.versionfile_source, ipy)
     return 0
+
+def _compute_ipy(cfg):
+    ipy = os.path.join(os.path.dirname(cfg.versionfile_source),
+                       "__init__.py")
+    if os.path.exists(ipy):
+        try:
+            with open(ipy, "r") as f:
+                old = f.read()
+        except EnvironmentError:
+            old = ""
+        if INIT_PY_SNIPPET not in old:
+            print(" appending to %s" % ipy)
+            with open(ipy, "a") as f:
+                f.write(INIT_PY_SNIPPET)
+        else:
+            print(" %s unmodified" % ipy)
+    else:
+        print(" %s doesn't exist, ok" % ipy)
+        ipy = None
+    return ipy
 
 
 def scan_setup_py():
