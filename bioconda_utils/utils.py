@@ -670,22 +670,7 @@ def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, mask_en
         else:
             masked_cmds = [do_mask(c) for c in cmds]
 
-        if proc.poll() is None:
-            mylogger.log(loglevel, 'Command closed STDOUT/STDERR but is still running')
-            waitfor = 30
-            waittimes = 5
-            for attempt in range(waittimes):
-                mylogger.log(loglevel, "Waiting %s seconds (%i/%i)", waitfor, attempt+1, waittimes)
-                try:
-                    proc.wait(timeout=waitfor)
-                    break;
-                except sp.TimeoutExpired:
-                    pass
-            else:
-                mylogger.log(loglevel, "Terminating process")
-                proc.kill()
-                proc.wait()
-        returncode = proc.poll()
+        returncode = _handle_process(mylogger, loglevel, proc)
 
         if returncode:
             if not quiet_failure:
@@ -696,6 +681,25 @@ def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, mask_en
                 raise sp.CalledProcessError(returncode, masked_cmds, output=output)
 
         return sp.CompletedProcess(masked_cmds, returncode, stdout=output)
+
+def _handle_process(mylogger, loglevel, proc):
+    if proc.poll() is None:
+        mylogger.log(loglevel, 'Command closed STDOUT/STDERR but is still running')
+        waitfor = 30
+        waittimes = 5
+        for attempt in range(waittimes):
+            mylogger.log(loglevel, "Waiting %s seconds (%i/%i)", waitfor, attempt+1, waittimes)
+            try:
+                proc.wait(timeout=waitfor)
+                break;
+            except sp.TimeoutExpired:
+                pass
+        else:
+            mylogger.log(loglevel, "Terminating process")
+            proc.kill()
+            proc.wait()
+    returncode = proc.poll()
+    return returncode
 
 
 def envstr(env):
