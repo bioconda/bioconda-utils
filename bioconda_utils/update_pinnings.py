@@ -338,6 +338,18 @@ def check(
         return State.FAIL, recipe
 
     flags = State(0)
+    maybe_bump = _handle_metas(skip_variant_keys, metas, flags)
+    if maybe_bump:
+        # Skip bump if we only add to the build matrix.
+        if will_build_only_missing(metas):
+            flags |= State.BUMPED
+        else:
+            flags |= State.BUMP
+    if not keep_metas:
+        recipe.conda_release()
+    return flags, recipe
+
+def _handle_metas(skip_variant_keys, metas, flags):
     maybe_bump = False
     for meta in metas:
         if meta.skip() or skip_for_variants(meta, skip_variant_keys):
@@ -352,12 +364,4 @@ def check(
             logger.info("Package %s=%s=%s missing!",
                          meta.name(), meta.version(), meta.build_id())
             maybe_bump = True
-    if maybe_bump:
-        # Skip bump if we only add to the build matrix.
-        if will_build_only_missing(metas):
-            flags |= State.BUMPED
-        else:
-            flags |= State.BUMP
-    if not keep_metas:
-        recipe.conda_release()
-    return flags, recipe
+    return maybe_bump
