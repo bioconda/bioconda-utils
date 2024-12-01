@@ -106,14 +106,7 @@ def build(recipe: str, pkg_paths: List[str] = None,
 
     logger.info("BUILD START %s", recipe)
 
-    args = ['--override-channels']
-    if testonly:
-        args += ["--test"]
-    else:
-        args += ["--no-anaconda-upload"]
-
-    for channel in channels or ['local']:
-        args += ['-c', channel]
+    args = _build_args(testonly, channels)
 
     logger.debug('Build and Channel Args: %s', args)
 
@@ -155,17 +148,7 @@ def build(recipe: str, pkg_paths: List[str] = None,
                         "cannot be found", pkg_path)
                     return BuildResult(False, None)
         else:
-            conda_build_cmd = [utils.bin_for('conda-build')]
-            # - Temporarily reset os.environ to avoid leaking env vars
-            # - Also pass filtered env to run()
-            # - Point conda-build to meta.yaml, to avoid building subdirs
-            with utils.sandboxed_env(whitelisted_env):
-                cmd = conda_build_cmd + args
-                for config_file in utils.get_conda_build_config_files():
-                    cmd += [config_file.arg, config_file.path]
-                cmd += [os.path.join(recipe, 'meta.yaml')]
-                with utils.Progress():
-                    utils.run(cmd, mask=False, live=live_logs)
+            _handle_conda_build(recipe, live_logs, whitelisted_env, args)
 
         logger.info('BUILD SUCCESS %s',
                     ' '.join(os.path.basename(p) for p in pkg_paths))
@@ -183,6 +166,28 @@ def build(recipe: str, pkg_paths: List[str] = None,
             raise exc
         return BuildResult(False, None)
 
+    return _handle_mulled_test(mulled_test
+                               , recipe
+                               , pkg_paths
+                               , base_image
+                               , mulled_conda_image
+                               , live_logs)
+
+def _handle_conda_build(recipe, live_logs, whitelisted_env, args):
+    conda_build_cmd = [utils.bin_for('conda-build')]
+            # - Temporarily reset os.environ to avoid leaking env vars
+            # - Also pass filtered env to run()
+            # - Point conda-build to meta.yaml, to avoid building subdirs
+    with utils.sandboxed_env(whitelisted_env):
+        cmd = conda_build_cmd + args
+        for config_file in utils.get_conda_build_config_files():
+            cmd += [config_file.arg, config_file.path]
+        cmd += [os.path.join(recipe, 'meta.yaml')]
+        with utils.Progress():
+            utils.run(cmd, mask=False, live=live_logs)
+
+def _handle_mulled_test(mulled_test, recipe, pkg_paths, base_image, mulled_conda_image, live_logs):
+
     if mulled_test:
         logger.info('TEST START via mulled-build %s', recipe)
         mulled_images = []
@@ -199,6 +204,17 @@ def build(recipe: str, pkg_paths: List[str] = None,
         return BuildResult(True, mulled_images)
 
     return BuildResult(True, None)
+
+def _build_args(testonly, channels):
+    args = ['--override-channels']
+    if testonly:
+        args += ["--test"]
+    else:
+        args += ["--no-anaconda-upload"]
+
+    for channel in channels or ['local']:
+        args += ['-c', channel]
+    return args
 
 
 def store_build_failure_record(recipe, output, meta, dag, skiplist_leafs):
@@ -421,6 +437,38 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
     skipped_recipes = []
     failed_uploads = []
 
+    _handle_recipes(recipe_folder, recipes, mulled_test, testonly, force, docker_builder, label
+                    , anaconda_upload, mulled_upload_target, check_channels, keep_old_work, mulled_conda_image
+                    , record_build_failures, skiplist_leafs, live_logs, config, linter, failed, dag
+                    , skip_dependent, subdag, built_recipes, skipped_recipes, failed_uploads)
+
+    if failed or failed_uploads:
+        logger.error('BUILD SUMMARY: of %s recipes, '
+                     '%s failed and %s were skipped. '
+                     'Details of recipes and environments follow.',
+                     len(recipes), len(failed), len(skipped_recipes))
+        if built_recipes:
+            logger.error('BUILD SUMMARY: while the entire build failed, '
+                         'the following recipes were built successfully:\n%s',
+                         '\n'.join(built_recipes))
+        for recipe in failed:
+            logger.error('BUILD SUMMARY: FAILED recipe %s', recipe)
+        for name, dep in skip_dependent.items():
+            logger.error('BUILD SUMMARY: SKIPPED recipe %s '
+                         'due to failed dependencies %s', name, dep)
+        if failed_uploads:
+            logger.error('UPLOAD SUMMARY: the following packages failed to upload:\n%s',
+                         '\n'.join(failed_uploads))
+        return False
+
+    logger.info("BUILD SUMMARY: successfully built %s of %s recipes",
+                len(built_recipes), len(recipes))
+    return True
+
+def _handle_recipes(recipe_folder, recipes, mulled_test, testonly, force, docker_builder, label, anaconda_upload
+                    , mulled_upload_target, check_channels, keep_old_work, mulled_conda_image, record_build_failures
+                    , skiplist_leafs, live_logs, config, linter, failed, dag, skip_dependent, subdag, built_recipes
+                    , skipped_recipes, failed_uploads):
     for recipe, name in recipes:
         platform = utils.RepoData().native_platform()
         if not force and do_not_consider_for_additional_platform(recipe_folder, recipe, platform):
@@ -488,26 +536,3 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
         # remove traces of the build
         if not keep_old_work:
             conda_build_purge()
-
-    if failed or failed_uploads:
-        logger.error('BUILD SUMMARY: of %s recipes, '
-                     '%s failed and %s were skipped. '
-                     'Details of recipes and environments follow.',
-                     len(recipes), len(failed), len(skipped_recipes))
-        if built_recipes:
-            logger.error('BUILD SUMMARY: while the entire build failed, '
-                         'the following recipes were built successfully:\n%s',
-                         '\n'.join(built_recipes))
-        for recipe in failed:
-            logger.error('BUILD SUMMARY: FAILED recipe %s', recipe)
-        for name, dep in skip_dependent.items():
-            logger.error('BUILD SUMMARY: SKIPPED recipe %s '
-                         'due to failed dependencies %s', name, dep)
-        if failed_uploads:
-            logger.error('UPLOAD SUMMARY: the following packages failed to upload:\n%s',
-                         '\n'.join(failed_uploads))
-        return False
-
-    logger.info("BUILD SUMMARY: successfully built %s of %s recipes",
-                len(built_recipes), len(recipes))
-    return True
