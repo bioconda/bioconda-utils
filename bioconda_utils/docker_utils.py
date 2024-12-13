@@ -490,3 +490,8 @@ def purgeImage(mulled_upload_target, img):
     pkg_container_image = f"quay.io/{mulled_upload_target}/{pkg_name}:{pkg_version}--{pkg_build_string}"
     cmd = ['docker', 'rmi', pkg_container_image]
     o = utils.run(cmd, mask=False)
+
+
+def pruneStoppedContainers():
+    cmd = ['docker', 'container', 'prune', '-f']
+    utils.run(cmd, mask=False)
