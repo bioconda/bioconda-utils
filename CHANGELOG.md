@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.6.0](https://www.github.com/bioconda/bioconda-utils/compare/v3.5.0...v3.6.0) (2024-12-13)
+
+
+### Features
+
+* report resource usage before and after builds ([#1023](https://www.github.com/bioconda/bioconda-utils/issues/1023)) ([08ea458](https://www.github.com/bioconda/bioconda-utils/commit/08ea458d205232c57da4b4c4eaeb014d8cb69614))
+
 ## [3.5.0](https://www.github.com/bioconda/bioconda-utils/compare/v3.4.1...v3.5.0) (2024-11-29)
 
 
