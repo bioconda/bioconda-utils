@@ -19,6 +19,7 @@ import shutil
 import json
 import queue
 import warnings
+import psutil
 
 from threading import Event, Thread
 from pathlib import PurePath
@@ -359,6 +360,16 @@ def get_free_space():
     """Return free space in MB on disk"""
     s = os.statvfs(os.getcwd())
     return s.f_frsize * s.f_bavail / (1024 ** 2)
+
+
+def get_free_memory_percent():
+    """Return free memory as a percentage of total memory"""
+    return psutil.virtual_memory().available * 100 / psutil.virtual_memory().total
+
+
+def get_free_memory_mb():
+    """Return free memory as megabytes"""
+    return psutil.virtual_memory().available / (1024 ** 2)
 
 
 def allowed_env_var(s, docker=False):

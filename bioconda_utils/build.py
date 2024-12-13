@@ -135,6 +135,7 @@ def build(recipe: str, pkg_paths: List[str] = None,
         build_failure_record.remove()
 
     try:
+        report_resources(f"Starting build for {recipe}", docker_builder is not None)
         if docker_builder is not None:
             docker_builder.build_recipe(recipe_dir=os.path.abspath(recipe),
                                         build_args=' '.join(args),
@@ -182,18 +183,23 @@ def build(recipe: str, pkg_paths: List[str] = None,
         if raise_error:
             raise exc
         return BuildResult(False, None)
+    finally:
+        report_resources(f"Finished build for {recipe}", docker_builder is not None)
 
     if mulled_test:
         logger.info('TEST START via mulled-build %s', recipe)
         mulled_images = []
         for pkg_path in pkg_paths:
             try:
+                report_resources(f"Starting mulled build for {pkg_path}")
                 pkg_test.test_package(pkg_path, base_image=base_image,
                                       conda_image=mulled_conda_image,
                                       live_logs=live_logs)
             except sp.CalledProcessError:
                 logger.error('TEST FAILED: %s', recipe)
                 return BuildResult(False, None)
+            finally:
+                report_resources(f"Finished mulled build for {pkg_path}")
             logger.info("TEST SUCCESS %s", recipe)
             mulled_images.append(pkg_test.get_image_name(pkg_path))
         return BuildResult(True, mulled_images)
@@ -511,3 +517,12 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
     logger.info("BUILD SUMMARY: successfully built %s of %s recipes",
                 len(built_recipes), len(recipes))
     return True
+
+def report_resources(message, show_docker=True):
+    free_space_mb = utils.get_free_space()
+    free_mem_mb = utils.get_free_memory_mb()
+    free_mem_percent = utils.get_free_memory_percent()
+    logger.info("{0} Free disk space: {1:.2f} MB. Free memory: {2:.2f} MB ({3:.2f}%)".format(message, free_space_mb, free_mem_mb, free_mem_percent))
+    if show_docker:
+        cmd = ['docker', 'system', 'df']
+        utils.run(cmd, mask=False, live=True)
