@@ -68,3 +68,6 @@ platformdirs=4.*              #
 
 # build failure output
 tabulate=0.9.*                #
+
+# resource reporting for builds
+psutil                        #
