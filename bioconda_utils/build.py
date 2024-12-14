@@ -530,3 +530,5 @@ def report_resources(message, show_docker=True):
     if show_docker:
         cmd = ['docker', 'system', 'df']
         utils.run(cmd, mask=False, live=True)
+        cmd = ['docker', 'ps', '-a']
+        utils.run(cmd, mask=False, live=True)
