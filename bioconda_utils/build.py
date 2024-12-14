@@ -494,6 +494,9 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
         # remove traces of the build
         if not keep_old_work:
             conda_build_purge()
+            # prune stopped containers
+            if docker_builder is not None:
+                docker_utils.pruneStoppedContainers()
 
     if failed or failed_uploads:
         logger.error('BUILD SUMMARY: of %s recipes, '
@@ -525,4 +528,6 @@ def report_resources(message, show_docker=True):
     logger.info("{0} Free disk space: {1:.2f} MB. Free memory: {2:.2f} MB ({3:.2f}%)".format(message, free_space_mb, free_mem_mb, free_mem_percent))
     if show_docker:
         cmd = ['docker', 'system', 'df']
+        utils.run(cmd, mask=False, live=True)
+        cmd = ['docker', 'ps', '-a']
         utils.run(cmd, mask=False, live=True)
