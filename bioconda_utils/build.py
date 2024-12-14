@@ -496,8 +496,7 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
             conda_build_purge()
             # prune stopped containers
             if docker_builder is not None:
-                pass
-                # docker_utils.pruneStoppedContainers()
+                docker_utils.pruneStoppedContainers()
 
     if failed or failed_uploads:
         logger.error('BUILD SUMMARY: of %s recipes, '
