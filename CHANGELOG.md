@@ -1,5 +1,12 @@
 # Changelog
 
+### [3.6.1](https://www.github.com/bioconda/bioconda-utils/compare/v3.6.0...v3.6.1) (2024-12-14)
+
+
+### Bug Fixes
+
+* prune stopped containers after build ([#1025](https://www.github.com/bioconda/bioconda-utils/issues/1025)) ([3a178ef](https://www.github.com/bioconda/bioconda-utils/commit/3a178ef60899c73be1e7993d0c02229da9e19570))
+
 ## [3.6.0](https://www.github.com/bioconda/bioconda-utils/compare/v3.5.0...v3.6.0) (2024-12-13)
 
 
