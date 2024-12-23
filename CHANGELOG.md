@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.7.0](https://www.github.com/bioconda/bioconda-utils/compare/v3.6.1...v3.7.0) (2024-12-23)
+
+
+### Features
+
+* Bioconductor skeleton updates ([#1027](https://www.github.com/bioconda/bioconda-utils/issues/1027)) ([5a14a3e](https://www.github.com/bioconda/bioconda-utils/commit/5a14a3ef9277687e270a682911bded08868ee362))
+
 ### [3.6.1](https://www.github.com/bioconda/bioconda-utils/compare/v3.6.0...v3.6.1) (2024-12-14)
 
 
