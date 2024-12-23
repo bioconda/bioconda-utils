@@ -468,9 +468,12 @@ class BioCProjectPage(object):
         package, otherwise returns None.
         """
         url = bioarchive_url(self.package, self.version, self.bioc_version)
-        response = requests.head(url)
-        if response.status_code == 200:
-            return url
+        try:
+            response = requests.head(url)
+            if response.status_code == 200:
+                return url
+        except requests.exceptions.SSLError:
+            pass
 
     @property
     def cargoport_url(self):
@@ -479,16 +482,19 @@ class BioCProjectPage(object):
         it exists.
         """
         url = cargoport_url(self.package, self.version, self.bioc_version)
-        response = requests.head(url)
-        if response.status_code == 404:
-            # This is expected if this is a new package or an updated version.
-            # Cargo Port will archive a working URL upon merging
-            return
-        elif response.status_code == 200:
-            return url
-        else:
-            raise PageNotFoundError(
-                "Unexpected error: {0.status_code} ({0.reason})".format(response))
+        try:
+            response = requests.head(url)
+            if response.status_code == 404:
+                # This is expected if this is a new package or an updated version.
+                # Cargo Port will archive a working URL upon merging
+                return
+            elif response.status_code == 200:
+                return url
+            else:
+                raise PageNotFoundError(
+                    "Unexpected error: {0.status_code} ({0.reason})".format(response))
+        except requests.exceptions.SSLError:
+            pass
 
     @property
     def bioconductor_tarball_url(self):
@@ -936,6 +942,11 @@ class BioCProjectPage(object):
         if self.linkingto != [] or len(set(['c', 'cxx', 'fortran']).intersection(self._cb3_build_reqs.keys())) > 0:
             additional_host_deps.append('libblas')
             additional_host_deps.append('liblapack')
+
+            # During the BioC 3.20 builds, which also corresponded to updates
+            # in pinnings, there were quite a few issues where zlib was
+            # missing.
+            additional_host_deps.append('zlib')
 
         additional_run_deps = []
         if self.is_data_package:
