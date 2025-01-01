@@ -39,7 +39,7 @@ git=2.*                       # well - git
 regex=2024.*                  #
 
 # asyncio
-aiohttp=3.9.*                 # HTTP lib
+aiohttp>=3.10.11              # HTTP lib; pinning to reflect dependabot alert
 aiohttp-jinja2                # jinja2 renderer for aiohttp.web
 aiohttp-session               #
 aiohttp-security              #
