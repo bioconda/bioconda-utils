@@ -944,9 +944,10 @@ class BioCProjectPage(object):
             additional_host_deps.append('liblapack')
 
             # During the BioC 3.20 builds, which also corresponded to updates
-            # in pinnings, there were quite a few issues where zlib was
-            # missing.
+            # in pinnings, there were quite a few issues where zlib and liblzma
+            # were missing.
             additional_host_deps.append('zlib')
+            additional_host_deps.append('liblzma-devel')
 
         additional_run_deps = []
         if self.is_data_package:
