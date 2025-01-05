@@ -239,12 +239,20 @@ def collect_build_failure_dataframe(recipe_folder, config, channel, link_fmt="tx
             downloads = utils.get_package_downloads(channel, package_name)
             recs = list(get_build_failure_records(recipe))
 
-            failures = ", ".join(utils.format_link(rec.path, link_fmt, prefix=link_prefix, label=rec.platform) for rec in recs)
-            categories = ", ".join(rec.category for rec in recs)
-            skiplisted = any(rec.skiplist for rec in recs)
-            prs = utils.format_link(f"https://github.com/bioconda/bioconda-recipes/pulls?q=is%3Apr+is%3Aopen+{package}", link_fmt, label="show")
-            yield (recipe, downloads, descendants, skiplisted, categories, failures, prs)
+            limit = 80  # characters in last column to show before putting the rest in "<details>"
+            for rec in recs:
+                failures = utils.format_link(rec.path, link_fmt, prefix=link_prefix, label=rec.platform)
+                categories = rec.category
+                reasons = rec.reason
 
-    data = pd.DataFrame(get_data(), columns=["recipe", "downloads", "depending", "skiplisted", "category", "build failures", "pull requests"])
+                if len(reasons) > limit:
+                    reasons = reasons[:limit] + "..." +  "<details>" + reasons[limit:] + "</details>"
+                skiplisted = rec.skiplist
+                prs = utils.format_link(f"https://github.com/bioconda/bioconda-recipes/pulls?q=is%3Apr+is%3Aopen+{package}", link_fmt, label="show")
+                recipe = recipe.replace('recipes/', '')
+
+                yield (recipe, downloads, descendants, skiplisted, categories, failures, prs, reasons)
+
+    data = pd.DataFrame(get_data(), columns=["recipe", "downloads", "depending", "skiplisted", "category", "build failures", "pull requests", "reason"])
     data.sort_values(by=["depending", "downloads"], ascending=False, inplace=True)
     return data
