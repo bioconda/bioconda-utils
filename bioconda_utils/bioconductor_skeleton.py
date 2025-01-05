@@ -1032,7 +1032,7 @@ class BioCProjectPage(object):
         for k, v in self._cb3_build_reqs.items():
             d['requirements']['build'].append(k + '_' + "PLACEHOLDER")
 
-        rendered = pyaml.dumps(d, width=1e6).decode('utf-8')
+        rendered = pyaml.dumps(d, width=1e6)  #.decode('utf-8')  # decoding seems no longer needed
 
         # Add Suggests: and SystemRequirements:
         renderedsplit = rendered.split('\n')
