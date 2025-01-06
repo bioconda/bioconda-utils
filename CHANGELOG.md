@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.7.0](https://www.github.com/bioconda/bioconda-utils/compare/v3.6.1...v3.7.0) (2025-01-06)
+
+
+### Features
+
+* add liblzma-devel to host deps for compiled bioc pkgs ([#1029](https://www.github.com/bioconda/bioconda-utils/issues/1029)) ([7194737](https://www.github.com/bioconda/bioconda-utils/commit/7194737f1b9cc3f605318a1e706f8c6810f74e59))
+* Bioconductor skeleton updates ([#1027](https://www.github.com/bioconda/bioconda-utils/issues/1027)) ([5a14a3e](https://www.github.com/bioconda/bioconda-utils/commit/5a14a3ef9277687e270a682911bded08868ee362))
+* improve build failure table in wiki ([#1031](https://www.github.com/bioconda/bioconda-utils/issues/1031)) ([f25bff9](https://www.github.com/bioconda/bioconda-utils/commit/f25bff924f7dac7b5ed8293dc5d1e54fb1f8f074))
+
+
+### Bug Fixes
+
+* don't decode ([#1030](https://www.github.com/bioconda/bioconda-utils/issues/1030)) ([0a4d558](https://www.github.com/bioconda/bioconda-utils/commit/0a4d5583f86f0752712158a77ca43049ce29ea74))
+
 ### [3.6.1](https://www.github.com/bioconda/bioconda-utils/compare/v3.6.0...v3.6.1) (2024-12-14)
 
 
