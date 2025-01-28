@@ -23,7 +23,7 @@ class version_constraints_missing_whitespace(LintCheck):
         for section in ('build', 'run', 'host'):
             check_paths.append(f'requirements/{section}')
 
-        constraints = re.compile("(.*?)([!<=>].*)")
+        constraints = re.compile("(.*?)([!~<=>].*)")
         for path in check_paths:
             for n, spec in enumerate(recipe.get(path, [])):
                 has_constraints = constraints.search(spec)
@@ -37,7 +37,7 @@ class version_constraints_missing_whitespace(LintCheck):
         for section in ('build', 'run', 'host'):
             check_paths.append(f'requirements/{section}')
 
-        constraints = re.compile("(.*?)([!<=>].*)")
+        constraints = re.compile("(.*?)([!~<=>].*)")
         for path in check_paths:
             for spec in self.recipe.get(path, []):
                 has_constraints = constraints.search(spec)
