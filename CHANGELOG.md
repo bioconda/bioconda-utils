@@ -1,5 +1,12 @@
 # Changelog
 
+### [3.7.1](https://www.github.com/bioconda/bioconda-utils/compare/v3.7.0...v3.7.1) (2025-01-28)
+
+
+### Bug Fixes
+
+* allow tilde in conda version constraints ([#1033](https://www.github.com/bioconda/bioconda-utils/issues/1033)) ([017e54d](https://www.github.com/bioconda/bioconda-utils/commit/017e54de1779e4e0284fa02ca379c585d416c30c))
+
 ## [3.7.0](https://www.github.com/bioconda/bioconda-utils/compare/v3.6.1...v3.7.0) (2025-01-06)
 
 
