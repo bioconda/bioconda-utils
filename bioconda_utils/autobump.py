@@ -142,7 +142,7 @@ class RecipeGraphSource(RecipeSource):
         # Keep set of recipes "in flight"
         sent: Set[Recipe] = set()
         while dag:
-            remaining_recipes = dag.nodes()
+            remaining_recipes = list(dag.nodes())
             if self.shuffle:
                 random.shuffle(remaining_recipes)
             for recipe in remaining_recipes:
