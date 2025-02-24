@@ -1,5 +1,12 @@
 # Changelog
 
+### [3.7.2](https://www.github.com/bioconda/bioconda-utils/compare/v3.7.1...v3.7.2) (2025-02-24)
+
+
+### Bug Fixes
+
+* networkx NodeView and random.shuffle incompatible ([#1035](https://www.github.com/bioconda/bioconda-utils/issues/1035)) ([0127c7f](https://www.github.com/bioconda/bioconda-utils/commit/0127c7f1605394731d98a177e439370add40de75))
+
 ### [3.7.1](https://www.github.com/bioconda/bioconda-utils/compare/v3.7.0...v3.7.1) (2025-01-28)
 
 
