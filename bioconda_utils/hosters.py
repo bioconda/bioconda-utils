@@ -683,6 +683,7 @@ class PyPi(JSONHoster):
     hoster_pattern = (r"(?P<hoster>"
                       r"files.pythonhosted.org/packages|"
                       r"pypi.python.org/packages|"
+                      r"pypi.org/packages|"
                       r"pypi.io/packages)")
     url_pattern = r"{hoster}/.*/{source}"
 
