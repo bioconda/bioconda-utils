@@ -20,7 +20,7 @@ jobs:
           QUAY_OAUTH_TOKEN: ${{ secrets.QUAY_BIOCONTAINERS_TOKEN }}
 
       - name: Upload logs
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: logs
           path: biocontainers-*.txt
