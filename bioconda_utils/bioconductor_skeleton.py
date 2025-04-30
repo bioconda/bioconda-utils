@@ -422,6 +422,7 @@ class BioCProjectPage(object):
         self.package_lower = package.lower()
         self.version = pkg_version
         self.extra = None
+        self.patches = None
         self.needsX = False
 
         # If no version specified, assume the latest
@@ -1025,6 +1026,10 @@ class BioCProjectPage(object):
         if self.extra:
             d['extra'] = self.extra
 
+        # Keep patches from existing meta.yaml
+        if self.patches:
+            d['source']['patches'] = self.patches
+
         if self._cb3_build_reqs:
             d['requirements']['build'] = []
         else:
@@ -1032,7 +1037,10 @@ class BioCProjectPage(object):
         for k, v in self._cb3_build_reqs.items():
             d['requirements']['build'].append(k + '_' + "PLACEHOLDER")
 
-        rendered = pyaml.dumps(d, width=1e6)  #.decode('utf-8')  # decoding seems no longer needed
+        # sort requirements sections to match standard order
+        d['requirements'] = OrderedDict(sorted(d['requirements'].items()))
+
+        rendered = pyaml.dumps(d, width=1e6, sort_keys=False)
 
         # Add Suggests: and SystemRequirements:
         renderedsplit = rendered.split('\n')
@@ -1273,6 +1281,9 @@ def write_recipe(package, recipe_dir, config, bioc_data_packages=None, force=Fal
                 proj.build_number = 0
             else:
                 proj.build_number = sorted([int(i) for i in existing_bldnos]) [-1] + 1
+
+        if 'source' in current_meta and 'patches' in current_meta['source']:
+            proj.patches = current_meta['source']['patches']
 
         if 'extra' in current_meta:
             exclude = set(['final', 'copy_test_source_files'])
