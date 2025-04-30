@@ -12,7 +12,7 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
-      - uses: GoogleCloudPlatform/release-please-action@v2
+      - uses: GoogleCloudPlatform/release-please-action@v4
         id: release
         with:
           release-type: python
@@ -31,7 +31,7 @@ jobs:
         run: |
           #tag=${{ github.event.release && github.event.release.tag_name || github.sha }}
           tag=${{ needs.release_please.outputs.tag_name }}
-          printf %s "::set-output name=tag::${tag#v}"
+          printf %s "tag=${tag#v}" >> $GITHUB_OUTPUT
 
       - name: Install qemu dependency
         run: |
