@@ -936,6 +936,8 @@ class BioCProjectPage(object):
             self._cb3_build_reqs["cxx"] = "{{ compiler('cxx') }}"
         if need_f:
             self._cb3_build_reqs["fortran"] = "{{ compiler('fortran') }}"
+        if len(self._cb3_build_reqs):
+            self._cb3_build_reqs["stdlib"] = "{{ stdlib('c') }}"
         if need_autotools:
             self._cb3_build_reqs["automake"] = "automake"
         if need_make:
@@ -1054,7 +1056,7 @@ class BioCProjectPage(object):
         if (
             self.linkingto != []
             or len(
-                set(["c", "cxx", "fortran"]).intersection(self._cb3_build_reqs.keys())
+                set(["c", "cxx", "fortran", "stdlib"]).intersection(self._cb3_build_reqs.keys())
             )
             > 0
         ):
