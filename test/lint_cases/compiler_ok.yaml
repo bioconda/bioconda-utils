@@ -17,6 +17,7 @@ recipes:
     requirements:
       build:
         - '{{compiler("c")}}'
+        - '{{stdlib("c")}}'
     test:
       commands:
         - do nothing
