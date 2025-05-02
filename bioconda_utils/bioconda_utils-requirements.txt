@@ -7,9 +7,9 @@ conda-forge-pinning=2024.11.29.12.37.53
 
 # basics
 python=3.10.*
-conda=24.9.*
-conda-libmamba-solver=24.1.*
-conda-build=24.7.*
+conda=24.11.*
+conda-libmamba-solver=24.9.*
+conda-build=24.11.*
 conda-index=0.5.*
 conda-package-streaming=0.11.*
 mamba=1.5.*
