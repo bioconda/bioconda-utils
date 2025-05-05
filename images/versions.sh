@@ -2,7 +2,7 @@
 
 # Configures various versions to be used throughout infrastructure
 ARCHS="amd64 arm64"
-DEBIAN_VERSION=12.2
+DEBIAN_VERSION=12.5
 BUSYBOX_VERSION=1.36.1
 BASE_DEBIAN_IMAGE_NAME="tmp-debian"
 BASE_BUSYBOX_IMAGE_NAME="tmp-busybox"

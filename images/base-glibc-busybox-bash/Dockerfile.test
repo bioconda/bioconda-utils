@@ -24,4 +24,4 @@ RUN arch=$(uname -m) \
     && \
     sh ./Miniforge3-Linux-${arch}.sh -bp /opt/conda \
     && \
-    /opt/conda/bin/conda info --all
+    /opt/conda/bin/conda info --verbose

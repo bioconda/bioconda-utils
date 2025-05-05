@@ -25,7 +25,11 @@ jobs:
 
   build-base-debian:
     name: Build base-debian
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
+    container:
+      # travier/podman-action contains newer podman/buildah versions.
+      image: quay.io/travier/podman-action
+      options: --privileged
     outputs:
       # A note on these TAG_EXISTS_* outputs: these allow subsequent jobs to
       # change behavior (e.g., skip building or skip pushing to ghcr) depending
@@ -41,6 +45,26 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y qemu-user-static
+
+    - name: Install Tools
+      run: |
+        set -eu
+        # jq is not installed in travier/podman-action
+        dnf install -qy \
+          jq
+        rpm -q \
+          buildah podman \
+          coreutils findutils sed \
+          curl jq \
+          | (
+            while read -r line ; do
+              printf %s\\n "${line}"
+              case "${line}" in (*' not installed'*)
+                err=1 ;;
+              esac
+              done
+              exit "${err-0}"
+          )
 
     - name: base-debian
       id: base-debian
@@ -61,7 +85,11 @@ jobs:
 
   build-base-busybox:
     name: Build base-busybox
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
+    container:
+      # travier/podman-action contains newer podman/buildah versions.
+      image: quay.io/travier/podman-action
+      options: --privileged
     outputs:
       TAG_EXISTS_base-busybox: ${{ steps.base-busybox.outputs.TAG_EXISTS_base-busybox }}
     steps:
@@ -74,6 +102,26 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y qemu-user-static
+
+        - name: Install Tools
+          run: |
+            set -eu
+            # jq is not installed in travier/podman-action
+            dnf install -qy \
+              jq
+            rpm -q \
+              buildah podman \
+              coreutils findutils sed \
+              curl jq \
+              | (
+                while read -r line ; do
+                  printf %s\\n "${line}"
+                  case "${line}" in (*' not installed'*)
+                    err=1 ;;
+                  esac
+                  done
+                  exit "${err-0}"
+              )
 
     - name: base-busybox
       id: base-busybox
