@@ -422,6 +422,7 @@ class BioCProjectPage(object):
         self.package_lower = package.lower()
         self.version = pkg_version
         self.extra = None
+        self.patches = None
         self.needsX = False
 
         # If no version specified, assume the latest
@@ -468,9 +469,12 @@ class BioCProjectPage(object):
         package, otherwise returns None.
         """
         url = bioarchive_url(self.package, self.version, self.bioc_version)
-        response = requests.head(url)
-        if response.status_code == 200:
-            return url
+        try:
+            response = requests.head(url)
+            if response.status_code == 200:
+                return url
+        except requests.exceptions.SSLError:
+            pass
 
     @property
     def cargoport_url(self):
@@ -479,16 +483,19 @@ class BioCProjectPage(object):
         it exists.
         """
         url = cargoport_url(self.package, self.version, self.bioc_version)
-        response = requests.head(url)
-        if response.status_code == 404:
-            # This is expected if this is a new package or an updated version.
-            # Cargo Port will archive a working URL upon merging
-            return
-        elif response.status_code == 200:
-            return url
-        else:
-            raise PageNotFoundError(
-                "Unexpected error: {0.status_code} ({0.reason})".format(response))
+        try:
+            response = requests.head(url)
+            if response.status_code == 404:
+                # This is expected if this is a new package or an updated version.
+                # Cargo Port will archive a working URL upon merging
+                return
+            elif response.status_code == 200:
+                return url
+            else:
+                raise PageNotFoundError(
+                    "Unexpected error: {0.status_code} ({0.reason})".format(response))
+        except requests.exceptions.SSLError:
+            pass
 
     @property
     def bioconductor_tarball_url(self):
@@ -937,6 +944,12 @@ class BioCProjectPage(object):
             additional_host_deps.append('libblas')
             additional_host_deps.append('liblapack')
 
+            # During the BioC 3.20 builds, which also corresponded to updates
+            # in pinnings, there were quite a few issues where zlib and liblzma
+            # were missing.
+            additional_host_deps.append('zlib')
+            additional_host_deps.append('liblzma-devel')
+
         additional_run_deps = []
         if self.is_data_package:
             additional_run_deps.append('curl')
@@ -1013,6 +1026,10 @@ class BioCProjectPage(object):
         if self.extra:
             d['extra'] = self.extra
 
+        # Keep patches from existing meta.yaml
+        if self.patches:
+            d['source']['patches'] = self.patches
+
         if self._cb3_build_reqs:
             d['requirements']['build'] = []
         else:
@@ -1020,7 +1037,10 @@ class BioCProjectPage(object):
         for k, v in self._cb3_build_reqs.items():
             d['requirements']['build'].append(k + '_' + "PLACEHOLDER")
 
-        rendered = pyaml.dumps(d, width=1e6).decode('utf-8')
+        # sort requirements sections to match standard order
+        d['requirements'] = OrderedDict(sorted(d['requirements'].items()))
+
+        rendered = pyaml.dumps(d, width=1e6, sort_keys=False)
 
         # Add Suggests: and SystemRequirements:
         renderedsplit = rendered.split('\n')
@@ -1261,6 +1281,9 @@ def write_recipe(package, recipe_dir, config, bioc_data_packages=None, force=Fal
                 proj.build_number = 0
             else:
                 proj.build_number = sorted([int(i) for i in existing_bldnos]) [-1] + 1
+
+        if 'source' in current_meta and 'patches' in current_meta['source']:
+            proj.patches = current_meta['source']['patches']
 
         if 'extra' in current_meta:
             exclude = set(['final', 'copy_test_source_files'])

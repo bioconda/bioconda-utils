@@ -14,7 +14,7 @@ import shutil
 from pathlib import Path
 from textwrap import dedent
 
-from conda_build import api, metadata
+from conda_build import api, metadata, exceptions
 
 from bioconda_utils import __version__
 from bioconda_utils import utils
@@ -250,6 +250,30 @@ def test_single_build_only(single_build):
     for pkg in single_build:
         assert os.path.exists(pkg)
         ensure_missing(pkg)
+
+
+@pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
+@pytest.mark.long_running_2
+def test_single_build_pkg_dir(recipes_fixture):
+    """
+    Builds the "one" recipe with pkg_dir.
+    """
+    logger.error("Making recipe builder")
+    docker_builder = docker_utils.RecipeBuilder(
+        use_host_conda_bld=True,
+        pkg_dir=os.getcwd() + "/output",
+        docker_base_image=DOCKER_BASE_IMAGE)
+    mulled_test = False
+    logger.error("DONE")
+    logger.error("Fixture: Building 'one' within docker with pkg_dir")
+    res = build.build(
+        recipe=recipes_fixture.recipe_dirs['one'],
+        pkg_paths=recipes_fixture.pkgs['one'],
+        docker_builder=docker_builder,
+        mulled_test=mulled_test,
+    )
+    logger.error("Fixture: Building 'one' within docker and pkg_dir -- DONE")
+    assert res.success
 
 
 @pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
@@ -652,7 +676,7 @@ def test_rendering_sandboxing():
         assert ("'GITHUB_TOKEN' is undefined" in str(excinfo.value.stdout))
     else:
         # recipe for "one" should fail because GITHUB_TOKEN is not a jinja var.
-        with pytest.raises(SystemExit) as excinfo:
+        with pytest.raises(exceptions.CondaBuildUserError) as excinfo:
             pkg_paths = utils.built_package_paths(r.recipe_dirs['one'])
             build.build(
                 recipe=r.recipe_dirs['one'],
