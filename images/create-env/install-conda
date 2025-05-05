@@ -115,7 +115,8 @@ conda config \
 # NB: Running conda after the .pyc removal will recreate some .pyc files.
 #     This is intentional as it speeds up conda startup time.
 conda list --name=base
-conda info --all
+conda info --verbose
+conda --version
 # Make sure we have the requested conda version installed, and no mamba
 conda list \
   --export '^(conda|mamba)$' \

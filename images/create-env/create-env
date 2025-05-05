@@ -1,10 +1,22 @@
 #! /bin/sh -eu
 
+unset \
+  prefix \
+  conda_impl \
+  create_command \
+  env_activate_args \
+  env_activate_file \
+  env_execute_file \
+  remove_paths_globs \
+  strip_files_globs \
+  licenses_path \
+  ;
+
 for arg do
   case "${arg}" in
     --help )
       cat <<'end-of-help'
-Usage: create-env [OPTIONS]... [--] PREFIX [CONDA_CREATE_ARGS]...
+Usage: create-env [OPTIONS]... [--] [PREFIX] [CONDA_CREATE_ARGS]...
 Use conda (or mamba via --conda=mamba) to create a Conda environment at PREFIX
 according to specifications given by CONDA_CREATE_ARGS.
 
@@ -19,6 +31,8 @@ according to specifications given by CONDA_CREATE_ARGS.
                               script. (default: PREFIX/env-activate.sh)
   --env-execute-script=FILE   Destination path of environment execution script.
                               (default: PREFIX/env-execute)
+  --prefix=PREFIX             Destination path of environment.
+                              If omitted, first positional argument is PREFIX.
   --remove-paths=GLOB         Glob of paths to remove from PREFIX after its
                               creation. Can be passed on multiple times. Will
                               be passed on to `find -path PREFIX/GLOB`.
@@ -57,6 +71,9 @@ end-of-help
           "${arg#--remove-paths=}"
       )"
       shift ;;
+    --prefix=* )
+      prefix="${arg#--prefix=}"
+      shift ;;
     --strip-files=* )
       strip_files_globs="$(
         printf '%s\n' \
@@ -68,22 +85,25 @@ end-of-help
       licenses_path="${arg#--licenses-path=}"
       shift ;;
     -- )
+      shift
       break ;;
     -* )
-      printf 'unknown option: %s\n' "${arg}"
+      printf 'unknown option: %s\n' "${arg}" 1>&2
       exit 1 ;;
     * )
       break
   esac
 done
 
-if [ $# -eq 0 ] ; then
-  printf 'missing argument: environment path\n'
-  exit 1
+if [ -z "${prefix+x}" ] ; then
+  if [ $# -eq 0 ] ; then
+    printf 'missing argument: environment path\n' 1>&2
+    exit 1
+  fi
+  prefix="${1}"
+  shift
 fi
-
-prefix="${1%%/}"
-shift
+prefix="${prefix%%/}"
 
 conda_impl="${conda_impl:-conda}"
 create_command="${create_command-create}"
@@ -235,6 +255,16 @@ if [ -n "${licenses_path}" ] ; then
           printf 'failed to copy licenses for %s\n' "${pkg}" 1>&2
           exit 1
         }
+      # Workaround https://github.com/conda/conda-build/issues/5330 :
+      # As of conda-build<=24.5, "info" files like "info/licenses/*" retain their original
+      # permissions which leads to downstream issues if they are too restrictive.
+      # => Fix permissions like conda_build.post.fix_permissions does for package content files.
+      if [ -d "${abs_licenses_path}/${pkg}" ] ; then
+        find "${abs_licenses_path}/${pkg}" \
+          -exec chmod 'u+rw,g+rw,o+r' {} \; \
+          -perm -u=x \
+          -exec chmod 'g+x,o+x' {} \;
+      fi
     done
   )
 fi

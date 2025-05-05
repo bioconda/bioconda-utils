@@ -68,7 +68,7 @@ COPY --from=build_conda /opt/conda /opt/conda
 COPY --from=build_conda /opt/conda/env-activate.sh /usr/local/
 RUN set -x && \
     /usr/local/env-execute \
-      conda info --all \
+      conda info --verbose \
     && \
     { set -x && . /usr/local/env-activate.sh && set +x ; } \
     && \

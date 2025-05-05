@@ -177,7 +177,11 @@ jobs:
     needs: [build-build-env, build-base-busybox]
     outputs:
       TAG_EXISTS_create-env: ${{ steps.create-env.outputs.TAG_EXISTS_create-env }}
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
+    container:
+      # travier/podman-action contains newer podman/buildah versions.
+      image: quay.io/travier/podman-action
+      options: --privileged
     steps:
     - uses: actions/checkout@v4
       with:
@@ -187,6 +191,26 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y qemu-user-static
+
+        - name: Install Tools
+          run: |
+            set -eu
+            # jq is not installed in travier/podman-action
+            dnf install -qy \
+              jq
+            rpm -q \
+              buildah podman \
+              coreutils findutils sed \
+              curl jq \
+              | (
+                while read -r line ; do
+                  printf %s\\n "${line}"
+                  case "${line}" in (*' not installed'*)
+                    err=1 ;;
+                  esac
+                  done
+                  exit "${err-0}"
+              )
 
     - name: Build create-env
       id: create-env

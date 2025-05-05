@@ -1,6 +1,25 @@
 # Changelog
 
 
+## bioconda/create-env 3.1 (2024-06-02)
+
+### Changed
+
+- Rebuild with newer Buildah, `bioconda/base-glibc-busybox-bash:3.1`, `conda`/`mamba` from `bioconda-utils=3.2.0`.
+
+### Fixed
+
+- Fix permissions for license files.
+
+- Fix argument separator `--` handling.
+
+- Ensure env vars don't set defaults.
+
+### Added
+
+- Allow passing PREFIX via `--prefix=...`.
+
+
 ## bioconda/create-env 3.0 (2023-10-17)
 
 ### Changed
