@@ -239,7 +239,7 @@ jobs:
 
   test:
     name: test bioconda-utils with images
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     needs: [build-base-debian, build-base-busybox, build-build-env, build-create-env]
     steps:
 
@@ -319,7 +319,7 @@ jobs:
 
   push:
     name: push images
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     needs: [build-base-debian, build-base-busybox, build-build-env, build-create-env, test]
     steps:
 
