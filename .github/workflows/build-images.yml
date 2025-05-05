@@ -41,10 +41,10 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Install qemu dependency
+    - name: Set up QEMU
       run: |
-        sudo apt-get update
-        sudo apt-get install -y qemu-user-static
+        podman run --rm --privileged \
+          docker.io/tonistiigi/binfmt --install arm64
 
     - name: Install Tools
       run: |
@@ -98,30 +98,30 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Install qemu dependency
+    - name: Set up QEMU
       run: |
-        sudo apt-get update
-        sudo apt-get install -y qemu-user-static
+        podman run --rm --privileged \
+          docker.io/tonistiigi/binfmt --install arm64
 
-        - name: Install Tools
-          run: |
-            set -eu
-            # jq is not installed in travier/podman-action
-            dnf install -qy \
-              jq
-            rpm -q \
-              buildah podman \
-              coreutils findutils sed \
-              curl jq \
-              | (
-                while read -r line ; do
-                  printf %s\\n "${line}"
-                  case "${line}" in (*' not installed'*)
-                    err=1 ;;
-                  esac
-                  done
-                  exit "${err-0}"
-              )
+    - name: Install Tools
+      run: |
+        set -eu
+        # jq is not installed in travier/podman-action
+        dnf install -qy \
+          jq
+        rpm -q \
+          buildah podman \
+          coreutils findutils sed \
+          curl jq \
+          | (
+            while read -r line ; do
+              printf %s\\n "${line}"
+              case "${line}" in (*' not installed'*)
+                err=1 ;;
+              esac
+              done
+              exit "${err-0}"
+          )
 
     - name: base-busybox
       id: base-busybox
@@ -187,30 +187,30 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Install qemu dependency
+    - name: Set up QEMU
       run: |
-        sudo apt-get update
-        sudo apt-get install -y qemu-user-static
+        podman run --rm --privileged \
+          docker.io/tonistiigi/binfmt --install arm64
 
-        - name: Install Tools
-          run: |
-            set -eu
-            # jq is not installed in travier/podman-action
-            dnf install -qy \
-              jq
-            rpm -q \
-              buildah podman \
-              coreutils findutils sed \
-              curl jq \
-              | (
-                while read -r line ; do
-                  printf %s\\n "${line}"
-                  case "${line}" in (*' not installed'*)
-                    err=1 ;;
-                  esac
-                  done
-                  exit "${err-0}"
-              )
+    - name: Install Tools
+      run: |
+        set -eu
+        # jq is not installed in travier/podman-action
+        dnf install -qy \
+          jq
+        rpm -q \
+          buildah podman \
+          coreutils findutils sed \
+          curl jq \
+          | (
+            while read -r line ; do
+              printf %s\\n "${line}"
+              case "${line}" in (*' not installed'*)
+                err=1 ;;
+              esac
+              done
+              exit "${err-0}"
+          )
 
     - name: Build create-env
       id: create-env
