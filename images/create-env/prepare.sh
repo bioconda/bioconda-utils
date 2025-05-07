@@ -9,16 +9,15 @@ BUILD_ARGS=()
 #
 # If this tag exists on quay.io (that is, this create-env is being built in
 # a subsequent run), then use that. Otherwise, we assume this tag has already
-# been built locally (and the GitHub Actions job dependency should reflect
-# this)
+# been built and pushed to GitHub Container Registry (and the GitHub Actions job
+# dependency should reflect this)
+BUILD_ENV_REGISTRY=${BUILD_ENV_REGISTRY:="ghcr.io/bioconda"}
 if [ $(tag_exists $BUILD_ENV_IMAGE_NAME $BIOCONDA_IMAGE_TAG) ]; then
-  REGISTRY=quay.io/bioconda
-else
-  REGISTRY=ghcr.io/bioconda
+  BUILD_ENV_REGISTRY=quay.io/bioconda
 fi
 
 CONDA_VERSION=$(
-        podman run -t $REGISTRY/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} \
+        podman run -t $BUILD_ENV_REGISTRY/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} \
         bash -c "/opt/conda/bin/conda list --export '^conda$'| sed -n 's/=[^=]*$//p'"
 )
 # Remove trailing \r with parameter expansion
@@ -27,13 +26,12 @@ export CONDA_VERSION=${CONDA_VERSION%$'\r'}
 BUILD_ARGS+=("--build-arg=CONDA_VERSION=$CONDA_VERSION")
 
 # Needs busybox image to copy some items over
+BASE_BUSYBOX_REGISTRY=${BASE_BUSYBOX_REGISTRY:="ghcr.io/bioconda"}
 if [ $(tag_exists $BASE_BUSYBOX_IMAGE_NAME $BASE_TAG) ]; then
-  REGISTRY=quay.io/bioconda
-else
-  REGISTRY=ghcr.io/bioconda
+  BASE_BUSYBOX_REGISTRY=quay.io/bioconda
 fi
 
-BUILD_ARGS+=("--build-arg=BUSYBOX_IMAGE=${REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}")
+BUILD_ARGS+=("--build-arg=BUSYBOX_IMAGE=${BASE_BUSYBOX_REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}")
 
 # TEST_BUILD_ARGS=()
 # TEST_BUILD_ARGS+=("--build-arg=BUSYBOX_IMAGE=$BUSYBOX_IMAGE")
