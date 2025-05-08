@@ -50,6 +50,8 @@ for arch in $ARCHS; do
     fi
   fi
 
+  source env_var_inventory.sh
+
   # Actual building happens here. We will keep track of the built image in
   # $image_id.
   iidfile="$( mktemp )"
