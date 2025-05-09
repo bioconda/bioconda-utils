@@ -5,9 +5,10 @@ TAG="${BIOCONDA_UTILS_VERSION}_base$BASE_TAG"
 # See ../locale/generate_locale.sh for how it was generated in the first place.
 cp -r ../locale/C.utf8 .
 
-# Copy everything we need to install into this image. We need all requirements.
+# Copy everything we need to install into this image. Note that we need the
+# .git directory so that versioneer can correctly compute the version.
 mkdir -p bioconda-utils
-for item in setup.py setup.cfg versioneer.py bioconda_utils; do
+for item in setup.py setup.cfg versioneer.py bioconda_utils MANIFEST .git; do
   cp -ar ../../$item bioconda-utils
 done
 
