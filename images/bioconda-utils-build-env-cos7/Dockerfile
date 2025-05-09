@@ -57,10 +57,6 @@ RUN . /opt/conda/etc/profile.d/conda.sh  && conda activate base && \
     '/^conda([><!=~ ].+)?$/p' \
     /opt/bioconda-utils/bioconda_utils-requirements.txt \
     | xargs -r conda install --yes && \
-    # FIXME: "remove truststore" only necessary due to python downgrade.
-    #        Updating requirements should fix that.
-    #        (Also this removal will break in future.)
-    # conda remove --yes truststore && \
     conda install --yes --file /opt/bioconda-utils/bioconda_utils-requirements.txt && \
     pip install --no-deps --find-links /opt/bioconda-utils bioconda_utils && \
     conda clean --yes --index --tarballs && \
