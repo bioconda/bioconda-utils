@@ -8,7 +8,7 @@ cp -r ../locale/C.utf8 .
 # Copy everything we need to install into this image. Note that we need the
 # .git directory so that versioneer can correctly compute the version.
 mkdir -p bioconda-utils
-for item in setup.py setup.cfg versioneer.py bioconda_utils MANIFEST .git; do
+for item in setup.py setup.cfg versioneer.py bioconda_utils MANIFEST.in .git; do
   cp -ar ../../$item bioconda-utils
 done
 
