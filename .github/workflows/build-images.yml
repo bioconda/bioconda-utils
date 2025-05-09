@@ -303,6 +303,7 @@ jobs:
         # --mulled-test \
         # --force
 
+        source images/env_var_inventory.sh
         py.test --durations=0 test/ -v --log-level=DEBUG -k "docker" --tb=native
 
     # END TESTING
