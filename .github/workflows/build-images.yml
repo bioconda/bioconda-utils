@@ -287,7 +287,7 @@ jobs:
         [ ${{ needs.build-base-debian.outputs.TAG_EXISTS_base_debian }} ] && DEST_EXTENDED_BASE_REGISTRY='quay.io/bioconda' || DEST_EXTENDED_BASE_REGISTRY="ghcr.io/bioconda"
 
         # Tell mulled-build which image to use
-        export DEST_BASE_IMAGE="${DEST_BASE_IMAGE_REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}"
+        export DEST_BASE_IMAGE="${DEST_BASE_REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}"
         export DEFAULT_BASE_IMAGE="${DEST_BASE_REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}"
         export DEFAULT_EXTENDED_BASE_IMAGE="${DEST_EXTENDED_BASE_REGISTRY}/${BASE_DEBIAN_IMAGE_NAME}"
         export BUILD_ENV_IMAGE="${BUILD_ENV_REGISTRY}/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
