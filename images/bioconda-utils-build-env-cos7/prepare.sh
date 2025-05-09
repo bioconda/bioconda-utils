@@ -12,7 +12,7 @@ for item in setup.py setup.cfg versioneer.py bioconda_utils MANIFEST .git; do
   cp -ar ../../$item bioconda-utils
 done
 
-# build script needs to special-case base images depending on archs when
+# The build script needs to special-case base images depending on archs when
 # building the build-env
 IS_BUILD_ENV=true
 

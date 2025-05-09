@@ -1,6 +1,8 @@
 ARG base_image
 FROM ${base_image} as base
 
+# Locale has been created ahead of time and copied to the context dir by
+# prepare.sh; here we just copy it in.
 COPY ./C.utf8 /usr/lib/locale/C.utf8
 
 # Provide system deps unconditionally until we are able to offer per-recipe installs.
@@ -27,6 +29,8 @@ RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda config --set channel_priority strict && \
     conda config --set auto_update_conda False
 
+# Build a wheel for bioconda-utils that will be used to install in the next
+# step.
 FROM base as build
 WORKDIR /tmp/repo
 ARG BIOCONDA_UTILS_FOLDER=./bioconda-utils
@@ -43,6 +47,8 @@ RUN . /opt/conda/etc/profile.d/conda.sh  && conda activate base && \
     chgrp -R lucky /opt/bioconda-utils && \
     chmod -R g=u /opt/bioconda-utils
 
+# Install the requirements for bioconda-utils, and then install the wheel
+# created in the last step.
 FROM base
 COPY --from=build /opt/bioconda-utils /opt/bioconda-utils
 RUN . /opt/conda/etc/profile.d/conda.sh  && conda activate base && \
