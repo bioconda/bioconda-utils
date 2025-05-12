@@ -526,8 +526,13 @@ def report_resources(message, show_docker=True):
     free_mem_mb = utils.get_free_memory_mb()
     free_mem_percent = utils.get_free_memory_percent()
     logger.info("{0} Free disk space: {1:.2f} MB. Free memory: {2:.2f} MB ({3:.2f}%)".format(message, free_space_mb, free_mem_mb, free_mem_percent))
-    if show_docker:
-        cmd = ['docker', 'system', 'df']
+    if 0:
+        # Locally, getting errors like:
+        # INFO     bioconda_utils.utils:utils.py:636 (COMMAND) podman system df
+        # INFO     bioconda_utils.utils:utils.py:664 (ERR) panic: runtime error: invalid memory address or nil pointer dereference
+        # INFO     bioconda_utils.utils:utils.py:664 (ERR) [signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0xf3cb02]
+
+        cmd = ['podman', 'system', 'df']
         utils.run(cmd, mask=False, live=True)
-        cmd = ['docker', 'ps', '-a']
+        cmd = ['podman', 'ps', '-a']
         utils.run(cmd, mask=False, live=True)

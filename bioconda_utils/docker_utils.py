@@ -356,38 +356,13 @@ class RecipeBuilder(object):
             ))
 
         logger.debug('Dockerfile:\n' + open(fout.name).read())
-
-        # Check if the installed version of docker supports the --network flag
-        # (requires version >= 1.13.0)
-        # Parse output of `docker --version` since the format of the
-        #  `docker version` command (note the missing dashes) is not consistent
-        # between different docker versions. The --version string is the same
-        # for docker 1.6.2 and 1.12.6
-        try:
-            s = sp.check_output(["docker", "--version"]).decode()
-        except FileNotFoundError:
-            logger.error('DOCKER FAILED: Error checking docker version, is it installed?')
-            raise
-        except sp.CalledProcessError:
-            logger.error('DOCKER FAILED: Error checking docker version.')
-            raise
-        p = re.compile(r"\d+\.\d+\.\d+")  # three groups of at least on digit separated by dots
-        version_string = re.search(p, s).group(0)
-        if LooseVersion(version_string) >= LooseVersion("1.13.0"):
-            cmd = [
-                    'docker', 'build',
-                    # xref #5027
-                    '--network', 'host',
-                    '-t', self.docker_temp_image,
-                    build_dir
-            ]
-        else:
-            # Network flag was added in 1.13.0, do not add it for lower versions. xref #5387
-            cmd = [
-                    'docker', 'build',
-                    '-t', self.docker_temp_image,
-                    build_dir
-            ]
+        cmd = [
+                'buildah', 'build',
+                # xref #5027
+                '--network', 'host',
+                '-t', self.docker_temp_image,
+                build_dir
+        ]
 
         try:
             with utils.Progress():
@@ -459,7 +434,7 @@ class RecipeBuilder(object):
         env_list.append('{0}={1}'.format('HOST_USER_ID', self.user_info['uid']))
 
         cmd = [
-            'docker', 'run', '-t',
+            'podman', 'run', '-t',
             '--net', 'host',
             '--rm',
             '-v', '{0}:/opt/build_script.bash'.format(build_script),
@@ -480,7 +455,7 @@ class RecipeBuilder(object):
 
     def cleanup(self):
         if self.build_image and not self.keep_image:
-            cmd = ['docker', 'rmi', self.docker_temp_image]
+            cmd = ['podman', 'rmi', self.docker_temp_image]
             utils.run(cmd, mask=False)
 
 
@@ -488,10 +463,10 @@ def purgeImage(mulled_upload_target, img):
     pkg_name_and_version, pkg_build_string = img.rsplit("--", 1)
     pkg_name, pkg_version = pkg_name_and_version.rsplit("=", 1)
     pkg_container_image = f"quay.io/{mulled_upload_target}/{pkg_name}:{pkg_version}--{pkg_build_string}"
-    cmd = ['docker', 'rmi', pkg_container_image]
+    cmd = ['podman', 'rmi', pkg_container_image]
     o = utils.run(cmd, mask=False)
 
 
 def pruneStoppedContainers():
-    cmd = ['docker', 'container', 'prune', '-f']
+    cmd = ['podman', 'container', 'prune', '-f']
     utils.run(cmd, mask=False)
