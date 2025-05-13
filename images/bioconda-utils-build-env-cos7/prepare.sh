@@ -13,12 +13,6 @@ if [ -e "./bioconda-utils" ]; then
   rm -rf "./bioconda-utils"
 fi
 git clone ../../ ./bioconda-utils
-current_branch=$(git symbolic-ref --short HEAD)
-(
-  cd bioconda-utils && git checkout $current_branch 
-)
-
-
 
 # The build script needs to special-case base images depending on archs when
 # building the build-env
