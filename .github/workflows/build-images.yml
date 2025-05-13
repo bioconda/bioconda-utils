@@ -300,6 +300,7 @@ jobs:
 
   push:
     name: push images
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-24.04
     needs: [build-base-debian, build-base-busybox, build-build-env, build-create-env, test]
     steps:
