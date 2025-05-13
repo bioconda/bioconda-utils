@@ -79,6 +79,9 @@ for arch in $ARCHS; do
   buildah tag "${image_id}" "${IMAGE_NAME}:${TAG}-${arch}"
   buildah manifest add "${IMAGE_NAME}:${TAG}" "${image_id}"
 
-  # copy image over to local docker registry
-  podman save "${IMAGE_NAME}:${TAG}-${arch}" | docker load
+  # copy image over to local docker registry, when running locally. Otherwise,
+  # the CI will use ghcr.io as an intermediate registry.
+  if [ "${CI:-false}" == "false" ]; then
+    podman save "${IMAGE_NAME}:${TAG}-${arch}" | docker load
+  fi
 done
