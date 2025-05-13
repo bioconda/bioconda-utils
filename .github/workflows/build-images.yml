@@ -247,16 +247,6 @@ jobs:
       with:
         fetch-depth: 0
 
-    # # Clone bioconda-recipes to use as part of the tests.
-    # - uses: actions/checkout@v4
-    #   with:
-    #     fetch-depth: 0
-    #     repository: bioconda/bioconda-recipes
-    #     path: recipes
-
-    # - name: set path
-    #   run: echo "/opt/mambaforge/bin" >> $GITHUB_PATH
-
     - name: Install bioconda-utils
       run: |
         export BIOCONDA_DISABLE_BUILD_PREP=1
@@ -292,16 +282,6 @@ jobs:
         export DEFAULT_EXTENDED_BASE_IMAGE="${DEST_EXTENDED_BASE_REGISTRY}/${BASE_DEBIAN_IMAGE_NAME}"
         export BUILD_ENV_IMAGE="${BUILD_ENV_REGISTRY}/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
         export CREATE_ENV_IMAGE="${CREATE_ENV_REGISTRY}/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
-
-        # # Build a package with containers.
-        # cd recipes
-        # bioconda-utils build \
-        # --docker-base-image "${BUILD_ENV_REGISTRY}/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}" \
-        # --mulled-conda-image "${CREATE_ENV_REGISTRY}/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}" \
-        # --packages seqtk \
-        # --docker \
-        # --mulled-test \
-        # --force
 
         source images/env_var_inventory.sh
         py.test --durations=0 test/ -v --log-level=DEBUG -k "docker" --tb=native
