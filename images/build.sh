@@ -78,4 +78,7 @@ for arch in $ARCHS; do
   # Add image to manifest
   buildah tag "${image_id}" "${IMAGE_NAME}:${TAG}-${arch}"
   buildah manifest add "${IMAGE_NAME}:${TAG}" "${image_id}"
+
+  # copy image over to local docker registry
+  podman save "${IMAGE_NAME}:${TAG}-${arch}" | docker load
 done
