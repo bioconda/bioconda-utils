@@ -4,10 +4,10 @@
 ARCHS="amd64 arm64"
 DEBIAN_VERSION=12.5
 BUSYBOX_VERSION=1.36.1
-BASE_DEBIAN_IMAGE_NAME="tmp-debian"
-BASE_BUSYBOX_IMAGE_NAME="tmp-busybox"
-BUILD_ENV_IMAGE_NAME="tmp-build-env"
-CREATE_ENV_IMAGE_NAME="tmp-create-env"
+BASE_DEBIAN_IMAGE_NAME="tmp_base-debian"
+BASE_BUSYBOX_IMAGE_NAME="tmp_base-busybox"
+BUILD_ENV_IMAGE_NAME="tmp_build-env"
+CREATE_ENV_IMAGE_NAME="tmp_create-env"
 BASE_TAG="0.2"
 
 # Inspect this repo to get the currently-checked-out version, but if
