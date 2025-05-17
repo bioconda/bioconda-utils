@@ -38,6 +38,8 @@ BUILD_ARGS "full build arguments passed to podman, typically created by <image>/
 busybox_image "initial busybox image, created by images/base-glibc-busybox-bash/prepare.sh"
 IMAGE_NAME "image name as determined by <image>/prepare.sh"
 TAG "tag as determined by <image>prepare.sh"
+BASE_IMAGE_CONDAFORGE_AMD64 "x86_64 base image for building"
+BASE_IMAGE_CONDAFORGE_ARM64 "ARM64 base image for building"
 BASE_IMAGE_BUILD_ARG "unique to build image, this determines the upstream conda-forge image to use"
 arch "current architecture"
 EOF

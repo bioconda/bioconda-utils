@@ -9,6 +9,9 @@ BASE_BUSYBOX_IMAGE_NAME="tmp_base-busybox"
 BUILD_ENV_IMAGE_NAME="tmp_build-env"
 CREATE_ENV_IMAGE_NAME="tmp_create-env"
 BASE_TAG="0.2"
+BASE_IMAGE_CONDAFORGE_AMD64="quay.io/condaforge/linux-anvil-x86_64:cos7"
+BASE_IMAGE_CONDAFORGE_ARM64="quay.io/condaforge/linux-anvil-aarch64:cos7"
+
 
 # Inspect this repo to get the currently-checked-out version, but if
 # BIOCONDA_UTILS_VERSION was set outside this script, use that instead.

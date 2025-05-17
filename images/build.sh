@@ -43,10 +43,10 @@ for arch in $ARCHS; do
   BASE_IMAGE_BUILD_ARG=""
   if [ "${IS_BUILD_ENV:-false}" == "true" ]; then
     if [ "$arch" == "amd64" ]; then
-      BASE_IMAGE_BUILD_ARG="--build-arg=base_image=quay.io/condaforge/linux-anvil-x86_64"
+      BASE_IMAGE_BUILD_ARG="--build-arg=base_image=${BASE_IMAGE_CONDAFORGE_AMD64}"
     fi
     if [ "$arch" == "arm64" ]; then
-      BASE_IMAGE_BUILD_ARG="--build-arg=base_image=quay.io/condaforge/linux-anvil-aarch64"
+      BASE_IMAGE_BUILD_ARG="--build-arg=base_image=${BASE_IMAGE_CONDAFORGE_ARM64}"
     fi
   fi
 
