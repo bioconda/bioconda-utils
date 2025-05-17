@@ -27,7 +27,7 @@ export BUILD_ENV_IMAGE="localhost/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
 
 bash build.sh base-glibc-busybox-bash
 bash build.sh base-glibc-debian-bash
-bash build.sh bioconda-utils-build-env-cos7
+bash build.sh build-env
 bash build.sh create-env
 ```
 
