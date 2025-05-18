@@ -162,7 +162,7 @@ jobs:
         if [ $(tag_exists $BUILD_ENV_IMAGE_NAME $BIOCONDA_IMAGE_TAG) ]; then
           echo "TAG_EXISTS_build-env=true" >> $GITHUB_OUTPUT
         else
-          cd images && bash build.sh bioconda-utils-build-env-cos7
+          cd images && bash build.sh build-env
         fi
 
     - name: push to ghcr
