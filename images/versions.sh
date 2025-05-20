@@ -61,7 +61,7 @@ function tag_exists () {
 # Helper function to push a just-built image to GitHub Container
 # Respository, which is used as a temporary storage mechanism.
 function push_to_ghcr () {
-  podman manifest push localhost/${1}:${2} ghcr.io/bioconda/${1}:${2}
+  podman manifest push --all localhost/${1}:${2} ghcr.io/bioconda/${1}:${2}
 }
 
 # Helper function to move an image from gchr to quay.io for public use.
