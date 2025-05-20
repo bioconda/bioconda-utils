@@ -23,8 +23,17 @@ following:
 ```bash
 source versions.sh
 
-export BUILD_ENV_IMAGE="localhost/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
+# When running on GitHub Actions, this would be ghcr.io or quay.io
+export BUILD_ENV_REGISTRY="localhost"
 
+# Similarly, when running on GitHub Actions, this would normally pull the
+# manifest (which does not have the -amd64 suffix) from ghcr.io or quay.io. There
+# does not seem to be a way to get podman-created manifests over to docker, or
+# even to make local docker manifests. So we need to reference the image
+# directly including the arch suffix.
+export BUILD_ENV_IMAGE="localhost/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}-amd64"
+
+# Each takes 3-10 min (build-env takes the longest)
 bash build.sh base-glibc-busybox-bash
 bash build.sh base-glibc-debian-bash
 bash build.sh build-env

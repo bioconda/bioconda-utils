@@ -270,15 +270,25 @@ jobs:
 
         source images/versions.sh
 
-        # Figure out which registry to use for each image, based on what was built.
+        # Figure out which registry to use for each image. If we built an image
+        # during this workflow run, it was pushed to ghcr.io as a staging area.
+        # If it was not built during this run, then we use the exissting one on
+        # quay.io.
         [ ${{ needs.build-build-env.outputs.TAG_EXISTS_build-env }} ] && BUILD_ENV_REGISTRY='quay.io/bioconda' || BUILD_ENV_REGISTRY="ghcr.io/bioconda"
         [ ${{ needs.build-create-env.outputs.TAG_EXISTS_create-env }} ] && CREATE_ENV_REGISTRY='quay.io/bioconda' || CREATE_ENV_REGISTRY="ghcr.io/bioconda"
         [ ${{ needs.build-base-busybox.outputs.TAG_EXISTS_base_busybox }} ] && DEST_BASE_REGISTRY='quay.io/bioconda' || DEST_BASE_REGISTRY="ghcr.io/bioconda"
         [ ${{ needs.build-base-debian.outputs.TAG_EXISTS_base_debian }} ] && DEST_EXTENDED_BASE_REGISTRY='quay.io/bioconda' || DEST_EXTENDED_BASE_REGISTRY="ghcr.io/bioconda"
 
         # Tell mulled-build which image to use
+        #
+        # DEST_BASE_IMAGE, DEFAULT_BASE_IMAGE, and DEFAULT_EXTENDED_BASE_IMAGE
+        # are hard-coded by mulled-build, e.g.
+        # https://github.com/galaxyproject/galaxy/blob/957f6f5475f8f96c6af110be10791b5acab3a0df/lib/galaxy/tool_util/deps/mulled/mulled_build.py#L62-L71
+        # We keep DEST_BASE_IMAGE unset so it defaults to DEFAULT_BASE_IMAGE or
+        # DEFAULT_EXTENDED_BASE_IMAGE.
         export DEFAULT_BASE_IMAGE="${DEST_BASE_REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}"
         export DEFAULT_EXTENDED_BASE_IMAGE="${DEST_EXTENDED_BASE_REGISTRY}/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}"
+
         export BUILD_ENV_IMAGE="${BUILD_ENV_REGISTRY}/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
         export CREATE_ENV_IMAGE="${CREATE_ENV_REGISTRY}/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
 

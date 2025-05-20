@@ -75,8 +75,10 @@ for arch in $ARCHS; do
   image_id="$( buildah commit "${container}" )"
   buildah rm "${container}"
 
-  # Add image to manifest
+  # Add -$arch suffix to image's tag
   buildah tag "${image_id}" "${IMAGE_NAME}:${TAG}-${arch}"
+
+  # Add it to the manifest, which has no -$arch suffix
   buildah manifest add "${IMAGE_NAME}:${TAG}" "${image_id}"
 
   # copy image over to local docker registry, when running locally. Otherwise,
