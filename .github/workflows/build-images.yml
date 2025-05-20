@@ -284,6 +284,10 @@ jobs:
         export CREATE_ENV_IMAGE="${CREATE_ENV_REGISTRY}/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
 
         source images/env_var_inventory.sh
+
+        [ command -v podman > /dev/null ] && podman images
+        [ command -v docker > /dev/null ] && docker images
+
         py.test --durations=0 test/ -v --log-level=DEBUG -k "docker" --tb=native
 
     # END TESTING
