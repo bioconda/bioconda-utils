@@ -17,27 +17,46 @@ images. It also has some helper functions. It should be sourced before running
 
 Then run `build.sh`, providing it an image directory.
 
-When building locally for testing, you need podman installed. Then do the
-following:
+Building locally has the following requirements:
+
+- podman installed
+- docker installed
+- docker registry running on localhost:5000
+    - i.e. with `docker run -p 5000:5000 --rm --name registry registry`
+- bioconda-utils installed, along with test dependencies
+    - i.e. with `conda create -p ./env --file bioconda_utils/bioconda_utils-requirements.txt --file test-requirements.txt -y`
+    - followed by `conda activate ./env && pip install -e .`
 
 ```bash
+
+cd images
 source versions.sh
 
-# When running on GitHub Actions, this would be ghcr.io or quay.io
 export BUILD_ENV_REGISTRY="localhost"
 
-# Similarly, when running on GitHub Actions, this would normally pull the
-# manifest (which does not have the -amd64 suffix) from ghcr.io or quay.io. There
-# does not seem to be a way to get podman-created manifests over to docker, or
-# even to make local docker manifests. So we need to reference the image
-# directly including the arch suffix.
-export BUILD_ENV_IMAGE="localhost/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}-amd64"
+time bash build.sh base-glibc-busybox-bash
+time bash build.sh base-glibc-debian-bash
+time bash build.sh build-env
+time bash build.sh create-env
 
-# Each takes 3-10 min (build-env takes the longest)
-bash build.sh base-glibc-busybox-bash
-bash build.sh base-glibc-debian-bash
-bash build.sh build-env
-bash build.sh create-env
+build_and_push_manifest ${BASE_DEBIAN_IMAGE_NAME} ${BASE_TAG} docker://localhost:5000
+build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME} ${BASE_TAG} docker://localhost:5000
+build_and_push_manifest ${CREATE_ENV_IMAGE_NAME} ${BIOCONDA_IMAGE_TAG} docker://localhost:5000
+build_and_push_manifest ${BUILD_ENV_IMAGE_NAME} ${BIOCONDA_IMAGE_TAG} docker://localhost:5000
+
+# Run bioconda-utils tests
+cd ../
+export DEFAULT_BASE_IMAGE="localhost:5000/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}"
+export DEFAULT_EXTENDED_BASE_IMAGE="localhost:5000/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}"
+export BUILD_ENV_IMAGE="localhost:5000/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
+export CREATE_ENV_IMAGE="localhost:5000/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
+
+docker pull $DEFAULT_BASE_IMAGE
+docker pull $DEFAULT_EXTENDED_BASE_IMAGE
+docker pull $BUILD_ENV_IMAGE
+docker pull $CREATE_ENV_IMAGE
+
+py.test --durations=0 test/ -v --log-level=DEBUG -k "docker" --tb=native
 ```
 
 # Details

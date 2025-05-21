@@ -10,12 +10,12 @@ TAG="$BASE_TAG"
 BUILD_ARGS=()
 BUILD_ARGS+=("--build-arg=debian_version=${DEBIAN_VERSION}")
 BUILD_ARGS+=("--build-arg=busybox_version=${BUSYBOX_VERSION}")
-iidfile="$( mktemp )"
+iidfile="$(mktemp)"
 buildah bud \
   --iidfile="${iidfile}" \
   --file=Dockerfile.busybox \
   ${BUILD_ARGS[@]}
-busybox_image="$( cat "${iidfile}" )"
+busybox_image="$(cat "${iidfile}")"
 rm "${iidfile}"
 
 # Override build args for what's needed in main Dockerfile

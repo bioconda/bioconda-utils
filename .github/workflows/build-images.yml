@@ -1,5 +1,14 @@
-# Build all container images.
 #
+# TODO:
+#  - detect whether there was a release created (over in release-please.yml)
+#  based on commit message, and use that to trigger an upload to quay.io,
+#  after building the images again here.
+#
+# NOTES:
+#  - export env vars to GITHUB_ENV so that upload/download artifacts have access
+#  - artifacts cannot have ":" in filenames
+#
+
 name: Build images
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -11,251 +20,135 @@ on:
     - '.circleci/**'
     - 'docs/**'
     - 'test/**'
+
 env:
-  # Used to override BIOCONDA_UTILS_VERSION in images/versions.sh
   BIOCONDA_UTILS_VERSION: ${{ github.event.release && github.event.release.tag_name || github.head_ref || github.ref_name }}
 
 jobs:
 
   # JOBS FOR BUILDING IMAGES
   # ----------------------------------------------------------------------
-  # These jobs will build images for archs, put them into a manifest, and push
-  # that to GitHub Container Registry. Later, the testing jobs will test and
-  # push to quay.io.
+  # Build images for all archs, upload as artifacts.
 
-  build-base-debian:
-    name: Build base-debian
+  # Inspect quay.io to see which, if any, of the images we're trying to build
+  # are already on quay.io. Export the results so they can be seen by other rules.
+  detect-existing:
+    name: detect-existing
     runs-on: ubuntu-24.04
+    outputs:
+      DO_BUILD: ${{ steps.detect-existing.outputs.DO_BUILD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect existing
+        id: detect-existing
+        run: |
+          source images/versions.sh
+          source images/env_var_inventory.sh
+
+          # Skip build if *all* versions exist on quay.io. Otherwise we will do
+          # the entire build.
+          if tag_exists $BASE_BUSYBOX_IMAGE_NAME $BASE_TAG \
+          && tag_exists $BASE_DEBIAN_IMAGE_NAME $BASE_TAG \
+          && tag_exists $BUILD_ENV_IMAGE_NAME $BIOCONDA_IMAGE_TAG \
+          && tag_exists $CREATE_ENV_IMAGE_NAME $BIOCONDA_IMAGE_TAG; then
+            echo "DO_BUILD=false" >> $GITHUB_OUTPUT
+          else
+            echo "DO_BUILD=true" >> $GITHUB_OUTPUT
+          fi
+
+  build-images:
+    name: Build all images with podman
+    runs-on: ubuntu-24.04
+    needs: [ detect-existing ]
+    if: ${{ needs.detect-existing.outputs.DO_BUILD == 'true' }}
     container:
       # travier/podman-action contains newer podman/buildah versions.
       image: quay.io/travier/podman-action
       options: --privileged
-    outputs:
-      # A note on these TAG_EXISTS_* outputs: these allow subsequent jobs to
-      # change behavior (e.g., skip building or skip pushing to ghcr) depending
-      # on whether an image has already been created.
-      TAG_EXISTS_base-debian: ${{ steps.base-debian.outputs.TAG_EXISTS_base-debian }}
+
     steps:
 
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-
-    - name: Set up QEMU
+    - name: Initial setup of podman-action container
       run: |
-        podman run --rm --privileged \
-          docker.io/tonistiigi/binfmt --install arm64
+        podman run --rm --privileged docker.io/tonistiigi/binfmt --install arm64
+        dnf install -qy jq git
 
-    - name: Install Tools
-      run: |
-        set -eu
-        # jq is not installed in travier/podman-action
-        dnf install -qy \
-          jq
         rpm -q \
           buildah podman \
           coreutils findutils sed \
-          curl jq \
-          | (
-            while read -r line ; do
+          curl jq git |
+          (
+            while read -r line; do
               printf %s\\n "${line}"
-              case "${line}" in (*' not installed'*)
-                err=1 ;;
+              case "${line}" in *' not installed'*)
+                err=1
+                ;;
               esac
-              done
-              exit "${err-0}"
+            done
+            exit "${err-0}"
           )
-
-    - name: base-debian
-      id: base-debian
-      run: |
-        source images/versions.sh
-        if [ $(tag_exists $BASE_DEBIAN_IMAGE_NAME $BASE_TAG) ]; then
-          echo "TAG_EXISTS_base-debian=true" >> $GITHUB_OUTPUT
-        else
-          cd images && bash build.sh base-glibc-debian-bash
-        fi
-
-    - name: push to ghcr
-      if: '${{ ! steps.base-debian.outputs.TAG_EXISTS_base-debian }}'
-      run: |
-        echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
-        source images/versions.sh
-        push_to_ghcr $BASE_DEBIAN_IMAGE_NAME $BASE_TAG
-
-  build-base-busybox:
-    name: Build base-busybox
-    runs-on: ubuntu-24.04
-    container:
-      # travier/podman-action contains newer podman/buildah versions.
-      image: quay.io/travier/podman-action
-      options: --privileged
-    outputs:
-      TAG_EXISTS_base-busybox: ${{ steps.base-busybox.outputs.TAG_EXISTS_base-busybox }}
-    steps:
 
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
-    - name: Set up QEMU
+    - name: build all images
       run: |
-        podman run --rm --privileged \
-          docker.io/tonistiigi/binfmt --install arm64
-
-    - name: Install Tools
-      run: |
-        set -eu
-        # jq is not installed in travier/podman-action
-        dnf install -qy \
-          jq
-        rpm -q \
-          buildah podman \
-          coreutils findutils sed \
-          curl jq \
-          | (
-            while read -r line ; do
-              printf %s\\n "${line}"
-              case "${line}" in (*' not installed'*)
-                err=1 ;;
-              esac
-              done
-              exit "${err-0}"
-          )
-
-    - name: base-busybox
-      id: base-busybox
-      run: |
+        ls
         source images/versions.sh
-        if [ $(tag_exists $BASE_BUSYBOX_IMAGE_NAME $BASE_TAG) ]; then
-          echo "TAG_EXISTS_base-busybox=true" >> $GITHUB_OUTPUT
-        else
-          cd images && bash build.sh base-glibc-busybox-bash
-        fi
+        cd images
+        time bash build.sh base-glibc-busybox-bash
+        time bash build.sh base-glibc-debian-bash
+        time bash build.sh build-env
+        time bash build.sh create-env
 
-    - name: push to ghcr
-      if: '${{ ! steps.base-busybox.outputs.TAG_EXISTS_base-busybox }}'
-      run: |
-        echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
-        source images/versions.sh
-        push_to_ghcr $BASE_BUSYBOX_IMAGE_NAME $BASE_TAG
-
-  build-build-env:
-    name: Build build-env
-    outputs:
-      TAG_EXISTS_build-env: ${{ steps.build-env.outputs.TAG_EXISTS_build-env }}
-    runs-on: ubuntu-22.04
-    steps:
-    - uses: actions/checkout@v4
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
       with:
-        fetch-depth: 0
-
-    - name: Install qemu dependency
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y qemu-user-static
-
-    - name: build-env
-      id: build-env
-      run: |
-        source images/versions.sh
-        if [ $(tag_exists $BUILD_ENV_IMAGE_NAME $BIOCONDA_IMAGE_TAG) ]; then
-          echo "TAG_EXISTS_build-env=true" >> $GITHUB_OUTPUT
-        else
-          cd images && bash build.sh build-env
-        fi
-
-    - name: push to ghcr
-      if: '${{ ! steps.build-env.outputs.TAG_EXISTS_build-env }}'
-      run: |
-        echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
-        source images/versions.sh
-        push_to_ghcr $BUILD_ENV_IMAGE_NAME $BIOCONDA_IMAGE_TAG
-
-  build-create-env:
-    name: Build create-env
-    needs: [build-build-env, build-base-busybox]
-    outputs:
-      TAG_EXISTS_create-env: ${{ steps.create-env.outputs.TAG_EXISTS_create-env }}
-    runs-on: ubuntu-24.04
-    container:
-      # travier/podman-action contains newer podman/buildah versions.
-      image: quay.io/travier/podman-action
-      options: --privileged
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-
-    - name: Set up QEMU
-      run: |
-        podman run --rm --privileged \
-          docker.io/tonistiigi/binfmt --install arm64
-
-    - name: Install Tools
-      run: |
-        set -eu
-        # jq is not installed in travier/podman-action
-        dnf install -qy \
-          jq
-        rpm -q \
-          buildah podman \
-          coreutils findutils sed \
-          curl jq \
-          | (
-            while read -r line ; do
-              printf %s\\n "${line}"
-              case "${line}" in (*' not installed'*)
-                err=1 ;;
-              esac
-              done
-              exit "${err-0}"
-          )
-
-    - name: Build create-env
-      id: create-env
-      run: |
-        source images/versions.sh
-        echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
-        if [ $(tag_exists $CREATE_ENV_IMAGE_NAME $BIOCONDA_IMAGE_TAG) ]; then
-          echo "TAG_EXISTS_create-env=true" >> $GITHUB_OUTPUT
-        else
-          cd images && bash build.sh create-env
-        fi
-
-    - name: push to ghcr
-      if: '${{ ! steps.create-env.outputs.TAG_EXISTS_create-env }}'
-      run: |
-        echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
-        source images/versions.sh
-        push_to_ghcr $CREATE_ENV_IMAGE_NAME $BIOCONDA_IMAGE_TAG
-
-
-  # END OF BUILDING IMAGES
-  # ----------------------------------------------------------------------
-  # START TESTING
-  # These testing jobs will run the respective Dockerfile.test in each image
-  # directory.
+        name: image-artifacts
+        path: |
+          image-artifacts/
 
   test:
     name: test bioconda-utils with images
     runs-on: ubuntu-24.04
-    needs: [build-base-debian, build-base-busybox, build-build-env, build-create-env]
+
+    # Start a local docker registry. Podman/buildah will push manifests and
+    # images here for docker to use within bioconda-utils
+    services:
+      registry:
+        image: registry:2
+        ports:
+          - 5000:5000
+    needs: [ build-images ]
     steps:
 
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
+    - name: export env vars marked as GITHUB_ENV
+      run: |
+        source images/versions.sh
+        for var in $(grep "# GITHUB_ENV$" images/versions.sh | cut -f1 -d "="); do
+          echo "$var=${!var}" >> $GITHUB_ENV
+        done
+
     - name: Install bioconda-utils
       run: |
         export BIOCONDA_DISABLE_BUILD_PREP=1
+
+        # TODO: change to master when done with PR
         BRANCH=simplify-unify-containers
         wget https://raw.githubusercontent.com/bioconda/bioconda-common/${BRANCH}/{common,install-and-set-up-conda,configure-conda}.sh
+
         source images/versions.sh
 
         # Ensure install-and-set-up-conda uses same version as in the container
-        # (which uses images/versions.sh
+        # (which uses images/versions.sh)
         export BIOCONDA_UTILS_TAG=$BIOCONDA_UTILS_VERSION
         bash install-and-set-up-conda.sh
         eval "$(conda shell.bash hook)"
@@ -263,39 +156,68 @@ jobs:
         conda activate bioconda
         python setup.py install
 
+    - name: Download images as artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: image-artifacts
+        path: image-artifacts
+
+    - name: Load image artifacts into podman
+      run: |
+          for image in image-artifacts/*.tar; do
+            podman load -i $image
+          done
+
+    - name: Build & push manifests to local docker registry
+      run: |
+        source images/versions.sh
+        source images/env_var_inventory.sh
+
+        podman images
+
+        set -x
+
+        build_and_push_manifest ${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG} docker://localhost:5000
+        build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} docker://localhost:5000
+        build_and_push_manifest ${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} docker://localhost:5000
+        build_and_push_manifest ${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} docker://localhost:5000
+
+        # Make sure we can get them back into the docker runtime
+        docker pull localhost:5000/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}
+        docker pull localhost:5000/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}
+        docker pull localhost:5000/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}
+        docker pull localhost:5000/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}
+        docker pull localhost:5000/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}
+
+        docker images
+
     - name: test
       run: |
         eval "$(conda shell.bash hook)"
         conda activate bioconda
 
-        source images/versions.sh
-
-        # Figure out which registry to use for each image. If we built an image
-        # during this workflow run, it was pushed to ghcr.io as a staging area.
-        # If it was not built during this run, then we use the exissting one on
-        # quay.io.
-        [ ${{ needs.build-build-env.outputs.TAG_EXISTS_build-env }} ] && BUILD_ENV_REGISTRY='quay.io/bioconda' || BUILD_ENV_REGISTRY="ghcr.io/bioconda"
-        [ ${{ needs.build-create-env.outputs.TAG_EXISTS_create-env }} ] && CREATE_ENV_REGISTRY='quay.io/bioconda' || CREATE_ENV_REGISTRY="ghcr.io/bioconda"
-        [ ${{ needs.build-base-busybox.outputs.TAG_EXISTS_base_busybox }} ] && DEST_BASE_REGISTRY='quay.io/bioconda' || DEST_BASE_REGISTRY="ghcr.io/bioconda"
-        [ ${{ needs.build-base-debian.outputs.TAG_EXISTS_base_debian }} ] && DEST_EXTENDED_BASE_REGISTRY='quay.io/bioconda' || DEST_EXTENDED_BASE_REGISTRY="ghcr.io/bioconda"
-
         # Tell mulled-build which image to use
         #
-        # DEST_BASE_IMAGE, DEFAULT_BASE_IMAGE, and DEFAULT_EXTENDED_BASE_IMAGE
-        # are hard-coded by mulled-build, e.g.
-        # https://github.com/galaxyproject/galaxy/blob/957f6f5475f8f96c6af110be10791b5acab3a0df/lib/galaxy/tool_util/deps/mulled/mulled_build.py#L62-L71
+        # The follwing env vars are searched for by mulled-build:
+        #   - DEST_BASE_IMAGE
+        #   - DEFAULT_BASE_IMAGE
+        #   - DEFAULT_EXTENDED_BASE_IMAGE
+        #
         # We keep DEST_BASE_IMAGE unset so it defaults to DEFAULT_BASE_IMAGE or
         # DEFAULT_EXTENDED_BASE_IMAGE.
-        export DEFAULT_BASE_IMAGE="${DEST_BASE_REGISTRY}/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}"
-        export DEFAULT_EXTENDED_BASE_IMAGE="${DEST_EXTENDED_BASE_REGISTRY}/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}"
+        #
+        # (see https://github.com/galaxyproject/galaxy/blob/957f6f5/lib/galaxy/tool_util/deps/mulled/mulled_build.py#L62-L71)
+        #
+        # We want to use the manifests that were pushed to the docker registry
+        # running on localhost (which simulates eventually using manifests from
+        # quay.io)
+        source images/versions.sh
+        export DEFAULT_BASE_IMAGE="localhost:5000/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}"
+        export DEFAULT_EXTENDED_BASE_IMAGE="localhost:5000/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}"
 
-        export BUILD_ENV_IMAGE="${BUILD_ENV_REGISTRY}/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
-        export CREATE_ENV_IMAGE="${CREATE_ENV_REGISTRY}/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
+        export BUILD_ENV_IMAGE="localhost:5000/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
+        export CREATE_ENV_IMAGE="localhost:5000/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
 
-        source images/env_var_inventory.sh
-
-        [ command -v podman > /dev/null ] && podman images
-        [ command -v docker > /dev/null ] && docker images
 
         py.test --durations=0 test/ -v --log-level=DEBUG -k "docker" --tb=native
 
@@ -307,15 +229,13 @@ jobs:
     # AND that repository must also be configured to allow write access for the
     # appropriate service account. This must be done by a user with admin
     # access to quay.io/bioconda.
-    #
-    # This uses the TAG_EXISTS_* outputs from previous jobs to determine if
-    # a push to quay.io should happen.
 
   push:
     name: push images
-    if: github.ref == 'refs/heads/master'
+    if: (github.ref == 'refs/heads/master') && (needs.detect-existing.outputs.DO_BUILD == 'true')
     runs-on: ubuntu-24.04
-    needs: [build-base-debian, build-base-busybox, build-build-env, build-create-env, test]
+    needs: [ test ]
+
     steps:
 
     - uses: actions/checkout@v4
@@ -327,26 +247,7 @@ jobs:
       run: |
         echo '${{ secrets.QUAY_BIOCONDA_TOKEN }}' | podman login quay.io -u '${{ secrets.QUAY_BIOCONDA_USERNAME }}' --password-stdin
         source images/versions.sh
-        move_from_ghcr_to_quay ${BASE_DEBIAN_IMAGE_NAME} ${BASE_TAG}
-
-
-    - name: push base-busybox
-      if: ${{ ! needs.base-busybox.outputs.TAG_EXISTS_base-busybox }}
-      run: |
-        echo '${{ secrets.QUAY_BIOCONDA_TOKEN }}' | podman login quay.io -u '${{ secrets.QUAY_BIOCONDA_USERNAME }}' --password-stdin
-        source images/versions.sh
-        move_from_ghcr_to_quay ${BASE_BUSYBOX_IMAGE_NAME} ${BASE_TAG}
-
-    - name: push create-env
-      if: ${{ ! needs.create-env.outputs.TAG_EXISTS_create-env }}
-      run: |
-        echo '${{ secrets.QUAY_BIOCONDA_TOKEN }}' | podman login quay.io -u '${{ secrets.QUAY_BIOCONDA_USERNAME }}' --password-stdin
-        source images/versions.sh
-        move_from_ghcr_to_quay ${CREATE_ENV_IMAGE_NAME} ${BIOCONDA_IMAGE_TAG}
-
-    - name: push build-env
-      if: ${{ ! needs.build-env.outputs.TAG_EXISTS_build-env }}
-      run: |
-        echo '${{ secrets.QUAY_BIOCONDA_TOKEN }}' | podman login quay.io -u '${{ secrets.QUAY_BIOCONDA_USERNAME }}' --password-stdin
-        source images/versions.sh
-        move_from_ghcr_to_quay ${BUILD_ENV_IMAGE_NAME} ${BIOCONDA_IMAGE_TAG}
+        build_and_push_manifest ${BASE_DEBIAN_IMAGE_NAME} ${BASE_TAG} "quay.io/bioconda"
+        build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME} ${BASE_TAG} "quay.io/bioconda"
+        build_and_push_manifest ${CREATE_ENV_IMAGE_NAME} ${BIOCONDA_IMAGE_TAG} "quay.io/bioconda"
+        build_and_push_manifest ${BUILD_ENV_IMAGE_NAME} ${BIOCONDA_IMAGE_TAG} "quay.io/bioconda"

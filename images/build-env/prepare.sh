@@ -8,7 +8,7 @@ TAG="${BIOCONDA_UTILS_VERSION}_base$BASE_TAG"
 cp -r ../locale/C.utf8 .
 
 # We are aiming to get the entire repo into the container so that versioneer
-# can correctly determine the version. But the direc
+# can correctly determine the version.
 if [ -e "./bioconda-utils" ]; then
   rm -rf "./bioconda-utils"
 fi

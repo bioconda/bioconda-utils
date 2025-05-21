@@ -19,15 +19,22 @@
 # ARCHS: space-separated string of archs to build
 # IMAGE_NAME: name of image; created manifest will be IMAGE_NAME:tag
 # BUILD_ARGS: array of arguments like ("--build-arg=argument1=the-value", "--build-arg=arg2=a")
+#
+# Output is:
+#   - images for each arch
+#   - manifest containing those images
+#   - tar files of images ready to upload as artifacts
+#   - tar files built by podman loaded into docker
 
 set -xeu
 
 IMAGE_DIR=$1
 
+echo === BUILDING $IMAGE_DIR ===
+
 cd $IMAGE_DIR
 
 [ -e prepare.sh ] && source prepare.sh
-
 
 # Clean up any manifests before we start.
 # IMAGE_NAME and TAG should be created by prepare.sh
@@ -50,29 +57,33 @@ for arch in $ARCHS; do
     fi
   fi
 
+  # Make arch available as an environment variable and source prepare.sh again
+  export CURRENT_ARCH="$arch"
+  [ -e prepare.sh ] && source prepare.sh
+
   source ../env_var_inventory.sh
 
   # Actual building happens here. We will keep track of the built image in
   # $image_id.
-  iidfile="$( mktemp )"
+  iidfile="$(mktemp)"
   buildah bud \
     --arch="${arch}" \
     --iidfile="${iidfile}" \
     --file=Dockerfile \
     ${BUILD_ARGS[@]} \
     $BASE_IMAGE_BUILD_ARG
-  image_id="$( cat "${iidfile}" )"
+  image_id="$(cat "${iidfile}")"
   rm "${iidfile}"
 
   # In order for GitHub Actions to inherit container permissions from the repo
   # permissions, we need to add a special label. However `buildah config
   # --label` operates on a container, not an image. So we add the label to
   # a temporary container and then save the resulting image.
-  container="$( buildah from "${image_id}" )"
+  container="$(buildah from "${image_id}")"
   buildah config \
     --label="org.opencontainers.image.source=https://github.com/bioconda/bioconda-utils" \
     "${container}"
-  image_id="$( buildah commit "${container}" )"
+  image_id="$(buildah commit "${container}")"
   buildah rm "${container}"
 
   # Add -$arch suffix to image's tag
@@ -81,9 +92,9 @@ for arch in $ARCHS; do
   # Add it to the manifest, which has no -$arch suffix
   buildah manifest add "${IMAGE_NAME}:${TAG}" "${image_id}"
 
-  # copy image over to local docker registry, when running locally. Otherwise,
-  # the CI will use ghcr.io as an intermediate registry.
-  if [ "${CI:-false}" == "false" ]; then
-    podman save "${IMAGE_NAME}:${TAG}-${arch}" | docker load
-  fi
+  # Save image for storing as artifact or to load into docker
+  mkdir -p ../../image-artifacts
+  podman save "${IMAGE_NAME}:${TAG}-${arch}" >"../../image-artifacts/${IMAGE_NAME}-${arch}.tar"
+  ls ../../image-artifacts
+
 done
