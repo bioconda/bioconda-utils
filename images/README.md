@@ -11,16 +11,13 @@ on the containers themselves and how they relate to each other.
 
 Here are the relevant components:
 
-- `.github/workflows/build-images.yml` in the top level of the repo
-  orchestrates these image builds in CI
+- `image_config.sh` configures versions and defines some useful functions. It
+  should be sourced before doing anything else.
+- There is a directory for each of the images to build; each has a `prepare.sh`
+  and a `Dockerfile` in it.
+- `build.sh`, when given an image directory, will build that image.
 
-- `image_config.sh` configures
-
-`image_config.sh` sets env vars that are used to control versions across all
-images. It also has some helper functions. It should be sourced before running
-`build.sh`.
-
-Then run `build.sh`, providing it an image directory.
+## Building locally
 
 Building locally has the following requirements:
 
@@ -31,6 +28,8 @@ Building locally has the following requirements:
 - bioconda-utils installed, along with test dependencies
     - i.e. with `conda create -p ./env --file bioconda_utils/bioconda_utils-requirements.txt --file test-requirements.txt -y`
     - followed by `conda activate ./env && pip install -e .`
+
+Use the following commands to build and test locally:
 
 ```bash
 
@@ -64,22 +63,24 @@ docker pull $CREATE_ENV_IMAGE
 py.test --durations=0 test/ -v --log-level=DEBUG -k "docker" --tb=native
 ```
 
-# Details
+## Details
 
 Image directories must at least contain the following:
 
-- `prepare.sh` script, where the first line should be `source ../image_config.sh`
+- `prepare.sh` script, where the first line should be `source
+  ../image_config.sh`. It should also do any other work needed in preparation
+  for building.
 - `Dockerfile` for building
 - `Dockerfile.test` for testing.
 
 `build.sh` sources `<IMAGE DIR>/prepare.sh`, which sources `image_config.sh` to
 populate the env vars needed for that particular image.
-`<IMAGE_DIR>/prepare.sh` should also do any other needed work in preparation
-for building.
 
-# How locale is handled
+## How locale is handled
 
 Previously, we were preparing the locale each time in an image and copying that
 out to subsequent image. However, we expect the C.utf8 locale to change
 infrequently. So now we store it separately in the repo and copy it in. It was
-initially prepared with `locale/generate_locale.sh`.
+initially prepared with `locale/generate_locale.sh` and stored in
+`locale/C.utf8`; if the locale needs updating then this script and output
+should be updated.

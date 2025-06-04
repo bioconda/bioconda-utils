@@ -130,13 +130,6 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: export env vars marked as GITHUB_ENV
-      run: |
-        source images/image_config.sh
-        for var in $(grep "# GITHUB_ENV$" images/image_config.sh | cut -f1 -d "="); do
-          echo "$var=${!var}" >> $GITHUB_ENV
-        done
-
     - name: Install bioconda-utils
       run: |
         export BIOCONDA_DISABLE_BUILD_PREP=1
@@ -214,10 +207,8 @@ jobs:
         source images/image_config.sh
         export DEFAULT_BASE_IMAGE="localhost:5000/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}"
         export DEFAULT_EXTENDED_BASE_IMAGE="localhost:5000/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}"
-
         export BUILD_ENV_IMAGE="localhost:5000/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
         export CREATE_ENV_IMAGE="localhost:5000/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
-
 
         py.test --durations=0 test/ -v --log-level=DEBUG -k "docker" --tb=native
 
@@ -235,19 +226,24 @@ jobs:
     if: (github.ref == 'refs/heads/master') && (needs.detect-existing.outputs.DO_BUILD == 'true')
     runs-on: ubuntu-24.04
     needs: [ test ]
-
     steps:
 
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
-    - name: push base-debian
-      if: ${{ ! needs.base-debian.outputs.TAG_EXISTS_base-debian }}
+    - name: push manifests to quay.io
       run: |
         echo '${{ secrets.QUAY_BIOCONDA_TOKEN }}' | podman login quay.io -u '${{ secrets.QUAY_BIOCONDA_USERNAME }}' --password-stdin
         source images/image_config.sh
-        build_and_push_manifest ${BASE_DEBIAN_IMAGE_NAME} ${BASE_TAG} "quay.io/bioconda"
-        build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME} ${BASE_TAG} "quay.io/bioconda"
-        build_and_push_manifest ${CREATE_ENV_IMAGE_NAME} ${BIOCONDA_IMAGE_TAG} "quay.io/bioconda"
-        build_and_push_manifest ${BUILD_ENV_IMAGE_NAME} ${BIOCONDA_IMAGE_TAG} "quay.io/bioconda"
+        build_and_push_manifest ${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG} "quay.io/bioconda"
+        build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} "quay.io/bioconda"
+        build_and_push_manifest ${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda"
+        build_and_push_manifest ${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda"
+
+        # The above functions have created manifests with "local_" prefix and
+        # we can push those to the remote repo directly with the "latest" tag.
+        podman manifest push --all "local_${BASE_DEBAIN_IMAGE_NAME}:${BASE_TAG}" "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:latest"
+        podman manifest push --all "local_${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}" "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:latest"
+        podman manifest push --all "local_${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}" "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:latest"
+        podman manifest push --all "local_${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}" "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:latest"
