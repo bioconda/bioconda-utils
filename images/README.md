@@ -42,14 +42,19 @@ time bash build.sh base-glibc-busybox-bash
 time bash build.sh base-glibc-debian-bash
 time bash build.sh build-env
 time bash build.sh create-env
+time bash build.sh bot
+time bash build.sh bioconda-recipes-issue-responder
+
+
 
 build_and_push_manifest ${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG} docker://localhost:5000
 build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} docker://localhost:5000
 build_and_push_manifest ${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} docker://localhost:5000
 build_and_push_manifest ${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} docker://localhost:5000
+ONLY_AMD64=true build_and_push_manifest ${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} docker://localhost:5000
+ONLY_AMD64=true build_and_push_manifest ${ISSUE_RESPONDER_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} docker://localhost:5000
 
 # Run bioconda-utils tests
-cd ../
 export DEFAULT_BASE_IMAGE="localhost:5000/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}"
 export DEFAULT_EXTENDED_BASE_IMAGE="localhost:5000/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}"
 export BUILD_ENV_IMAGE="localhost:5000/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
@@ -60,6 +65,7 @@ docker pull $DEFAULT_EXTENDED_BASE_IMAGE
 docker pull $BUILD_ENV_IMAGE
 docker pull $CREATE_ENV_IMAGE
 
+cd ../
 py.test --durations=0 test/ -v --log-level=DEBUG -k "docker" --tb=native
 ```
 

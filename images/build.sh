@@ -44,6 +44,8 @@ buildah manifest create "${IMAGE_NAME}:${TAG}"
 # ARCHS should be created by prepare.sh
 for arch in $ARCHS; do
 
+  [ "${ONLY_AMD64:-false}" == "true" -a "${arch}" != "amd64" ] && continue
+
   # This logic is specific to the build-env. We need an arch-specific base
   # image, but the nomenclature is inconsistent. So we directly map arch names
   # to conda-forge base images.
@@ -91,8 +93,11 @@ for arch in $ARCHS; do
   # Add -$arch suffix to image's tag
   buildah tag "${image_id}" "${IMAGE_NAME}:${TAG}-${arch}"
 
-  # Add it to the manifest, which has no -$arch suffix
-  buildah manifest add "${IMAGE_NAME}:${TAG}" "${image_id}"
+  # Run basic test in Dockerfile.test
+  buildah bud \
+    --build-arg=base="$" \
+    --file=Dockerfile.test \
+    --build-arg=base="${image_id}"
 
   # Save image for storing as artifact or to load into docker
   mkdir -p ../../image-artifacts

@@ -3,12 +3,14 @@
 #----------------------------VERSIONS-------------------------------------------
 # Configures various versions to be used throughout infrastructure.
 ARCHS="amd64 arm64"
-DEBIAN_VERSION=12.5
-BUSYBOX_VERSION=1.36.1
+DEBIAN_VERSION="12.5"
+BUSYBOX_VERSION="1.36.1"
 BASE_DEBIAN_IMAGE_NAME="tmp-base-debian"
 BASE_BUSYBOX_IMAGE_NAME="tmp-base-busybox"
 BUILD_ENV_IMAGE_NAME="tmp-build-env"
 CREATE_ENV_IMAGE_NAME="tmp-create-env"
+BOT_IMAGE_NAME="tmp-bot"
+ISSUE_RESPONDER_IMAGE_NAME="tmp-issue-responder"
 BASE_TAG="0.2"
 BASE_IMAGE_CONDAFORGE_AMD64="quay.io/condaforge/linux-anvil-x86_64:cos7"
 BASE_IMAGE_CONDAFORGE_ARM64="quay.io/condaforge/linux-anvil-aarch64:cos7"
@@ -66,13 +68,12 @@ function tag_exists() {
 }
 
 function build_and_push_manifest() {
-  # Builds a local manifest containing multiple archs for an image/tag, and
-  # pushes to a registry.
+  # Creates a local manifest, adds containers for multiple archs, and pushes to
+  # a registry.
   #
   # Typical usage:
   #   build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} docker://localhost:5000
   #   build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} quay.io/bioconda
-  #   build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} quay.io/bioconda latest
   #
   local image=$1
   local registry=$2
@@ -85,6 +86,7 @@ function build_and_push_manifest() {
   # Expects images for archs to be built already by buildah/podman. Here we add
   # them to local manifest.
   for arch in $ARCHS; do
+    [ "${ONLY_AMD64:-false}" == "true" -a "${arch}" != "amd64" ] && continue
     imgid=$(buildah pull --arch=$arch "${image}-${arch}")
     buildah manifest add "local_${image}" "${imgid}"
   done
@@ -127,6 +129,8 @@ function env_var_inventory () {
   BASE_BUSYBOX_IMAGE_NAME "name for busybox image"
   BUILD_ENV_IMAGE_NAME "name for build image"
   CREATE_ENV_IMAGE_NAME "name for create image"
+  BOT_IMAGE_IMAGE_NAME "name for bot image"
+  ISSUE_RESPONDER_IMAGE_NAME "name for issue-responder image"
   CURRENT_ARCH "Arch for current iteration of loop"
   BASE_TAG "the base version tag to add to image tags"
   BIOCONDA_IMAGE_TAG "full bioconda + image version"

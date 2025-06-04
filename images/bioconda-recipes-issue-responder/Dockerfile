@@ -1,9 +1,9 @@
-ARG base=quay.io/bioconda/base-glibc-busybox-bash:2.0.0
+ARG base=
+ARG create_env=
 
-FROM quay.io/bioconda/create-env:2.0.0 as build
+FROM ${create_env} as build
 RUN /opt/create-env/env-execute \
       create-env \
-        --conda=mamba \
         --strip-files=\* \
         --remove-paths=\*.a \
         --remove-paths=\*.pyc \

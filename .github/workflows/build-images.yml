@@ -175,6 +175,8 @@ jobs:
         build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} docker://localhost:5000
         build_and_push_manifest ${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} docker://localhost:5000
         build_and_push_manifest ${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} docker://localhost:5000
+        ONLY_AMD64=true build_and_push_manifest ${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} docker://localhost:5000
+        ONLY_AMD64=true build_and_push_manifest ${ISSUE_RESPONDER_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} docker://localhost:5000
 
         # Make sure we can get them back into the docker runtime
         docker pull localhost:5000/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}
@@ -182,6 +184,8 @@ jobs:
         docker pull localhost:5000/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}
         docker pull localhost:5000/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}
         docker pull localhost:5000/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}
+        docker pull localhost:5000/${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}
+        docker pull localhost:5000/${ISSUE_RESPONDER_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}
 
         docker images
 
@@ -240,6 +244,8 @@ jobs:
         build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} "quay.io/bioconda"
         build_and_push_manifest ${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda"
         build_and_push_manifest ${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda"
+        ONLY_AMD64=true build_and_push_manifest ${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda"
+        ONLY_AMD64=true build_and_push_manifest ${ISSUE_RESPONDER_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda"
 
         # The above functions have created manifests with "local_" prefix and
         # we can push those to the remote repo directly with the "latest" tag.
@@ -247,3 +253,5 @@ jobs:
         podman manifest push --all "local_${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}" "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:latest"
         podman manifest push --all "local_${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}" "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:latest"
         podman manifest push --all "local_${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}" "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:latest"
+        podman manifest push --all "local_${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}" "quay.io/bioconda/${BOT_IMAGE_NAME}:latest"
+        podman manifest push --all "local_${ISSUE_RESPONDER_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}" "quay.io/bioconda/${ISSUE_RESPONDER_IMAGE_NAME}:latest"

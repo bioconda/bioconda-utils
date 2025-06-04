@@ -1,10 +1,11 @@
-ARG base=quay.io/bioconda/base-glibc-busybox-bash:2.1.0
+ARG base=
+ARG create_env=
+FROM "${create_env}" as build
 
-FROM quay.io/bioconda/create-env as build
 ## If gettext pulls in libxml2, use one that doesn't bloat the image with ICU.
 #RUN . /opt/create-env/env-activate.sh \
 #    && \
-#    mamba install --yes curl conda-build patch \
+#    conda install --yes curl conda-build patch \
 #    && \
 #    curl -L \
 #      https://github.com/conda-forge/libxml2-feedstock/archive/master.tar.gz \
@@ -24,7 +25,6 @@ RUN . /opt/create-env/env-activate.sh && \
     export CONDA_ADD_PIP_AS_PYTHON_DEPENDENCY=0 \
     && \
     create-env \
-        --conda=mamba \
         --strip-files=\* \
         --remove-paths=\*.a \
         --remove-paths=\*.c \
