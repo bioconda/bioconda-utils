@@ -61,7 +61,9 @@ for arch in $ARCHS; do
   export CURRENT_ARCH="$arch"
   [ -e prepare.sh ] && source prepare.sh
 
-  source ../env_var_inventory.sh
+  # defined in image_config.sh, which is expected to have been sourced prior to
+  # running this script.
+  env_var_inventory
 
   # Actual building happens here. We will keep track of the built image in
   # $image_id.
