@@ -39,10 +39,10 @@ time bash build.sh base-glibc-debian-bash
 time bash build.sh build-env
 time bash build.sh create-env
 
-build_and_push_manifest ${BASE_DEBIAN_IMAGE_NAME} ${BASE_TAG} docker://localhost:5000
-build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME} ${BASE_TAG} docker://localhost:5000
-build_and_push_manifest ${CREATE_ENV_IMAGE_NAME} ${BIOCONDA_IMAGE_TAG} docker://localhost:5000
-build_and_push_manifest ${BUILD_ENV_IMAGE_NAME} ${BIOCONDA_IMAGE_TAG} docker://localhost:5000
+build_and_push_manifest ${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG} docker://localhost:5000
+build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} docker://localhost:5000
+build_and_push_manifest ${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} docker://localhost:5000
+build_and_push_manifest ${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} docker://localhost:5000
 
 # Run bioconda-utils tests
 cd ../
