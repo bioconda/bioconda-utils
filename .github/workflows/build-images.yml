@@ -94,6 +94,10 @@ jobs:
 
     - name: build all images
       run: |
+        # GHA is giving warning with a suggestion to do the following, even
+        # though the checkout action should have already done this.
+        git config --global --add safe.directory /__w/bioconda-utils/bioconda-utils
+
         source images/image_config.sh
         cd images
         time bash build.sh base-glibc-busybox-bash
