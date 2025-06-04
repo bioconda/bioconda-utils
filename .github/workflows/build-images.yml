@@ -45,7 +45,7 @@ jobs:
       - name: Detect existing
         id: detect-existing
         run: |
-          source images/versions.sh
+          source images/image_config.sh
           source images/env_var_inventory.sh
 
           # Skip build if *all* versions exist on quay.io. Otherwise we will do
@@ -98,7 +98,7 @@ jobs:
     - name: build all images
       run: |
         ls
-        source images/versions.sh
+        source images/image_config.sh
         cd images
         time bash build.sh base-glibc-busybox-bash
         time bash build.sh base-glibc-debian-bash
@@ -132,8 +132,8 @@ jobs:
 
     - name: export env vars marked as GITHUB_ENV
       run: |
-        source images/versions.sh
-        for var in $(grep "# GITHUB_ENV$" images/versions.sh | cut -f1 -d "="); do
+        source images/image_config.sh
+        for var in $(grep "# GITHUB_ENV$" images/image_config.sh | cut -f1 -d "="); do
           echo "$var=${!var}" >> $GITHUB_ENV
         done
 
@@ -145,10 +145,10 @@ jobs:
         BRANCH=simplify-unify-containers
         wget https://raw.githubusercontent.com/bioconda/bioconda-common/${BRANCH}/{common,install-and-set-up-conda,configure-conda}.sh
 
-        source images/versions.sh
+        source images/image_config.sh
 
         # Ensure install-and-set-up-conda uses same version as in the container
-        # (which uses images/versions.sh)
+        # (which uses images/image_config.sh)
         export BIOCONDA_UTILS_TAG=$BIOCONDA_UTILS_VERSION
         bash install-and-set-up-conda.sh
         eval "$(conda shell.bash hook)"
@@ -170,7 +170,7 @@ jobs:
 
     - name: Build & push manifests to local docker registry
       run: |
-        source images/versions.sh
+        source images/image_config.sh
         source images/env_var_inventory.sh
 
         podman images
@@ -211,7 +211,7 @@ jobs:
         # We want to use the manifests that were pushed to the docker registry
         # running on localhost (which simulates eventually using manifests from
         # quay.io)
-        source images/versions.sh
+        source images/image_config.sh
         export DEFAULT_BASE_IMAGE="localhost:5000/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}"
         export DEFAULT_EXTENDED_BASE_IMAGE="localhost:5000/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}"
 
@@ -246,7 +246,7 @@ jobs:
       if: ${{ ! needs.base-debian.outputs.TAG_EXISTS_base-debian }}
       run: |
         echo '${{ secrets.QUAY_BIOCONDA_TOKEN }}' | podman login quay.io -u '${{ secrets.QUAY_BIOCONDA_USERNAME }}' --password-stdin
-        source images/versions.sh
+        source images/image_config.sh
         build_and_push_manifest ${BASE_DEBIAN_IMAGE_NAME} ${BASE_TAG} "quay.io/bioconda"
         build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME} ${BASE_TAG} "quay.io/bioconda"
         build_and_push_manifest ${CREATE_ENV_IMAGE_NAME} ${BIOCONDA_IMAGE_TAG} "quay.io/bioconda"

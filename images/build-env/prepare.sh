@@ -1,6 +1,6 @@
 set -e
 
-source ../versions.sh
+source ../image_config.sh
 IMAGE_NAME="${BUILD_ENV_IMAGE_NAME}"
 TAG="${BIOCONDA_UTILS_VERSION}_base$BASE_TAG"
 

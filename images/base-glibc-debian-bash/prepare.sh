@@ -1,4 +1,4 @@
-source ../versions.sh
+source ../image_config.sh
 IMAGE_NAME="${BASE_DEBIAN_IMAGE_NAME}"
 TAG="$BASE_TAG"
 BUILD_ARGS=()

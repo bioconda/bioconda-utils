@@ -6,7 +6,7 @@
 #
 # Typical usage:
 #
-#   source versions.sh
+#   source image_config.sh
 #   source env_var_inventory.sh
 #
 echo "--------BEGIN ENVIRONMENT VARIABLE INVENTORY ---------------------------------"

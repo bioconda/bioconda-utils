@@ -1,4 +1,4 @@
-source ../versions.sh
+source ../image_config.sh
 IMAGE_NAME="${CREATE_ENV_IMAGE_NAME}"
 TAG=$BIOCONDA_IMAGE_TAG
 BUILD_ARGS=()

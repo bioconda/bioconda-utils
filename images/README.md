@@ -2,16 +2,21 @@
 
 This is where the various images used by bioconda-utils are created.
 
-Individual images for *each package* are not created here. But those depend on
-a base image, and the base image is created here.
+Individual images for *each created conda package* are not created here (those
+happen in pull requests to bioconda-recipes) but those depend on a base image
+-- and the base image is created here.
 
 See https://bioconda.github.io/developer/dockerfile-inventory.html for context
 on the containers themselves and how they relate to each other.
 
-`.github/workflows/build-images.yml` is what orchestrates these image builds on
-CI.
+Here are the relevant components:
 
-`versions.sh` sets env vars that are used to control versions across all
+- `.github/workflows/build-images.yml` in the top level of the repo
+  orchestrates these image builds in CI
+
+- `image_config.sh` configures
+
+`image_config.sh` sets env vars that are used to control versions across all
 images. It also has some helper functions. It should be sourced before running
 `build.sh`.
 
@@ -30,7 +35,7 @@ Building locally has the following requirements:
 ```bash
 
 cd images
-source versions.sh
+source image_config.sh
 
 export BUILD_ENV_REGISTRY="localhost"
 
@@ -63,11 +68,11 @@ py.test --durations=0 test/ -v --log-level=DEBUG -k "docker" --tb=native
 
 Image directories must at least contain the following:
 
-- `prepare.sh` script, where the first line should be `source ../versions.sh`
+- `prepare.sh` script, where the first line should be `source ../image_config.sh`
 - `Dockerfile` for building
 - `Dockerfile.test` for testing.
 
-`build.sh` sources `<IMAGE DIR>/prepare.sh`, which sources `versions.sh` to
+`build.sh` sources `<IMAGE DIR>/prepare.sh`, which sources `image_config.sh` to
 populate the env vars needed for that particular image.
 `<IMAGE_DIR>/prepare.sh` should also do any other needed work in preparation
 for building.
