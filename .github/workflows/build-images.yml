@@ -46,7 +46,8 @@ jobs:
         id: detect-existing
         run: |
           source images/image_config.sh
-          source images/env_var_inventory.sh
+
+          env_var_inventory
 
           # Skip build if *all* versions exist on quay.io. Otherwise we will do
           # the entire build.
@@ -164,7 +165,8 @@ jobs:
     - name: Build & push manifests to local docker registry
       run: |
         source images/image_config.sh
-        source images/env_var_inventory.sh
+
+        env_var_inventory
 
         podman images
 
