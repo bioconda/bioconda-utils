@@ -2,10 +2,9 @@ source ../image_config.sh
 IMAGE_NAME="${BASE_BUSYBOX_IMAGE_NAME}"
 TAG="$BASE_TAG"
 
-# Build busybox binaries for each arch.
-#
-# The respective busybox base containers for each arch will later extract the
-# relevant binary from this image.
+# Before building the actual base images (which will happen in build.sh), we
+# first build busybox binaries for each arch. Later, the base image Dockerfile
+# will extract the arch-appropriate binary.
 
 BUILD_ARGS=()
 BUILD_ARGS+=("--build-arg=debian_version=${DEBIAN_VERSION}")

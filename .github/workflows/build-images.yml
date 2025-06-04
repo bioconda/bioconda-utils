@@ -4,10 +4,6 @@
 #  based on commit message, and use that to trigger an upload to quay.io,
 #  after building the images again here.
 #
-# NOTES:
-#  - export env vars to GITHUB_ENV so that upload/download artifacts have access
-#  - artifacts cannot have ":" in filenames
-#
 
 name: Build images
 concurrency:
@@ -98,7 +94,6 @@ jobs:
 
     - name: build all images
       run: |
-        ls
         source images/image_config.sh
         cd images
         time bash build.sh base-glibc-busybox-bash
@@ -192,6 +187,7 @@ jobs:
         conda activate bioconda
 
         # Tell mulled-build which image to use
+        # (see https://github.com/galaxyproject/galaxy/blob/957f6f5/lib/galaxy/tool_util/deps/mulled/mulled_build.py#L62-L71)
         #
         # The follwing env vars are searched for by mulled-build:
         #   - DEST_BASE_IMAGE
@@ -201,11 +197,9 @@ jobs:
         # We keep DEST_BASE_IMAGE unset so it defaults to DEFAULT_BASE_IMAGE or
         # DEFAULT_EXTENDED_BASE_IMAGE.
         #
-        # (see https://github.com/galaxyproject/galaxy/blob/957f6f5/lib/galaxy/tool_util/deps/mulled/mulled_build.py#L62-L71)
-        #
-        # We want to use the manifests that were pushed to the docker registry
-        # running on localhost (which simulates eventually using manifests from
-        # quay.io)
+        # We use the manifests that were just pushed to the local docker
+        # registry running on localhost (which simulates eventually using
+        # manifests from quay.io)
         source images/image_config.sh
         export DEFAULT_BASE_IMAGE="localhost:5000/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}"
         export DEFAULT_EXTENDED_BASE_IMAGE="localhost:5000/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}"
