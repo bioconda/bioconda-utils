@@ -96,8 +96,7 @@ for arch in $ARCHS; do
   # Run basic test in Dockerfile.test
   buildah bud \
     ${TEST_ARGS[@]} \
-    --file=Dockerfile.test \
-    --build-arg=base="${image_id}"
+    --file=Dockerfile.test
 
   # Save image for storing as artifact or to load into docker
   mkdir -p ../../image-artifacts
