@@ -50,6 +50,8 @@ jobs:
           if tag_exists $BASE_BUSYBOX_IMAGE_NAME $BASE_TAG \
           && tag_exists $BASE_DEBIAN_IMAGE_NAME $BASE_TAG \
           && tag_exists $BUILD_ENV_IMAGE_NAME $BIOCONDA_IMAGE_TAG \
+          && tag_exists $BOT_IMAGE_NAME $BIOCONDA_IMAGE_TAG \
+          && tag_exists $ISSUE_RESPONDER_IMAGE_NAME $BIOCONDA_IMAGE_TAG \
           && tag_exists $CREATE_ENV_IMAGE_NAME $BIOCONDA_IMAGE_TAG; then
             echo "DO_BUILD=false" >> $GITHUB_OUTPUT
           else
@@ -104,6 +106,8 @@ jobs:
         time bash build.sh base-glibc-debian-bash
         time bash build.sh build-env
         time bash build.sh create-env
+        time bash build.sh bot
+        time bash build.sh bioconda-recipes-issue-responder
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4

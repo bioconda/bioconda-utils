@@ -9,4 +9,7 @@ ONLY_AMD64=true
 
 BUILD_ARGS=()
 BUILD_ARGS+=("--build-arg=create_env=${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}-${CURRENT_ARCH}")
-BUILD_ARGS+=("--build-arg=base=localhost/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}-${CURRENT_ARCH}")
+BUILD_ARGS+=("--build-arg=base=${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}-${CURRENT_ARCH}")
+
+TEST_ARGS=()
+TEST_ARGS+=("--build-arg=base=${IMAGE_NAME}:${TAG}-${CURRENT_ARCH}")

@@ -95,7 +95,7 @@ for arch in $ARCHS; do
 
   # Run basic test in Dockerfile.test
   buildah bud \
-    --build-arg=base="$" \
+    ${TEST_ARGS[@]} \
     --file=Dockerfile.test \
     --build-arg=base="${image_id}"
 
