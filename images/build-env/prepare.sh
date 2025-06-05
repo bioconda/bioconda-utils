@@ -25,4 +25,3 @@ BUILD_ARGS+=("--build-arg=BIOCONDA_UTILS_FOLDER=bioconda-utils")
 BUILD_ARGS+=("--build-arg=bioconda_utils_version=$BIOCONDA_UTILS_VERSION")
 
 TEST_ARGS=()
-TEST_ARGS+=("--build-arg=base=${IMAGE_NAME}:${TAG}-${CURRENT_ARCH}")

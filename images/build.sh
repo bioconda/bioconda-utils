@@ -93,8 +93,11 @@ for arch in $ARCHS; do
   # Add -$arch suffix to image's tag
   buildah tag "${image_id}" "${IMAGE_NAME}:${TAG}-${arch}"
 
-  # Run basic test in Dockerfile.test
+  # Run basic test in Dockerfile.test, passing the exact image ID that was just
+  # created.
+  TEST_ARGS=${TEST_ARGS:-""}
   buildah bud \
+    --build-arg=base=${image_id} \
     ${TEST_ARGS[@]} \
     --file=Dockerfile.test
 
