@@ -97,6 +97,7 @@ for arch in $ARCHS; do
   # created.
   TEST_ARGS=${TEST_ARGS:-""}
   buildah bud \
+    --arch="${arch}" \
     --build-arg=base=${image_id} \
     ${TEST_ARGS[@]} \
     --file=Dockerfile.test
