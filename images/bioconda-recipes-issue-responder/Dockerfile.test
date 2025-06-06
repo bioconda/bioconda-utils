@@ -1,7 +1,0 @@
-ARG base
-
-
-FROM "${base}"
-RUN JOB_CONTEXT='{"event": {"issue": {}}}' \
-      /usr/local/env-execute \
-        issue-responder
