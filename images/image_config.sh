@@ -71,42 +71,37 @@ function build_and_push_manifest() {
   # a registry.
   #
   # Typical usage:
-  #   build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} docker://localhost:5000
-  #   build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} quay.io/bioconda
+  #   build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} docker://localhost:5000 ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} "--tls-verify=false"
   #
-  local image=$1
-  local registry=$2
+  # or
+  #
+  #   build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:latest
+  #
+  local source=$1
+  local dest=$2
+  local additional_args={$3:-""}
 
-  buildah manifest rm "local_${image}" || true
+  local manifest_name="local_${source}"
+
+  buildah manifest rm "${manifest_name}" || true
 
   # Locally-named manifest to which we'll add the different archs.
-  buildah manifest create "local_${image}"
+  buildah manifest create "${manifest_name}"
 
   # Expects images for archs to be built already by buildah/podman. Here we add
   # them to local manifest.
   for arch in $ARCHS; do
+
+    # skip non-amd64 if configured
     [ "${ONLY_AMD64:-false}" == "true" -a "${arch}" != "amd64" ] && continue
-    imgid=$(buildah pull --arch=$arch "${image}-${arch}")
-    buildah manifest add "local_${image}" "${imgid}"
+
+    imgid=$(buildah pull --arch=$arch "${source}-${arch}")
+
+    buildah manifest add "${manifest_name}" "${imgid}"
   done
 
-  # In order for docker to use manifests, they must come from a registry (in
-  # contrast to podman, which can use local manifests). When testing, a local
-  # docker registry is expected to be running; when pushing final images, the
-  # registry will be a public registry like quay.io.
-  if [ "$registry" == "docker://localhost:5000" ]; then
-    if ! curl -X GET http://localhost:5000/v2/_catalog; then
-      echo "Local docker registry does not appear to be running on localhost:5000!"
-      return 1
-    fi
-    # This avoids needing to set up TLS certs for the local registry
-    additional_args="--tls-verify=false"
-  else
-    additional_args=""
-  fi
-
   # Note that --all is required to actually push the images, too
-  podman manifest push --all $additional_args "local_${image}" "$registry/${image}"
+  podman manifest push --all $additional_args "${manifest_name}" "${dest}"
 }
 
 
