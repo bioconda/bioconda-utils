@@ -183,6 +183,8 @@ jobs:
         # Check that we loaded images
         podman images
 
+        set -x
+
         # Compose a multi-arch manifest (json file); push it and its images to the local docker registry.
         # We provide additional arguments of --tls-verify=false for the local
         # registry to avoid the need to set up TLS certs for it.
