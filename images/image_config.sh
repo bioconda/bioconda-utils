@@ -79,7 +79,7 @@ function build_and_push_manifest() {
   #
   local source=$1
   local dest=$2
-  local additional_args={$3:-""}
+  local additional_args=${3:-""}
 
   local manifest_name="local_${source}"
 
