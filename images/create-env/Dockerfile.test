@@ -1,0 +1,80 @@
+ARG base
+ARG BUSYBOX_IMAGE
+FROM "${base}"
+RUN set -x && \
+    CONDA_PKGS_DIRS="/tmp/pkgs" \
+      /opt/create-env/env-execute \
+        create-env \
+          /usr/local \
+          file findutils grep
+RUN set -x && \
+    . /usr/local/env-activate.sh && \
+    if find /opt/create-env \
+      -xdev \
+      -type f \
+      -exec file {} \+ \
+      | grep 'not stripped' \
+    ; then \
+      >&2 printf 'found unstripped binaries\n' ; exit 1 \
+    ; fi
+RUN set -x && \
+    . /usr/local/env-activate.sh && \
+    if find /opt/create-env \
+      -xdev \
+      -type f \
+      -name \*.a \
+      | grep . \
+    ; then \
+      >&2 printf 'found static libraries\n' ; exit 1 \
+    ; fi
+
+
+FROM "${base}" as build_bioconda_package
+RUN set -x && \
+    /opt/create-env/env-execute \
+      create-env \
+        --strip-files=\* \
+        /usr/local \
+        python
+
+FROM "${BUSYBOX_IMAGE}"
+COPY --from=build_bioconda_package /usr/local /usr/local
+RUN set -x && \
+    /usr/local/env-execute \
+      python --version \
+    && \
+    [ ! "${CONDA_PREFIX}" = /usr/local ] \
+    && \
+    { set -x && . /usr/local/env-activate.sh && set +x ; } \
+    && \
+    [ "${CONDA_PREFIX}" = /usr/local ] \
+    && \
+    python --version
+
+
+FROM "${base}" as build_conda
+RUN set -x && \
+    /opt/create-env/env-execute \
+      create-env \
+        --env-activate-args='--prefix-is-base' \
+        --strip-files=\* \
+        --remove-paths=\*.a \
+        --remove-paths=\*.pyc \
+        /opt/conda \
+        conda
+
+FROM "${BUSYBOX_IMAGE}"
+COPY --from=build_conda /opt/conda /opt/conda
+COPY --from=build_conda /opt/conda/env-activate.sh /usr/local/
+RUN set -x && \
+    /usr/local/env-execute \
+      conda info --verbose \
+    && \
+    { set -x && . /usr/local/env-activate.sh && set +x ; } \
+    && \
+    . "${CONDA_PREFIX}/etc/profile.d/conda.sh" \
+    && \
+    conda activate \
+    && \
+    conda info \
+      | grep 'base environment.*/opt/conda'
