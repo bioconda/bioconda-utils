@@ -15,3 +15,7 @@ docs/source/developer/_autosummary
 
 # Mac OS Files
 .DS_Store
+
+# files created when building images
+images/build-env/bioconda-utils
+images/build-env/C.utf8
