@@ -122,11 +122,11 @@ def build(recipe: str, pkg_paths: List[str] = None,
     # name, version, noarch, whether or not an extended container was used)
     meta = utils.load_first_metadata(recipe, finalize=False)
     is_noarch = bool(meta.get_value('build/noarch', default=False))
-    use_base_image = meta.get_value('extra/container', {}).get('extended-base', False)
-    if use_base_image:
-        base_image = 'quay.io/bioconda/base-glibc-debian-bash:3.1'
+    use_extended_base_image = meta.get_value('extra/container', {}).get('extended-base', False)
+    if use_extended_base_image:
+        base_image = os.getenv("DEFAULT_EXTENDED_BASE_IMAGE", 'quay.io/bioconda/base-glibc-debian-bash:3.1')
     else:
-        base_image = 'quay.io/bioconda/base-glibc-busybox-bash:3.1'
+        base_image = os.getenv("DEFAULT_BASE_IMAGE", 'quay.io/bioconda/base-glibc-busybox-bash:3.1')
 
     build_failure_record = BuildFailureRecord(recipe)
     build_failure_record_existed_before_build = build_failure_record.exists()
