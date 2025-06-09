@@ -100,7 +100,7 @@ def config_fixture():
     yield config
 
 
-@pytest.fixture(scope='module', params=PARAMS, ids=IDS)
+@pytest.fixture(params=PARAMS, ids=IDS)
 def single_build(request, recipes_fixture):
     """
     Builds the "one" recipe.
