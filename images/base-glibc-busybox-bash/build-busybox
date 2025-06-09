@@ -1,0 +1,140 @@
+#! /bin/sh
+set -xeu
+
+download() {
+  curl --location --silent \
+    "https://busybox.net/downloads/busybox-${version}.tar.bz2" \
+    | tar -xjf- --strip-components=1
+}
+
+patch() {
+  case "${version}" in 1.36.* )
+    # Small fix to let it build with older glibc versions.
+    curl --location --silent \
+      'https://git.busybox.net/busybox/patch/miscutils/seedrng.c?id=200a9669fbf6f06894e4243cccc9fc11a1a6073a' \
+      'https://git.busybox.net/busybox/patch/miscutils/seedrng.c?id=cb57abb46f06f4ede8d9ccbdaac67377fdf416cf' \
+      | command patch --strip=1
+  esac
+
+  # Add support for running busybox wget without OpenSSL under QEMU.
+  # (NB: If we run into other QEMU+BusyBox problems that needs debugging: That
+  #      vfork issue might affect other BusyBox parts, so check for it first.)
+  command patch --strip=1 <<'EOP'
+From e7b57533ffcd5842fa93f5aa96949b3eaed54b67 Mon Sep 17 00:00:00 2001
+From: Marcel Bargull <marcel.bargull@udo.edu>
+Date: Sat, 14 Oct 2023 22:58:42 +0200
+Subject: [PATCH] wget: don't assume vfork blocking for openssl exec
+
+Under QEMU, busybox wget fails to fallback to busybox ssl_client in case
+openssl s_client can't be executed because QEMU's vfork does not block.
+Ref.: https://man7.org/linux/man-pages/man2/vfork.2.html#VERSIONS
+
+Signed-off-by: Marcel Bargull <marcel.bargull@udo.edu>
+---
+ networking/wget.c | 24 +++++++++++++++++++++---
+ 1 file changed, 21 insertions(+), 3 deletions(-)
+
+diff --git a/networking/wget.c b/networking/wget.c
+index 9ec0e67b9..4bcc26e86 100644
+--- a/networking/wget.c
++++ b/networking/wget.c
+@@ -683,3 +683,9 @@ static int spawn_https_helper_openssl(const char *host, unsigned port)
+ 	int pid;
+-	IF_FEATURE_WGET_HTTPS(volatile int child_failed = 0;)
++
++# if ENABLE_FEATURE_WGET_HTTPS
++	struct fd_pair status;
++	int exec_errno = 0;
++
++	xpiped_pair(status);
++# endif
+ 
+@@ -701,2 +707,7 @@ static int spawn_https_helper_openssl(const char *host, unsigned port)
+ 
++# if ENABLE_FEATURE_WGET_HTTPS
++		close(status.rd);
++		if (fcntl(status.wr, F_SETFD, FD_CLOEXEC) != 0)
++			bb_simple_perror_msg_and_die("fcntl");
++# endif
+ 		close(sp[0]);
+@@ -743,5 +754,8 @@ static int spawn_https_helper_openssl(const char *host, unsigned port)
+ 		BB_EXECVP(argv[0], argv);
++		exec_errno = errno;
+ 		xmove_fd(3, 2);
+ # if ENABLE_FEATURE_WGET_HTTPS
+-		child_failed = 1;
++		if (write(status.wr, &exec_errno, sizeof(exec_errno)) != sizeof(exec_errno))
++			bb_simple_perror_msg_and_die("write");
++		close(status.wr);
+ 		xfunc_die();
+@@ -758,3 +772,7 @@ static int spawn_https_helper_openssl(const char *host, unsigned port)
+ # if ENABLE_FEATURE_WGET_HTTPS
+-	if (child_failed) {
++	close(status.wr);
++	if (read(status.rd, &exec_errno, sizeof(exec_errno)) == -1)
++		bb_simple_perror_msg_and_die("read");
++	close(status.rd);
++	if (exec_errno) {
+ 		close(sp[0]);
+EOP
+}
+
+config() {
+  make defconfig
+  mv .config .defconfig
+  # Set CONFIG_SUBST_WCHAR=0 for better Unicode support and remove big components.
+  printf %s\\n \
+    CONFIG_AR=y \
+    CONFIG_FEATURE_AR_CREATE=y \
+    CONFIG_FEATURE_AR_LONG_FILENAMES=y \
+    CONFIG_SUBST_WCHAR=0 \
+    CONFIG_RPM=n \
+    CONFIG_RPM2CPIO=n \
+    CONFIG_FSCK_MINIX=n \
+    CONFIG_MKFS_MINIX=n \
+    CONFIG_BC=n \
+    CONFIG_DC=n \
+    CONFIG_HDPARM=n \
+    CONFIG_HEXEDIT=n \
+    CONFIG_I2CGET=n \
+    CONFIG_I2CSET=n \
+    CONFIG_I2CDUMP=n \
+    CONFIG_I2CDETECT=n \
+    CONFIG_I2CTRANSFER=n \
+    CONFIG_DNSD=n \
+    CONFIG_FTPD=n \
+    CONFIG_HTTPD=n \
+    CONFIG_TCPSVD=n \
+    CONFIG_UDPSVD=n \
+    CONFIG_UDHCPD=n \
+    CONFIG_SH_IS_ASH=n \
+    CONFIG_SH_IS_NONE=y \
+    CONFIG_SHELL_ASH=n \
+    CONFIG_ASH=n \
+    CONFIG_HUSH=n \
+    CONFIG_SHELL_HUSH=n \
+    | cat - .defconfig \
+    > .config
+  # make still asks which shell to use for sh although CONFIG_SH_IS_NONE=y is set!?
+  printf \\n | make oldconfig
+}
+
+build() {
+  make -j "$( nproc )" busybox
+}
+
+main() {
+  version="${1}"
+  shift
+  download
+  patch
+  for target ; do
+    export MAKEFLAGS="ARCH=${target} CROSS_COMPILE=${target}-linux-gnu-"
+    make clean
+    config
+    build
+    cp -al ./busybox "./busybox.${target}"
+  done
+}
+
+main "${@}"

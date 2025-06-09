@@ -1,0 +1,361 @@
+#! /bin/sh
+set -xeu
+
+arch=$(uname -m)
+
+prepare_remove_docs() {
+  # remove lintian and docs (apart from copyright)
+  rm -rf \
+    ./usr/share/lintian \
+    ./usr/share/man
+  find ./usr/share/doc/ -type f ! -name copyright -delete
+  find ./usr/share/doc/ -type d -empty -delete
+}
+
+
+prepare_usrmerge() {
+  # If we are on Debian >=12, /bin et al. are symlinks to /usr/ counterparts.
+  # Since we don't do full apt installs, we accomodate for it here.
+  if [ -L "${root_fs}/bin" ] ; then
+    for dir in bin lib* sbin ; do
+      [ -d "./${dir}" ] || continue
+      [ -L "./${dir}" ] && continue
+      mkdir -p ./usr
+      cp -ral "./${dir}" ./usr/
+      rm -rf "./${dir}"
+      ln -s "usr/${dir}" "${dir}"
+    done
+  fi
+}
+
+
+add_rpath() {
+  local binary="${1}"
+  shift
+  local new_rpath="${1}"
+  shift
+  local rpath
+  rpath="$(
+    patchelf \
+      --print-rpath \
+      "${binary}"
+  )"
+  patchelf \
+    --set-rpath \
+    "${rpath:+${rpath}:}${new_rpath}" \
+    "${binary}"
+}
+
+
+prepare() {
+  local pkg="${1}"
+  shift
+  local destdir="${1}"
+  shift
+
+  case "${pkg}" in
+    libc6 )
+      # To reduce image size, remove all charset conversion modules apart
+      # from smaller ones for some common encodings.
+      # Update gconv-modules accordingly.
+      # NOTE: When adding/removing any, check required dyn. linked libs!
+
+      local gconv_path="./usr/lib/${arch}-linux-gnu/gconv"
+      local gconv_modules_regex
+      if [ -e "${gconv_path}/gconv-modules.d/gconv-modules-extra.conf" ] ; then
+        gconv_modules_regex="$(
+          sed -nE 's/^module\s+\S+\s+\S+\s+(\S+)\s+.*/\1/p' \
+            < "${gconv_path}/gconv-modules" \
+            | sort -u \
+            | tr '\n' '|' \
+            | sed 's/|$//'
+        )"
+        : > "${gconv_path}/gconv-modules.d/gconv-modules-extra.conf"
+      else
+        gconv_modules_regex='UTF-\w+|UNICODE|ISO8859-(1|15)|CP1252|ANSI_X3\.110'
+        local gconv_modules_file_tmp='./.tmp.gconv-modules'
+
+        mv "${gconv_path}"/gconv-modules "${gconv_modules_file_tmp}"
+
+        grep -E \
+          '^\s*$|^#|^(alias\s+.*|module\s+[^\s]+\s+[^\s]+)\s+\<('"${gconv_modules_regex}"')(//|\s)' \
+          "${gconv_modules_file_tmp}" \
+          | sed -nEe '1N;N;/^(#.*)\n.*\1/{D;D};P;D' | cat -s \
+          > "${gconv_path}"/gconv-modules
+        rm "${gconv_modules_file_tmp}"
+      fi
+
+      find "${gconv_path}" \
+        -mindepth 1 -maxdepth 1 \
+        -name '*.so' \
+        -type f \
+        -regextype posix-extended \
+        ! -regex '.*/('"${gconv_modules_regex}"').so' \
+        -print -delete
+
+      iconvconfig --prefix ./
+
+      ;;
+    bash )
+      rm -rf ./usr/share/locale
+      # Add custom rpath for libtinfo (see below) to bash binaries.
+      local new_rpath="/lib/${arch}-linux-gnu/terminfo:/usr/lib/${arch}-linux-gnu/terminfo"
+      add_rpath ./bin/bash "${new_rpath}"
+      add_rpath ./usr/bin/clear_console "${new_rpath}"
+      ;;
+    libtinfo* )
+      # Move libtinfo libraries to a custom path to ensure it is not
+      # unintentionally used in downstream images.
+      find ./usr/lib/${arch}-linux-gnu -type f \
+        | {
+          while read binary ; do
+            add_rpath "${binary}" "/lib/${arch}-linux-gnu/terminfo"
+          done
+        }
+
+      mv ./lib/${arch}-linux-gnu ./temp
+      mkdir ./lib/${arch}-linux-gnu
+      mv ./temp ./lib/${arch}-linux-gnu/terminfo
+
+      mv ./usr/lib/${arch}-linux-gnu ./temp
+      mkdir ./usr/lib/${arch}-linux-gnu
+      mv ./temp ./usr/lib/${arch}-linux-gnu/terminfo
+      ;;
+    base-passwd )
+      # The dependencies libdebconfclient0 (and libselinux1 for Debian>=12)
+      # are needed for update-passwd, but we ignore them => remove the binary.
+      rm ./usr/sbin/update-passwd
+      ;;
+    login )
+      rm -rf ./usr/share/locale
+      # The following binaries provided by BusyBox or pull in more dependencies
+      # (PAM, libselinux1, and their dependencies) => remove them.
+      rm -f \
+       ./bin/login \
+       ./bin/su \
+       ./usr/bin/lastlog \
+       ./usr/bin/newgrp \
+       ./usr/bin/sg
+     ;;
+    libc-bin | \
+    libgcc1 | \
+    base-files | \
+    gcc-*-base | \
+    libcrypt1 | \
+    libgcc-s1 | \
+    libdebconfclient0 | \
+    libpcre* | \
+    libselinux1 | \
+    ncurses-base | \
+    zlib1g )
+      :
+      ;;
+    * )
+      # Abort if we get an unexpected package.
+      printf %s\\n "\`prepare\` not defined for ${pkg}" >&2
+      return 1
+     ;;
+  esac
+  prepare_remove_docs
+  prepare_usrmerge
+}
+
+
+postinst_ldconfig_trigger() {
+  ldconfig --verbose -r ./
+}
+
+
+postinst() {
+  local pkg="${1}"
+  shift
+  local destdir="${1}"
+  shift
+
+  case "${pkg}" in
+    libc-bin )
+      cp -p --remove-destination \
+        ./usr/share/libc-bin/nsswitch.conf \
+        ./etc/nsswitch.conf
+        postinst_ldconfig_trigger
+      ;;
+    base-files )
+      cp "${destdir}/DEBIAN/postinst" ./base-files-postinst
+      chroot ./ sh /base-files-postinst configure
+      rm ./base-files-postinst
+      ;;
+    base-passwd )
+      mkdir -p "${destdir}/etc"
+      cp -p --remove-destination \
+         "${destdir}/usr/share/base-passwd/group.master" \
+         ./etc/group
+      cp -p --remove-destination \
+         "${destdir}/usr/share/base-passwd/passwd.master" \
+         ./etc/passwd
+      DPKG_ROOT="$( pwd )" \
+        shadowconfig on
+      ;;
+    login )
+      for file in /var/log/faillog /etc/subuid /etc/subgid ; do
+        [ -f "./${file}" ] || continue
+        touch "${file}"
+        chown 0:0 "${file}"
+        chmod 644 "${file}"
+      done
+      ;;
+    bash )
+      # Replace BusyBox's sh by Bash
+      rm -f ./bin/sh
+      ln -s /bin/bash ./bin/sh
+      chroot ./ add-shell /bin/sh
+      chroot ./ add-shell /bin/bash
+      chroot ./ add-shell /bin/rbash
+      # Bash 4.* did not have default key bindings for control-arrow-key key
+      # combinations. Add some for convenience:
+      cat >> ./etc/inputrc <<'EOF'
+
+"\e[5C": forward-word
+"\e[5D": backward-word
+"\e\e[C": forward-word
+"\e\e[D": backward-word
+"\e[1;5C": forward-word
+"\e[1;5D": backward-word
+EOF
+      ;;
+    libc6 | \
+    libdebconfclient0 | \
+    libgcc1 | \
+    libcrypt1 | \
+    libgcc-s1 | \
+    libpcre* | \
+    libselinux1 | \
+    libtinfo* | \
+    zlib1g )
+      postinst_ldconfig_trigger
+      ;;
+    gcc-*-base | \
+    ncurses-base )
+      :
+      ;;
+    * )
+      # Abort if we get an unexpected package.
+      printf %s\\n "\`postinst\` not defined for ${pkg}" >&2
+      return 1
+      ;;
+  esac
+}
+
+
+install_pkg() {
+  local pkg="${1}"
+  shift
+
+  local work_dir="${work_base}/${pkg}"
+  mkdir "${work_dir}"
+  cd "${work_dir}"
+
+  # Download package
+  apt-get download "${pkg}"
+  local deb_file
+  deb_file="$( find "$( pwd )" -maxdepth 1 -name '*.deb' )"
+
+  # Prepare package
+  local destdir="${work_dir}/destdir"
+  mkdir "${destdir}"
+  cd "${destdir}"
+  dpkg-deb --raw-extract "${deb_file}" ./
+  prepare "${pkg}" "${destdir}"
+  dpkg-deb --build ./ "${deb_file}"
+  cd "${work_dir}"
+
+  # Extract package
+  dpkg-deb --vextract "${deb_file}" "${root_fs}"
+  rm "${deb_file}"
+  printf %s\\n "$( basename "${deb_file}" )" >> "${root_fs}/.deb.lst"
+
+  # Finalize package installation
+  cd "${root_fs}"
+  postinst "${pkg}" "${destdir}"
+
+  cd "${work_base}"
+  rm -rf "${work_dir}"
+  printf %s\\n "${pkg}" >> "${root_fs}/.pkg.lst"
+}
+
+
+get_deps() {
+  [ -z "${*}" ] && return 0
+
+  # Instead of using `apt-cache depends --recurse` or `debfoster -d`, recurse
+  # manually so that we can exclude some packages that are either already
+  # installed or would pull in files/packages we don't need.
+
+  local ignore_pkgs
+  ignore_pkgs="$(
+    printf %s\\n \
+      base-files '<awk>' debianutils dash \
+      libdebconfclient0 libselinux1 \
+      libaudit1 libpam-modules libpam-runtime libpam0g \
+      | grep -vFx "$( printf %s\\n "${@}" )"
+  )"
+  [ -f "${root_fs}/.pkg.lst" ] && \
+    ignore_pkgs=$( printf %s\\n ${ignore_pkgs} $( cat -s "${root_fs}/.pkg.lst" ) )
+
+  local new_pkgs="${*}"
+  local old_pkgs=''
+  while ! [ "${new_pkgs}" = "${old_pkgs}" ] ; do
+    old_pkgs="${new_pkgs}"
+    new_pkgs="$(
+      apt-cache depends \
+        --no-recommends --no-suggests --no-conflicts \
+        --no-breaks --no-replaces --no-enhances \
+        ${old_pkgs} \
+        | sed -n 's/.*Depends: //p' | cat -s
+    )"
+    new_pkgs="$(
+      printf %s\\n ${old_pkgs} ${new_pkgs} \
+        | sort -u \
+        | grep -vFx "$( printf %s\\n ${ignore_pkgs} )"
+    )"
+  done
+  printf %s\\n ${new_pkgs}
+}
+
+
+install_with_deps() {
+  get_deps "${@}" | while read -r pkg ; do
+    install_pkg "${pkg}"
+  done
+}
+
+
+main() {
+  root_fs="${1}"
+  shift
+  work_base="${1}"
+  shift
+
+  mkdir -p "${work_base}"
+  cd "${work_base}"
+
+  apt-get update
+
+  # Unconditionally install glibc (package libc6).
+  # Also install dependencies acc. to `apt-cache depends`:
+  #  - libgcc1 only consists of libgcc_s.so.1 (+ docs, which we remove).
+  #  - gcc-*-base only has empty directories (+ docs, which we remove).
+  install_with_deps libc6
+
+  # libc-bin must be in ${@} for Unicode support (C.UTF-8 locale).
+  install_with_deps "${@}"
+
+  # base-files contains /usr/share/common-licenses/, /etc/profile, etc.
+  # Install base-files afterwards so we have a working sh for the postinst.
+  install_with_deps base-files
+
+  cd "${root_fs}"
+  rm -rf "${work_base}"
+}
+
+
+main "${@}"
