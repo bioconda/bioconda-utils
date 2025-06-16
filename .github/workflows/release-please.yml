@@ -32,54 +32,16 @@ jobs:
           #tag=${{ github.event.release && github.event.release.tag_name || github.sha }}
           tag=${{ needs.release_please.outputs.tag_name }}
           printf %s "tag=${tag#v}" >> $GITHUB_OUTPUT
-
-      - name: Install qemu dependency
+      
+      - name: tag images with latest
         run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-user-static
 
-      - name: Build x86_64 Image
-        id: buildah-build
-        uses: redhat-actions/buildah-build@v2
-        with:
-          image: bioconda-utils-build-env-cos7
-          arch: amd64
-          build-args: |
-            BASE_IMAGE=quay.io/condaforge/linux-anvil-cos7-x86_64
-          tags: >-
-            latest
-            ${{ steps.get-tag.outputs.tag }}
-          dockerfiles: |
-            ./Dockerfile
+          echo '${{ secrets.QUAY_BIOCONDA_TOKEN }}' | podman login quay.io -u '${{ secrets.QUAY_BIOCONDA_USERNAME }}' --password-stdin
 
-      - name: Push To Quay
-        uses: redhat-actions/push-to-registry@v2
-        with:
-          image: ${{ steps.buildah-build.outputs.image }}
-          tags: ${{ steps.buildah-build.outputs.tags }}
-          registry: ${{ secrets.QUAY_BIOCONDA_REPO }}
-          username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
-          password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
+          source images/image_config.sh
+          podman tag "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:master" "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:latest"
+          podman tag "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:master" "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:latest"
+          podman tag "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:master" "quay.io/bioconda${BUILD_ENV_IMAGE_NAME}:latest"
+          podman tag "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:master" "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:latest"
+          podman tag "quay.io/bioconda/${BOT_IMAGE_NAME}:master" "quay.io/bioconda/${BOT_IMAGE_NAME}:latest"
 
-      - name: Build ARM Image
-        id: buildah-build-arm
-        uses: redhat-actions/buildah-build@v2
-        with:
-          image: bioconda-utils-build-env-cos7-aarch64
-          arch: arm64
-          build-args: |
-            BASE_IMAGE=quay.io/condaforge/linux-anvil-aarch64
-          tags: >-
-            latest
-            ${{ steps.get-tag.outputs.tag }}
-          dockerfiles: |
-            ./Dockerfile
-
-      - name: Push To Quay
-        uses: redhat-actions/push-to-registry@v2
-        with:
-          image: ${{ steps.buildah-build-arm.outputs.image }}
-          tags: ${{ steps.buildah-build-arm.outputs.tags }}
-          registry: ${{ secrets.QUAY_BIOCONDA_REPO }}
-          username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
-          password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}

@@ -288,9 +288,11 @@ jobs:
         build_and_push_manifest ${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
         ONLY_AMD64=true build_and_push_manifest ${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda/${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
 
-        # Same thing, but push as "latest" tag.
-        build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:latest"
-        build_and_push_manifest ${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG} "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:latest"
-        build_and_push_manifest ${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:latest"
-        build_and_push_manifest ${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:latest"
-        ONLY_AMD64=true build_and_push_manifest ${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda/${BOT_IMAGE_NAME}:latest"
+        # Now that they are pushed, we can make tags pointing to them. Note
+        # that the "latest" tag will not be applied unil release time (via
+        # release-please workflow).
+        podman tag "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}" "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:master"
+        podman tag "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}" "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:master"
+        podman tag "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}" "quay.io/bioconda${BUILD_ENV_IMAGE_NAME}::master"
+        podman tag "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}" "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:master"
+        podman tag "quay.io/bioconda/${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}" "quay.io/bioconda/${BOT_IMAGE_NAME}:master"
