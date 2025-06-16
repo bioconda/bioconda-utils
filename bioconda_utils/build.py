@@ -58,7 +58,7 @@ def build(recipe: str, pkg_paths: List[str] = None,
           docker_builder: docker_utils.RecipeBuilder = None,
           raise_error: bool = False,
           linter=None,
-          mulled_conda_image: str = pkg_test.MULLED_CONDA_IMAGE,
+          mulled_conda_image: str = pkg_test.CREATE_ENV_IMAGE,
           record_build_failure: bool = False,
           dag: Optional[nx.DiGraph] = None,
           skiplist_leafs: bool = False,
@@ -122,11 +122,11 @@ def build(recipe: str, pkg_paths: List[str] = None,
     # name, version, noarch, whether or not an extended container was used)
     meta = utils.load_first_metadata(recipe, finalize=False)
     is_noarch = bool(meta.get_value('build/noarch', default=False))
-    use_base_image = meta.get_value('extra/container', {}).get('extended-base', False)
-    if use_base_image:
-        base_image = 'quay.io/bioconda/base-glibc-debian-bash:3.1'
+    use_extended_base_image = meta.get_value('extra/container', {}).get('extended-base', False)
+    if use_extended_base_image:
+        base_image = os.getenv("DEFAULT_EXTENDED_BASE_IMAGE", 'quay.io/bioconda/base-glibc-debian-bash:3.1')
     else:
-        base_image = 'quay.io/bioconda/base-glibc-busybox-bash:3.1'
+        base_image = os.getenv("DEFAULT_BASE_IMAGE", 'quay.io/bioconda/base-glibc-busybox-bash:3.1')
 
     build_failure_record = BuildFailureRecord(recipe)
     build_failure_record_existed_before_build = build_failure_record.exists()
@@ -331,7 +331,7 @@ def build_recipes(recipe_folder: str, config_path: str, recipes: List[str],
                   n_workers: int = 1,
                   worker_offset: int = 0,
                   keep_old_work: bool = False,
-                  mulled_conda_image: str = pkg_test.MULLED_CONDA_IMAGE,
+                  mulled_conda_image: str = pkg_test.CREATE_ENV_IMAGE,
                   record_build_failures: bool = False,
                   skiplist_leafs: bool = False,
                   live_logs: bool = True,
