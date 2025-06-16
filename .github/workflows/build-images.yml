@@ -136,7 +136,7 @@ jobs:
         image: registry:2
         ports:
           - 5000:5000
-    needs: [ build-images ]
+    needs: [ build-images, detect-existing ]
     steps:
 
     - uses: actions/checkout@v4
@@ -236,6 +236,7 @@ jobs:
         # If we built images in this CI run, then use them -- otherwise use the
         # latest on quay.io
         if [ "${{ needs.detect-existing.outputs.DO_BUILD }}" == "true" ]; then
+
           registry="localhost:5000"
           base_tag="${BASE_TAG}"
           bioconda_image_tag="${BIOCONDA_IMAGE_TAG}"
