@@ -62,7 +62,6 @@ jobs:
     name: Build all images with podman
     runs-on: ubuntu-24.04
     needs: [ detect-existing ]
-    if: ${{ needs.detect-existing.outputs.DO_BUILD == 'true' }}
     container:
       # travier/podman-action contains newer podman/buildah versions.
       image: quay.io/travier/podman-action
@@ -71,6 +70,7 @@ jobs:
     steps:
 
     - name: Initial setup of podman-action container
+      if: ${{ needs.detect-existing.outputs.DO_BUILD == 'true' }}
       run: |
         # support cross-arch container building
         podman run --rm --privileged docker.io/tonistiigi/binfmt --install arm64
@@ -97,6 +97,7 @@ jobs:
         fetch-depth: 0
 
     - name: build all images
+      if: ${{ needs.detect-existing.outputs.DO_BUILD == 'true' }}
       run: |
         # GHA is giving warning with a suggestion to do the following, even
         # though the checkout action should have already done this.
@@ -119,6 +120,7 @@ jobs:
 
     # Upload the tarballs just created so they can be used in the next job.
     - name: Upload artifacts
+      if: ${{ needs.detect-existing.outputs.DO_BUILD == 'true' }}
       uses: actions/upload-artifact@v4
       with:
         name: image-artifacts
