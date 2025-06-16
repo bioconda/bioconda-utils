@@ -1,12 +1,9 @@
-# Specify the base image to support multi-arch images, such as
-# - 'quay.io/condaforge/linux-anvil-aarch64' for Linux aarch64
-# - 'quay.io/condaforge/linux-anvil-cos7-x86_64' for Linux x86_64
-ARG BASE_IMAGE=quay.io/condaforge/linux-anvil-cos7-x86_64
+ARG base_image
+FROM ${base_image} as base
 
-FROM ${BASE_IMAGE} as base
-
-# Copy over C.UTF-8 locale from our base image to make it consistently available during build.
-COPY --from=quay.io/bioconda/base-glibc-busybox-bash /usr/lib/locale/C.utf8 /usr/lib/locale/C.utf8
+# Locale has been created ahead of time and copied to the context dir by
+# prepare.sh; here we just copy it in.
+COPY ./C.utf8 /usr/lib/locale/C.utf8
 
 # Provide system deps unconditionally until we are able to offer per-recipe installs.
 # (Addresses, e.g., "ImportError: libGL.so.1" in tests directly invoked by conda-build.)
@@ -14,6 +11,8 @@ COPY --from=quay.io/bioconda/base-glibc-busybox-bash /usr/lib/locale/C.utf8 /usr
 RUN yum install -y mesa-libGL-devel \
     && \
     yum install -y openssh-clients \
+    && \
+    yum install -y git \
     && \
     yum clean all && \
     rm -rf /var/cache/yum/*
@@ -24,17 +23,20 @@ RUN . /opt/conda/etc/profile.d/conda.sh && \
     --add channels bioconda \
     --add channels conda-forge \
     && \
-    conda config \
-    --remove channels defaults || true \
+    conda config --remove channels defaults 2> /dev/null || true \
     && \
     { conda config --remove repodata_fns current_repodata.json 2> /dev/null || true ; } && \
     conda config --prepend repodata_fns repodata.json && \
     conda config --set channel_priority strict && \
     conda config --set auto_update_conda False
 
+# Build a wheel for bioconda-utils that will be used to install in the next
+# step.
 FROM base as build
 WORKDIR /tmp/repo
-COPY . ./
+ARG BIOCONDA_UTILS_FOLDER=./bioconda-utils
+COPY ${BIOCONDA_UTILS_FOLDER} ./
+
 RUN . /opt/conda/etc/profile.d/conda.sh  && conda list
 RUN . /opt/conda/etc/profile.d/conda.sh  && conda activate base && \
     pip wheel . && \
@@ -46,6 +48,8 @@ RUN . /opt/conda/etc/profile.d/conda.sh  && conda activate base && \
     chgrp -R lucky /opt/bioconda-utils && \
     chmod -R g=u /opt/bioconda-utils
 
+# Install the requirements for bioconda-utils, and then install the wheel
+# created in the last step.
 FROM base
 COPY --from=build /opt/bioconda-utils /opt/bioconda-utils
 RUN . /opt/conda/etc/profile.d/conda.sh  && conda activate base && \

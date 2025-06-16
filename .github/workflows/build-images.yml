@@ -1,0 +1,301 @@
+name: Build images
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    paths-ignore:
+    - '.circleci/**'
+    - 'docs/**'
+    - 'test/**'
+
+env:
+  BIOCONDA_UTILS_VERSION: ${{ github.event.release && github.event.release.tag_name || github.head_ref || github.ref_name }}
+
+jobs:
+
+  # Inspect quay.io to see which, if any, of the images we're trying to build
+  # are already on quay.io. If *any* are missing, then build them *all*.
+  detect-existing:
+    name: detect-existing
+    runs-on: ubuntu-24.04
+    outputs:
+      DO_BUILD: ${{ steps.detect-existing.outputs.DO_BUILD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether we should build
+        id: detect-existing
+        run: |
+
+          # Source env vars and functions to be used throughout building.
+          source images/image_config.sh
+
+          # Display the current environment variables used throughout building
+          # -- useful for debugging
+          env_var_inventory
+          set -x
+
+          if [[ "$(git log -1 --pretty=%B | head -n 1)" == *"[image skip]"* ]]; then
+
+            if tag_exists $BASE_BUSYBOX_IMAGE_NAME latest \
+            && tag_exists $BASE_DEBIAN_IMAGE_NAME latest \
+            && tag_exists $BUILD_ENV_IMAGE_NAME latest \
+            && tag_exists $BOT_IMAGE_NAME latest \
+            && tag_exists $ISSUE_RESPONDER_IMAGE_NAME latest \
+            && tag_exists $CREATE_ENV_IMAGE_NAME latest; then
+              echo "DO_BUILD=false" >> $GITHUB_OUTPUT
+            else
+              echo "Although '[image skip]' was used in the commit message, no images exist on quay.io to use. So images will be built."
+              echo "DO_BUILD=true" >> $GITHUB_OUTPUT
+          fi
+
+          else
+            echo "DO_BUILD=true" >> $GITHUB_OUTPUT
+
+          fi
+
+  build-images:
+    name: Build all images with podman
+    runs-on: ubuntu-24.04
+    needs: [ detect-existing ]
+    container:
+      # travier/podman-action contains newer podman/buildah versions.
+      image: quay.io/travier/podman-action
+      options: --privileged
+
+    steps:
+
+    - name: Initial setup of podman-action container
+      if: ${{ needs.detect-existing.outputs.DO_BUILD == 'true' }}
+      run: |
+        # support cross-arch container building
+        podman run --rm --privileged docker.io/tonistiigi/binfmt --install arm64
+
+        # Install jq and git, and then check that we have other required tools
+        dnf install -qy jq git
+        rpm -q \
+          buildah podman \
+          coreutils findutils sed \
+          curl jq git |
+          (
+            while read -r line; do
+              printf %s\\n "${line}"
+              case "${line}" in *' not installed'*)
+                err=1
+                ;;
+              esac
+            done
+            exit "${err-0}"
+          )
+
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: build all images
+      if: ${{ needs.detect-existing.outputs.DO_BUILD == 'true' }}
+      run: |
+        # GHA is giving warning with a suggestion to do the following, even
+        # though the checkout action should have already done this.
+        git config --global --add safe.directory /__w/bioconda-utils/bioconda-utils
+
+        # Source env vars and functions to be used throughout building.
+        source images/image_config.sh
+
+        # Build each image, do a quick test, and then save the image as
+        # a tarball in the image-artifacts directory. This happens once per
+        # arch.
+        #
+        # There are dependencies, so they should be built in this order.
+        cd images
+        time bash build.sh base-glibc-busybox-bash
+        time bash build.sh base-glibc-debian-bash
+        time bash build.sh build-env
+        time bash build.sh create-env
+        time bash build.sh bot
+
+    # Upload the tarballs just created so they can be used in the next job.
+    - name: Upload artifacts
+      if: ${{ needs.detect-existing.outputs.DO_BUILD == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: image-artifacts
+        path: |
+          image-artifacts/
+
+  test:
+    name: test bioconda-utils with images
+    runs-on: ubuntu-24.04
+
+    # Start a local docker registry. Podman/buildah will push manifests and
+    # images here for docker to use within bioconda-utils
+    services:
+      registry:
+        image: registry:2
+        ports:
+          - 5000:5000
+    needs: [ build-images, detect-existing ]
+    steps:
+
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install bioconda-utils
+      run: |
+        export BIOCONDA_DISABLE_BUILD_PREP=1
+        BRANCH=master
+        wget https://raw.githubusercontent.com/bioconda/bioconda-common/${BRANCH}/{common,install-and-set-up-conda,configure-conda}.sh
+
+        # Source env vars and functions to be used throughout building.
+        source images/image_config.sh
+
+        # Ensure install-and-set-up-conda uses same version as in the container
+        # (which uses images/image_config.sh)
+        export BIOCONDA_UTILS_TAG=$BIOCONDA_UTILS_VERSION
+        bash install-and-set-up-conda.sh
+        eval "$(conda shell.bash hook)"
+        conda create -n bioconda -y --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
+        conda activate bioconda
+        python setup.py install
+
+    # Download tarballs created in the previous job
+    - name: Download images as artifacts
+      uses: actions/download-artifact@v4
+      if: ${{ needs.detect-existing.outputs.DO_BUILD == 'true' }}
+      with:
+        name: image-artifacts
+        path: image-artifacts
+
+    # Load those tarballs as images into podman.
+    - name: Load image artifacts into podman
+      if: ${{ needs.detect-existing.outputs.DO_BUILD == 'true' }}
+      run: |
+          for image in image-artifacts/*.tar; do
+            podman load -i $image
+          done
+
+    - name: Build & push manifests to local docker registry
+      if: ${{ needs.detect-existing.outputs.DO_BUILD == 'true' }}
+      run: |
+
+        # Source env vars and functions to be used throughout building.
+        source images/image_config.sh
+
+        # Display the current environment variables used throughout building
+        # -- useful for debugging
+        env_var_inventory
+
+        # Check that we loaded images
+        podman images
+
+        # Compose a multi-arch manifest (json file); push it and its images to the local docker registry.
+        # We provide additional arguments of --tls-verify=false for the local
+        # registry to avoid the need to set up TLS certs for it.
+        build_and_push_manifest ${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG} docker://localhost:5000/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG} "--tls-verify=false"
+        build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} docker://localhost:5000/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} "--tls-verify=false"
+        build_and_push_manifest ${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} docker://localhost:5000/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "--tls-verify=false"
+        build_and_push_manifest ${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} docker://localhost:5000/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "--tls-verify=false"
+        ONLY_AMD64=true build_and_push_manifest ${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} docker://localhost:5000/${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "--tls-verify=false"
+
+        # Make sure we can get them back into the docker runtime in preparation
+        # for running bioconda-utils tests in the next job.
+        docker pull localhost:5000/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}
+        docker pull localhost:5000/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}
+        docker pull localhost:5000/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}
+        docker pull localhost:5000/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}
+        docker pull localhost:5000/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}
+        docker pull localhost:5000/${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}
+
+        docker images
+
+    - name: test
+      run: |
+        eval "$(conda shell.bash hook)"
+        conda activate bioconda
+
+        # The following env vars are searched for by mulled-build:
+        #   - DEST_BASE_IMAGE
+        #   - DEFAULT_BASE_IMAGE
+        #   - DEFAULT_EXTENDED_BASE_IMAGE
+        #
+        # We keep DEST_BASE_IMAGE unset so it defaults to DEFAULT_BASE_IMAGE or
+        # DEFAULT_EXTENDED_BASE_IMAGE.
+        #
+        # See
+        # https://github.com/galaxyproject/galaxy/blob/957f6f5/lib/galaxy/tool_util/deps/mulled/mulled_build.py#L62-L71
+        # for more details.
+        #
+        # We use the manifests that were just pushed to the local docker
+        # registry running on localhost (which simulates eventually using
+        # manifests from quay.io)
+        source images/image_config.sh
+
+        # If we built images in this CI run, then use them -- otherwise use the
+        # latest on quay.io
+        if [ "${{ needs.detect-existing.outputs.DO_BUILD }}" == "true" ]; then
+
+          registry="localhost:5000"
+          base_tag="${BASE_TAG}"
+          bioconda_image_tag="${BIOCONDA_IMAGE_TAG}"
+        else
+          registry="quay.io/bioconda/"
+          base_tag="latest"
+          bioconda_image_tag="latest"
+        fi
+
+        export DEFAULT_BASE_IMAGE="${registry}/${BASE_BUSYBOX_IMAGE_NAME}:${base_tag}"
+        export DEFAULT_EXTENDED_BASE_IMAGE="${registry}/${BASE_DEBIAN_IMAGE_NAME}:${base_tag}"
+        export BUILD_ENV_IMAGE="${registry}/${BUILD_ENV_IMAGE_NAME}:${bioconda_image_tag}"
+        export CREATE_ENV_IMAGE="${registry}/${CREATE_ENV_IMAGE_NAME}:${bioconda_image_tag}"
+
+        # Now that everything is set up, run the actual tests -- but only those
+        # related to docker. The other tests are run in a different GitHub
+        # Actions workflow.
+        py.test --durations=0 test/ -v --log-level=DEBUG -k "docker" --tb=native
+
+
+  # Push images to quay.io.
+  #
+  # NOTE: a repository must first exist on quay.io/bioconda AND that
+  # repository must also be configured to allow write access for the
+  # appropriate service account. This must be done by a user with admin
+  # access to quay.io/bioconda.
+  push:
+    name: push images
+    if: (github.ref == 'refs/heads/master') && (needs.detect-existing.outputs.DO_BUILD == 'true')
+    runs-on: ubuntu-24.04
+    needs: [ test ]
+    steps:
+
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: push manifests to quay.io
+      run: |
+        # quay.io login
+        echo '${{ secrets.QUAY_BIOCONDA_TOKEN }}' | podman login quay.io -u '${{ secrets.QUAY_BIOCONDA_USERNAME }}' --password-stdin
+
+        # Source env vars and functions to be used throughout building.
+        source images/image_config.sh
+
+        # Compose a multi-arch manifest (json file); push it and its images to quay.io
+        build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}"
+        build_and_push_manifest ${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG} "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}"
+        build_and_push_manifest ${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
+        build_and_push_manifest ${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
+        ONLY_AMD64=true build_and_push_manifest ${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda/${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
+
+        # Now that they are pushed, we can make tags pointing to them. Note
+        # that the "latest" tag will not be applied unil release time (via
+        # release-please workflow).
+        podman tag "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}" "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:master"
+        podman tag "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}" "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:master"
+        podman tag "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}" "quay.io/bioconda${BUILD_ENV_IMAGE_NAME}::master"
+        podman tag "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}" "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:master"
+        podman tag "quay.io/bioconda/${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}" "quay.io/bioconda/${BOT_IMAGE_NAME}:master"
