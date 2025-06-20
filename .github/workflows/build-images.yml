@@ -271,7 +271,7 @@ jobs:
     #
     # TODO: change back to master after testing
     #
-    if: (github.ref == 'refs/heads/containers-overhaul-upload-test') && (needs.detect-existing.outputs.DO_BUILD == 'true')
+    if: ${{ (github.ref == 'refs/heads/containers-overhaul-upload-test') && (needs.detect-existing.outputs.DO_BUILD == 'true') }}
     runs-on: ubuntu-24.04
     needs: [ test ]
     steps:
