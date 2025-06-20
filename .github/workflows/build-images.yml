@@ -267,7 +267,10 @@ jobs:
   # access to quay.io/bioconda.
   push:
     name: push images
-    if: (github.ref == 'refs/heads/master') && (needs.detect-existing.outputs.DO_BUILD == 'true')
+    # if: (github.ref == 'refs/heads/master') && (needs.detect-existing.outputs.DO_BUILD == 'true')
+    #
+    # TODO: change back to master after testing
+    if: (github.ref == 'refs/heads/containers-overhaul') && (needs.detect-existing.outputs.DO_BUILD == 'true')
     runs-on: ubuntu-24.04
     needs: [ test ]
     steps:
