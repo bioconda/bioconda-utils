@@ -271,9 +271,9 @@ jobs:
     #
     # TODO: change back to master after testing
     #
+    needs: [ test, detect-existing ]
     if: ${{ (github.ref == 'refs/heads/containers-overhaul-upload-test') && (needs.detect-existing.outputs.DO_BUILD == 'true') }}
     runs-on: ubuntu-24.04
-    needs: [ test, detect-existing ]
     steps:
 
     - uses: actions/checkout@v4
@@ -282,6 +282,8 @@ jobs:
 
     - name: push manifests to quay.io
       run: |
+
+        echo "${{ github.ref }}"
         # quay.io login
         echo '${{ secrets.QUAY_BIOCONDA_TOKEN }}' | podman login quay.io -u '${{ secrets.QUAY_BIOCONDA_USERNAME }}' --password-stdin
 
