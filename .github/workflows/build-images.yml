@@ -268,10 +268,7 @@ jobs:
   push:
     name: push images
     if: ${{ needs.detect-existing.outputs.DO_BUILD == 'true' }}
-    #
-    #
     needs: [ test, detect-existing ]
-     if: ${{ (github.ref == 'refs/heads/containers-overhaul-upload-test') && (needs.detect-existing.outputs.DO_BUILD == 'true') }}
     runs-on: ubuntu-24.04
     steps:
 
