@@ -280,7 +280,7 @@ jobs:
       run: |
         set -x
         # TODO: change back to master after testing
-        if [ ${{ github.ref }} == "refs/heads/containers-overhaul-upload-test" ]; then
+        if [ ${{ github.head_ref }} == "containers-overhaul-upload-test" ]; then
 
           # quay.io login
           echo '${{ secrets.QUAY_BIOCONDA_TOKEN }}' | podman login quay.io -u '${{ secrets.QUAY_BIOCONDA_USERNAME }}' --password-stdin
