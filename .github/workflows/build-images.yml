@@ -268,7 +268,7 @@ jobs:
   push:
     name: push images
     if: ${{ needs.detect-existing.outputs.DO_BUILD == 'true' }}
-    needs: [ test, detect-existing ]
+    needs: [ test, build-images, detect-existing ]
     runs-on: ubuntu-24.04
     steps:
 
@@ -276,13 +276,28 @@ jobs:
       with:
         fetch-depth: 0
 
+    # Download tarballs created in the previous job
+    - name: Download images as artifacts
+      uses: actions/download-artifact@v4
+      if: ${{ needs.detect-existing.outputs.DO_BUILD == 'true' }}
+      with:
+        name: image-artifacts
+        path: image-artifacts
+
+    # Load those tarballs as images into podman.
+    - name: Load image artifacts into podman
+      if: ${{ needs.detect-existing.outputs.DO_BUILD == 'true' }}
+      run: |
+          for image in image-artifacts/*.tar; do
+            podman load -i $image
+          done
+
     - name: push manifests to quay.io
       run: |
         set -x
         # TODO: change back to master after testing
         if [ ${{ github.head_ref }} == "containers-overhaul-upload-test" ]; then
 
-          # quay.io login
           echo '${{ secrets.QUAY_BIOCONDA_TOKEN }}' | podman login quay.io -u '${{ secrets.QUAY_BIOCONDA_USERNAME }}' --password-stdin
 
           # Source env vars and functions to be used throughout building.
