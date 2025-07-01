@@ -316,7 +316,7 @@ jobs:
           # release-please workflow).
           retag "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}"         "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:master"
           retag "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}"          "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:master"
-          retag "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"  "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}::master"
+          retag "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"  "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:master"
           retag "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}" "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:master"
           retag "quay.io/bioconda/${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"        "quay.io/bioconda/${BOT_IMAGE_NAME}:master"
         fi
