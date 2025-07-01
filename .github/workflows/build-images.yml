@@ -196,10 +196,10 @@ jobs:
         # Compose a multi-arch manifest (json file); push it and its images to the local docker registry.
         # We provide additional arguments of --tls-verify=false for the local
         # registry to avoid the need to set up TLS certs for it.
-        build_and_push_manifest ${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG} docker://localhost:5000/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG} "--tls-verify=false"
-        build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} docker://localhost:5000/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} "--tls-verify=false"
-        build_and_push_manifest ${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} docker://localhost:5000/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "--tls-verify=false"
-        build_and_push_manifest ${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} docker://localhost:5000/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "--tls-verify=false"
+        build_and_push_manifest ${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}                   docker://localhost:5000/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG} "--tls-verify=false"
+        build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}                  docker://localhost:5000/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} "--tls-verify=false"
+        build_and_push_manifest ${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}          docker://localhost:5000/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "--tls-verify=false"
+        build_and_push_manifest ${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}           docker://localhost:5000/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "--tls-verify=false"
         ONLY_AMD64=true build_and_push_manifest ${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} docker://localhost:5000/${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "--tls-verify=false"
 
         # Make sure we can get them back into the docker runtime in preparation
@@ -304,10 +304,11 @@ jobs:
           source images/image_config.sh
 
           # Compose a multi-arch manifest (json file); push it and its images to quay.io
-          build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}"
-          build_and_push_manifest ${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG} "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}"
-          build_and_push_manifest ${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
-          build_and_push_manifest ${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
+          # Issues uploading? See the notes in image_config.sh on repository creation.
+          build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}                  "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}"
+          build_and_push_manifest ${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}                   "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}"
+          build_and_push_manifest ${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}           "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
+          build_and_push_manifest ${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}          "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
           ONLY_AMD64=true build_and_push_manifest ${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda/${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
 
           # Now that they are pushed, we can make tags pointing to them. Note
