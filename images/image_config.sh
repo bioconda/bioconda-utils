@@ -109,6 +109,18 @@ function build_and_push_manifest() {
   podman manifest push --all $additional_args "${manifest_name}" "${dest}"
 }
 
+function retag () {
+  # Re-tags existing tag ($1) with a new one ($2)
+  # Example usage:
+  #
+  #   retag ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} ${BASE_BUSYBOX_IMAGE_NAME}:master
+  #
+  local existing="$1"
+  local new="$2"
+  podman pull "$existing"
+  podman tag "$existing" "$new"
+  podman push "$new"
+}
 
 function env_var_inventory () {
   # There are a lot of environment variables used here; this function describes
