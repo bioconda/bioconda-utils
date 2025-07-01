@@ -2,6 +2,11 @@
 
 #----------------------------VERSIONS-------------------------------------------
 # Configures various versions to be used throughout infrastructure.
+#
+# NOTE: If you change a container name, you need to make sure you create the
+# respective repository on quay.io/bioconda ("+Create New Repository" in top
+# right) AND in the new repository settings you need to give the
+# bioconda+bioconda_utils_bot write access to the repository.
 ARCHS="amd64 arm64"
 DEBIAN_VERSION="12.5"
 BUSYBOX_VERSION="1.36.1"
