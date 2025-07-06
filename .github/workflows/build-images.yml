@@ -303,20 +303,13 @@ jobs:
           # Source env vars and functions to be used throughout building.
           source images/image_config.sh
 
-          # Compose a multi-arch manifest (json file); push it and its images to quay.io
+          # Compose a multi-arch manifest (json file); push it and its images
+          # to quay.io with the "master" tag.
           # Issues uploading? See the notes in image_config.sh on repository creation.
-          build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}                  "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}"
-          build_and_push_manifest ${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}                   "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}"
-          build_and_push_manifest ${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}           "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
-          build_and_push_manifest ${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}          "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
-          ONLY_AMD64=true build_and_push_manifest ${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda/${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
+          build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}                  "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:master"
+          build_and_push_manifest ${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}                   "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:master"
+          build_and_push_manifest ${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}           "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:master"
+          build_and_push_manifest ${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}          "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:master"
+          ONLY_AMD64=true build_and_push_manifest ${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda/${BOT_IMAGE_NAME}:master"
 
-          # Now that they are pushed, we can make tags pointing to them. Note
-          # that the "latest" tag will not be applied unil release time (via
-          # release-please workflow).
-          retag "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}"         "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:master"
-          retag "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}"          "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:master"
-          retag "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"  "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:master"
-          retag "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}" "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:master"
-          retag "quay.io/bioconda/${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"        "quay.io/bioconda/${BOT_IMAGE_NAME}:master"
         fi
