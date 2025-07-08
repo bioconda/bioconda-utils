@@ -295,8 +295,7 @@ jobs:
     - name: push manifests to quay.io
       run: |
         set -x
-        # TODO: change back to master after testing
-        if [ ${{ github.head_ref }} == "containers-overhaul-upload-test" ]; then
+        if [ ${{ github.head_ref }} == "master" ]; then
 
           echo '${{ secrets.QUAY_BIOCONDA_TOKEN }}' | podman login quay.io -u '${{ secrets.QUAY_BIOCONDA_USERNAME }}' --password-stdin
 
@@ -306,10 +305,10 @@ jobs:
           # Compose a multi-arch manifest (json file); push it and its images
           # to quay.io with the "master" tag.
           # Issues uploading? See the notes in image_config.sh on repository creation.
-          build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}                  "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:master"
-          build_and_push_manifest ${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}                   "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:master"
-          build_and_push_manifest ${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}           "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:master"
-          build_and_push_manifest ${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}          "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:master"
+          build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:master"
+          build_and_push_manifest ${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG} "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:master"
+          build_and_push_manifest ${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:master"
+          build_and_push_manifest ${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:master"
           ONLY_AMD64=true build_and_push_manifest ${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda/${BOT_IMAGE_NAME}:master"
 
         fi
