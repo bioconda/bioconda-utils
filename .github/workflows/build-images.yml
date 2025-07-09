@@ -196,10 +196,10 @@ jobs:
         # Compose a multi-arch manifest (json file); push it and its images to the local docker registry.
         # We provide additional arguments of --tls-verify=false for the local
         # registry to avoid the need to set up TLS certs for it.
-        build_and_push_manifest ${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}                   docker://localhost:5000/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG} "--tls-verify=false"
-        build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}                  docker://localhost:5000/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} "--tls-verify=false"
-        build_and_push_manifest ${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}          docker://localhost:5000/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "--tls-verify=false"
-        build_and_push_manifest ${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}           docker://localhost:5000/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "--tls-verify=false"
+        build_and_push_manifest ${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG} docker://localhost:5000/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG} "--tls-verify=false"
+        build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} docker://localhost:5000/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} "--tls-verify=false"
+        build_and_push_manifest ${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} docker://localhost:5000/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "--tls-verify=false"
+        build_and_push_manifest ${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} docker://localhost:5000/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "--tls-verify=false"
         ONLY_AMD64=true build_and_push_manifest ${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} docker://localhost:5000/${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "--tls-verify=false"
 
         # Make sure we can get them back into the docker runtime in preparation
@@ -295,8 +295,7 @@ jobs:
     - name: push manifests to quay.io
       run: |
         set -x
-        # TODO: set back to master before merging
-        if [ ${{ github.head_ref }} == "containers-overhaul-upload-test" ]; then
+        if [ ${{ github.head_ref }} == "master" ]; then
 
           echo '${{ secrets.QUAY_BIOCONDA_TOKEN }}' | podman login quay.io -u '${{ secrets.QUAY_BIOCONDA_USERNAME }}' --password-stdin
 
@@ -312,11 +311,5 @@ jobs:
           build_and_push_manifest ${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:master"
           ONLY_AMD64=true build_and_push_manifest ${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda/${BOT_IMAGE_NAME}:master"
 
-          # TODO: remove this after testing retag, this will eventually live in the release-please yaml
-          build_and_push_manifest "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:master" "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:latest" "" "false"
-          build_and_push_manifest "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:master" "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:latest" "" "false"
-          build_and_push_manifest "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:master" "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:latest" "" "false"
-          build_and_push_manifest "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:master" "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:latest" "" "false"
-          ONLY_AMD64=true build_and_push_manifest "quay.io/bioconda/${BOT_IMAGE_NAME}:master" "quay.io/bioconda/${BOT_IMAGE_NAME}:latest" "" "false"
 
         fi

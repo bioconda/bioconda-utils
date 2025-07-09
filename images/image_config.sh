@@ -75,13 +75,21 @@ function build_and_push_manifest() {
   # Creates a local manifest, adds containers for multiple archs, and pushes to
   # a registry.
   #
-  # Typical usage:
+  # build_and_push_manifest <source> <dest> <podman manifest push args> <use_arch_suffix>
+  #
+  # (last two args are optional)
+  #
+  # For pushing to a local registry:
+  #
   #   build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} docker://localhost:5000 ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} "--tls-verify=false"
   #
-  # or
+  # For pushing the manifest from local images to quay.io:
   #
   #   build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:latest
   #
+  # For re-tagging a manifest (with its component images):
+  #
+  #   build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:latest "" "false"
   local source=$1
   local dest=$2
   local additional_args=${3:-""}
