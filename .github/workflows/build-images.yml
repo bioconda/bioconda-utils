@@ -315,7 +315,7 @@ jobs:
           # TODO: remove this after testing retag, this will eventually live in the release-please yaml
           retag "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:master" "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:latest"
           retag "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:master" "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:latest"
-          retag "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:master" "quay.io/bioconda${BUILD_ENV_IMAGE_NAME}:latest"
+          retag "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:master" "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:latest"
           retag "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:master" "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:latest"
           retag "quay.io/bioconda/${BOT_IMAGE_NAME}:master" "quay.io/bioconda/${BOT_IMAGE_NAME}:latest"
 
