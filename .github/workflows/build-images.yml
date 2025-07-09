@@ -267,35 +267,49 @@ jobs:
   # access to quay.io/bioconda.
   push:
     name: push images
-    if: (github.ref == 'refs/heads/master') && (needs.detect-existing.outputs.DO_BUILD == 'true')
+    if: ${{ needs.detect-existing.outputs.DO_BUILD == 'true' }}
+    needs: [ test, build-images, detect-existing ]
     runs-on: ubuntu-24.04
-    needs: [ test ]
     steps:
 
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
+    # Download tarballs created in the previous job
+    - name: Download images as artifacts
+      uses: actions/download-artifact@v4
+      if: ${{ needs.detect-existing.outputs.DO_BUILD == 'true' }}
+      with:
+        name: image-artifacts
+        path: image-artifacts
+
+    # Load those tarballs as images into podman.
+    - name: Load image artifacts into podman
+      if: ${{ needs.detect-existing.outputs.DO_BUILD == 'true' }}
+      run: |
+          for image in image-artifacts/*.tar; do
+            podman load -i $image
+          done
+
     - name: push manifests to quay.io
       run: |
-        # quay.io login
-        echo '${{ secrets.QUAY_BIOCONDA_TOKEN }}' | podman login quay.io -u '${{ secrets.QUAY_BIOCONDA_USERNAME }}' --password-stdin
+        set -x
+        if [ ${{ github.head_ref }} == "master" ]; then
 
-        # Source env vars and functions to be used throughout building.
-        source images/image_config.sh
+          echo '${{ secrets.QUAY_BIOCONDA_TOKEN }}' | podman login quay.io -u '${{ secrets.QUAY_BIOCONDA_USERNAME }}' --password-stdin
 
-        # Compose a multi-arch manifest (json file); push it and its images to quay.io
-        build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}"
-        build_and_push_manifest ${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG} "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}"
-        build_and_push_manifest ${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
-        build_and_push_manifest ${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
-        ONLY_AMD64=true build_and_push_manifest ${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda/${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}"
+          # Source env vars and functions to be used throughout building.
+          source images/image_config.sh
 
-        # Now that they are pushed, we can make tags pointing to them. Note
-        # that the "latest" tag will not be applied unil release time (via
-        # release-please workflow).
-        podman tag "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG}" "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:master"
-        podman tag "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG}" "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:master"
-        podman tag "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}" "quay.io/bioconda${BUILD_ENV_IMAGE_NAME}::master"
-        podman tag "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}" "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:master"
-        podman tag "quay.io/bioconda/${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG}" "quay.io/bioconda/${BOT_IMAGE_NAME}:master"
+          # Compose a multi-arch manifest (json file); push it and its images
+          # to quay.io with the "master" tag.
+          # Issues uploading? See the notes in image_config.sh on repository creation.
+          build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:master"
+          build_and_push_manifest ${BASE_DEBIAN_IMAGE_NAME}:${BASE_TAG} "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:master"
+          build_and_push_manifest ${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:master"
+          build_and_push_manifest ${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:master"
+          ONLY_AMD64=true build_and_push_manifest ${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda/${BOT_IMAGE_NAME}:master"
+
+
+        fi

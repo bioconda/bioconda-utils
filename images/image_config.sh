@@ -2,17 +2,24 @@
 
 #----------------------------VERSIONS-------------------------------------------
 # Configures various versions to be used throughout infrastructure.
+#
+# NOTE: If you change a container name, you need to make sure you create the
+# respective repository on quay.io/bioconda ("+Create New Repository" in top
+# right) AND in the new repository settings you need to give the
+# bioconda+bioconda_utils_bot write access to the repository.
 ARCHS="amd64 arm64"
 DEBIAN_VERSION="12.5"
 BUSYBOX_VERSION="1.36.1"
-BASE_DEBIAN_IMAGE_NAME="tmp-base-debian"
-BASE_BUSYBOX_IMAGE_NAME="tmp-base-busybox"
+BASE_DEBIAN_IMAGE_NAME="tmp-debian"
+BASE_BUSYBOX_IMAGE_NAME="tmp-busybox"
 BUILD_ENV_IMAGE_NAME="tmp-build-env"
 CREATE_ENV_IMAGE_NAME="tmp-create-env"
 BOT_IMAGE_NAME="tmp-bot"
 BASE_TAG="0.2"
 BASE_IMAGE_CONDAFORGE_AMD64="quay.io/condaforge/linux-anvil-x86_64:cos7"
 BASE_IMAGE_CONDAFORGE_ARM64="quay.io/condaforge/linux-anvil-aarch64:cos7"
+
+# May be set within loops sourcing this script, in which case respect it
 CURRENT_ARCH=${CURRENT_ARCH:-""}
 
 # Inspect this repo to get the currently-checked-out version, which matches
@@ -67,19 +74,28 @@ function tag_exists() {
 }
 
 function build_and_push_manifest() {
-  # Creates a local manifest, adds containers for multiple archs, and pushes to
-  # a registry.
+  # Creates a local manifest, pull containers for multiple archs, adds them to
+  # the manifest, and pushes the manifest & images to a registry.
   #
-  # Typical usage:
-  #   build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} docker://localhost:5000 ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} "--tls-verify=false"
+  # build_and_push_manifest <source> <dest> <podman manifest push args> <use_arch_suffix>
   #
-  # or
+  # (last two args are optional)
   #
-  #   build_and_push_manifest ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:latest
+  # For pushing to a local registry:
   #
+  #   build_and_push_manifest image:tag docker://localhost:5000/image:tag "--tls-verify=false"
+  #
+  # For pushing the manifest from local images to quay.io:
+  #
+  #   build_and_push_manifest image:tag quay.io/bioconda/image:master
+  #
+  # For re-tagging a manifest already on quay.io (with its component images):
+  #
+  #   build_and_push_manifest quay.io/bioconda/image:master quay.io/bioconda/image:latest "" "false"
   local source=$1
   local dest=$2
   local additional_args=${3:-""}
+  local use_arch_suffix=${4:-"true"}
 
   local manifest_name="local_${source}"
 
@@ -95,7 +111,17 @@ function build_and_push_manifest() {
     # skip non-amd64 if configured
     [ "${ONLY_AMD64:-false}" == "true" -a "${arch}" != "amd64" ] && continue
 
-    imgid=$(buildah pull --arch=$arch "${source}-${arch}")
+    # When first creating a manifest, we have local images that have
+    # arch-specific suffixes so use the default, "true".
+    #
+    # However, when re-tagging a manifest already on quay.io, the arch-specific
+    # images are inside the manifest and do not have arch-specific suffixes, so
+    # use "false".
+    if [ $use_arch_suffix == "true" ]; then 
+      imgid=$(buildah pull --arch=$arch "${source}-${arch}")
+    else
+      imgid=$(buildah pull --arch=$arch "${source}")
+    fi
 
     buildah manifest add "${manifest_name}" "${imgid}"
   done
@@ -103,7 +129,6 @@ function build_and_push_manifest() {
   # Note that --all is required to actually push the images, too
   podman manifest push --all $additional_args "${manifest_name}" "${dest}"
 }
-
 
 function env_var_inventory () {
   # There are a lot of environment variables used here; this function describes
