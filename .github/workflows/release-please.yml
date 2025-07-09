@@ -39,9 +39,10 @@ jobs:
           echo '${{ secrets.QUAY_BIOCONDA_TOKEN }}' | podman login quay.io -u '${{ secrets.QUAY_BIOCONDA_USERNAME }}' --password-stdin
 
           source images/image_config.sh
-          build_and_push_manifest "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:master" "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:latest"
-          build_and_push_manifest "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:master" "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:latest"
-          build_and_push_manifest "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:master" "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:latest"
-          build_and_push_manifest "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:master" "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:latest"
-          build_and_push_manifest "quay.io/bioconda/${BOT_IMAGE_NAME}:master" "quay.io/bioconda/${BOT_IMAGE_NAME}:latest"
+          # build_and_push_manifest <source> <dest> <additional args> <use arch-specific suffix>
+          build_and_push_manifest "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:master" "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:latest" "" "false"
+          build_and_push_manifest "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:master" "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:latest" "" "false"
+          build_and_push_manifest "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:master" "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:latest" "" "false"
+          build_and_push_manifest "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:master" "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:latest" "" "false"
+          ONLY_AMD64=true build_and_push_manifest "quay.io/bioconda/${BOT_IMAGE_NAME}:master" "quay.io/bioconda/${BOT_IMAGE_NAME}:latest" "" "false"
 

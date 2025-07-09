@@ -85,6 +85,7 @@ function build_and_push_manifest() {
   local source=$1
   local dest=$2
   local additional_args=${3:-""}
+  local use_arch_suffix=${4:-"true"}
 
   local manifest_name="local_${source}"
 
@@ -100,26 +101,17 @@ function build_and_push_manifest() {
     # skip non-amd64 if configured
     [ "${ONLY_AMD64:-false}" == "true" -a "${arch}" != "amd64" ] && continue
 
-    imgid=$(buildah pull --arch=$arch "${source}-${arch}")
+    if [ $use_arch_suffix == "true" ]; then 
+      imgid=$(buildah pull --arch=$arch "${source}-${arch}")
+    else
+      imgid=$(buildah pull --arch=$arch "${source}")
+    fi
 
     buildah manifest add "${manifest_name}" "${imgid}"
   done
 
   # Note that --all is required to actually push the images, too
   podman manifest push --all $additional_args "${manifest_name}" "${dest}"
-}
-
-function retag () {
-  # Re-tags existing tag ($1) with a new one ($2)
-  # Example usage:
-  #
-  #   retag ${BASE_BUSYBOX_IMAGE_NAME}:${BASE_TAG} ${BASE_BUSYBOX_IMAGE_NAME}:master
-  #
-  local existing="$1"
-  local new="$2"
-  podman pull "$existing"
-  podman tag "$existing" "$new"
-  podman push "$new"
 }
 
 function env_var_inventory () {
