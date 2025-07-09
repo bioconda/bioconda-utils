@@ -296,7 +296,7 @@ jobs:
       run: |
         set -x
         # TODO: set back to master before merging
-        if [ ${{ github.head_ref }} == "container-overhaul-upload-test" ]; then
+        if [ ${{ github.head_ref }} == "containers-overhaul-upload-test" ]; then
 
           echo '${{ secrets.QUAY_BIOCONDA_TOKEN }}' | podman login quay.io -u '${{ secrets.QUAY_BIOCONDA_USERNAME }}' --password-stdin
 
