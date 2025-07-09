@@ -295,7 +295,8 @@ jobs:
     - name: push manifests to quay.io
       run: |
         set -x
-        if [ ${{ github.head_ref }} == "master" ]; then
+        # TODO: set back to master before merging
+        if [ ${{ github.head_ref }} == "container-overhaul-upload-test" ]; then
 
           echo '${{ secrets.QUAY_BIOCONDA_TOKEN }}' | podman login quay.io -u '${{ secrets.QUAY_BIOCONDA_USERNAME }}' --password-stdin
 
@@ -310,5 +311,12 @@ jobs:
           build_and_push_manifest ${BUILD_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:master"
           build_and_push_manifest ${CREATE_ENV_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:master"
           ONLY_AMD64=true build_and_push_manifest ${BOT_IMAGE_NAME}:${BIOCONDA_IMAGE_TAG} "quay.io/bioconda/${BOT_IMAGE_NAME}:master"
+
+          # TODO: remove this after testing retag, this will eventually live in the release-please yaml
+          retag "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:master" "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:latest"
+          retag "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:master" "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:latest"
+          retag "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:master" "quay.io/bioconda${BUILD_ENV_IMAGE_NAME}:latest"
+          retag "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:master" "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:latest"
+          retag "quay.io/bioconda/${BOT_IMAGE_NAME}:master" "quay.io/bioconda/${BOT_IMAGE_NAME}:latest"
 
         fi

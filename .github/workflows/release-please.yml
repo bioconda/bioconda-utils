@@ -32,16 +32,16 @@ jobs:
           #tag=${{ github.event.release && github.event.release.tag_name || github.sha }}
           tag=${{ needs.release_please.outputs.tag_name }}
           printf %s "tag=${tag#v}" >> $GITHUB_OUTPUT
-      
+
       - name: tag images with latest
         run: |
 
           echo '${{ secrets.QUAY_BIOCONDA_TOKEN }}' | podman login quay.io -u '${{ secrets.QUAY_BIOCONDA_USERNAME }}' --password-stdin
 
           source images/image_config.sh
-          podman tag "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:master" "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:latest"
-          podman tag "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:master" "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:latest"
-          podman tag "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:master" "quay.io/bioconda${BUILD_ENV_IMAGE_NAME}:latest"
-          podman tag "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:master" "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:latest"
-          podman tag "quay.io/bioconda/${BOT_IMAGE_NAME}:master" "quay.io/bioconda/${BOT_IMAGE_NAME}:latest"
+          retag "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:master" "quay.io/bioconda/${BASE_BUSYBOX_IMAGE_NAME}:latest"
+          retag "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:master" "quay.io/bioconda/${BASE_DEBIAN_IMAGE_NAME}:latest"
+          retag "quay.io/bioconda/${BUILD_ENV_IMAGE_NAME}:master" "quay.io/bioconda${BUILD_ENV_IMAGE_NAME}:latest"
+          retag "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:master" "quay.io/bioconda/${CREATE_ENV_IMAGE_NAME}:latest"
+          retag "quay.io/bioconda/${BOT_IMAGE_NAME}:master" "quay.io/bioconda/${BOT_IMAGE_NAME}:latest"
 
