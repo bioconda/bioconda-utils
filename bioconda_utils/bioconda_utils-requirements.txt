@@ -3,33 +3,32 @@
 # so please keep that documentation up to date as they change
 
 # pinnings
-conda-forge-pinning=2024.11.29.12.37.53
+conda-forge-pinning=2025.07.17.18.28.26
 
 # basics
-python=3.10.*
-conda=24.9.*
-conda-libmamba-solver=24.1.*
-conda-build=24.7.*
-conda-index=0.5.*
-conda-package-streaming=0.11.*
-mamba=1.5.*
-#boa=0.17.*
+python=3.11.*
+conda=25.5.*
+conda-libmamba-solver=25.4.*
+conda-build=25.5.*
+conda-index=0.6.*
+conda-package-streaming=0.12.*
+mamba=2.3.*
 
 argh=0.31.*                   # CLI
 colorlog=6.*                  # Logging
 tqdm=4.66.*                   # Progress monitor
-yaspin=2.*                    #
+yaspin=3.*                    #
 ruamel.yaml=0.18.*            # Recipe YAML parsing
-pyaml=24.04.*                 # Faster YAML parser (deprecate?)
-networkx=3.3.*                # (networkx>3.3 needs python>=3.10)
+pyaml=24.12.*                 # Faster YAML parser (deprecate?)
+networkx=3.4.*                # (networkx>3.3 needs python>=3.10)
 pandas=2.2.*                  #
 libblas=*=*openblas           # Avoid large mkl package (pulled in by pandas)
-boltons=24.0.*                #
+boltons=25.0.*                #
 jsonschema=4.22.*             # JSON schema verification
 jinja2=3.1.*                  #
 
-anaconda-client=1.12.*        # anaconda_upload
-galaxy-tool-util=24.*         # mulled test and container build
+anaconda-client=1.13.*        # anaconda_upload
+galaxy-tool-util=25.*         # mulled test and container build
 involucro=1.1.*               # mulled test and container build
 skopeo=1.15.*                 # docker upload
 findutils                     # find/xargs copy built packages from container
@@ -44,7 +43,7 @@ aiohttp-jinja2                # jinja2 renderer for aiohttp.web
 aiohttp-session               #
 aiohttp-security              #
 aiofiles=23.*                 # async open
-aioftp=0.22.*                 # FTP lib
+aioftp=0.26.*                 # FTP lib
 backoff=2.2.*                 # retrying of failed API calls
 cachetools=5.3.*              # request caching (NEEDED?)
 
