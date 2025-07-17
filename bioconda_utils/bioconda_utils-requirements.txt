@@ -12,19 +12,19 @@ conda-libmamba-solver=25.4.*
 conda-build=25.5.*
 conda-index=0.6.*
 conda-package-streaming=0.12.*
-mamba=2.3.*
+mamba=2.2.*
 
 argh=0.31.*                   # CLI
 colorlog=6.*                  # Logging
-tqdm=4.66.*                   # Progress monitor
+tqdm=4.67.*                   # Progress monitor
 yaspin=3.*                    #
 ruamel.yaml=0.18.*            # Recipe YAML parsing
 pyaml=24.12.*                 # Faster YAML parser (deprecate?)
-networkx=3.4.*                # (networkx>3.3 needs python>=3.10)
+networkx=3.3.*                # (networkx>3.3 needs python>=3.10)
 pandas=2.2.*                  #
 libblas=*=*openblas           # Avoid large mkl package (pulled in by pandas)
 boltons=25.0.*                #
-jsonschema=4.22.*             # JSON schema verification
+jsonschema=4.24.*             # JSON schema verification
 jinja2=3.1.*                  #
 
 anaconda-client=1.13.*        # anaconda_upload
