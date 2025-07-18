@@ -7,12 +7,12 @@ conda-forge-pinning=2025.01.03.14.12.46
 
 # basics
 python=3.12.*
-conda=25.5.*
-conda-libmamba-solver=25.4.*
-conda-build=25.5.*
+conda=24.11.*
+conda-libmamba-solver=24.9.*
+conda-build=24.11.*
 conda-index=0.6.*
 conda-package-streaming=0.12.*
-mamba=2.3.*
+mamba=1.5.*
 
 argh=0.31.*                   # CLI
 colorlog=6.*                  # Logging
