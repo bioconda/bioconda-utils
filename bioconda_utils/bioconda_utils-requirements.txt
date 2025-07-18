@@ -3,10 +3,10 @@
 # so please keep that documentation up to date as they change
 
 # pinnings
-conda-forge-pinning=2025.07.17.17.06.34
+conda-forge-pinning=2025.01.03.14.12.46
 
 # basics
-python=3.10.*
+python=3.12.*
 conda=25.5.*
 conda-libmamba-solver=25.4.*
 conda-build=25.5.*
