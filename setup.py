@@ -1,6 +1,6 @@
 # -*- coding: UTF-8 -*-
 
-from setuptools import setup, find_packages
+from setuptools import setup, find_namespace_packages
 import versioneer
 
 
@@ -9,7 +9,7 @@ setup(
     author="Johannes Köster, Ryan Dale, The Bioconda Team",
     description="Utilities for building and managing conda packages",
     license="MIT",
-    packages=find_packages(exclude=['test']),
+    packages=find_namespace_packages(exclude=['test']),
     include_package_data=True,
     data_files=[
         (
