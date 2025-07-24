@@ -230,7 +230,7 @@ tests:
   - name: should_not_be_noarch_compiler
     add:
       build: { noarch: python }
-      requirements: { build: [compiler_gcc] }
+      requirements: { build: [compiler_gcc, stdlib_c] }
     expect: should_not_be_noarch_compiler
   - name: should_not_be_noarch_skip
     add:
@@ -257,7 +257,7 @@ tests:
           sha256: 123 # [linux]
         - url: https://elsewhere # [osx]
           sha256: 123 # [osx]
-      requirements: { build: ['{{compiler("c")}}'] }
+      requirements: { build: ['{{compiler("c")}}', '{{stdlib("c")}}'] }
   - name: noarch_java_with_python_wrapper
     add:
       build: { noarch: generic }
@@ -328,7 +328,7 @@ tests:
     add: { requirements: { build: ["numpy x.x"], run: ["numpy x.x"] } }
   - name: compiler_ok
     remove: build/noarch
-    add: { requirements: { build: ['{{compiler("c")}}'] } }
+    add: { requirements: { build: ['{{compiler("c")}}', '{{stdlib("c")}}'] } }
   - name: compiler_old_1
     expect: should_use_compilers
     add: { requirements: { build: ["gcc  # [linux]"] } }
@@ -341,6 +341,10 @@ tests:
   - name: compiler_old_4
     expect: should_use_compilers
     add: { requirements: { build: ["rust >=1.56"] } }
+  - name: compiler_needs_stdlib_c
+    expect: compiler_needs_stdlib_c
+    remove: build/noarch
+    add: { requirements: { build: ['{{compiler("c")}}'] } }
   - name: compiler_in_host
     expect: compilers_must_be_in_build
     remove: build/noarch
@@ -397,18 +401,18 @@ tests:
   - name: cython_in_run
     expect: cython_must_be_in_host
     add:
-      requirements: { run: [cython], build: ['{{compiler("c")}}'] }
+      requirements: { run: [cython], build: ['{{compiler("c")}}', '{{stdlib("c")}}'] }
       build: { noarch: False }
   - name: cython_in_host_no_compiler
     expect: cython_needs_compiler
     add: { requirements: { host: [cython] } }
   - name: cython_in_host
     add:
-      requirements: { host: [cython], build: ['{{compiler("c")}}'] }
+      requirements: { host: [cython], build: ['{{compiler("c")}}', '{{stdlib("c")}}'] }
       build: { noarch: False }
   - name: cython_cxx_compiler_ok
     add:
-      requirements: { host: [cython], build: ['{{compiler("cxx")}}'] }
+      requirements: { host: [cython], build: ['{{compiler("cxx")}}', '{{stdlib("c")}}'] }
       build: { noarch: False }
   - name: missing_run_exports
     remove: build/run_exports

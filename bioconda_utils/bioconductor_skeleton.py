@@ -821,11 +821,13 @@ class BioCProjectPage(object):
 
         self._cb3_build_reqs = {}
         if need_c:
-            self._cb3_build_reqs['c'] = "{{ compiler('c') }}"
+            self._cb3_build_reqs['compiler_c'] = "{{ compiler('c') }}"
         if need_cxx:
-            self._cb3_build_reqs['cxx'] = "{{ compiler('cxx') }}"
+            self._cb3_build_reqs['compiler_cxx'] = "{{ compiler('cxx') }}"
         if need_f:
-            self._cb3_build_reqs['fortran'] = "{{ compiler('fortran') }}"
+            self._cb3_build_reqs['compiler_fortran'] = "{{ compiler('fortran') }}"
+        if len(self._cb3_build_reqs):
+            self._cb3_build_reqs['stdlib_c'] = "{{ stdlib('c') }}"
         if need_autotools:
             self._cb3_build_reqs['automake'] = 'automake'
         if need_make:
@@ -940,7 +942,7 @@ class BioCProjectPage(object):
         # Handle libblas and liblapack, which all compiled packages
         # are assumed to need
         additional_host_deps = []
-        if self.linkingto != [] or len(set(['c', 'cxx', 'fortran']).intersection(self._cb3_build_reqs.keys())) > 0:
+        if self.linkingto != [] or len(set(['compiler_c', 'compiler_cxx', 'compiler_fortran', 'stdlib_c']).intersection(self._cb3_build_reqs.keys())) > 0:
             additional_host_deps.append('libblas')
             additional_host_deps.append('liblapack')
 

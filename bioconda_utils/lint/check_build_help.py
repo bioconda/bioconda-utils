@@ -62,6 +62,24 @@ class compilers_must_be_in_build(LintCheck):
                     if "run" in location or "host" in location:
                         self.message(section=location)
 
+class compiler_needs_stdlib_c(LintCheck):
+    """The recipe requests a compiler in the build section, but does not have stdlib.
+
+    Please add the ``{{ stdlib('c') }}`` line to the
+    ``requirements: build:`` section.
+    """
+
+    def check_deps(self, deps):
+        compiler = False
+        stdlib = False
+        for dep, locations in deps.items():
+            if dep.startswith("compiler_") and any(["build" in location for location in locations]):
+                compiler = True
+            if dep == "stdlib_c" and any(["build" in location for location in locations]):
+                stdlib = True
+        if compiler and not stdlib:
+            self.message(section="requirements/build")
+
 
 class uses_setuptools(LintCheck):
     """The recipe uses setuptools in run depends
