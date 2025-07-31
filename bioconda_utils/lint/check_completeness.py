@@ -81,6 +81,11 @@ class missing_tests(LintCheck):
     and/or any file named ``run_test.py`, ``run_test.sh`` or
     ``run_test.pl`` executing tests.
 
+    You can either add the test section on the top level of
+    your meta.yaml file; or if you use an ``outputs:`` section
+    to specify multiple outputs, add a test to each of your
+    ``outputs:`` entries.
+
     """
     test_files = ['run_test.py', 'run_test.sh', 'run_test.pl']
 
@@ -88,9 +93,18 @@ class missing_tests(LintCheck):
         if any(os.path.exists(os.path.join(recipe.dir, f))
                for f in self.test_files):
             return
+        # if multiple `outputs:` are specified, we have to go
+        # through one level of the resulting list at a time and
+        # check that all of them have a test specified
+        if recipe.get('outputs', ''):
+            if all(t.get('commands', '') or t.get('imports', '')
+                   for t in [
+                       p.get('test', '') for p in recipe.get('outputs')
+                   ]):
+                return
         if recipe.get('test/commands', '') or recipe.get('test/imports', ''):
             return
-        if recipe.get('test', False) is not False:
+        if recipe.get('test', ''):
             self.message(section='test')
         else:
             self.message()
