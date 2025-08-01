@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.8.0](https://github.com/bioconda/bioconda-utils/compare/v3.7.2...v3.8.0) (2025-08-01)
+
+
+### Features
+
+* replace deprecated find_packages with find_namespace_packages ([#1055](https://github.com/bioconda/bioconda-utils/issues/1055)) ([2ba618a](https://github.com/bioconda/bioconda-utils/commit/2ba618a41b8f2f6597c4802a49aa8c3999239fb0))
+* Update dependencies to latest versions ([#1054](https://github.com/bioconda/bioconda-utils/issues/1054)) ([c6698e3](https://github.com/bioconda/bioconda-utils/commit/c6698e3b31439cea12fd477bbf800d62f0c48501))
+
+
+### Bug Fixes
+
+* handle recipes with an empty extra section ([#1050](https://github.com/bioconda/bioconda-utils/issues/1050)) ([d6b01ec](https://github.com/bioconda/bioconda-utils/commit/d6b01ecdbdea32a6e3f21d5127500ad72d4797ab))
+* keep existing patches during bioconductor updates ([#1041](https://github.com/bioconda/bioconda-utils/issues/1041)) ([2d97074](https://github.com/bioconda/bioconda-utils/commit/2d97074e08e63504bfa88e2a79fa77c34aeb22bb))
+
 ### [3.7.2](https://www.github.com/bioconda/bioconda-utils/compare/v3.7.1...v3.7.2) (2025-03-20)
 
 
