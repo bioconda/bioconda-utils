@@ -64,7 +64,7 @@ import conda_build.config
 from conda.exports import MatchSpec, VersionOrder
 import conda.exceptions
 
-from pkg_resources import parse_version
+from packaging.version import parse as _pep440_parse, InvalidVersion
 
 from . import __version__
 from . import utils
@@ -78,11 +78,28 @@ from .aiopipe import AsyncFilter, AsyncPipeline, AsyncRequests, EndProcessingIte
 from .githandler import GitHandler
 from .githubhandler import GitHubHandler
 
-# pkg_resources.parse_version returns a Version or LegacyVersion object
-# as defined in packaging.version. Since it's bundling it's own copy of
-# packaging, the class it returns is not the same as the one we can import.
-# So we cheat by having it create a LegacyVersion delibarately.
-LegacyVersion = parse_version("1.1").__class__  # pylint: disable=invalid-name
+def _parse_or_legacy(s: str):
+    """
+    Attempt to parse a version string as a PEP 440-compliant Version.
+
+    Returns
+    -------
+    tuple
+        (parsed_version, is_legacy)
+        - parsed_version : packaging.version.Version instance if parseable,
+          otherwise the original string for legacy (non-PEP 440) versions.
+        - is_legacy : bool indicating whether the string is a legacy version.
+
+    Notes
+    -----
+    This replaces the deprecated ``pkg_resources.parse_version`` + LegacyVersion
+    check. ``is_legacy`` allows downstream logic to gate acceptance of
+    unparseable versions.
+    """
+    try:
+        return _pep440_parse(s), False   # Version, not legacy
+    except InvalidVersion:
+        return s, True                   # raw string, legacy
 
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -680,21 +697,22 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
           defined by parse_version)
 
         - may only be "Legacy" (=strange) if current is Legacy (as
-          defined by parse_version)
+          identified by PEP 440 parsing)
         """
-        current_version = parse_version(current)
-        current_is_legacy = isinstance(current_version, LegacyVersion)
+        current_version, current_is_legacy = _parse_or_legacy(current)
         latest_vo = VersionOrder(current)
         latest = current
         for vers in versions:
             if "-" in vers:  # ignore versions with local (FIXME)
                 continue
-            vers_version = parse_version(vers)
+            vers_version, vers_is_legacy = _parse_or_legacy(vers)
             # allow prerelease only if current is prerelease
-            if vers_version.is_prerelease and not current_version.is_prerelease:
+            if (
+                getattr(vers_version, "is_prerelease", False)
+                and not getattr(current_version, "is_prerelease", False)
+            ):
                 continue
             # allow legacy only if current is legacy
-            vers_is_legacy = isinstance(vers_version, LegacyVersion)
             if vers_is_legacy and not current_is_legacy:
                 continue
             # using conda version order here as that's what will be
