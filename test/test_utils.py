@@ -22,6 +22,7 @@ from bioconda_utils import pkg_test
 from bioconda_utils import docker_utils
 from bioconda_utils import build
 from bioconda_utils import upload
+from bioconda_utils.utils import validate_config
 from helpers import ensure_missing, Recipes
 
 
@@ -1333,3 +1334,16 @@ def test_pkg_test_conda_package_format(
             assert pkg_file.endswith({"1": ".tar.bz2", "2": ".conda"}[pkg_format])
             assert os.path.exists(pkg_file)
             ensure_missing(pkg_file)
+
+
+def test_validate_config_smoke():
+    """Minimal config that satisfies schema types should validate without error."""
+    cfg = {
+        "channels": ["conda-forge", "bioconda"],
+        "docker_image": "quay.io/bioconda/bioconda-utils",
+        "upload_channel": "bioconda",
+        "conda_build_version": "3.28.4",
+        "blacklists": [],
+    }
+    # Should not raise
+    validate_config(cfg)
