@@ -20,7 +20,7 @@ tqdm=4.67.*                   # Progress monitor
 yaspin=3.*                    #
 ruamel.yaml=0.18.*            # Recipe YAML parsing
 pyaml=25.7.*                  # Faster YAML parser (deprecate?)
-networkx=3.4.*                # (networkx>3.3 needs python>=3.10)
+networkx=3.5.*                # (networkx>3.3 needs python>=3.10)
 pandas=2.3.*                  #
 libblas=*=*openblas           # Avoid large mkl package (pulled in by pandas)
 boltons=25.0.*                #
@@ -35,7 +35,7 @@ findutils                     # find/xargs copy built packages from container
 git=2.*                       # well - git
 
 # hosters - special regex not supported by RE
-regex=2024.*                  #
+regex=2025.*                  #
 
 # asyncio
 aiohttp>=3.12.14              # HTTP lib; pinning to reflect dependabot alert
