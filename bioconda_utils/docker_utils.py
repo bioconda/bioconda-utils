@@ -59,7 +59,6 @@ from distutils.version import LooseVersion
 
 import conda
 import conda_build
-from conda_build.config import CondaPkgFormat
 
 from conda import exports as conda_exports
 
