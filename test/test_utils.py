@@ -627,7 +627,7 @@ def test_built_package_paths():
 
     assert os.path.basename(
         utils.built_package_paths(r.recipe_dirs['one'])[0]
-    ) == 'one-0.1-py36{}_0.tar.bz2'.format(h)
+    ) == 'one-0.1-py36{}_0.conda'.format(h)
 
 
 def test_string_or_float_to_integer_python():
@@ -1316,9 +1316,18 @@ def test_pkg_test_conda_package_format(
     r.write_recipes()
     docker_builder = None
     if mulled_test:
+        # Override conda_build.pkg_format in build_script_template.
+        build_script_template = re.sub(
+            "^(conda config.*)",
+            f"conda config --set conda_build.pkg_format {pkg_format}\n\\1",
+            docker_utils.BUILD_SCRIPT_TEMPLATE,
+            count=1,
+            flags=re.M,
+        )
         docker_builder = docker_utils.RecipeBuilder(
             use_host_conda_bld=True,
             docker_base_image=DOCKER_BASE_IMAGE,
+            build_script_template=build_script_template,
         )
     build_result = build.build_recipes(
         r.basedir,

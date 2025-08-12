@@ -106,7 +106,7 @@ conda config --add channels file://{self.container_staging} 2> >(
 )
 
 # Pass on conda_pkg_format ("2" for .conda instead of .tar.bz2) from host's conda-build config.
-test -n '{self.conda_pkg_format}' && conda config --set conda_build.pkg_format '{self.conda_pkg_format}'
+#test -n '{self.conda_pkg_format}' && conda config --set conda_build.pkg_format '{self.conda_pkg_format}'
 
 # The actual building...
 # we explicitly point to the meta.yaml, in order to keep
