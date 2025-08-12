@@ -4,5 +4,3 @@
 channels:
     - conda-forge
     - bioconda
-conda_build:
-    pkg_format: '2'
