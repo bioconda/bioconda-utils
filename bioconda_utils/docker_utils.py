@@ -59,7 +59,6 @@ from distutils.version import LooseVersion
 
 import conda
 import conda_build
-from conda_build.config import CondaPkgFormat
 
 from conda import exports as conda_exports
 
@@ -278,7 +277,7 @@ class RecipeBuilder(object):
         self.container_recipe = container_recipe
         self.container_staging = container_staging
 
-        conda_build_config = conda_build.utils.load_conda_build_config()
+        conda_build_config = utils.load_conda_build_config()
         # Identify conda-bld directory on the host.
         self.host_conda_bld = conda_build_config.croot
         # Pass on config to choose wheter to build .tar.bz2 or .conda format.
