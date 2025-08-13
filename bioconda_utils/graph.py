@@ -57,10 +57,15 @@ def build(recipes, config: Dict[str, Any], blacklist: Optional[Skiplist]=None, r
     # names to map to the same recipe, if the package name somehow depends on
     # the environment.
     name2recipe = defaultdict(set)
+    subpackage2parent = dict()
     for meta, recipe in metadata:
         name = meta["package"]["name"]
         if blacklist is None or not blacklist.is_skiplisted(recipe):
             name2recipe[name].update([recipe])
+        if "outputs" in meta:
+            for output in meta["outputs"]:
+                subpackage2parent[output["name"]] = name
+
 
     def get_deps(meta, sec):
         reqs = meta.get("requirements")
@@ -76,6 +81,10 @@ def build(recipes, config: Dict[str, Any], blacklist: Optional[Skiplist]=None, r
         for dep in dependencies:
             if dep in name2recipe or not restrict:
                 yield dep
+            else:
+                parentdep = subpackage2parent.get(dep)
+                if parentdep is not None:
+                    yield parentdep
 
     dag = nx.DiGraph()
     dag.add_nodes_from(meta["package"]["name"]
