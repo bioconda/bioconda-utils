@@ -139,13 +139,23 @@ def recipe_dir(recipes_folder: py.path.local, tmpdir: py.path.local,
         for remove in utils.ensure_list(case['remove']):
             path = remove.split('/')
             cont = recipe
+            select_by_name = False
             for p in path[:-1]:
-                cont = cont[p]
+                if select_by_name:
+                    for subpackage in cont:
+                        if subpackage['name'] == p:
+                            cont = subpackage
+                    select_by_name = False
+                else:
+                    cont = cont.get(p, {})
+                    if p == "outputs":
+                        select_by_name = True
             if isinstance(cont, list):
                 for n in range(len(cont)):
                     del cont[n][path[-1]]
             else:
-                del cont[path[-1]]
+                if cont.get(path[-1], ""):
+                    del cont[path[-1]]
     if 'add' in case:
         dict_merge(recipe, case['add'])
 
