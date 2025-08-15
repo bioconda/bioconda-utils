@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.9.1](https://github.com/bioconda/bioconda-utils/compare/v3.9.0...v3.9.1) (2025-08-13)
+
+
+### Bug Fixes
+
+* wrong jinja function definitions ([#1063](https://github.com/bioconda/bioconda-utils/issues/1063)) ([b94aa79](https://github.com/bioconda/bioconda-utils/commit/b94aa7938b3088babe7309d6ec2b8a6e0157331d))
+
 ## [3.9.0](https://github.com/bioconda/bioconda-utils/compare/v3.8.0...v3.9.0) (2025-08-12)
 
 
