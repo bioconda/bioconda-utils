@@ -53,7 +53,7 @@ import tempfile
 import pwd
 import grp
 from textwrap import dedent
-import pkg_resources
+from importlib.resources import files, as_file
 import re
 from distutils.version import LooseVersion
 
@@ -341,10 +341,10 @@ class RecipeBuilder(object):
             if self.requirements:
                 fout.write(open(self.requirements).read())
             else:
-                fout.write(open(pkg_resources.resource_filename(
-                    'bioconda_utils',
-                    'bioconda_utils-requirements.txt')
-                ).read())
+                # pkg_resources (deprecated) is replaced with importlib.resources
+                with as_file(files('bioconda_utils') / 'bioconda_utils-requirements.txt') as req_path:
+                    with open(req_path, 'r', encoding='utf-8') as fh:
+                        fout.write(fh.read())
 
         proxies = "\n".join("ENV {} {}".format(k, v)
                             for k, v in self._find_proxy_settings())

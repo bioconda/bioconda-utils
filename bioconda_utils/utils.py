@@ -40,7 +40,7 @@ import diskcache
 
 from github import Github
 
-import pkg_resources
+from importlib.resources import files, as_file
 import pandas as pd
 import tqdm as _tqdm
 import aiohttp
@@ -1170,10 +1170,13 @@ def validate_config(config):
     """
     if not isinstance(config, dict):
         config = yaml.safe_load(open(config))
-    fn = pkg_resources.resource_filename(
-        'bioconda_utils', 'config.schema.yaml'
-    )
-    schema = yaml.safe_load(open(fn))
+
+    # Load packaged schema without pkg_resources (deprecated)
+    # files('bioconda_utils') returns a Traversable to the package contents
+    with as_file(files('bioconda_utils') / 'config.schema.yaml') as schema_path:
+        with open(schema_path, 'r', encoding='utf-8') as fh:
+            schema = yaml.safe_load(fh)
+
     validate(config, schema)
 
 
@@ -1650,7 +1653,7 @@ def extract_stable_version(version):
 
 
 def yaml_remove_invalid_chars(text: str, valid_chars_re=re.compile(r"[^ \t\n\w\d:\{\}\[\]\(\);&|\$§\"'\?\!%#\\~*\.,-\^°]+")) -> str:
-    """Remove chars that are invalid in yaml literal strings. 
+    """Remove chars that are invalid in yaml literal strings.
 
     E.g. we do not want them to contain carriage return chars or delete chars.
     """
