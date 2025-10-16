@@ -464,16 +464,22 @@ class BiocondaRepoMixin(GitHandlerBase):
         cur_blacklist = self.get_blacklisted(ref)
         return orig_blacklist.difference(cur_blacklist)
 
-    def get_recipes_to_build(self, ref=None, other=None):
+    def get_recipes_to_build(self, ref=None, other=None, files=None):
         """Returns `list` of recipes to build for merge of **ref** into **other**
 
         This includes all recipes returned by `get_changed_recipes` and
         all newly unblacklisted, extant recipes within `recipes_folder`
 
+        Args:
+          ref: Branch or commit or reference, defaults to current branch
+          other: Same as **ref**, defaults to ``origin/master``
+          files: List of files to consider. Defaults to ``meta.yaml``
+                 and ``build.sh``
+
         Returns:
           `list` of recipes that should be built
         """
-        tobuild = set(self.get_changed_recipes(ref, other))
+        tobuild = set(self.get_changed_recipes(ref, other, files))
         tobuild.update([recipe
                         for recipe in self.get_unblacklisted(ref, other)
                         if recipe.startswith(self.recipes_folder)
