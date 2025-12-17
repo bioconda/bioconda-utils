@@ -1,5 +1,33 @@
 # Changelog
 
+## [3.9.1](https://github.com/bioconda/bioconda-utils/compare/v3.9.0...v3.9.1) (2025-08-13)
+
+
+### Bug Fixes
+
+* wrong jinja function definitions ([#1063](https://github.com/bioconda/bioconda-utils/issues/1063)) ([b94aa79](https://github.com/bioconda/bioconda-utils/commit/b94aa7938b3088babe7309d6ec2b8a6e0157331d))
+
+## [3.9.0](https://github.com/bioconda/bioconda-utils/compare/v3.8.0...v3.9.0) (2025-08-12)
+
+
+### Features
+
+* Bump deps 8-10-2025 ([#1059](https://github.com/bioconda/bioconda-utils/issues/1059)) ([7a8754f](https://github.com/bioconda/bioconda-utils/commit/7a8754fc178488cf5d04b40a943dd92d71f0dd33))
+
+## [3.8.0](https://github.com/bioconda/bioconda-utils/compare/v3.7.2...v3.8.0) (2025-08-01)
+
+
+### Features
+
+* replace deprecated find_packages with find_namespace_packages ([#1055](https://github.com/bioconda/bioconda-utils/issues/1055)) ([2ba618a](https://github.com/bioconda/bioconda-utils/commit/2ba618a41b8f2f6597c4802a49aa8c3999239fb0))
+* Update dependencies to latest versions ([#1054](https://github.com/bioconda/bioconda-utils/issues/1054)) ([c6698e3](https://github.com/bioconda/bioconda-utils/commit/c6698e3b31439cea12fd477bbf800d62f0c48501))
+
+
+### Bug Fixes
+
+* handle recipes with an empty extra section ([#1050](https://github.com/bioconda/bioconda-utils/issues/1050)) ([d6b01ec](https://github.com/bioconda/bioconda-utils/commit/d6b01ecdbdea32a6e3f21d5127500ad72d4797ab))
+* keep existing patches during bioconductor updates ([#1041](https://github.com/bioconda/bioconda-utils/issues/1041)) ([2d97074](https://github.com/bioconda/bioconda-utils/commit/2d97074e08e63504bfa88e2a79fa77c34aeb22bb))
+
 ### [3.7.2](https://www.github.com/bioconda/bioconda-utils/compare/v3.7.1...v3.7.2) (2025-03-20)
 
 
