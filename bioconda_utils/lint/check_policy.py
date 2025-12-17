@@ -129,6 +129,9 @@ class outputs_name_same_as_package_name(LintCheck):
     If multiple outputs are specified, their names must be different from the
     main package name.
 
+    This enforces accepted CEP 0014: https://conda.org/learn/ceps/cep-0014/#outputs-section
+    And it prevents hard to debug issues: https://github.com/conda/conda-build/pull/5767
+
     """
     def check_recipe(self, recipe):
         if recipe.get('outputs', ''):
