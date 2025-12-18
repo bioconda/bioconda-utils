@@ -424,7 +424,14 @@ tests:
     add: { package: { version: 0.0.1 } }
   - name: outputs_name_same_as_package_name
     expect: outputs_name_same_as_package_name
-    add: { outputs: [{ name: "meta_package" }] }
+    add:
+      outputs:
+       - name: "meta_package"
+       - name: "one"
+       - name: "two"
+      extra:
+        skip-lints:
+          - missing_tests
   - name: version_starts_with_v
     expect: version_starts_with_v
     add: { package: { version: "v0.1" } }

@@ -123,6 +123,7 @@ class cran_packages_to_conda_forge(LintCheck):
                    for dep in deps):
                    self.message()
 
+
 class outputs_name_same_as_package_name(LintCheck):
     """Output names must differ from main package name
     
@@ -134,9 +135,13 @@ class outputs_name_same_as_package_name(LintCheck):
 
     """
     def check_recipe(self, recipe):
-        if recipe.get('outputs', ''):
-            if recipe in recipe.get('outputs', ''):
-                self.message()
+        name = recipe.get('package', {}).get('name', '')
+        outputs = recipe.get('outputs', '')
+        if outputs:
+            for o in outputs:
+                if o.get('name', '') == name:
+                    self.message()
+
 
 class version_starts_with_v(LintCheck):
     """The version string should not start with a "v" character
