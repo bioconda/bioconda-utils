@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.9.2](https://github.com/bioconda/bioconda-utils/compare/v3.9.1...v3.9.2) (2026-01-09)
+
+
+### Bug Fixes
+
+* remove deprecated pkg_resources usage ahead of planned removal in Setuptools ≥81 ([#1058](https://github.com/bioconda/bioconda-utils/issues/1058)) ([0ef2df1](https://github.com/bioconda/bioconda-utils/commit/0ef2df1a5395e0111446fe79b9e1efdd5d67a7af))
+* unexpected arg 'label' ([#1065](https://github.com/bioconda/bioconda-utils/issues/1065)) ([16f2ab9](https://github.com/bioconda/bioconda-utils/commit/16f2ab9b48b8337647e4e4acfc6263c0592dd4b4))
+
 ## [3.9.1](https://github.com/bioconda/bioconda-utils/compare/v3.9.0...v3.9.1) (2025-08-13)
 
 

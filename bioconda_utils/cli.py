@@ -556,7 +556,6 @@ def handle_merged_pr(
             anaconda_upload=not dryrun,
             mulled_upload_target=quay_upload_target if not dryrun else None,
             mulled_test=True,
-            label=label,
         )
     else:
         success = res != UploadResult.FAILURE

@@ -66,9 +66,9 @@ class compilers_must_be_in_build(LintCheck):
 class uses_setuptools(LintCheck):
     """The recipe uses setuptools in run depends
 
-    Most Python packages only need setuptools during installation.
-    Check if the package really needs setuptools (e.g. because it uses
-    pkg_resources or setuptools console scripts).
+    Most Python packages only need setuptools during installation. Check if the
+    package really needs setuptools (e.g. because it uses pkg_resources
+    (deprecated; slated for removal) or setuptools console scripts).
 
     """
 
