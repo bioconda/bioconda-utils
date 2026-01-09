@@ -52,6 +52,56 @@ setup:
           license: BSD
           home: https://elsewhere
           summary: the_summary
+    meta:
+      folder: meta_package
+      meta.yaml:
+        package:
+          name: meta_package
+          version: 0.1
+        source:
+          - url: https://somewhere
+            sha256: 123
+          - url: https://elsewhere
+            sha256: abc
+        build:
+          noarch: True
+          number: 0
+          run_exports:
+            # add a run export
+            # (note that jinja templating as in reality is not
+            # supported by our test system to the same
+            # extend as in conda build)
+            - "{{ pin_subpackage('meta_package') }}"
+        outputs:
+          - name: meta_one
+            build:
+              noarch: True
+              run_exports:
+                # add a run export
+                # (note that jinja templating as in reality is not
+                # supported by our test system to the same
+                # extend as in conda build)
+                - "{{ pin_subpackage('meta_one') }}"
+            test:
+              commands:
+                - do nothing
+          - name: meta_two
+            build:
+              noarch: True
+              number: 0
+              run_exports:
+                # add a run export
+                # (note that jinja templating as in reality is not
+                # supported by our test system to the same
+                # extend as in conda build)
+                - "{{ pin_subpackage('meta_two') }}"
+            test:
+              imports:
+                - no imports to see here
+        about:
+          license: MIT
+          home: https://elsewhere
+          summary: another_summary
   repodata:
     bioconda:
       one:
@@ -59,6 +109,8 @@ setup:
       two:
         - version: 0.0.1
       four:
+        - version: 0.0.1
+      meta_package:
         - version: 0.0.1
     conda-forge:
       three:
@@ -123,11 +175,14 @@ tests:
     add: { about: { license: "" } }
     expect: missing_license
   - name: missing_tests
-    remove: test
+    remove:
+      - test
+      - outputs/meta_one/test
     expect: missing_tests
   - name: missing_tests_empty_section
     remove:
       - test/commands
+      - outputs/meta_two/test/imports
     expect: missing_tests
   - name: missing_tests_but_runtest_py
     remove: test
@@ -142,7 +197,10 @@ tests:
     add_files:
       run_test.pl: ""
   - name: missing_tests_but_runtst_sh
-    remove: test
+    remove:
+      - test
+      - outputs/meta_one/test
+      - outputs/meta_two/test
     add_files:
       run_tst.sh: ""
     expect: missing_tests
@@ -364,12 +422,22 @@ tests:
   - name: build_number_needs_bump
     expect: build_number_needs_bump
     add: { package: { version: 0.0.1 } }
+  - name: outputs_name_same_as_package_name
+    expect: outputs_name_same_as_package_name
+    add:
+      outputs:
+       - name: "meta_package"
+       - name: "one"
+       - name: "two"
+      extra:
+        skip-lints:
+          - missing_tests
   - name: version_starts_with_v
     expect: version_starts_with_v
     add: { package: { version: "v0.1" } }
   - name: in_other_channels
     expect: in_other_channels
-    repodata: { conda-forge: { one: [{ version: 0.1 }], two: [version: 0.1] } }
+    repodata: { conda-forge: { one: [{ version: 0.1 }], two: [version: 0.1], meta_package: [version: 0.1] } }
   - name: long_summary
     expect: long_summary
     add:
@@ -383,6 +451,7 @@ tests:
       blacklist: |
         recipes/one
         recipes/two
+        recipes/meta_package
     config:
       blacklists:
         - blacklist

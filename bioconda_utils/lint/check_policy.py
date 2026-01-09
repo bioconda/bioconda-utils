@@ -124,6 +124,25 @@ class cran_packages_to_conda_forge(LintCheck):
                    self.message()
 
 
+class outputs_name_same_as_package_name(LintCheck):
+    """Output names must differ from main package name
+    
+    If multiple outputs are specified, their names must be different from the
+    main package name.
+
+    This enforces accepted CEP 0014: https://conda.org/learn/ceps/cep-0014/#outputs-section
+    And it prevents hard to debug issues: https://github.com/conda/conda-build/pull/5767
+
+    """
+    def check_recipe(self, recipe):
+        name = recipe.get('package', {}).get('name', '')
+        outputs = recipe.get('outputs', '')
+        if outputs:
+            for o in outputs:
+                if o.get('name', '') == name:
+                    self.message()
+
+
 class version_starts_with_v(LintCheck):
     """The version string should not start with a "v" character
 
