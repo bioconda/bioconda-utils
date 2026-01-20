@@ -139,7 +139,7 @@ def recipe_folder_and_config(allow_missing_for=None):
     return decorator
 
 
-def get_recipes_to_build(git_range: Tuple[str], recipe_folder: str) -> List[str]:
+def get_recipes_to_build(git_range: Tuple[str], recipe_folder: str, files: List[str] = None) -> List[str]:
     """Gets list of modified recipes according to git_range and blacklist
 
     See `BiocondaRepoMixin.get_recipes_to_build()`.
@@ -147,6 +147,9 @@ def get_recipes_to_build(git_range: Tuple[str], recipe_folder: str) -> List[str]
     Arguments:
       git_range: one or two-tuple containing "from" and "to" git refs,
                  with "to" defaulting to "HEAD"
+      recipe_folder: Top-level dir of the recipes
+      files: List of files to consider. Defaults to ``meta.yaml``
+                and ``build.sh``
     Returns:
       List of recipes for which meta.yaml or build.sh was modified or
       which were unblacklisted.
@@ -156,10 +159,10 @@ def get_recipes_to_build(git_range: Tuple[str], recipe_folder: str) -> List[str]
     other = git_range[0]
     ref = "HEAD" if len(git_range) == 1 else git_range[1]
     repo = BiocondaRepo(recipe_folder)
-    return repo.get_recipes_to_build(ref, other)
+    return repo.get_recipes_to_build(ref, other, files)
 
 
-def get_recipes(config, recipe_folder, packages, git_range, include_blacklisted=False) -> List[str]:
+def get_recipes(config, recipe_folder, packages, git_range, include_blacklisted=False, files=None) -> List[str]:
     """Gets list of paths to recipe folders to be built
 
     Considers all recipes matching globs in packages, constrains to
@@ -172,7 +175,7 @@ def get_recipes(config, recipe_folder, packages, git_range, include_blacklisted=
                 len(recipes), utils.ellipsize_recipes(recipes, recipe_folder))
 
     if git_range:
-        changed_recipes = get_recipes_to_build(git_range, recipe_folder)
+        changed_recipes = get_recipes_to_build(git_range, recipe_folder, files)
         logger.info("Constraining to %s git modified recipes%s.", len(changed_recipes),
                     utils.ellipsize_recipes(changed_recipes, recipe_folder))
         recipes = [recipe for recipe in recipes if recipe in set(changed_recipes)]
@@ -349,7 +352,7 @@ def do_lint(recipe_folder, config, packages="*", cache=None, list_checks=False,
     if cache is not None:
         utils.RepoData().set_cache(cache)
 
-    recipes = get_recipes(config, recipe_folder, packages, git_range, include_blacklisted=True)
+    recipes = get_recipes(config, recipe_folder, packages, git_range, include_blacklisted=True, files=["meta.yaml", "meta.yml", "build.sh"])
     linter = lint.Linter(config, recipe_folder, exclude)
     result = linter.lint(recipes, fix=try_fix)
     messages = linter.get_messages()
