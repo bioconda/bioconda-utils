@@ -152,7 +152,7 @@ class cython_needs_compiler(LintCheck):
 
 
 class missing_run_exports(LintCheck):
-    """Recipe should have a run_exports statement that ensures correct pinning in downstream packages
+    """Recipe should have a run_exports statement for each package, ensuring correct pinning in downstream packages
 
     This ensures that the package is automatically pinned to a compatible version if
     it is used as a dependency in another recipe.
@@ -162,6 +162,15 @@ class missing_run_exports(LintCheck):
     This holds for compiled packages (in particular those with shared
     libraries) but also for e.g. Python packages, as those might also
     introduce breaking changes in their APIs or command line interfaces.
+
+    A ``run_exports:`` specification should be specified in the relevant
+    ``build:`` section for all packages that are built. This means either:
+    (i) in the main ``build`` section, if only one package is built from this
+        recipe, or:
+    (ii) in each outputs' ``build:`` section, if multiple ``outputs:`` are
+        specified. In this case, the main recipe ``build:`` section does not
+        refer to a package that is being built, but only to the recipe, so a
+        ``run_exports:`` section for it does not make sense.
 
     We distinguish between four cases.
 
