@@ -81,7 +81,6 @@ setup:
           - name: meta_two
             build:
               noarch: True
-              number: 0
               run_exports:
                 # add a run export
                 # (note that jinja templating as in reality is not
