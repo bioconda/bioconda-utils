@@ -121,7 +121,9 @@ tests:
       meta.yaml: meta.yml
     expect: missing_meta_yaml
   - name: empty_build_section
-    remove: build
+    remove:
+      - build
+      - outputs/*/build
     expect:
       [should_be_noarch_generic, missing_build_number, missing_run_exports]
   - name: missing_home
