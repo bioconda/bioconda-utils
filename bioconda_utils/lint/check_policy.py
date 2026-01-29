@@ -143,6 +143,22 @@ class outputs_name_same_as_package_name(LintCheck):
                     self.message()
 
 
+class no_top_level_requirements_with_outputs(LintCheck):
+    """When outputs: are specified, the top level recipe cannot define requirements
+    
+    If (multiple) ``outputs:`` are specified, the top level recipe should not
+    contain a ``requirements:`` section, as it should not be built.
+
+    This enforces accepted CEP 0014: https://conda.org/learn/ceps/cep-0014/#outputs-section
+
+    """
+    def check_recipe(self, recipe):
+        outputs = recipe.get('outputs', '')
+        top_level_requirements = recipe.get('requirements', '')
+        if outputs and top_level_requirements:
+            self.message()
+
+
 class version_starts_with_v(LintCheck):
     """The version string should not start with a "v" character
 
