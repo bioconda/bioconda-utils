@@ -52,12 +52,15 @@ class should_be_noarch_python(LintCheck):
 
 
 class should_be_noarch_generic(LintCheck):
-    """The recipe should be build as ``noarch``
+    """The package should be built as ``noarch``
 
     Please add::
 
         build:
           noarch: generic
+
+    to the top level for single-package recipes, or to the
+    respective outputs, if multiple ``outputs:`` are specified.
 
     Packages that don't require a compiler to build are normally
     architecture independent and go into the ``noarch`` subset of
@@ -66,14 +69,32 @@ class should_be_noarch_generic(LintCheck):
     """
     requires = ['should_be_noarch_python']
     def check_deps(self, deps):
-        if any(dep.startswith('compiler_') for dep in deps):
-            return  # not compiled
-        if self.recipe.get('build/noarch', None):
-            return  # already marked noarch
-        self.message(section='build', data=True)
+        outputs = self.recipe.get('outputs', dict())
+        if outputs:
+            # we have to do the lint per outputs: package
+            for i in range(len(outputs)):
+                build_section=f'outputs/{i}/build'
+                if self.recipe.get(f'{build_section}/noarch', None):
+                    continue  # already marked noarch
+                # filter down to dependencies for this outputs: package
+                output_deps = []
+                for dep in deps:
+                    if any(f"outputs/{i}" in d for d in deps[dep]):
+                        output_deps.append(dep)
+                if any(dep.startswith('compiler_') for dep in output_deps):
+                    continue  # not compiled
+                self.message(section=build_section, data=build_section)
+        else:
+            if any(dep.startswith('compiler_') for dep in deps):
+                return  # not compiled
+            build_section='build'
+            if self.recipe.get(f'{build_section}/noarch', None):
+                return  # already marked noarch
+            self.message(section=build_section, data=build_section)
 
-    def fix(self, _message, _data):
-        self.recipe.set('build/noarch', 'generic')
+
+    def fix(self, _message, data):
+        self.recipe.set(f'{data}/noarch', 'generic')
         return True
 
 
