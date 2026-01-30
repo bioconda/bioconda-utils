@@ -68,29 +68,13 @@ class should_be_noarch_generic(LintCheck):
 
     """
     requires = ['should_be_noarch_python']
-    def check_deps(self, deps):
-        outputs = self.recipe.get('outputs', dict())
-        if outputs:
-            # we have to do the lint per outputs: package
-            for i in range(len(outputs)):
-                build_section=f'outputs/{i}/build'
-                if self.recipe.get(f'{build_section}/noarch', None):
-                    continue  # already marked noarch
-                # filter down to dependencies for this outputs: package
-                output_deps = []
-                for dep in deps:
-                    if any(f"outputs/{i}" in d for d in deps[dep]):
-                        output_deps.append(dep)
-                if any(dep.startswith('compiler_') for dep in output_deps):
-                    continue  # not compiled
-                self.message(section=build_section, data=build_section)
-        else:
-            if any(dep.startswith('compiler_') for dep in deps):
-                return  # not compiled
-            build_section='build'
-            if self.recipe.get(f'{build_section}/noarch', None):
-                return  # already marked noarch
-            self.message(section=build_section, data=build_section)
+    def check_deps(self, deps, package_location):
+        build_section=f"{package_location}build"
+        if self.recipe.get(f'{build_section}/noarch', None):
+            return  # already marked noarch
+        if any(dep.startswith('compiler_') for dep in deps):
+            return  # not compiled
+        self.message(section=build_section, data=build_section)
 
 
     def fix(self, _message, data):
