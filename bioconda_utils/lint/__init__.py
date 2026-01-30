@@ -242,8 +242,20 @@ class LintCheck(metaclass=LintCheckMeta):
             for num, src in enumerate(source):
                 self.check_source(src, f'source/{num}')
 
-        # Run depends checks
-        self.check_deps(recipe.get_deps_dict())
+        # Run depends checks, per outputs: package if necessary
+        outputs = recipe.get("outputs", dict())
+        deps=recipe.get_deps_dict()
+        if outputs:
+            for i in range(len(outputs)):
+                output_location=f"outputs/{i}/"
+                # filter down to dependencies for this outputs: package
+                output_deps = dict()
+                for dep in deps:
+                    if any(output_location in d for d in deps[dep]):
+                        output_deps[dep] = deps[dep]
+                self.check_deps(output_deps, output_location)
+        else:
+            self.check_deps(deps, "")
 
         return self.messages
 
@@ -266,7 +278,7 @@ class LintCheck(metaclass=LintCheckMeta):
                    ``source/0`` (1,2,3...).
         """
 
-    def check_deps(self, deps: Dict[str, List[str]]) -> None:
+    def check_deps(self, deps: Dict[str, List[str]], package_location: str) -> None:
         """Execute check on recipe dependencies
 
         Example format for **deps**::
@@ -283,6 +295,12 @@ class LintCheck(metaclass=LintCheckMeta):
         Args:
           deps: Dictionary mapping requirements occurring in the recipe
                 to their locations within the recipe.
+          package_location: Path to the main location for the build and
+                            requirements sections. Empty string for the top
+                            level in single-package recipes, something like
+                            ``outputs/0/`` for recipes with packages specified
+                            in an outputs section.
+                            
         """
 
     def fix(self, message, data) -> LintMessage:
