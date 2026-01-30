@@ -456,6 +456,17 @@ class jinja_render_failure(LintCheck):
     """
 
 
+class skipping_recipe(LintCheck):
+    """skipping linting of this recipe as requested
+
+    As specified via ``extra: skip-recipes:``, this recipe is being
+    skipped during linting. This is meant for the linter test
+    suite.
+    """
+
+    severity: Severity = INFO
+
+
 class unknown_check(LintCheck):
     """Something went wrong inside the linter
 
@@ -613,6 +624,13 @@ class Linter:
             recipe = _recipe.Recipe(recipe_name, self.recipe_folder)
             check_cls = recipe_error_to_lint_check.get(exc.__class__, linter_failure)
             return [check_cls.make_message(recipe=recipe, line=getattr(exc, "line"))]
+
+        # collect recipes to skip
+        if isinstance(recipe.get('extra/skip-recipes', []), list):
+            if any(recipe_name.endswith(name) for name in recipe.get('extra/skip-recipes')):
+                return [skipping_recipe.make_message(
+                    recipe=recipe,
+                )]
 
         # collect checks to skip
         checks_to_skip = set(self.skip[recipe_name])
