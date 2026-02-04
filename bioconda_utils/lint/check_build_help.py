@@ -219,11 +219,11 @@ class missing_run_exports(LintCheck):
     """
 
     def check_recipe(self, recipe):
-        outputs = recipe.get('outputs', dict())
+        outputs = recipe.get("outputs", dict())
         if outputs:
-            build_sections = [ o.get("build", dict()) for o in outputs ]
+            build_sections = [o.get("build", dict()) for o in outputs]
         else:
-            build_sections =  [ recipe.meta.get("build", dict()) ]
+            build_sections = [recipe.meta.get("build", dict())]
         for build in build_sections:
             if "run_exports" not in build:
                 self.message()

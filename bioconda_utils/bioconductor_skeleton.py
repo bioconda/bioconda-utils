@@ -1,20 +1,19 @@
 """
 Conda Skeleton for Bioconductor Recipes
 """
+
 import shutil
 import tempfile
-import configparser
 from textwrap import dedent
 import tarfile
-import hashlib
 import os
+import sys
 import re
 from collections import OrderedDict
 import logging
 import json
 from datetime import date
 
-import bs4
 import pyaml
 import requests
 import yaml
@@ -22,11 +21,10 @@ import networkx as nx
 import itertools
 
 from . import utils
-from . import cran_skeleton
 
 logger = logging.getLogger(__name__)
 
-base_url = 'https://bioconductor.org/packages/'
+base_url = "https://bioconductor.org/packages/"
 
 # Packages that might be specified in the DESCRIPTION of a package as
 # dependencies, but since they're built-in we don't need to specify them in
@@ -36,88 +34,142 @@ base_url = 'https://bioconductor.org/packages/'
 #
 #   conda create -n rtest -c r r
 #   R -e "rownames(installed.packages())"
-BASE_R_PACKAGES = ["base", "compiler", "datasets", "graphics", "grDevices",
-                   "grid", "methods", "parallel", "splines", "stats", "stats4",
-                   "tcltk", "tools", "utils"]
+BASE_R_PACKAGES = [
+    "base",
+    "compiler",
+    "datasets",
+    "graphics",
+    "grDevices",
+    "grid",
+    "methods",
+    "parallel",
+    "splines",
+    "stats",
+    "stats4",
+    "tcltk",
+    "tools",
+    "utils",
+]
 
 # These CRAN packages directly or indirectly depend on X, requiring specialized
 # build and test-time requirements as well as the extended container.
 # These can be found here: https://github.com/search?p=2&q=cdt%28%27mesa-libgl-devel%27%29+user%3Aconda-forge+r-base&type=Code
 # and here: https://github.com/search?l=YAML&q=r-rgl+user%3Aconda-forge&type=Code
-CRAN_X_PACKAGES = set(["rgl", "tsdist", "tsclust", "plot3drgl", "pals", "longitudinaldata",
-                       "bpca", "bcrocsurface", "feature", "pca3d", "forestfloor", "oceanview",
-                       "clustersim", "hiver", "lidr", "mixomics", "snpls", "matlib", "qpcr"])
+CRAN_X_PACKAGES = set(
+    [
+        "rgl",
+        "tsdist",
+        "tsclust",
+        "plot3drgl",
+        "pals",
+        "longitudinaldata",
+        "bpca",
+        "bcrocsurface",
+        "feature",
+        "pca3d",
+        "forestfloor",
+        "oceanview",
+        "clustersim",
+        "hiver",
+        "lidr",
+        "mixomics",
+        "snpls",
+        "matlib",
+        "qpcr",
+    ]
+)
 
 # This maps items in a package's SystemRequirement to conda packages
 # There can be multiple resulting packages, all of which should then
 # be included in recipes
-SysReqs = {'and egrep are required for some functionalities': ['grep'],
-           'bowtie': ['bowtie2'],
-           'bowtie and samtools are required for some functionalities': ['bowtie2', 'samtools'],
-           'clustalo': ['clustalo'],
-           'cwltool (>= 1.0.2018)': ['cwltool >=1.0.2018'],
-           'Cytoscape (>= 3.3.0)': ['cytoscape >=3.3.0'],
-           'Cytoscape (>= 3.6.1) (if used for visualization of results': ['cytoscape >=3.6.1'],
-           'Cytoscape (>= 3.7.1)': ['cytoscape >=3.7.1'],
-           'Ensembl VEP (API version 96) and the Perl modules DBI and DBD::mysql must be installed. See the package README and Ensembl installation instructions: http://www.ensembl.org/info/docs/tools/vep/script/vep_download.html#installer': ['ensembl-vep', 'perl-dbd-mysql', 'perl-dbi'],
-           'GEOS (>= 3.2.0);for building from source: GEOS from http://trac.osgeo.org/geos/; GEOS OSX frameworks built by William Kyngesburye at http://www.kyngchaos.com/ may be used for source installs on OSX.': ['geos >=3.2.0'],
-           'GLPK (>= 4.42)': ['glpk >=4.42'],
-           'GNU Scientific Library >= 1.6 (http://www.gnu.org/software/gsl/)': ['gsl >=4.42'],
-           'graphviz': ['graphviz'],
-           'Graphviz version >= 2.2': ['graphviz >=2.2'],
-           'gs': ['ghostscript'],
-           'gsl': ['gsl'],
-           'GSL and OpenMP': ['gsl'],
-           'GSL (GNU Scientific Library)': ['gsl'],
-           'gsl. Note: users should have GSL installed. Windows users: \'consult the README file available in the inst directory of the source distribution for necessary configuration instructions\'.': ['gsl'],
-           'h5py': ['h5py'],
-           'HMMER3': ['hmmer >=3'],
-           'ImageMagick': ['imagemagick'],
-           'JAGS 4.x.y': ['jags 4.*.*'],
-           'Java': ['openjdk'],
-           'Java (>= 1.5)': ['openjdk'],
-           'Java (>= 1.6)': ['openjdk'],
-           'Java (>= 1.7)': ['openjdk'],
-           'Java (>= 1.8)': ['openjdk'],
-           'Java (>= 8)': ['openjdk'],
-           'Java Runtime Environment (>= 6)': ['openjdk'],
-           'Java version >= 1.6': ['openjdk'],
-           'Java version >= 1.7': ['openjdk'],
-           'jQuery': ['jquery'],
-           'jQueryUI': ['jquery-ui'],
-           'libsbml (==5.10.2)': ['libsbml 5.10.2'],
-           'libSBML (>= 5.5)': ['libsbml >=5.5'],
-           'libxml2': ['libxml2'],
-           'MAFFT (>= 7.305)': ['mafft >=7.305'],
-           'mofapy': ['mofapy'],
-           'Netpbm': ['netpbm'],
-           'nodejs': ['nodejs'],
-           'numpy': ['numpy'],
-           'OpenBabel': ['openbabel'],
-           'OpenBabel (>= 2.3.1) with headers (http://openbabel.org).': ['openbabel >=2.3.1'],
-           'pandas': ['pandas'],
-           'Pandoc': ['pandoc'],
-           'pandoc (>= 1.12.3)': ['pandoc >=1.12.3'],
-           'Pandoc (>= 1.12.3)': ['pandoc >=1.12.3'],
-           'pandoc (>= 1.19.2.1)': ['pandoc >=1.19.2.1'],
-           'pandoc (http://pandoc.org/installing.html) for generating reports from markdown files.': ['pandoc'],
-           'perl': ['perl >=5.6.0'],
-           'Perl': ['perl >=5.6.0'],
-           'Perl (>= 5.6.0)': ['perl >=5.6.0'],
-           'python (>= 2.7)': ['python >=2.7'],
-           'Python (>=2.7.0)': ['python >=2.7'],
-           'python (< 3.7)': ['python <3.7'],
-           'root_v5.34.36 <http://root.cern.ch> - See README file for installation instructions.': ['root5 5.34.36'],
-           'rTANDEM uses expat and pthread libraries. See the README file for details.': ['expat'],
-           'samtools': ['samtools'],
-           'scipy': ['scipiy'],
-           'sklearn': ['scikit-learn'],
-           'STAR': ['star'],
-           'tensorflow': ['tensorflow'],
-           'To generate html reports pandoc (http://pandoc.org/installing.html) is required.': ['pandoc'],
-           'TopHat': ['tophat2'],
-           'ViennaRNA (>= 2.4.1)': ['viennarna >=2.4.1'],
-           'xml2': ['libxml2']}
+SysReqs = {
+    "and egrep are required for some functionalities": ["grep"],
+    "bowtie": ["bowtie2"],
+    "bowtie and samtools are required for some functionalities": [
+        "bowtie2",
+        "samtools",
+    ],
+    "clustalo": ["clustalo"],
+    "cwltool (>= 1.0.2018)": ["cwltool >=1.0.2018"],
+    "Cytoscape (>= 3.3.0)": ["cytoscape >=3.3.0"],
+    "Cytoscape (>= 3.6.1) (if used for visualization of results": ["cytoscape >=3.6.1"],
+    "Cytoscape (>= 3.7.1)": ["cytoscape >=3.7.1"],
+    "Ensembl VEP (API version 96) and the Perl modules DBI and DBD::mysql must be installed. See the package README and Ensembl installation instructions: http://www.ensembl.org/info/docs/tools/vep/script/vep_download.html#installer": [
+        "ensembl-vep",
+        "perl-dbd-mysql",
+        "perl-dbi",
+    ],
+    "GEOS (>= 3.2.0);for building from source: GEOS from http://trac.osgeo.org/geos/; GEOS OSX frameworks built by William Kyngesburye at http://www.kyngchaos.com/ may be used for source installs on OSX.": [
+        "geos >=3.2.0"
+    ],
+    "GLPK (>= 4.42)": ["glpk >=4.42"],
+    "GNU Scientific Library >= 1.6 (http://www.gnu.org/software/gsl/)": ["gsl >=4.42"],
+    "graphviz": ["graphviz"],
+    "Graphviz version >= 2.2": ["graphviz >=2.2"],
+    "gs": ["ghostscript"],
+    "gsl": ["gsl"],
+    "GSL and OpenMP": ["gsl"],
+    "GSL (GNU Scientific Library)": ["gsl"],
+    "gsl. Note: users should have GSL installed. Windows users: 'consult the README file available in the inst directory of the source distribution for necessary configuration instructions'.": [
+        "gsl"
+    ],
+    "h5py": ["h5py"],
+    "HMMER3": ["hmmer >=3"],
+    "ImageMagick": ["imagemagick"],
+    "JAGS 4.x.y": ["jags 4.*.*"],
+    "Java": ["openjdk"],
+    "Java (>= 1.5)": ["openjdk"],
+    "Java (>= 1.6)": ["openjdk"],
+    "Java (>= 1.7)": ["openjdk"],
+    "Java (>= 1.8)": ["openjdk"],
+    "Java (>= 8)": ["openjdk"],
+    "Java Runtime Environment (>= 6)": ["openjdk"],
+    "Java version >= 1.6": ["openjdk"],
+    "Java version >= 1.7": ["openjdk"],
+    "jQuery": ["jquery"],
+    "jQueryUI": ["jquery-ui"],
+    "libsbml (==5.10.2)": ["libsbml 5.10.2"],
+    "libSBML (>= 5.5)": ["libsbml >=5.5"],
+    "libxml2": ["libxml2"],
+    "MAFFT (>= 7.305)": ["mafft >=7.305"],
+    "mofapy": ["mofapy"],
+    "Netpbm": ["netpbm"],
+    "nodejs": ["nodejs"],
+    "numpy": ["numpy"],
+    "OpenBabel": ["openbabel"],
+    "OpenBabel (>= 2.3.1) with headers (http://openbabel.org).": ["openbabel >=2.3.1"],
+    "pandas": ["pandas"],
+    "Pandoc": ["pandoc"],
+    "pandoc (>= 1.12.3)": ["pandoc >=1.12.3"],
+    "Pandoc (>= 1.12.3)": ["pandoc >=1.12.3"],
+    "pandoc (>= 1.19.2.1)": ["pandoc >=1.19.2.1"],
+    "pandoc (http://pandoc.org/installing.html) for generating reports from markdown files.": [
+        "pandoc"
+    ],
+    "perl": ["perl >=5.6.0"],
+    "Perl": ["perl >=5.6.0"],
+    "Perl (>= 5.6.0)": ["perl >=5.6.0"],
+    "python (>= 2.7)": ["python >=2.7"],
+    "Python (>=2.7.0)": ["python >=2.7"],
+    "python (< 3.7)": ["python <3.7"],
+    "root_v5.34.36 <http://root.cern.ch> - See README file for installation instructions.": [
+        "root5 5.34.36"
+    ],
+    "rTANDEM uses expat and pthread libraries. See the README file for details.": [
+        "expat"
+    ],
+    "samtools": ["samtools"],
+    "scipy": ["scipiy"],
+    "sklearn": ["scikit-learn"],
+    "STAR": ["star"],
+    "tensorflow": ["tensorflow"],
+    "To generate html reports pandoc (http://pandoc.org/installing.html) is required.": [
+        "pandoc"
+    ],
+    "TopHat": ["tophat2"],
+    "ViennaRNA (>= 2.4.1)": ["viennarna >=2.4.1"],
+    "xml2": ["libxml2"],
+}
 
 
 HERE = os.path.abspath(os.path.dirname(__file__))
@@ -141,7 +193,9 @@ def bioconductor_versions():
     bioc_config = yaml.safe_load(response.text)
     versions = list(bioc_config["r_ver_for_bioc_ver"].keys())
     # Handle semantic version sorting like 3.10 and 3.9
-    versions = sorted(versions, key=lambda v: list(map(int, v.split('.'))), reverse=True)
+    versions = sorted(
+        versions, key=lambda v: list(map(int, v.split("."))), reverse=True
+    )
     return versions
 
 
@@ -175,8 +229,8 @@ def bioconductor_tarball_url(package, pkg_version, bioc_version):
         Bioconductor release version
     """
     return (
-        'https://bioconductor.org/packages/{bioc_version}'
-        '/bioc/src/contrib/{package}_{pkg_version}.tar.gz'.format(**locals())
+        "https://bioconductor.org/packages/{bioc_version}"
+        "/bioc/src/contrib/{package}_{pkg_version}.tar.gz".format(**locals())
     )
 
 
@@ -199,8 +253,10 @@ def bioconductor_archive_tarball_url(package, pkg_version, bioc_version):
         Bioconductor release version
     """
     return (
-        'https://bioconductor.org/packages/{bioc_version}'
-        '/bioc/src/contrib/Archive/{package}/{package}_{pkg_version}.tar.gz'.format(**locals())
+        "https://bioconductor.org/packages/{bioc_version}"
+        "/bioc/src/contrib/Archive/{package}/{package}_{pkg_version}.tar.gz".format(
+            **locals()
+        )
     )
 
 
@@ -220,8 +276,8 @@ def bioconductor_annotation_data_url(package, pkg_version, bioc_version):
         Bioconductor release version
     """
     return (
-        'https://bioconductor.org/packages/{bioc_version}'
-        '/data/annotation/src/contrib/{package}_{pkg_version}.tar.gz'.format(**locals())
+        "https://bioconductor.org/packages/{bioc_version}"
+        "/data/annotation/src/contrib/{package}_{pkg_version}.tar.gz".format(**locals())
     )
 
 
@@ -241,8 +297,8 @@ def bioconductor_experiment_data_url(package, pkg_version, bioc_version):
         Bioconductor release version
     """
     return (
-        'https://bioconductor.org/packages/{bioc_version}'
-        '/data/experiment/src/contrib/{package}_{pkg_version}.tar.gz'.format(**locals())
+        "https://bioconductor.org/packages/{bioc_version}"
+        "/data/experiment/src/contrib/{package}_{pkg_version}.tar.gz".format(**locals())
     )
 
 
@@ -262,9 +318,8 @@ def bioarchive_url(package, pkg_version, bioc_version=None):
         Bioconductor release version. Not used;, only included for API
         compatibility with other url funcs
     """
-    return (
-        'https://bioarchive.galaxyproject.org/{0}_{1}.tar.gz'
-        .format(package, pkg_version)
+    return "https://bioarchive.galaxyproject.org/{0}_{1}.tar.gz".format(
+        package, pkg_version
     )
 
 
@@ -286,8 +341,8 @@ def cargoport_url(package, pkg_version, bioc_version=None):
     """
     package = package.lower()
     return (
-        'https://depot.galaxyproject.org/software/bioconductor-{0}/bioconductor-{0}_'
-        '{1}_src_all.tar.gz'.format(package, pkg_version)
+        "https://depot.galaxyproject.org/software/bioconductor-{0}/bioconductor-{0}_"
+        "{1}_src_all.tar.gz".format(package, pkg_version)
     )
 
 
@@ -310,7 +365,7 @@ def find_best_bioc_version(package, version):
     """
     for bioc_version in bioconductor_versions():
         for kind, func in zip(
-            ('package', 'data'),
+            ("package", "data"),
             (
                 bioconductor_tarball_url,
                 bioconductor_archive_tarball_url,
@@ -320,14 +375,18 @@ def find_best_bioc_version(package, version):
         ):
             url = func(package, version, bioc_version)
             if requests.head(url).status_code == 200:
-                logger.debug('success: %s', url)
+                logger.debug("success: %s", url)
                 logger.info(
-                    'A working URL for %s==%s was identified for Bioconductor version %s: %s',
-                    package, version, bioc_version, url)
+                    "A working URL for %s==%s was identified for Bioconductor version %s: %s",
+                    package,
+                    version,
+                    bioc_version,
+                    url,
+                )
                 found_version = bioc_version
                 return found_version
             else:
-                logger.debug('missing: %s', url)
+                logger.debug("missing: %s", url)
     raise PackageNotFoundError(
         "Cannot find any Bioconductor versions for {0}=={1}".format(package, version)
     )
@@ -348,9 +407,17 @@ def fetchPackages(bioc_version):
         }
     """
     d = dict()
-    packages_urls = [(os.path.join(base_url, bioc_version, 'bioc', 'VIEWS'), 'bioc'),
-                     (os.path.join(base_url, bioc_version, 'data', 'annotation', 'VIEWS'), 'data/annotation'),
-                     (os.path.join(base_url, bioc_version, 'data', 'experiment', 'VIEWS'), 'data/experiment')]
+    packages_urls = [
+        (os.path.join(base_url, bioc_version, "bioc", "VIEWS"), "bioc"),
+        (
+            os.path.join(base_url, bioc_version, "data", "annotation", "VIEWS"),
+            "data/annotation",
+        ),
+        (
+            os.path.join(base_url, bioc_version, "data", "experiment", "VIEWS"),
+            "data/experiment",
+        ),
+    ]
     for url, prefix in packages_urls:
         req = requests.get(url)
         if not req.ok:
@@ -361,13 +428,15 @@ def fetchPackages(bioc_version):
             for line in pkg.split("\n"):
                 if line.startswith(" "):
                     pkgDict[lastKey] += " {}".format(line.strip())
-                    pkgDict[lastKey] = pkgDict[lastKey].strip()  # Prevent prepending a space when content begins on the next line
+                    pkgDict[lastKey] = pkgDict[
+                        lastKey
+                    ].strip()  # Prevent prepending a space when content begins on the next line
                 elif ":" in line:
                     idx = line.index(":")
                     lastKey = line[:idx]
-                    pkgDict[lastKey] = line[idx + 2:].strip()
-            pkgDict['URLprefix'] = prefix.strip()
-            d[pkgDict['Package']] = pkgDict
+                    pkgDict[lastKey] = line[idx + 2 :].strip()
+            pkgDict["URLprefix"] = prefix.strip()
+            d[pkgDict["Package"]] = pkgDict
     return d
 
 
@@ -430,7 +499,9 @@ class BioCProjectPage(object):
             if not self._pkg_version:
                 self.bioc_version = latest_bioconductor_release_version()
             else:
-                self.bioc_version = find_best_bioc_version(self.package, self._pkg_version)
+                self.bioc_version = find_best_bioc_version(
+                    self.package, self._pkg_version
+                )
 
         # Fetch a list of all packages, so dependency versions can be calculated
         if not packages:
@@ -439,27 +510,35 @@ class BioCProjectPage(object):
             self.packages = packages
 
         if package not in self.packages:
-            raise PackageNotFoundError('{} does not exist in this bioconductor release!'.format(package))
+            raise PackageNotFoundError(
+                "{} does not exist in this bioconductor release!".format(package)
+            )
 
         if not pkg_version:
-            self.version = self.packages[package]['Version']
+            self.version = self.packages[package]["Version"]
         self.depends_on_gcc = False
 
         # Determine the URL
-        url = os.path.join(base_url, self.bioc_version, self.packages[package]['URLprefix'], 'html', package + '.html')
+        url = os.path.join(
+            base_url,
+            self.bioc_version,
+            self.packages[package]["URLprefix"],
+            "html",
+            package + ".html",
+        )
         request = requests.get(url)
 
         if not request:
             raise PageNotFoundError(
-                'Could not find HTML page for {0.package}. Tried: '
-                '{1}'.format(self, url))
+                "Could not find HTML page for {0.package}. Tried: {1}".format(self, url)
+            )
 
         # Since we provide the "short link" we will get redirected. Using
         # requests allows us to keep track of the final destination URL,
         # which we need for reconstructing the tarball URL.
         self.url = request.url
 
-        if self.packages[package]['URLprefix'] != 'bioc':
+        if self.packages[package]["URLprefix"] != "bioc":
             self.is_data_package = True
 
     @property
@@ -493,7 +572,8 @@ class BioCProjectPage(object):
                 return url
             else:
                 raise PageNotFoundError(
-                    "Unexpected error: {0.status_code} ({0.reason})".format(response))
+                    "Unexpected error: {0.status_code} ({0.reason})".format(response)
+                )
         except requests.exceptions.SSLError:
             pass
 
@@ -502,7 +582,12 @@ class BioCProjectPage(object):
         """
         Return the url to the tarball from the bioconductor site.
         """
-        url = os.path.join(base_url, self.bioc_version, self.packages[self.package]['URLprefix'], self.packages[self.package]['source.ver'])
+        url = os.path.join(
+            base_url,
+            self.bioc_version,
+            self.packages[self.package]["URLprefix"],
+            self.packages[self.package]["source.ver"],
+        )
         response = requests.head(url)
         if response.status_code == 200:
             return url
@@ -510,9 +595,11 @@ class BioCProjectPage(object):
     @property
     def tarball_url(self):
         if not self._tarball_url:
-            urls = [self.bioconductor_tarball_url,
-                    self.bioarchive_url,
-                    self.cargoport_url]
+            urls = [
+                self.bioconductor_tarball_url,
+                self.bioarchive_url,
+                self.cargoport_url,
+            ]
             for url in urls:
                 if url is not None:
                     response = requests.head(url)
@@ -521,9 +608,11 @@ class BioCProjectPage(object):
                         return url
 
             logger.error(
-                'No working URL for %s==%s in Bioconductor %s. '
-                'Tried the following:\n\t' + '\n\t'.join(urls),
-                self.package, self.version, self.bioc_version
+                "No working URL for %s==%s in Bioconductor %s. "
+                "Tried the following:\n\t" + "\n\t".join(urls),
+                self.package,
+                self.version,
+                self.bioc_version,
             )
 
             if self._auto:
@@ -531,7 +620,8 @@ class BioCProjectPage(object):
 
             if self._tarball_url is None:
                 raise ValueError(
-                    "No working URLs found for this version in any bioconductor version")
+                    "No working URLs found for this version in any bioconductor version"
+                )
         return self._tarball_url
 
     @property
@@ -549,7 +639,7 @@ class BioCProjectPage(object):
         """
         if self._cached_tarball:
             return self._cached_tarball
-        cache_dir = os.path.join(tempfile.gettempdir(), 'cached_bioconductor_tarballs')
+        cache_dir = os.path.join(tempfile.gettempdir(), "cached_bioconductor_tarballs")
         if not os.path.exists(cache_dir):
             os.makedirs(cache_dir)
         fn = os.path.join(cache_dir, self.tarball_basename)
@@ -557,14 +647,15 @@ class BioCProjectPage(object):
             self._cached_tarball = fn
             return fn
         tmp = tempfile.NamedTemporaryFile(delete=False).name
-        with open(tmp, 'wb') as fout:
-            logger.info('Downloading {0} to {1}'.format(self.tarball_url, fn))
+        with open(tmp, "wb") as fout:
+            logger.info("Downloading {0} to {1}".format(self.tarball_url, fn))
             response = requests.get(self.tarball_url)
             if response.status_code == 200:
                 fout.write(response.content)
             else:
                 raise PageNotFoundError(
-                    'Unexpected error {0.status_code} ({0.reason})'.format(response))
+                    "Unexpected error {0.status_code} ({0.reason})".format(response)
+                )
         shutil.move(tmp, fn)
         self._cached_tarball = fn
         return fn
@@ -574,18 +665,18 @@ class BioCProjectPage(object):
         """
         The Title section fromt he VIEW file
         """
-        return self.packages[self.package]['Title']
+        return self.packages[self.package]["Title"]
 
     @property
     def description(self):
         """
         The "Description" from the VIEW file
         """
-        return self.packages[self.package]['Description']
+        return self.packages[self.package]["Description"]
 
     @property
     def license(self):
-        return self.packages[self.package]['License']
+        return self.packages[self.package]["License"]
 
     def license_file_location(self):
         """
@@ -602,14 +693,16 @@ class BioCProjectPage(object):
         if "LICENSE" in license:
             return "LICENSE"
 
-        licenses = {'GPL-2': '{{ environ["PREFIX"] }}/lib/R/share/licenses/GPL-2',
-                    'GPL (== 2)': '{{ environ["PREFIX"] }}/lib/R/share/licenses/GPL-2',
-                    'GPL (==2)': '{{ environ["PREFIX"] }}/lib/R/share/licenses/GPL-2',
-                    'GPL version 2': '{{ environ["PREFIX"] }}/lib/R/share/licenses/GPL-2',
-                    'AGPL-3': '{{ environ["PREFIX"] }}/lib/R/share/licenses/AGPL-3',
-                    'Artisitic-2.0': '{{ environ["PREFIX"] }}/lib/R/share/licenses/Artistic-2.0',
-                    'LGPL-2': '{{ environ["PREFIX"] }}/lib/R/share/licenses/LGPL-2',
-                    'LGPL-2.1': '{{ environ["PREFIX"] }}/lib/R/share/licenses/LGPL-2.1'}
+        licenses = {
+            "GPL-2": '{{ environ["PREFIX"] }}/lib/R/share/licenses/GPL-2',
+            "GPL (== 2)": '{{ environ["PREFIX"] }}/lib/R/share/licenses/GPL-2',
+            "GPL (==2)": '{{ environ["PREFIX"] }}/lib/R/share/licenses/GPL-2',
+            "GPL version 2": '{{ environ["PREFIX"] }}/lib/R/share/licenses/GPL-2',
+            "AGPL-3": '{{ environ["PREFIX"] }}/lib/R/share/licenses/AGPL-3',
+            "Artisitic-2.0": '{{ environ["PREFIX"] }}/lib/R/share/licenses/Artistic-2.0',
+            "LGPL-2": '{{ environ["PREFIX"] }}/lib/R/share/licenses/LGPL-2',
+            "LGPL-2.1": '{{ environ["PREFIX"] }}/lib/R/share/licenses/LGPL-2.1',
+        }
 
         if license in licenses:
             return licenses[license]
@@ -621,14 +714,18 @@ class BioCProjectPage(object):
             return '{{ environ["PREFIX"] }}/lib/R/share/licenses/GPL-3'
         return None
 
-
     @property
     def imports(self):
         """
         List of "imports" from the VIEW file
         """
         try:
-            return [i.strip() for i in self.packages[self.package]['Imports'].replace(' ', '').split(',')]
+            return [
+                i.strip()
+                for i in self.packages[self.package]["Imports"]
+                .replace(" ", "")
+                .split(",")
+            ]
         except KeyError:
             return []
 
@@ -638,7 +735,7 @@ class BioCProjectPage(object):
         List of "SystemRequirements" from the VIEW file
         """
         try:
-            return self.packages[self.package]['SystemRequirements']
+            return self.packages[self.package]["SystemRequirements"]
         except KeyError:
             return []
 
@@ -648,7 +745,12 @@ class BioCProjectPage(object):
         List of "depends" from the VIEW file
         """
         try:
-            return [i.strip() for i in self.packages[self.package]['Depends'].replace(' ', '').split(',')]
+            return [
+                i.strip()
+                for i in self.packages[self.package]["Depends"]
+                .replace(" ", "")
+                .split(",")
+            ]
         except KeyError:
             return []
 
@@ -658,7 +760,12 @@ class BioCProjectPage(object):
         List of "linkingto" from the VIEW file
         """
         try:
-            return [i.strip() for i in self.packages[self.package]['LinkingTo'].replace(' ', '').split(',')]
+            return [
+                i.strip()
+                for i in self.packages[self.package]["LinkingTo"]
+                .replace(" ", "")
+                .split(",")
+            ]
         except KeyError:
             return []
 
@@ -680,12 +787,12 @@ class BioCProjectPage(object):
         """
         results = []
         for item in items:
-            toks = [i.strip() for i in item.split('(')]
+            toks = [i.strip() for i in item.split("(")]
             if len(toks) == 1:
                 results.append((toks[0], ""))
             elif len(toks) == 2:
-                assert ')' in toks[1]
-                toks[1] = toks[1].replace(')', '').replace(' ', '')
+                assert ")" in toks[1]
+                toks[1] = toks[1].replace(")", "").replace(" ", "")
                 results.append(tuple(toks))
             else:
                 raise ValueError("Found {0} toks: {1}".format(len(toks), toks))
@@ -704,7 +811,7 @@ class BioCProjectPage(object):
           - BSgenome.Vvinifera.URGI.IGGP12Xv0
           - BSgenome.Vvinifera.URGI.IGGP12Xv2
         """
-        v = str(self.packages[name]['Version'])
+        v = str(self.packages[name]["Version"])
         # There are a few packages with only major.minor versions!
         s = v.split(".")
         if len(s) == 3:
@@ -714,9 +821,7 @@ class BioCProjectPage(object):
 
     @property
     def dependencies(self):
-        """
-
-        """
+        """ """
         if self._dependencies:
             return self._dependencies
 
@@ -726,9 +831,9 @@ class BioCProjectPage(object):
         # `imports`. We keep the most specific version of each.
         version_specs = list(
             set(
-                self._parse_dependencies(self.imports) +
-                self._parse_dependencies(self.depends) +
-                self._parse_dependencies(self.linkingto)
+                self._parse_dependencies(self.imports)
+                + self._parse_dependencies(self.depends)
+                + self._parse_dependencies(self.linkingto)
             )
         )
         specific_r_version = False
@@ -749,14 +854,16 @@ class BioCProjectPage(object):
             # Try finding the dependency on the bioconductor site; if it can't
             # be found then we assume it's in CRAN.
             if name in self.packages:
-                prefix = 'bioconductor-'
+                prefix = "bioconductor-"
                 version = self.pin_version(name)
             else:
-                prefix = 'r-'
+                prefix = "r-"
 
-            logger.info('{0:>12} dependency: name="{1}" version="{2}"'.format(
-                {'r-': 'R', 'bioconductor-': 'BioConductor'}[prefix],
-                name, version))
+            logger.info(
+                '{0:>12} dependency: name="{1}" version="{2}"'.format(
+                    {"r-": "R", "bioconductor-": "BioConductor"}[prefix], name, version
+                )
+            )
 
             # add padding to version string
             if version:
@@ -766,8 +873,7 @@ class BioCProjectPage(object):
             # the dependency `r-base` for that version. Otherwise, R is
             # implied, and we make sure that r-base is added as a dependency at
             # the end.
-            if name.lower() == 'r':
-
+            if name.lower() == "r":
                 # Had some issues with CONDA_R finding the right version if "r"
                 # had version restrictions. Since we're generally building
                 # up-to-date packages, we can just use "r".
@@ -775,45 +881,49 @@ class BioCProjectPage(object):
 
                 # # "r >=2.5" rather than "r-r >=2.5"
                 specific_r_version = True
-                dependency_mapping[name.lower() + '-base'] = 'r-base'
+                dependency_mapping[name.lower() + "-base"] = "r-base"
 
             else:
                 dependency_mapping[prefix + name.lower() + version] = name
 
         # Check SystemRequirements in the DESCRIPTION file to make sure
         # packages with such requirements are provided correct recipes.
-        if (self.packages[self.package].get('SystemRequirements') is not None):
+        if self.packages[self.package].get("SystemRequirements") is not None:
             logger.warning(
                 "The 'SystemRequirements' {} are needed".format(
-                    self.packages[self.package].get('SystemRequirements')) +
-                " by the recipe for the package to work as intended."
+                    self.packages[self.package].get("SystemRequirements")
+                )
+                + " by the recipe for the package to work as intended."
             )
 
-        if (
-            (self.packages[self.package].get('NeedsCompilation', 'no') == 'yes') or
-            (self.packages[self.package].get('LinkingTo', None) is not None)
+        if (self.packages[self.package].get("NeedsCompilation", "no") == "yes") or (
+            self.packages[self.package].get("LinkingTo", None) is not None
         ):
             # Modified from conda_build.skeletons.cran
             #
             with tarfile.open(self.cached_tarball) as tf:
-                need_f = any(f.name.lower().endswith(('.f', '.f90', '.f77')) for f in tf)
+                need_f = any(
+                    f.name.lower().endswith((".f", ".f90", ".f77")) for f in tf
+                )
                 if need_f:
                     need_c = True
                 else:
-                    need_c = any(f.name.lower().endswith('.c') for f in tf)
+                    need_c = any(f.name.lower().endswith(".c") for f in tf)
                 need_cxx = any(
-                    f.name.lower().endswith(('.cxx', '.cpp', '.cc', '.c++')) for f in tf)
-                need_autotools = any(f.name.lower().endswith('/configure') for f in tf)
+                    f.name.lower().endswith((".cxx", ".cpp", ".cc", ".c++")) for f in tf
+                )
+                need_autotools = any(f.name.lower().endswith("/configure") for f in tf)
                 if any((need_autotools, need_f, need_cxx, need_c)):
                     need_make = True
                 else:
                     need_make = any(
-                        f.name.lower().endswith(('/makefile', '/makevars')) for f in tf)
+                        f.name.lower().endswith(("/makefile", "/makevars")) for f in tf
+                    )
         else:
             need_c = need_cxx = need_f = need_autotools = need_make = False
 
         for name, version in sorted(versions.items()):
-            if name in ['Rcpp', 'RcppArmadillo']:
+            if name in ["Rcpp", "RcppArmadillo"]:
                 need_cxx = True
 
         if need_cxx:
@@ -821,24 +931,24 @@ class BioCProjectPage(object):
 
         self._cb3_build_reqs = {}
         if need_c:
-            self._cb3_build_reqs['c'] = "{{ compiler('c') }}"
+            self._cb3_build_reqs["c"] = "{{ compiler('c') }}"
         if need_cxx:
-            self._cb3_build_reqs['cxx'] = "{{ compiler('cxx') }}"
+            self._cb3_build_reqs["cxx"] = "{{ compiler('cxx') }}"
         if need_f:
-            self._cb3_build_reqs['fortran'] = "{{ compiler('fortran') }}"
+            self._cb3_build_reqs["fortran"] = "{{ compiler('fortran') }}"
         if need_autotools:
-            self._cb3_build_reqs['automake'] = 'automake'
+            self._cb3_build_reqs["automake"] = "automake"
         if need_make:
-            self._cb3_build_reqs['make'] = 'make'
+            self._cb3_build_reqs["make"] = "make"
 
         # Add R itself
         if not specific_r_version:
-            dependency_mapping['r-base'] = 'r-base'
+            dependency_mapping["r-base"] = "r-base"
 
         # Sometimes empty dependencies make it into the list from a trailing
         # comma in DESCRIPTION; remove them here.
         for k in list(dependency_mapping.keys()):
-            if k == 'r-':
+            if k == "r-":
                 dependency_mapping.pop(k)
 
         self._dependencies = dependency_mapping
@@ -850,7 +960,7 @@ class BioCProjectPage(object):
         Calculate the md5 hash of the tarball so it can be filled into the
         meta.yaml.
         """
-        return self.packages[self.package]['MD5sum']
+        return self.packages[self.package]["MD5sum"]
 
     def pacified_text(self, section="Description"):
         """
@@ -862,15 +972,15 @@ class BioCProjectPage(object):
         By default, this will pacify the Description section
         """
         description = self.packages[self.package][section]
-        for vcs in ['HG', 'SVN', 'GIT']:
-            description = description.replace('{}_'.format(vcs), '{} '.format(vcs))
+        for vcs in ["HG", "SVN", "GIT"]:
+            description = description.replace("{}_".format(vcs), "{} ".format(vcs))
         return description
 
     def parseSystemRequirements(self, reqs):
         """
         Parse the text version of system requirements and return a list of conda packages
         """
-        reqs = reqs.split(',')
+        reqs = reqs.split(",")
         packages = [SysReqs[r.strip()] for r in reqs if r.strip() in SysReqs]
         packages = []
         for req in reqs:
@@ -902,30 +1012,31 @@ class BioCProjectPage(object):
         the yaml is written.
         """
 
-        version_placeholder = '{{ version }}'
-        package_placeholder = '{{ name }}'
-        package_lower_placeholder = '{{ name|lower }}'
-        bioc_placeholder = '{{ bioc }}'
+        version_placeholder = "{{ version }}"
+        package_placeholder = "{{ name }}"
+        package_lower_placeholder = "{{ name|lower }}"
+        bioc_placeholder = "{{ bioc }}"
 
         def sub_placeholders(x):
             return (
-                x
-                .replace(self.version, version_placeholder)
+                x.replace(self.version, version_placeholder)
                 .replace(self.package, package_placeholder)
                 .replace(self.package_lower, package_lower_placeholder)
                 .replace(self.bioc_version, bioc_placeholder)
             )
 
         url = [
-            sub_placeholders(u) for u in
-            [
+            sub_placeholders(u)
+            for u in [
                 # keep the one that was found
                 self.bioconductor_tarball_url,
                 # Add a hypothetical archive URL which can serve as a fallback whenever there
                 # was a second release of a package whithin one bioconductor release cycle.
                 # In such a case, the primary URL becomes invalid, but the archive URL will
                 # start to work.
-                bioconductor_archive_tarball_url(self.package, self.version, self.bioc_version),
+                bioconductor_archive_tarball_url(
+                    self.package, self.version, self.bioc_version
+                ),
                 # use the built URL, regardless of whether it was found or not.
                 # bioaRchive and cargo-port cache packages but only after the
                 # first recipe is built.
@@ -940,118 +1051,163 @@ class BioCProjectPage(object):
         # Handle libblas and liblapack, which all compiled packages
         # are assumed to need
         additional_host_deps = []
-        if self.linkingto != [] or len(set(['c', 'cxx', 'fortran']).intersection(self._cb3_build_reqs.keys())) > 0:
-            additional_host_deps.append('libblas')
-            additional_host_deps.append('liblapack')
+        if (
+            self.linkingto != []
+            or len(
+                set(["c", "cxx", "fortran"]).intersection(self._cb3_build_reqs.keys())
+            )
+            > 0
+        ):
+            additional_host_deps.append("libblas")
+            additional_host_deps.append("liblapack")
 
             # During the BioC 3.20 builds, which also corresponded to updates
             # in pinnings, there were quite a few issues where zlib and liblzma
             # were missing.
-            additional_host_deps.append('zlib')
-            additional_host_deps.append('liblzma-devel')
+            additional_host_deps.append("zlib")
+            additional_host_deps.append("liblzma-devel")
 
         additional_run_deps = []
         if self.is_data_package:
-            additional_run_deps.append('curl')
-            additional_run_deps.append('bioconductor-data-packages >={}'.format(date.today().strftime('%Y%m%d')))
+            additional_run_deps.append("curl")
+            additional_run_deps.append(
+                "bioconductor-data-packages >={}".format(
+                    date.today().strftime("%Y%m%d")
+                )
+            )
 
-        d = OrderedDict((
+        d = OrderedDict(
             (
-                'package', OrderedDict((
-                    ('name', 'bioconductor-{{ name|lower }}'),
-                    ('version', '{{ version }}'),
-                )),
-            ),
-            (
-                'source', OrderedDict((
-                    ('url', url),
-                    ('md5', self.md5),
-                )),
-            ),
-            (
-                'build', OrderedDict((
-                    ('number', self.build_number),
-                    ('rpaths', ['lib/R/lib/', 'lib/']),
-                    ('run_exports', f'{{{{ pin_subpackage("bioconductor-{self.package_lower}", max_pin="x.x") }}}}'),
-                )),
-            ),
-            (
-                'requirements', OrderedDict((
-                    # If you don't make copies, pyaml sees these as the same
-                    # object and tries to make a shortcut, causing an error in
-                    # decoding unicode. Possible pyaml bug? Anyway, this fixes
-                    # it.
-                    ('host', DEPENDENCIES[:] + additional_host_deps),
-                    ('run', DEPENDENCIES[:] + additional_run_deps),
-                )),
-            ),
-            (
-                'test', OrderedDict((
-                    (
-                        'commands', ['''$R -e "library('{{ name }}')"''']
+                (
+                    "package",
+                    OrderedDict(
+                        (
+                            ("name", "bioconductor-{{ name|lower }}"),
+                            ("version", "{{ version }}"),
+                        )
                     ),
-                )),
-            ),
-            (
-                'about', OrderedDict((
-                    ('home', sub_placeholders(self.url)),
-                    ('license', self.license),
-                    ('summary', self.pacified_text(section="Title")),
-                    ('description', self.pacified_text(section="Description")),
-                )),
-            ),
-        ))
+                ),
+                (
+                    "source",
+                    OrderedDict(
+                        (
+                            ("url", url),
+                            ("md5", self.md5),
+                        )
+                    ),
+                ),
+                (
+                    "build",
+                    OrderedDict(
+                        (
+                            ("number", self.build_number),
+                            ("rpaths", ["lib/R/lib/", "lib/"]),
+                            (
+                                "run_exports",
+                                f'{{{{ pin_subpackage("bioconductor-{self.package_lower}", max_pin="x.x") }}}}',
+                            ),
+                        )
+                    ),
+                ),
+                (
+                    "requirements",
+                    OrderedDict(
+                        (
+                            # If you don't make copies, pyaml sees these as the same
+                            # object and tries to make a shortcut, causing an error in
+                            # decoding unicode. Possible pyaml bug? Anyway, this fixes
+                            # it.
+                            ("host", DEPENDENCIES[:] + additional_host_deps),
+                            ("run", DEPENDENCIES[:] + additional_run_deps),
+                        )
+                    ),
+                ),
+                (
+                    "test",
+                    OrderedDict((("commands", ['''$R -e "library('{{ name }}')"''']),)),
+                ),
+                (
+                    "about",
+                    OrderedDict(
+                        (
+                            ("home", sub_placeholders(self.url)),
+                            ("license", self.license),
+                            ("summary", self.pacified_text(section="Title")),
+                            ("description", self.pacified_text(section="Description")),
+                        )
+                    ),
+                ),
+            )
+        )
 
         if self.license_file_location():
-            d['about']['license_file'] = self.license_file_location()
+            d["about"]["license_file"] = self.license_file_location()
 
-        if self.packages[self.package].get('SystemRequirements', None):
-            if self.parseSystemRequirements(self.packages[self.package]['SystemRequirements']):
-                d['requirements']['host'].extend(self.parseSystemRequirements(self.packages[self.package]['SystemRequirements']))
-                d['requirements']['run'].extend(self.parseSystemRequirements(self.packages[self.package]['SystemRequirements']))
+        if self.packages[self.package].get("SystemRequirements", None):
+            if self.parseSystemRequirements(
+                self.packages[self.package]["SystemRequirements"]
+            ):
+                d["requirements"]["host"].extend(
+                    self.parseSystemRequirements(
+                        self.packages[self.package]["SystemRequirements"]
+                    )
+                )
+                d["requirements"]["run"].extend(
+                    self.parseSystemRequirements(
+                        self.packages[self.package]["SystemRequirements"]
+                    )
+                )
 
         if self.needsX:
             # Anything that causes rgl to get imported needs X around
             if not self.extra:
                 self.extra = OrderedDict()
-            self.extra['container'] = OrderedDict([('extended-base', True)])
+            self.extra["container"] = OrderedDict([("extended-base", True)])
 
-            if 'build' not in d['requirements']:
+            if "build" not in d["requirements"]:
                 # This is filled in manually later since pyaml.dumps will mess of the formatting otherwise
-                d['requirements']['build'] = ["PLACEHOLDER"]
+                d["requirements"]["build"] = ["PLACEHOLDER"]
 
-            d['test']['commands'] = ['''LD_LIBRARY_PATH="${BUILD_PREFIX}/x86_64-conda-linux-gnu/sysroot/usr/lib64:${BUILD_PREFIX}/lib" $R -e "library('{{ name }}')"''']
-
+            d["test"]["commands"] = [
+                '''LD_LIBRARY_PATH="${BUILD_PREFIX}/x86_64-conda-linux-gnu/sysroot/usr/lib64:${BUILD_PREFIX}/lib" $R -e "library('{{ name }}')"'''
+            ]
 
         if self.extra:
-            d['extra'] = self.extra
+            d["extra"] = self.extra
 
         # Keep patches from existing meta.yaml
         if self.patches:
-            d['source']['patches'] = self.patches
+            d["source"]["patches"] = self.patches
 
         if self._cb3_build_reqs:
-            d['requirements']['build'] = []
+            d["requirements"]["build"] = []
         else:
-            d['build']['noarch'] = 'generic'
+            d["build"]["noarch"] = "generic"
         for k, v in self._cb3_build_reqs.items():
-            d['requirements']['build'].append(k + '_' + "PLACEHOLDER")
+            d["requirements"]["build"].append(k + "_" + "PLACEHOLDER")
 
         # sort requirements sections to match standard order
-        d['requirements'] = OrderedDict(sorted(d['requirements'].items()))
+        d["requirements"] = OrderedDict(sorted(d["requirements"].items()))
 
         rendered = pyaml.dumps(d, width=1e6, sort_keys=False)
 
         # Add Suggests: and SystemRequirements:
-        renderedsplit = rendered.split('\n')
-        idx = renderedsplit.index('requirements:')
-        if self.packages[self.package].get('SystemRequirements', None):
-            renderedsplit.insert(idx, '# SystemRequirements: {}'.format(self.packages[self.package]['SystemRequirements']))
-        if self.packages[self.package].get('Suggests', None):
-            renderedsplit.insert(idx, '# Suggests: {}'.format(self.packages[self.package]['Suggests']))
+        renderedsplit = rendered.split("\n")
+        idx = renderedsplit.index("requirements:")
+        if self.packages[self.package].get("SystemRequirements", None):
+            renderedsplit.insert(
+                idx,
+                "# SystemRequirements: {}".format(
+                    self.packages[self.package]["SystemRequirements"]
+                ),
+            )
+        if self.packages[self.package].get("Suggests", None):
+            renderedsplit.insert(
+                idx, "# Suggests: {}".format(self.packages[self.package]["Suggests"])
+            )
         # Fix the core dependencies if this needsX
         if self.needsX:
-            idx = renderedsplit.index('  build:') + 1
+            idx = renderedsplit.index("  build:") + 1
             renderedsplit.insert(idx, "    - xorg-libxfixes  # [linux]")
             renderedsplit.insert(idx, "    - {{ cdt('libxxf86vm') }}  # [linux]")
             renderedsplit.insert(idx, "    - {{ cdt('libxdamage') }}  # [linux]")
@@ -1060,26 +1216,42 @@ class BioCProjectPage(object):
             renderedsplit.insert(idx, "    - {{ cdt('mesa-libgl-devel') }}  # [linux]")
             if "    - PLACEHOLDER" in renderedsplit:
                 del renderedsplit[renderedsplit.index("    - PLACEHOLDER")]
-        rendered = '\n'.join(renderedsplit) + '\n'
+        rendered = "\n".join(renderedsplit) + "\n"
 
         rendered = (
-            '{% set version = "' + self.version + '" %}\n' +
-            '{% set name = "' + self.package + '" %}\n' +
-            '{% set bioc = "' + self.bioc_version + '" %}\n\n' +
-            rendered
+            '{% set version = "'
+            + self.version
+            + '" %}\n'
+            + '{% set name = "'
+            + self.package
+            + '" %}\n'
+            + '{% set bioc = "'
+            + self.bioc_version
+            + '" %}\n\n'
+            + rendered
         )
 
         for k, v in self._cb3_build_reqs.items():
-            rendered = rendered.replace(k + '_' + "PLACEHOLDER", v)
+            rendered = rendered.replace(k + "_" + "PLACEHOLDER", v)
 
         tmpdir = tempfile.mkdtemp()
-        with open(os.path.join(tmpdir, 'meta.yaml'), 'w') as fout:
+        with open(os.path.join(tmpdir, "meta.yaml"), "w") as fout:
             fout.write(rendered)
         return fout.name
 
 
-def write_recipe_recursive(proj, seen_dependencies, recipe_dir, config, bioc_data_packages, force,
-                           bioc_version, pkg_version, versioned, recursive):
+def write_recipe_recursive(
+    proj,
+    seen_dependencies,
+    recipe_dir,
+    config,
+    bioc_data_packages,
+    force,
+    bioc_version,
+    pkg_version,
+    versioned,
+    recursive,
+):
     """
     Parameters
     ----------
@@ -1102,25 +1274,26 @@ def write_recipe_recursive(proj, seen_dependencies, recipe_dir, config, bioc_dat
     force : bool
         If True, any recipes that already exist will be overwritten.
     """
-    logger.debug('%s has dependencies: %s', proj.package, proj.dependencies)
+    logger.debug("%s has dependencies: %s", proj.package, proj.dependencies)
     for conda_name, cran_or_bioc_name in proj.dependencies.items():
-
         # For now, this function is version-agnostic. so we strip out any
         # version info when checking if we've seen this dep before.
-        conda_name_without_version = re.sub(r' >=.*$', '', conda_name)
-        if conda_name.startswith('r-base'):
+        conda_name_without_version = re.sub(r" >=.*$", "", conda_name)
+        if conda_name.startswith("r-base"):
             continue
 
         if conda_name_without_version in seen_dependencies:
             logger.debug(
-                "{} already created or in existing channels, skipping"
-                .format(conda_name_without_version))
+                "{} already created or in existing channels, skipping".format(
+                    conda_name_without_version
+                )
+            )
             continue
 
         seen_dependencies.update([conda_name_without_version])
 
-        if conda_name_without_version.startswith('r-'):
-            #writer = cran_skeleton.write_recipe  # We should only create bioconductor dependencies, otherwise we duplicate what's on conda-forge!
+        if conda_name_without_version.startswith("r-"):
+            # writer = cran_skeleton.write_recipe  # We should only create bioconductor dependencies, otherwise we duplicate what's on conda-forge!
             continue
         else:
             writer = write_recipe
@@ -1151,13 +1324,25 @@ def updateDataPackages(bioc_data_packages, pkg, urls, md5, tarball):
     jsContent = dict()
     if os.path.exists(jsPath):
         jsContent = json.load(open(jsPath))
-    jsContent[pkg] = {'urls': urls, 'md5': md5, 'fn': tarball}
+    jsContent[pkg] = {"urls": urls, "md5": md5, "fn": tarball}
     json.dump(jsContent, open(jsPath, "w"))
 
 
-def write_recipe(package, recipe_dir, config, bioc_data_packages=None, force=False, bioc_version=None,
-                 pkg_version=None, versioned=False, recursive=False, seen_dependencies=None,
-                 packages=None, skip_if_in_channels=None, needs_x=None):
+def write_recipe(
+    package,
+    recipe_dir,
+    config,
+    bioc_data_packages=None,
+    force=False,
+    bioc_version=None,
+    pkg_version=None,
+    versioned=False,
+    recursive=False,
+    seen_dependencies=None,
+    packages=None,
+    skip_if_in_channels=None,
+    needs_x=None,
+):
     """
     Write the meta.yaml and build.sh files. If the package is detected to be
     a data package (bsed on the detected URL from Bioconductor), then also
@@ -1213,7 +1398,7 @@ def write_recipe(package, recipe_dir, config, bioc_data_packages=None, force=Fal
     """
     config = utils.load_config(config)
     proj = BioCProjectPage(package, bioc_version, pkg_version, packages=packages)
-    logger.info('Making recipe for: {}'.format(package))
+    logger.info("Making recipe for: {}".format(package))
 
     if bioc_data_packages is None:
         bioc_data_packages = os.path.join(recipe_dir, "bioconductor-data-packages")
@@ -1229,73 +1414,86 @@ def write_recipe(package, recipe_dir, config, bioc_data_packages=None, force=Fal
     if recursive:
         # get a list of existing packages in channels
         if skip_if_in_channels is not None:
-            for name in set(utils.RepoData().get_package_data("name", channels=skip_if_in_channels)):
-                if name.startswith(('r-', 'bioconductor-')):
+            for name in set(
+                utils.RepoData().get_package_data("name", channels=skip_if_in_channels)
+            ):
+                if name.startswith(("r-", "bioconductor-")):
                     seen_dependencies.add(name)
 
-        write_recipe_recursive(proj, seen_dependencies, recipe_dir, config,
-                               bioc_data_packages, force, bioc_version, pkg_version, versioned,
-                               recursive)
+        write_recipe_recursive(
+            proj,
+            seen_dependencies,
+            recipe_dir,
+            config,
+            bioc_data_packages,
+            force,
+            bioc_version,
+            pkg_version,
+            versioned,
+            recursive,
+        )
 
-    logger.debug('%s==%s, BioC==%s', proj.package, proj.version, proj.bioc_version)
-    logger.info('Using tarball from %s', proj.tarball_url)
+    logger.debug("%s==%s, BioC==%s", proj.package, proj.version, proj.bioc_version)
+    logger.info("Using tarball from %s", proj.tarball_url)
     if versioned:
-        recipe_dir = os.path.join(recipe_dir, 'bioconductor-' + proj.package.lower(), proj.version)
+        recipe_dir = os.path.join(
+            recipe_dir, "bioconductor-" + proj.package.lower(), proj.version
+        )
     else:
-        recipe_dir = os.path.join(recipe_dir, 'bioconductor-' + proj.package.lower())
+        recipe_dir = os.path.join(recipe_dir, "bioconductor-" + proj.package.lower())
     if os.path.exists(recipe_dir) and not force:
         raise ValueError("{0} already exists, aborting".format(recipe_dir))
     else:
         if not os.path.exists(recipe_dir):
-            logger.info('creating %s' % recipe_dir)
+            logger.info("creating %s" % recipe_dir)
             os.makedirs(recipe_dir)
 
     # If the version number has not changed but something else in the recipe
     # *has* changed, then bump the version number.
-    meta_file = os.path.join(recipe_dir, 'meta.yaml')
+    meta_file = os.path.join(recipe_dir, "meta.yaml")
     if os.path.exists(meta_file):
         updated_meta = utils.load_first_metadata(proj.meta_yaml, finalize=False).meta
         current_meta = utils.load_first_metadata(meta_file, finalize=False).meta
 
         # pop off the version and build numbers so we can compare the rest of
         # the dicts
-        updated_version = updated_meta['package']['version']
-        current_version = current_meta['package']['version']
+        updated_version = updated_meta["package"]["version"]
+        current_version = current_meta["package"]["version"]
 
         # updated_build_number = updated_meta['build'].pop('number')
-        current_build_number = current_meta['build'].pop('number', 0)
+        # current_build_number = current_meta["build"].pop("number", 0)
 
-        if (
-            (updated_version == current_version) and
-            (updated_meta != current_meta)
-        ):
+        if (updated_version == current_version) and (updated_meta != current_meta):
             # Sometimes when updating all packages, the updating process fails
             # partway. Re-running the updating process should not bump the
             # build number if no builds for this version exist yet in the repo.
             existing_bldnos = utils.RepoData().get_package_data(
                 key="build_number",
                 name="bioconductor-" + proj.package.lower(),
-                version=updated_version
+                version=updated_version,
             )
             if not existing_bldnos:
                 proj.build_number = 0
             else:
-                proj.build_number = sorted([int(i) for i in existing_bldnos]) [-1] + 1
+                proj.build_number = sorted([int(i) for i in existing_bldnos])[-1] + 1
 
-        if 'source' in current_meta and 'patches' in current_meta['source']:
-            proj.patches = current_meta['source']['patches']
+        if "source" in current_meta and "patches" in current_meta["source"]:
+            proj.patches = current_meta["source"]["patches"]
 
-        if 'extra' in current_meta:
-            exclude = set(['final', 'copy_test_source_files'])
-            proj.extra = {x: y for x, y in current_meta['extra'].items() if x not in exclude}
+        if "extra" in current_meta:
+            exclude = set(["final", "copy_test_source_files"])
+            proj.extra = {
+                x: y for x, y in current_meta["extra"].items() if x not in exclude
+            }
 
-    with open(os.path.join(recipe_dir, 'meta.yaml'), 'w') as fout:
+    with open(os.path.join(recipe_dir, "meta.yaml"), "w") as fout:
         fout.write(open(proj.meta_yaml).read())
 
     if not proj.is_data_package:
-        with open(os.path.join(recipe_dir, 'build.sh'), 'w') as fout:
-            fout.write(dedent(
-                '''\
+        with open(os.path.join(recipe_dir, "build.sh"), "w") as fout:
+            fout.write(
+                dedent(
+                    """\
                 #!/bin/bash
                 mv DESCRIPTION DESCRIPTION.old
                 grep -v '^Priority: ' DESCRIPTION.old > DESCRIPTION
@@ -1306,35 +1504,46 @@ def write_recipe(package, recipe_dir, config, bioc_data_packages=None, force=Fal
                 CXX98=$CXX
                 CXX11=$CXX
                 CXX14=$CXX" > ~/.R/Makevars
-                '''))
+                """
+                )
+            )
             if needs_x:
-                fout.write(dedent(
-                    '''export LD_LIBRARY_PATH=${BUILD_PREFIX}/x86_64-conda-linux-gnu/sysroot/usr/lib64:${BUILD_PREFIX}/lib
-                    '''))
-            fout.write(dedent('''$R CMD INSTALL --build .'''))
+                fout.write(
+                    dedent(
+                        """export LD_LIBRARY_PATH=${BUILD_PREFIX}/x86_64-conda-linux-gnu/sysroot/usr/lib64:${BUILD_PREFIX}/lib
+                    """
+                    )
+                )
+            fout.write(dedent("""$R CMD INSTALL --build ."""))
 
     else:
         urls = [
-            '{0}'.format(u) for u in [
+            "{0}".format(u)
+            for u in [
                 proj.bioconductor_tarball_url,
                 bioarchive_url(proj.package, proj.version, proj.bioc_version),
                 cargoport_url(proj.package, proj.version, proj.bioc_version),
-                proj.cargoport_url
+                proj.cargoport_url,
             ]
             if u is not None
         ]
-        recipeName = '{}-{}'.format(proj.package.lower(), proj.version)
+        recipeName = "{}-{}".format(proj.package.lower(), proj.version)
         post_link_template = dedent(
-            '''\
+            """\
             #!/bin/bash
             installBiocDataPackage.sh "{recipeName}"
-            '''.format(recipeName=recipeName))
+            """.format(recipeName=recipeName)
+        )
 
-        with open(os.path.join(recipe_dir, 'post-link.sh'), 'w') as fout:
+        with open(os.path.join(recipe_dir, "post-link.sh"), "w") as fout:
             fout.write(dedent(post_link_template))
-        pre_unlink_template = "R CMD REMOVE --library=$PREFIX/lib/R/library/ {0}\n".format(package)
-        with open(os.path.join(recipe_dir, 'pre-unlink.sh'), 'w') as fout:
+        pre_unlink_template = (
+            "R CMD REMOVE --library=$PREFIX/lib/R/library/ {0}\n".format(package)
+        )
+        with open(os.path.join(recipe_dir, "pre-unlink.sh"), "w") as fout:
             fout.write(pre_unlink_template)
-        updateDataPackages(bioc_data_packages, recipeName, urls, proj.md5, proj.tarball_basename)
+        updateDataPackages(
+            bioc_data_packages, recipeName, urls, proj.md5, proj.tarball_basename
+        )
 
-    logger.info('Wrote recipe in %s', recipe_dir)
+    logger.info("Wrote recipe in %s", recipe_dir)

@@ -8,6 +8,7 @@ import shutil
 import subprocess as sp
 import logging
 from . import utils
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,21 +30,20 @@ def anaconda_upload(package: str, token: str = None, label: str = None) -> bool:
     """
     label_arg = []
     if label is not None:
-        label_arg = ['--label', label]
+        label_arg = ["--label", label]
 
     if not os.path.exists(package):
-        logger.error("UPLOAD ERROR: package %s cannot be found.",
-                     package)
+        logger.error("UPLOAD ERROR: package %s cannot be found.", package)
         return False
 
     if token is None:
-        token = os.environ.get('ANACONDA_TOKEN')
+        token = os.environ.get("ANACONDA_TOKEN")
         if token is None:
             raise ValueError("Env var ANACONDA_TOKEN not found")
 
     logger.info("UPLOAD uploading package %s", package)
     try:
-        cmds = ["anaconda", "-t", token, 'upload', package] + label_arg
+        cmds = ["anaconda", "-t", token, "upload", package] + label_arg
         utils.run(cmds, mask=[token])
         logger.info("UPLOAD SUCCESS: uploaded package %s", package)
         return True
@@ -53,15 +53,15 @@ def anaconda_upload(package: str, token: str = None, label: str = None) -> bool:
             # ignore error assuming that it is caused by
             # existing package
             logger.warning(
-                "UPLOAD WARNING: tried to upload package, got:\n "
-                "%s", e.stdout)
+                "UPLOAD WARNING: tried to upload package, got:\n %s", e.stdout
+            )
             return True
         elif "Gateway Timeout" in e.stdout:
             logger.warning("UPLOAD TEMP FAILURE: Gateway timeout")
             return False
         else:
-            logger.error('UPLOAD ERROR: command: %s', e.cmd)
-            logger.error('UPLOAD ERROR: stdout+stderr: %s', e.stdout)
+            logger.error("UPLOAD ERROR: command: %s", e.cmd)
+            logger.error("UPLOAD ERROR: stdout+stderr: %s", e.stdout)
             return False
 
 
@@ -75,28 +75,32 @@ def mulled_upload(image: str, quay_target: str) -> sp.CompletedProcess:
       image: name of image to push
       quary_target: name of image on quay
     """
-    cmd = ['mulled-build', 'push', image, '-n', quay_target]
+    cmd = ["mulled-build", "push", image, "-n", quay_target]
 
     # galaxy-lib always downloads involucro, unless it's in cwd or its path is
     # explicitly given.
-    involucro_path = os.path.join(os.path.dirname(__file__), 'involucro')
+    involucro_path = os.path.join(os.path.dirname(__file__), "involucro")
     if not os.path.exists(involucro_path):
-        raise RuntimeError('internal involucro wrapper missing')
-    cmd += ['--involucro-path', involucro_path]
+        raise RuntimeError("internal involucro wrapper missing")
+    cmd += ["--involucro-path", involucro_path]
 
     env = os.environ.copy()
 
     mask = []
-    if os.environ.get('QUAY_OAUTH_TOKEN', False):
-        token = os.environ['QUAY_OAUTH_TOKEN']
-        cmd.extend(['--oauth-token', token])
+    if os.environ.get("QUAY_OAUTH_TOKEN", False):
+        token = os.environ["QUAY_OAUTH_TOKEN"]
+        cmd.extend(["--oauth-token", token])
         mask = [token]
     return utils.run(cmd, mask=mask, env=env)
 
 
-def skopeo_upload(image_file: str, target: str,
-                  creds: str, registry: str = "quay.io",
-                  timeout: int = 600) -> bool:
+def skopeo_upload(
+    image_file: str,
+    target: str,
+    creds: str,
+    registry: str = "quay.io",
+    timeout: int = 600,
+) -> bool:
     """
     Upload an image to docker registy
 
@@ -112,16 +116,20 @@ def skopeo_upload(image_file: str, target: str,
       registry: url of the registry. defaults to "quay.io"
       timeout: timeout in seconds
     """
-    cmd = ['skopeo',
-           '--command-timeout', f'{timeout}s',
-           'copy',
-           f'docker-archive:{image_file}',
-           f'docker://{registry}/{target}',
-           '--dest-creds', creds]
+    cmd = [
+        "skopeo",
+        "--command-timeout",
+        f"{timeout}s",
+        "copy",
+        f"docker-archive:{image_file}",
+        f"docker://{registry}/{target}",
+        "--dest-creds",
+        creds,
+    ]
     env = os.environ.copy()
-    env['SSL_CERT_DIR'] = str(Path(shutil.which('skopeo')).parents[1] / 'ssl')
+    env["SSL_CERT_DIR"] = str(Path(shutil.which("skopeo")).parents[1] / "ssl")
     try:
-        utils.run(cmd, mask=creds.split(':'), env=env)
+        utils.run(cmd, mask=creds.split(":"), env=env)
         return True
     except sp.CalledProcessError as exc:
         logger.error("Failed to upload %s to %s", image_file, target)

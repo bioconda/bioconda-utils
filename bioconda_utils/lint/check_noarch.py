@@ -8,7 +8,7 @@ behavior. These checks aim at getting the right settings.
 
 import re
 
-from . import LintCheck, ERROR, WARNING, INFO
+from . import LintCheck
 
 
 # Noarch or not checks:
@@ -21,6 +21,7 @@ from . import LintCheck, ERROR, WARNING, INFO
 #   a) NOT marked ``noarch: python``
 #   b) Not use ``- python [<>]3``,
 #      but use ``skip: True  # [py[23]k]``
+
 
 class should_be_noarch_python(LintCheck):
     """The recipe should be build as ``noarch``
@@ -35,19 +36,20 @@ class should_be_noarch_python(LintCheck):
     subset of packages.
 
     """
+
     def check_deps(self, deps):
-        if 'python' not in deps:
+        if "python" not in deps:
             return  # not a python package
-        if all('build' not in loc for loc in deps['python']):
+        if all("build" not in loc for loc in deps["python"]):
             return  # only uses python in run/host
-        if any(dep.startswith('compiler_') for dep in deps):
+        if any(dep.startswith("compiler_") for dep in deps):
             return  # not compiled
-        if self.recipe.get('build/noarch', None) == 'python':
+        if self.recipe.get("build/noarch", None) == "python":
             return  # already marked noarch: python
-        self.message(section='build', data=True)
+        self.message(section="build", data=True)
 
     def fix(self, _message, _data):
-        self.recipe.set('build/noarch', 'python')
+        self.recipe.set("build/noarch", "python")
         return True
 
 
@@ -67,18 +69,19 @@ class should_be_noarch_generic(LintCheck):
     packages.
 
     """
-    requires = ['should_be_noarch_python']
+
+    requires = ["should_be_noarch_python"]
+
     def check_deps(self, deps, package_location):
-        build_section=f"{package_location}build"
-        if self.recipe.get(f'{build_section}/noarch', None):
+        build_section = f"{package_location}build"
+        if self.recipe.get(f"{build_section}/noarch", None):
             return  # already marked noarch
-        if any(dep.startswith('compiler_') for dep in deps):
+        if any(dep.startswith("compiler_") for dep in deps):
             return  # not compiled
         self.message(section=build_section, data=build_section)
 
-
     def fix(self, _message, data):
-        self.recipe.set(f'{data}/noarch', 'generic')
+        self.recipe.set(f"{data}/noarch", "generic")
         return True
 
 
@@ -90,12 +93,13 @@ class should_not_be_noarch_compiler(LintCheck):
     Please remove the ``build: noarch:`` section.
 
     """
+
     def check_deps(self, deps):
-        if not any(dep.startswith('compiler_') for dep in deps):
+        if not any(dep.startswith("compiler_") for dep in deps):
             return  # not compiled
-        if self.recipe.get('build/noarch', False) is False:
+        if self.recipe.get("build/noarch", False) is False:
             return  # no noarch, or noarch=False
-        self.message(section='build/noarch')
+        self.message(section="build/noarch")
 
 
 class should_not_be_noarch_skip(LintCheck):
@@ -104,12 +108,13 @@ class should_not_be_noarch_skip(LintCheck):
     Recipes marked as ``noarch`` cannot use skip.
 
     """
+
     def check_recipe(self, recipe):
-        if self.recipe.get('build/noarch', False) is False:
+        if self.recipe.get("build/noarch", False) is False:
             return  # no noarch, or noarch=False
-        if self.recipe.get('build/skip', False) is False:
+        if self.recipe.get("build/skip", False) is False:
             return  # no skip or skip=False
-        self.message(section='build/noarch')
+        self.message(section="build/noarch")
 
 
 class should_not_use_skip_python(LintCheck):
@@ -129,19 +134,20 @@ class should_not_use_skip_python(LintCheck):
     skips.
 
     """
-    bad_skip_terms = ('py2k', 'py3k', 'python')
+
+    bad_skip_terms = ("py2k", "py3k", "python")
 
     def check_deps(self, deps):
-        if 'python' not in deps:
+        if "python" not in deps:
             return  # not a python package
-        if any(dep.startswith('compiler_') for dep in deps):
+        if any(dep.startswith("compiler_") for dep in deps):
             return  # not compiled
-        if self.recipe.get('build/skip', None) is None:
+        if self.recipe.get("build/skip", None) is None:
             return  # no build: skip: section
-        skip_line = self.recipe.get_raw('build/skip')
+        skip_line = self.recipe.get_raw("build/skip")
         if not any(term in skip_line for term in self.bad_skip_terms):
             return  # no offending skip terms
-        self.message(section='build/skip')
+        self.message(section="build/skip")
 
 
 class should_not_be_noarch_source(LintCheck):
@@ -151,10 +157,11 @@ class should_not_be_noarch_source(LintCheck):
     platform. Remove the noarch section or use just one source for all
     platforms.
     """
-    _pat = re.compile(r'# +\[.*\]')
+
+    _pat = re.compile(r"# +\[.*\]")
 
     def check_source(self, source, section):
-        if self.recipe.get('build/noarch', False) is False:
+        if self.recipe.get("build/noarch", False) is False:
             return  # no noarch, or noarch=False
         # just search the entire source entry for a comment
         if self._pat.search(self.recipe.get_raw(f"{section}")):

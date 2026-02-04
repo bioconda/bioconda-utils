@@ -53,7 +53,6 @@ from jinja2 import Environment, PackageLoader
 #                  by conda.core.index.get_index which messes up our logging.
 # => Prevent custom conda logging init before importing anything conda-related.
 import conda.gateways.logging
-conda.gateways.logging.initialize_logging = lambda: None
 
 from conda_build import api
 from conda.exports import VersionOrder
@@ -63,6 +62,7 @@ from jsonschema import validate
 from colorlog import ColoredFormatter
 from boltons.funcutils import FunctionBuilder
 
+conda.gateways.logging.initialize_logging = lambda: None
 
 logger = logging.getLogger(__name__)
 
@@ -75,10 +75,12 @@ class TqdmHandler(logging.StreamHandler):
     Passes all log writes through tqdm to allow progress bars and log
     messages to coexist without clobbering terminal
     """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-         # initialise internal tqdm lock so that we can use tqdm.write
+        # initialise internal tqdm lock so that we can use tqdm.write
         _tqdm.tqdm(disable=True, total=0)
+
     def emit(self, record):
         _tqdm.tqdm.write(self.format(record))
 
@@ -96,15 +98,17 @@ def tqdm(*args, **kwargs):
       loglevel: logging loglevel (the number, so logging.INFO)
       logger: local logger (in case it has different effective log level)
     """
-    term_ok = (sys.stderr.isatty()
-               and os.environ.get("TERM", "") != "dumb"
-               and os.environ.get("CIRCLECI", "") != "true"
-               and os.environ.get("CI", "") != "true")
-    loglevel_ok = (kwargs.get('logger', logger).getEffectiveLevel()
-                   <= kwargs.get('loglevel', logging.INFO))
-    kwargs['disable'] = not (term_ok and loglevel_ok)
+    term_ok = (
+        sys.stderr.isatty()
+        and os.environ.get("TERM", "") != "dumb"
+        and os.environ.get("CIRCLECI", "") != "true"
+        and os.environ.get("CI", "") != "true"
+    )
+    loglevel_ok = kwargs.get("logger", logger).getEffectiveLevel() <= kwargs.get(
+        "loglevel", logging.INFO
+    )
+    kwargs["disable"] = not (term_ok and loglevel_ok)
     return _tqdm.tqdm(*args, **kwargs)
-
 
 
 def ensure_list(obj):
@@ -141,17 +145,18 @@ def wraps(func, hide_wrapped=False):
     """
 
     fb = FunctionBuilder.from_func(func)
+
     def wrapper_wrapper(wrapper_func):
         fb_wrapper = FunctionBuilder.from_func(wrapper_func)
         fb.kwonlyargs += fb_wrapper.kwonlyargs
         fb.kwonlydefaults.update(fb_wrapper.kwonlydefaults)
-        fb.body = 'return _call(%s)' % fb.get_invocation_str()
+        fb.body = "return _call(%s)" % fb.get_invocation_str()
         execdict = dict(_call=wrapper_func, _func=func)
         fully_wrapped = fb.get_func(execdict)
         if not hide_wrapped:
             fully_wrapped.__wrapped__ = func
-        elif hasattr(fully_wrapped, '__wrapped__'):
-            del fully_wrapped.__dict__['__wrapped__']
+        elif hasattr(fully_wrapped, "__wrapped__"):
+            del fully_wrapped.__dict__["__wrapped__"]
         return fully_wrapped
 
     return wrapper_wrapper
@@ -172,8 +177,10 @@ class LogFuncFilter:
       The implementation  assumes that **func** uses a logger initialized with
       ``getLogger(__name__)``.
     """
-    def __init__(self, func, trunc_msg: str = None, max_lines: int = 0,
-                 consecutive: bool = True) -> None:
+
+    def __init__(
+        self, func, trunc_msg: str = None, max_lines: int = 0, consecutive: bool = True
+    ) -> None:
         self.func = func
         self.max_lines = max_lines + 1
         self.cur_max_lines = max_lines + 1
@@ -181,7 +188,10 @@ class LogFuncFilter:
         self.trunc_msg = trunc_msg
 
     def filter(self, record: logging.LogRecord) -> bool:
-        if record.name == self.func.__module__ and record.funcName == self.func.__name__:
+        if (
+            record.name == self.func.__module__
+            and record.funcName == self.func.__name__
+        ):
             if self.cur_max_lines > 1:
                 self.cur_max_lines -= 1
                 return True
@@ -201,22 +211,27 @@ class LoggingSourceRenameFilter:
     Maps ``bioconda_utils`` to ``BIOCONDA`` and for everything else
     to just the top level package uppercased.
     """
+
     def filter(self, record: logging.LogRecord) -> bool:
         if record.name.startswith("bioconda_utils"):
             record.name = "BIOCONDA"
         else:
-            record.name = record.name.split('.')[0].upper()
+            record.name = record.name.split(".")[0].upper()
         return True
 
 
-def setup_logger(name: str = 'bioconda_utils', loglevel: Union[str, int] = logging.INFO,
-                 logfile: str = None, logfile_level: Union[str, int] = logging.DEBUG,
-                 log_command_max_lines = None,
-                 prefix: str = "BIOCONDA ",
-                 msgfmt: str = ("%(asctime)s "
-                                "%(log_color)s%(name)s %(levelname)s%(reset)s "
-                                "%(message)s"),
-                 datefmt: str ="%H:%M:%S") -> logging.Logger:
+def setup_logger(
+    name: str = "bioconda_utils",
+    loglevel: Union[str, int] = logging.INFO,
+    logfile: str = None,
+    logfile_level: Union[str, int] = logging.DEBUG,
+    log_command_max_lines=None,
+    prefix: str = "BIOCONDA ",
+    msgfmt: str = (
+        "%(asctime)s %(log_color)s%(name)s %(levelname)s%(reset)s %(message)s"
+    ),
+    datefmt: str = "%H:%M:%S",
+) -> logging.Logger:
     """Set up logging for bioconda-utils
 
     Args:
@@ -242,7 +257,9 @@ def setup_logger(name: str = 'bioconda_utils', loglevel: Union[str, int] = loggi
         log_file_handler = logging.FileHandler(logfile)
         log_file_handler.setLevel(logfile_level)
         log_file_formatter = logging.Formatter(
-            msgfmt.replace("%(log_color)s", "").replace("%(reset)s", "").format(prefix=prefix),
+            msgfmt.replace("%(log_color)s", "")
+            .replace("%(reset)s", "")
+            .format(prefix=prefix),
             datefmt=None,
         )
         log_file_handler.setFormatter(log_file_formatter)
@@ -262,17 +279,20 @@ def setup_logger(name: str = 'bioconda_utils', loglevel: Union[str, int] = loggi
     if loglevel:
         log_stream_handler.setLevel(loglevel)
 
-    log_stream_handler.setFormatter(ColoredFormatter(
-        msgfmt.format(prefix=prefix),
-        datefmt=datefmt,
-        reset=True,
-        log_colors={
-            'DEBUG': 'cyan',
-            'INFO': 'green',
-            'WARNING': 'yellow',
-            'ERROR': 'red',
-            'CRITICAL': 'red',
-        }))
+    log_stream_handler.setFormatter(
+        ColoredFormatter(
+            msgfmt.format(prefix=prefix),
+            datefmt=datefmt,
+            reset=True,
+            log_colors={
+                "DEBUG": "cyan",
+                "INFO": "green",
+                "WARNING": "yellow",
+                "ERROR": "red",
+                "CRITICAL": "red",
+            },
+        )
+    )
     log_stream_handler.addFilter(LoggingSourceRenameFilter())
     root_logger.addHandler(log_stream_handler)
 
@@ -280,14 +300,17 @@ def setup_logger(name: str = 'bioconda_utils', loglevel: Union[str, int] = loggi
     # We do this here rather than in `utils.run` so that it can be configured
     # from the CLI more easily
     if log_command_max_lines is not None:
-        log_filter = LogFuncFilter(run, "Command output truncated", log_command_max_lines)
+        log_filter = LogFuncFilter(
+            run, "Command output truncated", log_command_max_lines
+        )
         log_stream_handler.addFilter(log_filter)
 
     return new_logger
 
 
-def ellipsize_recipes(recipes: Collection[str], recipe_folder: str,
-                      n: int = 5, m: int = 50) -> str:
+def ellipsize_recipes(
+    recipes: Collection[str], recipe_folder: str, n: int = 5, m: int = 50
+) -> str:
     """Logging helper showing recipe list
 
     Args:
@@ -308,58 +331,63 @@ def ellipsize_recipes(recipes: Collection[str], recipe_folder: str,
         append = ", ..."
     else:
         append = ""
-    return ' ('+', '.join(recipe.replace(recipe_folder,'').lstrip('/')
-                     for recipe in recipes) + append + ')'
+    return (
+        " ("
+        + ", ".join(recipe.replace(recipe_folder, "").lstrip("/") for recipe in recipes)
+        + append
+        + ")"
+    )
 
 
 class JinjaSilentUndefined(jinja2.Undefined):
     def _fail_with_undefined_error(self, *args, **kwargs):
         return ""
 
-    __add__ = __radd__ = __mul__ = __rmul__ = __div__ = __rdiv__ = \
-        __truediv__ = __rtruediv__ = __floordiv__ = __rfloordiv__ = \
-        __mod__ = __rmod__ = __pos__ = __neg__ = __call__ = \
-        __getitem__ = __lt__ = __le__ = __gt__ = __ge__ = __int__ = \
-        __float__ = __complex__ = __pow__ = __rpow__ = \
-        _fail_with_undefined_error
+    __add__ = __radd__ = __mul__ = __rmul__ = __div__ = __rdiv__ = __truediv__ = (
+        __rtruediv__
+    ) = __floordiv__ = __rfloordiv__ = __mod__ = __rmod__ = __pos__ = __neg__ = (
+        __call__
+    ) = __getitem__ = __lt__ = __le__ = __gt__ = __ge__ = __int__ = __float__ = (
+        __complex__
+    ) = __pow__ = __rpow__ = _fail_with_undefined_error
 
 
 jinja = Environment(
-    loader=PackageLoader('bioconda_utils', 'templates'),
+    loader=PackageLoader("bioconda_utils", "templates"),
     trim_blocks=True,
-    lstrip_blocks=True
+    lstrip_blocks=True,
 )
 
 
-jinja_silent_undef = Environment(
-    undefined=JinjaSilentUndefined
-)
+jinja_silent_undef = Environment(undefined=JinjaSilentUndefined)
 
 
 # Patterns of allowed environment variables that are allowed to be passed to
 # conda-build.
 ENV_VAR_WHITELIST = [
-    'PATH',
-    'LC_*',
-    'LANG',
-    'MACOSX_DEPLOYMENT_TARGET',
-    'HTTPS_PROXY','HTTP_PROXY', 'https_proxy', 'http_proxy',
+    "PATH",
+    "LC_*",
+    "LANG",
+    "MACOSX_DEPLOYMENT_TARGET",
+    "HTTPS_PROXY",
+    "HTTP_PROXY",
+    "https_proxy",
+    "http_proxy",
 ]
 
 # Of those that make it through the whitelist, remove these specific ones
-ENV_VAR_BLACKLIST = [
-]
+ENV_VAR_BLACKLIST = []
 
 # Of those, also remove these when we're running in a docker container
 ENV_VAR_DOCKER_BLACKLIST = [
-    'PATH',
+    "PATH",
 ]
 
 
 def get_free_space():
     """Return free space in MB on disk"""
     s = os.statvfs(os.getcwd())
-    return s.f_frsize * s.f_bavail / (1024 ** 2)
+    return s.f_frsize * s.f_bavail / (1024**2)
 
 
 def get_free_memory_percent():
@@ -369,7 +397,7 @@ def get_free_memory_percent():
 
 def get_free_memory_mb():
     """Return free memory as megabytes"""
-    return psutil.virtual_memory().available / (1024 ** 2)
+    return psutil.virtual_memory().available / (1024**2)
 
 
 def allowed_env_var(s, docker=False):
@@ -385,9 +413,9 @@ def allowed_env_var(s, docker=False):
             return True
 
 
-def bin_for(name='conda'):
-    if 'CONDA_ROOT' in os.environ:
-        return os.path.join(os.environ['CONDA_ROOT'], 'bin', name)
+def bin_for(name="conda"):
+    if "CONDA_ROOT" in os.environ:
+        return os.path.join(os.environ["CONDA_ROOT"], "bin", name)
     return name
 
 
@@ -481,7 +509,6 @@ def load_all_meta(recipe, config=None, finalize=True):
     return metas
 
 
-
 def load_meta_fast(recipe: str, env=None):
     """
     Given a package name, find the current meta.yaml file, parse it, and return
@@ -498,21 +525,21 @@ def load_meta_fast(recipe: str, env=None):
         env = {}
 
     try:
-        pth = os.path.join(recipe, 'meta.yaml')
-        template = jinja_silent_undef.from_string(open(pth, 'r', encoding='utf-8').read())
+        pth = os.path.join(recipe, "meta.yaml")
+        template = jinja_silent_undef.from_string(
+            open(pth, "r", encoding="utf-8").read()
+        )
         meta = yaml.safe_load(template.render(env))
         return (meta, recipe)
     except Exception:
-        raise ValueError('Problem inspecting {0}'.format(recipe))
+        raise ValueError("Problem inspecting {0}".format(recipe))
 
 
 def load_conda_build_config(platform=None, trim_skip=True):
     """
     Load conda build config while considering global pinnings from conda-forge.
     """
-    config = api.Config(
-        no_download_source=True,
-        set_build_id=False)
+    config = api.Config(no_download_source=True, set_build_id=False)
 
     # get environment root
     env_root = PurePath(shutil.which("bioconda-utils")).parents[1]
@@ -520,31 +547,34 @@ def load_conda_build_config(platform=None, trim_skip=True):
     config.exclusive_config_files = [
         os.path.join(env_root, "conda_build_config.yaml"),
         os.path.join(
-            os.path.dirname(__file__),
-            'bioconda_utils-conda_build_config.yaml'),
+            os.path.dirname(__file__), "bioconda_utils-conda_build_config.yaml"
+        ),
     ]
     for cfg in chain(config.exclusive_config_files, config.variant_config_files or []):
-        assert os.path.exists(cfg), ('error: {0} does not exist'.format(cfg))
+        assert os.path.exists(cfg), "error: {0} does not exist".format(cfg)
     if platform:
         config.platform = platform
     config.trim_skip = trim_skip
     return config
 
 
-CondaBuildConfigFile = namedtuple('CondaBuildConfigFile', (
-    'arg',  # either '-e' or '-m'
-    'path',
-))
+CondaBuildConfigFile = namedtuple(
+    "CondaBuildConfigFile",
+    (
+        "arg",  # either '-e' or '-m'
+        "path",
+    ),
+)
 
 
 def get_conda_build_config_files(config=None):
     if config is None:
         config = load_conda_build_config()
     # TODO: open PR upstream for conda-build to support multiple exclusive_config_files
-    for file_path in (config.exclusive_config_files or []):
-        yield CondaBuildConfigFile('-e', file_path)
-    for file_path in (config.variant_config_files or []):
-        yield CondaBuildConfigFile('-m', file_path)
+    for file_path in config.exclusive_config_files or []:
+        yield CondaBuildConfigFile("-e", file_path)
+    for file_path in config.variant_config_files or []:
+        yield CondaBuildConfigFile("-m", file_path)
 
 
 def load_first_metadata(recipe, config=None, finalize=True):
@@ -581,9 +611,18 @@ def temp_os(platform):
         sys.platform = original
 
 
-def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, mask_envvars: bool=False, live: bool=False,
-        mylogger: logging.Logger=logger, loglevel: int=logging.INFO, check=True, quiet_failure=False,
-        **kwargs: Dict[Any, Any]) -> sp.CompletedProcess:
+def run(
+    cmds: List[str],
+    env: Dict[str, str] = None,
+    mask: List[str] = None,
+    mask_envvars: bool = False,
+    live: bool = False,
+    mylogger: logging.Logger = logger,
+    loglevel: int = logging.INFO,
+    check=True,
+    quiet_failure=False,
+    **kwargs: Dict[Any, Any],
+) -> sp.CompletedProcess:
     """
     Run a command (with logging, masking, etc)
 
@@ -616,7 +655,7 @@ def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, mask_en
     def pushqueue(out, pipe):
         """Reads from a pipe and pushes into a queue, pushing "None" to
         indicate closed pipe"""
-        for line in iter(pipe.readline, b''):
+        for line in iter(pipe.readline, b""):
             out.put((pipe, line))
         out.put(None)  # End-of-data-token
 
@@ -625,20 +664,27 @@ def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, mask_en
         if mask is None:
             # caller has not considered masking, hide the entire command
             # for security reasons
-            return '<hidden>'
+            return "<hidden>"
         if mask is False:
             # masking has been deactivated
             return arg
         for mitem in mask:
-            arg = arg.replace(mitem, '<hidden>')
+            arg = arg.replace(mitem, "<hidden>")
         return arg
 
-    mylogger.log(loglevel, "(COMMAND) %s", ' '.join(do_mask(arg) for arg in cmds))
+    mylogger.log(loglevel, "(COMMAND) %s", " ".join(do_mask(arg) for arg in cmds))
 
     # bufsize=4 result of manual experimentation. Changing it can
     # drop performance drastically.
-    with sp.Popen(cmds, stdout=sp.PIPE, stderr=sp.PIPE,
-                  close_fds=True, env=env, bufsize=4, **kwargs) as proc:
+    with sp.Popen(
+        cmds,
+        stdout=sp.PIPE,
+        stderr=sp.PIPE,
+        close_fds=True,
+        env=env,
+        bufsize=4,
+        **kwargs,
+    ) as proc:
         # Start threads reading stdout/stderr and pushing it into queue q
         out_thread = Thread(target=pushqueue, args=(logq, proc.stdout))
         err_thread = Thread(target=pushqueue, args=(logq, proc.stderr))
@@ -651,7 +697,7 @@ def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, mask_en
             try:
                 for _ in range(2):  # Run until we've got both `None` tokens
                     for pipe, line in iter(logq.get, None):
-                        line = do_mask(line.decode(errors='replace').rstrip())
+                        line = do_mask(line.decode(errors="replace").rstrip())
                         output_lines.append(line)
                         # only keep the last 1000 lines to avoid memory issues
                         if len(output_lines) > 1000:
@@ -682,14 +728,20 @@ def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, mask_en
             masked_cmds = [do_mask(c) for c in cmds]
 
         if proc.poll() is None:
-            mylogger.log(loglevel, 'Command closed STDOUT/STDERR but is still running')
+            mylogger.log(loglevel, "Command closed STDOUT/STDERR but is still running")
             waitfor = 30
             waittimes = 5
             for attempt in range(waittimes):
-                mylogger.log(loglevel, "Waiting %s seconds (%i/%i)", waitfor, attempt+1, waittimes)
+                mylogger.log(
+                    loglevel,
+                    "Waiting %s seconds (%i/%i)",
+                    waitfor,
+                    attempt + 1,
+                    waittimes,
+                )
                 try:
                     proc.wait(timeout=waitfor)
-                    break;
+                    break
                 except sp.TimeoutExpired:
                     pass
             else:
@@ -700,9 +752,13 @@ def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, mask_en
 
         if returncode:
             if not quiet_failure:
-                logger.error('COMMAND FAILED (exited with %s): %s', returncode, ' '.join(masked_cmds))
+                logger.error(
+                    "COMMAND FAILED (exited with %s): %s",
+                    returncode,
+                    " ".join(masked_cmds),
+                )
             if not live:
-                logger.error('STDOUT+STDERR:\n%s', output)
+                logger.error("STDOUT+STDERR:\n%s", output)
             if check:
                 raise sp.CalledProcessError(returncode, masked_cmds, output=output)
 
@@ -711,7 +767,7 @@ def run(cmds: List[str], env: Dict[str, str]=None, mask: List[str]=None, mask_en
 
 def envstr(env):
     env = dict(env)
-    return ';'.join(['='.join([i, str(j)]) for i, j in sorted(env.items())])
+    return ";".join(["=".join([i, str(j)]) for i, j in sorted(env.items())])
 
 
 def flatten_dict(dict):
@@ -755,8 +811,7 @@ class EnvMatrix:
             self.env = env
         for key, val in self.env.items():
             if key != "CONDA_PY" and not isinstance(val, str):
-                raise ValueError(
-                    "All versions except CONDA_PY must be strings.")
+                raise ValueError("All versions except CONDA_PY must be strings.")
 
     def __iter__(self):
         """
@@ -780,7 +835,7 @@ class EnvMatrix:
             yield env
 
 
-def get_deps(recipe=None, build=True):
+def get_deps(recipe, build=True):
     """
     Generator of dependencies for a single recipe
 
@@ -798,20 +853,15 @@ def get_deps(recipe=None, build=True):
     build : bool
         If True yield build dependencies, if False yield run dependencies.
     """
-    if recipe is not None:
-        assert isinstance(recipe, str)
-        metadata = load_all_meta(recipe, finalize=False)
-    elif meta is not None:
-        metadata = [meta]
-    else:
-        raise ValueError("Either meta or recipe has to be specified.")
+    assert isinstance(recipe, str)
+    metadata = load_all_meta(recipe, finalize=False)
 
     all_deps = set()
     for meta in metadata:
         if build:
-            deps = meta.get_value('requirements/build', [])
+            deps = meta.get_value("requirements/build", [])
         else:
-            deps = meta.get_value('requirements/run', [])
+            deps = meta.get_value("requirements/run", [])
         all_deps.update(dep.split()[0] for dep in deps)
     return all_deps
 
@@ -826,7 +876,7 @@ def set_max_threads(n):
 
 def threads_to_use():
     """Returns the number of cores we are allowed to run on"""
-    if hasattr(os, 'sched_getaffinity'):
+    if hasattr(os, "sched_getaffinity"):
         cores = len(os.sched_getaffinity(0))
     else:
         cores = os.cpu_count()
@@ -836,14 +886,10 @@ def threads_to_use():
 def parallel_iter(func, items, desc, *args, **kwargs):
     pfunc = partial(func, *args, **kwargs)
     with Pool(threads_to_use()) as pool:
-        yield from tqdm(
-            pool.imap_unordered(pfunc, items),
-            desc=desc,
-            total=len(items)
-        )
+        yield from tqdm(pool.imap_unordered(pfunc, items), desc=desc, total=len(items))
 
 
-def format_link(uri, fmt: str, prefix: str="", label: str=""):
+def format_link(uri, fmt: str, prefix: str = "", label: str = ""):
     if prefix:
         uri = f"{prefix}/{uri}"
     if fmt == "markdown":
@@ -875,13 +921,15 @@ def get_recipes(recipe_folder, package="*", exclude=None):
     if exclude is None:
         exclude = []
     for p in package:
-        logger.debug("get_recipes(%s, package='%s'): %s",
-                     recipe_folder, package, p)
+        logger.debug("get_recipes(%s, package='%s'): %s", recipe_folder, package, p)
         path = os.path.join(recipe_folder, p)
         for new_dir in glob.glob(path):
             meta_yaml_found_or_excluded = False
             for dir_path, dir_names, file_names in os.walk(new_dir):
-                if any(fnmatch.fnmatch(dir_path[len(recipe_folder):], pat) for pat in exclude):
+                if any(
+                    fnmatch.fnmatch(dir_path[len(recipe_folder) :], pat)
+                    for pat in exclude
+                ):
                     meta_yaml_found_or_excluded = True
                     continue
                 if "meta.yaml" in file_names:
@@ -891,7 +939,7 @@ def get_recipes(recipe_folder, package="*", exclude=None):
                 logger.warn(
                     "No meta.yaml found in %s."
                     " If you want to ignore this directory, add it to the blacklist.",
-                    new_dir
+                    new_dir,
                 )
                 yield new_dir
 
@@ -915,8 +963,7 @@ def get_latest_recipes(recipe_folder, config, package="*"):
     """
 
     def toplevel(x):
-        return x.replace(
-            recipe_folder, '').strip(os.path.sep).split(os.path.sep)[0]
+        return x.replace(recipe_folder, "").strip(os.path.sep).split(os.path.sep)[0]
 
     config = load_config(config)
     recipes = sorted(get_recipes(recipe_folder, package), key=toplevel)
@@ -926,11 +973,13 @@ def get_latest_recipes(recipe_folder, config, package="*"):
         if len(group) == 1:
             yield group[0]
         else:
+
             def get_version(p):
-                meta_path = os.path.join(p, 'meta.yaml')
+                meta_path = os.path.join(p, "meta.yaml")
                 meta = load_first_metadata(meta_path, finalize=False)
-                version = meta.get_value('package/version')
+                version = meta.get_value("package/version")
                 return VersionOrder(version)
+
             sorted_versions = sorted(group, key=get_version)
             if sorted_versions:
                 yield sorted_versions[-1]
@@ -977,15 +1026,15 @@ def last_commit_to_master():
     """
     Identifies the day of the last commit to master branch.
     """
-    if not shutil.which('git'):
+    if not shutil.which("git"):
         raise ValueError("git not found")
     p = sp.run(
         'git log master --date=iso | grep "^Date:" | head -n1',
-        shell=True, stdout=sp.PIPE, check=True
+        shell=True,
+        stdout=sp.PIPE,
+        check=True,
     )
-    date = datetime.datetime.strptime(
-        p.stdout[:-1].decode().split()[1],
-        '%Y-%m-%d')
+    date = datetime.datetime.strptime(p.stdout[:-1].decode().split()[1], "%Y-%m-%d")
     return date
 
 
@@ -999,11 +1048,10 @@ def file_from_commit(commit, filename):
 
     filename : str
     """
-    if commit == 'HEAD':
+    if commit == "HEAD":
         return open(filename).read()
 
-    p = run(['git', 'show', '{0}:{1}'.format(commit, filename)], mask=False,
-            loglevel=0)
+    p = run(["git", "show", "{0}:{1}".format(commit, filename)], mask=False, loglevel=0)
     return str(p.stdout)
 
 
@@ -1015,8 +1063,8 @@ def changed_since_master(recipe_folder):
     repo and have added the main repo as ``upstream``, then you'll have to do
     a ``git checkout master && git pull upstream master`` to update your fork.
     """
-    p = run(['git', 'fetch', 'origin', 'master'], mask=False, loglevel=0)
-    p = run(['git', 'diff', 'FETCH_HEAD', '--name-only'], mask=False, loglevel=0)
+    p = run(["git", "fetch", "origin", "master"], mask=False, loglevel=0)
+    p = run(["git", "diff", "FETCH_HEAD", "--name-only"], mask=False, loglevel=0)
     return [
         os.path.dirname(os.path.relpath(i, recipe_folder))
         for i in p.stdout.splitlines(False)
@@ -1026,9 +1074,9 @@ def changed_since_master(recipe_folder):
 def _load_platform_metas(recipe, finalize=True):
     # check if package is noarch, if so, build only on linux
     # with temp_os, we can fool the MetaData if needed.
-    platform = os.environ.get('OSTYPE', sys.platform)
+    platform = os.environ.get("OSTYPE", sys.platform)
     if platform.startswith("darwin"):
-        platform = 'osx'
+        platform = "osx"
     elif platform == "linux-gnu":
         platform = "linux"
 
@@ -1038,8 +1086,7 @@ def _load_platform_metas(recipe, finalize=True):
 
 def _meta_subdir(meta):
     # logic extracted from conda_build.variants.bldpkg_path
-    return 'noarch' if meta.noarch or meta.noarch_python else meta.config.host_subdir
-
+    return "noarch" if meta.noarch or meta.noarch_python else meta.config.host_subdir
 
 
 def check_recipe_skippable(recipe, check_channels):
@@ -1052,26 +1099,31 @@ def check_recipe_skippable(recipe, check_channels):
     if not metas:
         return True
     # If on CI, handle noarch.
-    if os.environ.get('CI', None) == 'true':
+    if os.environ.get("CI", None) == "true":
         first_meta = metas[0]
-        if first_meta.get_value('build/noarch'):
-            if platform != 'linux':
-                logger.info('FILTER: only building %s on '
-                             'linux because it defines noarch.',
-                             recipe)
+        if first_meta.get_value("build/noarch"):
+            if platform != "linux":
+                logger.info(
+                    "FILTER: only building %s on linux because it defines noarch.",
+                    recipe,
+                )
                 return True
 
-    packages =  set(
-        (meta.name(), meta.version(), int(meta.build_number() or 0))
-        for meta in metas
+    packages = set(
+        (meta.name(), meta.version(), int(meta.build_number() or 0)) for meta in metas
     )
     r = RepoData()
     num_existing_pkg_builds = Counter(
         (name, version, build_number, subdir)
         for name, version, build_number in packages
-        for subdir in r.get_package_data("subdir", name=name, version=version,
-                                         build_number=build_number,
-                                         channels=check_channels, native=True)
+        for subdir in r.get_package_data(
+            "subdir",
+            name=name,
+            version=version,
+            build_number=build_number,
+            channels=check_channels,
+            native=True,
+        )
     )
     if num_existing_pkg_builds == Counter():
         # No packages with same version + build num in channels: no need to skip
@@ -1082,9 +1134,10 @@ def check_recipe_skippable(recipe, check_channels):
     )
     if num_new_pkg_builds == num_existing_pkg_builds:
         logger.info(
-            'FILTER: not building recipe %s because '
-            'the same number of builds are in channel(s) and it is not forced.',
-            recipe)
+            "FILTER: not building recipe %s because "
+            "the same number of builds are in channel(s) and it is not forced.",
+            recipe,
+        )
         return True
     return False
 
@@ -1102,12 +1155,16 @@ def _filter_existing_packages(metas, check_channels):
 
     r = RepoData()
     for pkg_key, build_meta in key_build_meta.items():
-        existing_pkg_builds = set(r.get_package_data(['subdir', 'build'],
-                                                     name=pkg_key[0],
-                                                     version=pkg_key[1],
-                                                     build_number=pkg_key[2],
-                                                     channels=check_channels,
-                                                     native=True))
+        existing_pkg_builds = set(
+            r.get_package_data(
+                ["subdir", "build"],
+                name=pkg_key[0],
+                version=pkg_key[1],
+                build_number=pkg_key[2],
+                channels=check_channels,
+                native=True,
+            )
+        )
         for pkg_build, meta in build_meta.items():
             if pkg_build not in existing_pkg_builds:
                 new_metas.append(meta)
@@ -1120,11 +1177,10 @@ def _filter_existing_packages(metas, check_channels):
         # build on aarch64 machine, the `divergent_builds` will wrongly include the linux-64
         # one, we need to filter the non-native CPU architecture versions.
         native_pkg_builds = {
-            x for x in existing_pkg_builds if x.subdir in (conda_subdir, 'noarch')
+            x for x in existing_pkg_builds if x.subdir in (conda_subdir, "noarch")
         }
-        for divergent_build in (native_pkg_builds - set(build_meta.keys())):
-            divergent_builds.add(
-                '-'.join((pkg_key[0], pkg_key[1], divergent_build[1])))
+        for divergent_build in native_pkg_builds - set(build_meta.keys()):
+            divergent_builds.add("-".join((pkg_key[0], pkg_key[1], divergent_build[1])))
     return new_metas, existing_metas, divergent_builds
 
 
@@ -1139,23 +1195,26 @@ def get_package_paths(recipe, check_channels, force=False):
     if not metas:
         return []
 
-    new_metas, existing_metas, divergent_builds = (
-        _filter_existing_packages(metas, check_channels))
+    new_metas, existing_metas, divergent_builds = _filter_existing_packages(
+        metas, check_channels
+    )
 
     if divergent_builds:
         raise DivergentBuildsError(*sorted(divergent_builds))
 
     for meta in existing_metas:
         logger.info(
-            'FILTER: not building %s because '
-            'it is in channel(s) and it is not forced.', meta.pkg_fn())
+            "FILTER: not building %s because it is in channel(s) and it is not forced.",
+            meta.pkg_fn(),
+        )
     # yield all pkgs that do not yet exist
     if force:
         build_metas = new_metas + existing_metas
     else:
         build_metas = new_metas
-    return list(chain.from_iterable(
-        api.get_output_file_paths(meta) for meta in build_metas))
+    return list(
+        chain.from_iterable(api.get_output_file_paths(meta) for meta in build_metas)
+    )
 
 
 def validate_config(config):
@@ -1173,8 +1232,8 @@ def validate_config(config):
 
     # Load packaged schema without pkg_resources (deprecated)
     # files('bioconda_utils') returns a Traversable to the package contents
-    with as_file(files('bioconda_utils') / 'config.schema.yaml') as schema_path:
-        with open(schema_path, 'r', encoding='utf-8') as fh:
+    with as_file(files("bioconda_utils") / "config.schema.yaml") as schema_path:
+        with open(schema_path, "r", encoding="utf-8") as fh:
             schema = yaml.safe_load(fh)
 
     validate(config, schema)
@@ -1192,12 +1251,16 @@ def load_config(path):
     validate_config(path)
 
     if isinstance(path, dict):
+
         def relpath(p):
             return p
+
         config = path
     else:
+
         def relpath(p):
             return os.path.join(os.path.dirname(path), p)
+
         config = yaml.safe_load(open(path))
 
     def get_list(key):
@@ -1208,15 +1271,15 @@ def load_config(path):
         return value
 
     default_config = {
-        'blacklists': [],
-        'channels': ['conda-forge', 'bioconda'],
-        'requirements': None,
-        'upload_channel': 'bioconda'
+        "blacklists": [],
+        "channels": ["conda-forge", "bioconda"],
+        "requirements": None,
+        "upload_channel": "bioconda",
     }
-    if 'blacklists' in config:
-        config['blacklists'] = [relpath(p) for p in get_list('blacklists')]
-    if 'channels' in config:
-        config['channels'] = get_list('channels')
+    if "blacklists" in config:
+        config["blacklists"] = [relpath(p) for p in get_list("blacklists")]
+    if "channels" in config:
+        config["channels"] = get_list("channels")
 
     default_config.update(config)
 
@@ -1255,6 +1318,7 @@ class AsyncRequests:
 
     This is not really a class, more a name space encapsulating a bunch of calls.
     """
+
     #: Identify ourselves
     USER_AGENT = "bioconda/bioconda-utils"
     #: Max connections to each server
@@ -1310,34 +1374,48 @@ class AsyncRequests:
             fds = []
         conn = aiohttp.TCPConnector(limit_per_host=cls.CONNECTIONS_PER_HOST)
         async with aiohttp.ClientSession(
-                connector=conn,
-                headers={'User-Agent': cls.USER_AGENT},
-                trust_env=True,
+            connector=conn,
+            headers={"User-Agent": cls.USER_AGENT},
+            trust_env=True,
         ) as session:
             coros = [
-                asyncio.ensure_future(cls._async_fetch_one(session, url, desc, cb, data, fd))
+                asyncio.ensure_future(
+                    cls._async_fetch_one(session, url, desc, cb, data, fd)
+                )
                 for url, desc, data, fd in zip_longest(urls, descs, datas, fds)
             ]
-            with tqdm(asyncio.as_completed(coros),
-                      total=len(coros),
-                      desc="Downloading", unit="files") as t:
+            with tqdm(
+                asyncio.as_completed(coros),
+                total=len(coros),
+                desc="Downloading",
+                unit="files",
+            ) as t:
                 result = [await coro for coro in t]
         return result
 
     @staticmethod
-    @backoff.on_exception(backoff.fibo, aiohttp.ClientResponseError, max_tries=20,
-                          giveup=lambda ex: ex.code not in [429, 502, 503, 504])
+    @backoff.on_exception(
+        backoff.fibo,
+        aiohttp.ClientResponseError,
+        max_tries=20,
+        giveup=lambda ex: ex.code not in [429, 502, 503, 504],
+    )
     async def _async_fetch_one(session, url, desc, cb=None, data=None, fd=None):
         result = []
         async with session.get(url, timeout=None) as resp:
             resp.raise_for_status()
             size = int(resp.headers.get("Content-Length", 0))
-            with tqdm(total=size, unit='B', unit_scale=True, unit_divisor=1024,
-                      desc=desc, miniters=1,
-                      disable=logger.getEffectiveLevel() > logging.INFO
+            with tqdm(
+                total=size,
+                unit="B",
+                unit_scale=True,
+                unit_divisor=1024,
+                desc=desc,
+                miniters=1,
+                disable=logger.getEffectiveLevel() > logging.INFO,
             ) as progress:
                 while True:
-                    block = await resp.content.read(1024*16)
+                    block = await resp.content.read(1024 * 16)
                     if not block:
                         break
                     progress.update(len(block))
@@ -1405,16 +1483,18 @@ class RepoData:
 
     """
 
-    REPODATA_URL = 'https://conda.anaconda.org/{channel}/{subdir}/repodata.json'
-    REPODATA_LABELED_URL = 'https://conda.anaconda.org/{channel}/label/{label}/{subdir}/repodata.json'
-    REPODATA_DEFAULTS_URL = 'https://repo.anaconda.com/pkgs/main/{subdir}/repodata.json'
+    REPODATA_URL = "https://conda.anaconda.org/{channel}/{subdir}/repodata.json"
+    REPODATA_LABELED_URL = (
+        "https://conda.anaconda.org/{channel}/label/{label}/{subdir}/repodata.json"
+    )
+    REPODATA_DEFAULTS_URL = "https://repo.anaconda.com/pkgs/main/{subdir}/repodata.json"
 
-    _load_columns = ['build', 'build_number', 'name', 'version', 'depends']
+    _load_columns = ["build", "build_number", "name", "version", "depends"]
 
     #: Columns available in internal dataframe
-    columns = _load_columns + ['channel', 'subdir', 'platform']
+    columns = _load_columns + ["channel", "subdir", "platform"]
     #: Platforms loaded
-    platforms = ['linux', 'linux-aarch64', 'osx', 'osx-arm64', 'noarch']
+    platforms = ["linux", "linux-aarch64", "osx", "osx-arm64", "noarch"]
     # config object
     config = None
 
@@ -1423,18 +1503,20 @@ class RepoData:
     _df_ts = None
 
     #: default lifetime for repodata cache
-    cache_timeout = 60*60*8
+    cache_timeout = 60 * 60 * 8
 
     @classmethod
     def register_config(cls, config):
         cls.config = config
 
     __instance = None
+
     def __new__(cls):
         """Makes RepoData a singleton"""
         if RepoData.__instance is None:
-            assert RepoData.config is not None, ("bug: ensure to load config "
-                                                 "before instantiating RepoData.")
+            assert RepoData.config is not None, (
+                "bug: ensure to load config before instantiating RepoData."
+            )
             RepoData.__instance = object.__new__(cls)
         return RepoData.__instance
 
@@ -1477,8 +1559,9 @@ class RepoData:
         else:
             url_template = self.REPODATA_URL
 
-        url = url_template.format(channel=channel,
-                                  subdir=self.platform2subdir(platform))
+        url = url_template.format(
+            channel=channel, subdir=self.platform2subdir(platform)
+        )
         return url
 
     def _load_channel_dataframe_cached(self):
@@ -1509,12 +1592,12 @@ class RepoData:
             packages = repo["packages"]
             packages.update(repo.get("packages.conda", {}))
 
-            df = pd.DataFrame.from_dict(packages, 'index', columns=self._load_columns)
+            df = pd.DataFrame.from_dict(packages, "index", columns=self._load_columns)
             # Ensure that version is always a string.
-            df['version'] = df['version'].astype(str)
-            df['channel'] = channel
-            df['platform'] = platform
-            df['subdir'] = subdir
+            df["version"] = df["version"].astype(str)
+            df["channel"] = channel
+            df["platform"] = platform
+            df["subdir"] = subdir
             return df
 
         if urls:
@@ -1523,8 +1606,8 @@ class RepoData:
         else:
             res = pd.DataFrame(columns=self.columns)
 
-        for col in ('channel', 'platform', 'subdir', 'name', 'version', 'build'):
-            res[col] = res[col].astype('category')
+        for col in ("channel", "platform", "subdir", "name", "version", "build"):
+            res[col] = res[col].astype("category")
         res = res.reset_index(drop=True)
 
         return res
@@ -1544,20 +1627,20 @@ class RepoData:
 
     @staticmethod
     def platform2subdir(platform):
-        if platform == 'linux':
-            return 'linux-64'
-        elif platform == 'linux-aarch64':
-            return 'linux-aarch64'
-        elif platform == 'osx':
-            return 'osx-64'
-        elif platform == 'osx-arm64':
-            return 'osx-arm64'
-        elif platform == 'noarch':
-            return 'noarch'
+        if platform == "linux":
+            return "linux-64"
+        elif platform == "linux-aarch64":
+            return "linux-aarch64"
+        elif platform == "osx":
+            return "osx-64"
+        elif platform == "osx-arm64":
+            return "osx-arm64"
+        elif platform == "noarch":
+            return "noarch"
         else:
             raise ValueError(
-                'Unsupported platform: bioconda only supports linux, linux-aarch64, osx, osx-arm64 and noarch.')
-
+                "Unsupported platform: bioconda only supports linux, linux-aarch64, osx, osx-arm64 and noarch."
+            )
 
     def get_versions(self, name):
         """Get versions available for package
@@ -1570,20 +1653,32 @@ class RepoData:
           e.g. {'0.1': ['linux'], '0.2': ['linux', 'osx'], '0.3': ['noarch']}
         """
         # called from doc generator
-        packages = self.df[self.df.name == name][['version', 'platform']]
-        versions = packages.groupby('version').agg(lambda x: list(set(x)))
-        return versions['platform'].to_dict()
+        packages = self.df[self.df.name == name][["version", "platform"]]
+        versions = packages.groupby("version").agg(lambda x: list(set(x)))
+        return versions["platform"].to_dict()
 
     def get_latest_versions(self, channel):
         """Get the latest version for each package in **channel**"""
         # called from pypi module
-        packages = self.df[self.df.channel == channel]['version']
+        packages = self.df[self.df.channel == channel]["version"]
+
         def max_vers(x):
             return max(VersionOrder(v) for v in x)
-        vers = packages.groupby('name').agg(max_vers)
 
-    def get_package_data(self, key=None, channels=None, name=None, version=None,
-                         build_number=None, platform=None, build=None, native=False):
+        vers = packages.groupby("name").agg(max_vers)
+        return vers
+
+    def get_package_data(
+        self,
+        key=None,
+        channels=None,
+        name=None,
+        version=None,
+        build_number=None,
+        platform=None,
+        build=None,
+        native=False,
+    ):
         """Get **key** for each package in **channels**
 
         If **key** is not give, returns bool whether there are matches.
@@ -1591,7 +1686,7 @@ class RepoData:
         If **key** is a list of string, returns tuple iterator.
         """
         if native:
-            platform = ['noarch', self.native_platform()]
+            platform = ["noarch", self.native_platform()]
 
         if version is not None:
             version = str(version)
@@ -1602,12 +1697,12 @@ class RepoData:
         # is much faster than executing the comparisons for all values
         # every time, in particular if we are looking at a specific package.
         for col, val in (
-                ('name', name),         # thousands of different values
-                ('build', build),       # build string should vary a lot
-                ('version', version),   # still pretty good variety
-                ('channel', channels),  # 3 values
-                ('platform', platform), # 3 values
-                ('build_number', build_number), # most values 0
+            ("name", name),  # thousands of different values
+            ("build", build),  # build string should vary a lot
+            ("version", version),  # still pretty good variety
+            ("channel", channels),  # 3 values
+            ("platform", platform),  # 3 values
+            ("build_number", build_number),  # most values 0
         ):
             if val is None:
                 continue
@@ -1624,20 +1719,15 @@ class RepoData:
 
 
 def get_github_client():
-    """Get a Github client with a robust retry policy.
-    """
+    """Get a Github client with a robust retry policy."""
     if "GITHUB_TOKEN" in os.environ.keys():
         return Github(
             os.environ["GITHUB_TOKEN"],
-            retry=Retry(
-                total=10, status_forcelist=(500, 502, 504), backoff_factor=0.3
-            ),
+            retry=Retry(total=10, status_forcelist=(500, 502, 504), backoff_factor=0.3),
         )
     logger.warn("GITHUB_TOKEN not found, restrictions may be enforced by GitHub API")
     return Github(
-        retry=Retry(
-            total=10, status_forcelist=(500, 502, 504), backoff_factor=0.3
-        ),
+        retry=Retry(total=10, status_forcelist=(500, 502, 504), backoff_factor=0.3),
     )
 
 
@@ -1652,7 +1742,10 @@ def extract_stable_version(version):
     return m.group(1)
 
 
-def yaml_remove_invalid_chars(text: str, valid_chars_re=re.compile(r"[^ \t\n\w\d:\{\}\[\]\(\);&|\$§\"'\?\!%#\\~*\.,-\^°]+")) -> str:
+def yaml_remove_invalid_chars(
+    text: str,
+    valid_chars_re=re.compile(r"[^ \t\n\w\d:\{\}\[\]\(\);&|\$§\"'\?\!%#\\~*\.,-\^°]+"),
+) -> str:
     """Remove chars that are invalid in yaml literal strings.
 
     E.g. we do not want them to contain carriage return chars or delete chars.
