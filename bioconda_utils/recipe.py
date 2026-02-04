@@ -145,11 +145,9 @@ class Recipe:
     JINJA_VARS = {
         "cran_mirror": "https://cloud.r-project.org",
         "compiler": lambda x: f"compiler_{x}",
-        "pin_compatible": lambda x,
-        max_pin=None,
-        min_pin=None,
-        upper_bound=None,
-        lower_bound=None: f"{x}",
+        "pin_compatible": lambda x, max_pin=None, min_pin=None, upper_bound=None, lower_bound=None: (
+            f"{x}"
+        ),
         "cdt": lambda x: x,
     }
 
