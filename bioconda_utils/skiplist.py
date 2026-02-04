@@ -7,12 +7,12 @@ class Skiplist:
     def __init__(self, config: Dict[str, Any], recipe_folder: str):
         self.recipe_folder = recipe_folder
         self.global_list = set()
-        for p in config.get("blacklists", []):
+        for p in config.get('blacklists', []):
             self.global_list.update(
                 [
                     self._get_reldir(i.strip())
-                    for i in open(p, encoding="utf8")
-                    if not i.startswith("#") and i.strip()
+                    for i in open(p, encoding='utf8')
+                    if not i.startswith('#') and i.strip()
                 ]
             )
 
@@ -21,7 +21,7 @@ class Skiplist:
 
     def is_skiplisted(self, recipe: Union[str, Recipe]) -> bool:
         from bioconda_utils.build_failure import BuildFailureRecord
-
+        
         if isinstance(recipe, Recipe):
             recipe_reldir = recipe.reldir
         else:

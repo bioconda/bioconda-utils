@@ -1,3 +1,5 @@
+
+
 from enum import Enum
 import glob
 import os
@@ -26,15 +28,7 @@ class UploadResult(Enum):
     NO_PR = 4
 
 
-def upload_pr_artifacts(
-    config,
-    repo,
-    git_sha,
-    dryrun=False,
-    mulled_upload_target=None,
-    label=None,
-    artifact_source="azure",
-) -> UploadResult:
+def upload_pr_artifacts(config, repo, git_sha, dryrun=False, mulled_upload_target=None, label=None, artifact_source="azure") -> UploadResult:
     _config = utils.load_config(config)
     repodata = utils.RepoData()
 
@@ -64,24 +58,18 @@ def upload_pr_artifacts(
                     zipfile.ZipFile(artifact_path).extractall(tmpdir)
                 elif artifact_source == "circleci":
                     artifact_dir = os.path.join(tmpdir, *(artifact.split("/")[-4:-1]))
-                    artifact_path = os.path.join(
-                        tmpdir, artifact_dir, os.path.basename(artifact)
-                    )
+                    artifact_path = os.path.join(tmpdir, artifact_dir, os.path.basename(artifact))
                     Path(artifact_dir).mkdir(parents=True, exist_ok=True)
                     download_artifact(artifact, artifact_path, artifact_source)
                 elif artifact_source == "github-actions":
                     artifact_dir = os.path.join(tmpdir, "artifacts")
-                    artifact_path = os.path.join(
-                        artifact_dir, os.path.basename(artifact)
-                    )
+                    artifact_path = os.path.join(artifact_dir, os.path.basename(artifact))
                     Path(artifact_dir).mkdir(parents=True, exist_ok=True)
                     download_artifact(artifact, artifact_path, artifact_source)
                     zipfile.ZipFile(artifact_path).extractall(artifact_dir)
 
                 # get all the contained packages and images and upload them
-                platform_patterns = [
-                    repodata.platform2subdir(repodata.native_platform())
-                ]
+                platform_patterns = [repodata.platform2subdir(repodata.native_platform())]
                 if repodata.native_platform().startswith("linux"):
                     platform_patterns.append("noarch")
 
@@ -98,7 +86,7 @@ def upload_pr_artifacts(
                                 success.append(anaconda_upload(pkg, label=label))
 
                 if mulled_upload_target:
-                    quay_login = os.environ["QUAY_LOGIN"]
+                    quay_login = os.environ['QUAY_LOGIN']
 
                     pattern = f"{tmpdir}/*/images/*.tar.gz"
                     logger.info(f"Checking for images at {pattern}.")
@@ -118,25 +106,24 @@ def upload_pr_artifacts(
                         else:
                             # upload the image
                             logger.info(f"Uploading {img} to {target}.")
-                            success.append(
-                                skopeo_upload(fixed_img_name, target, creds=quay_login)
-                            )
+                            success.append(skopeo_upload(fixed_img_name, target, creds=quay_login))
         if all(success):
             return UploadResult.SUCCESS
         else:
             return UploadResult.FAILURE
 
 
-@backoff.on_exception(backoff.expo, requests.exceptions.RequestException)
+@backoff.on_exception(
+    backoff.expo,
+    requests.exceptions.RequestException
+)
 def download_artifact(url, to_path, artifact_source):
     logger.info(f"Downloading artifact {url}.")
     headers = {}
     if artifact_source == "github-actions":
         token = os.environ.get("GITHUB_TOKEN")
         if not token:
-            logger.critical(
-                "GITHUB_TOKEN required to download GitHub Actions artifacts"
-            )
+            logger.critical("GITHUB_TOKEN required to download GitHub Actions artifacts")
             exit(1)
         headers = {"Authorization": f"token {token}"}
     resp = requests.get(url, stream=True, allow_redirects=True, headers=headers)
@@ -168,20 +155,23 @@ def fetch_artifacts(pr, artifact_source, repo):
     platform = repodata.native_platform()
     for check_run in check_runs:
         if (
-            artifact_source == "azure"
-            and check_run.app.slug == "azure-pipelines"
-            and check_run.name.startswith(f"bioconda.bioconda-recipes (test_{platform}")
+            artifact_source == "azure" and 
+            check_run.app.slug == "azure-pipelines" and
+            check_run.name.startswith(f"bioconda.bioconda-recipes (test_{platform}")
         ):
             # azure builds
             artifact_url = get_azure_artifacts(check_run)
             yield from artifact_url
-        elif artifact_source == "circleci" and check_run.app.slug == "circleci-checks":
+        elif (
+            artifact_source == "circleci" and
+            check_run.app.slug == "circleci-checks"
+        ):
             # Circle CI builds
             artifact_url = get_circleci_artifacts(check_run, platform)
             yield from artifact_url
         elif (
-            artifact_source == "github-actions"
-            and check_run.app.slug == "github-actions"
+            artifact_source == "github-actions" and
+            check_run.app.slug == "github-actions"
         ):
             # GitHubActions builds
             artifact_url = get_gha_artifacts(check_run, platform, repo)
@@ -233,22 +223,18 @@ def get_circleci_artifacts(check_run, platform):
                 else:
                     for artifact in json_job["items"]:
                         artifact_url = artifact["url"]
-                        if artifact_url.endswith(
-                            (".html", ".json", ".json.bz2", ".json.zst")
-                        ):
+                        if artifact_url.endswith((".html", ".json", ".json.bz2", ".json.zst")):
                             continue
                         else:
                             yield artifact_url
-
 
 def parse_gha_build_id(url: str) -> str:
     # Get workflow run id from URL
     return re.search("runs/(\d+)/", url).group(1)
 
-
 def get_gha_artifacts(check_run, platform, repo):
     gha_workflow_id = parse_gha_build_id(check_run.details_url)
-    if gha_workflow_id:
+    if (gha_workflow_id) :
         # The workflow run is different from the check run
         run = repo.get_workflow_run(int(gha_workflow_id))
         artifacts = run.get_artifacts()

@@ -8,7 +8,6 @@ from bioconda_utils.build_failure import BuildFailureRecord
 from .. import utils
 from . import LintCheck, ERROR, WARNING, INFO
 
-
 class in_other_channels(LintCheck):
     """A package of the same name already exists in another channel
 
@@ -23,11 +22,10 @@ class in_other_channels(LintCheck):
     new home at conda-forge.
 
     """
-
     def check_recipe(self, recipe):
         channels = utils.RepoData().get_package_data(key="channel", name=recipe.name)
-        if set(channels) - set(("bioconda",)):
-            self.message(section="package/name")
+        if set(channels) - set(('bioconda',)):
+            self.message(section='package/name')
 
 
 class build_number_needs_bump(LintCheck):
@@ -38,13 +36,12 @@ class build_number_needs_bump(LintCheck):
     channel. Please increase the build number.
 
     """
-
     def check_recipe(self, recipe):
         bldnos = utils.RepoData().get_package_data(
-            key="build_number", name=recipe.name, version=recipe.version
-        )
+            key="build_number",
+            name=recipe.name, version=recipe.version)
         if bldnos and recipe.build_number <= max(bldnos):
-            self.message("build/number", data=max(bldnos))
+            self.message('build/number', data=max(bldnos))
 
     def fix(self, _message, data):
         self.recipe.reset_buildnumber(data + 1)
@@ -57,15 +54,13 @@ class build_number_needs_reset(LintCheck):
     No previous build of a package of this name and this version exists,
     the build number should therefore be 0.
     """
-
-    requires = ["missing_build_number"]
-
+    requires = ['missing_build_number']
     def check_recipe(self, recipe):
         bldnos = utils.RepoData().get_package_data(
-            key="build_number", name=recipe.name, version=recipe.version
-        )
+            key="build_number",
+            name=recipe.name, version=recipe.version)
         if not bldnos and recipe.build_number > 0:
-            self.message("build/number", data=0)
+            self.message('build/number', data=0)
 
     def fix(self, _message, data):
         self.recipe.reset_buildnumber(data)
@@ -78,22 +73,21 @@ class recipe_is_blacklisted(LintCheck):
     If you are intending to repair this recipe, remove it from
     the build fail blacklist.
     """
-
     def __init__(self, linter):
         super().__init__(linter)
         self.skiplist = linter.get_skiplist()
-        self.blacklists = linter.config.get("blacklists")
+        self.blacklists = linter.config.get('blacklists')
 
     def check_recipe(self, recipe):
         if self.skiplist.is_skiplisted(recipe):
-            self.message(section="package/name", data=True)
+            self.message(section='package/name', data=True)
 
     def fix(self, _message, _data):
         failure_record = BuildFailureRecord(self.recipe)
         if failure_record.exists() and failure_record.skiplist:
             failure_record.remove()
         for blacklist in self.blacklists:
-            with open(blacklist, "r") as fdes:
+            with open(blacklist, 'r') as fdes:
                 data = fdes.readlines()
             for num, line in enumerate(data):
                 if self.recipe.name in line:
@@ -101,8 +95,8 @@ class recipe_is_blacklisted(LintCheck):
             else:
                 continue
             del data[num]
-            with open(blacklist, "w") as fdes:
-                fdes.write("".join(data))
+            with open(blacklist, 'w') as fdes:
+                fdes.write(''.join(data))
             break
         else:
             return False

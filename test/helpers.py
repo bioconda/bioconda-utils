@@ -107,7 +107,7 @@ class Recipes(object):
             os.makedirs(rdir)
             self.recipe_dirs[name] = rdir
             for key, value in recipe.items():
-                with open(os.path.join(rdir, key), "w") as fout:
+                with open(os.path.join(rdir, key), 'w') as fout:
                     fout.write(value)
         self.basedir = basedir
 
