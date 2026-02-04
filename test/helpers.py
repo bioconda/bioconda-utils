@@ -2,7 +2,6 @@ from textwrap import dedent
 import tempfile
 import yaml
 import os
-import subprocess as sp
 
 from conda_index.index import update_index
 
@@ -107,7 +106,7 @@ class Recipes(object):
             os.makedirs(rdir)
             self.recipe_dirs[name] = rdir
             for key, value in recipe.items():
-                with open(os.path.join(rdir, key), 'w') as fout:
+                with open(os.path.join(rdir, key), "w") as fout:
                     fout.write(value)
         self.basedir = basedir
 

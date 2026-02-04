@@ -5,6 +5,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  qc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/ruff-action@v3
+        name: ruff check
+      - uses: astral-sh/ruff-action@v3
+        name: ruff format
+        with:
+          args: "format --check --diff"
   test-linux:
     name: Linux tests
     runs-on: ubuntu-latest
