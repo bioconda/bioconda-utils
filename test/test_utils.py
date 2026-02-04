@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 # Label that will be used for uploading test packages to anaconda/binstar
-TEST_LABEL = 'bioconda-utils-test'
+TEST_LABEL = "bioconda-utils-test"
 
 # PARAMS and ID are used with pytest.fixture. The end result is that, on Linux,
 # any tests that depend on a fixture that uses PARAMS will run twice (once with
@@ -42,15 +42,15 @@ TEST_LABEL = 'bioconda-utils-test'
 # Docker ref for build container
 DOCKER_BASE_IMAGE = "quay.io/bioconda/bioconda-utils-test-env-cos7:latest"
 
-SKIP_DOCKER_TESTS = sys.platform.startswith('darwin')
-SKIP_NOT_OSX = not sys.platform.startswith('darwin')
+SKIP_DOCKER_TESTS = sys.platform.startswith("darwin")
+SKIP_NOT_OSX = not sys.platform.startswith("darwin")
 
 if SKIP_DOCKER_TESTS:
     PARAMS = [False]
-    IDS = ['system conda']
+    IDS = ["system conda"]
 else:
     PARAMS = [True, False]
-    IDS = ['with docker', 'system conda']
+    IDS = ["with docker", "system conda"]
 
 
 @contextlib.contextmanager
@@ -59,15 +59,25 @@ def ensure_env_missing(env_name):
     context manager that makes sure a conda env of a particular name does not
     exist, deleting it if needed.
     """
+
     def _clean():
-        proc = sp.run(['conda', 'env', 'list'],
-                      stdout=sp.PIPE, stderr=sp.STDOUT, check=True,
-                      universal_newlines=True)
+        proc = sp.run(
+            ["conda", "env", "list"],
+            stdout=sp.PIPE,
+            stderr=sp.STDOUT,
+            check=True,
+            universal_newlines=True,
+        )
 
         if env_name in proc.stdout:
-            sp.run(['conda', 'env', 'remove', '-y', '-n', env_name],
-                   stdout=sp.PIPE, stderr=sp.STDOUT, check=True,
-                   universal_newlines=True)
+            sp.run(
+                ["conda", "env", "remove", "-y", "-n", env_name],
+                stdout=sp.PIPE,
+                stderr=sp.STDOUT,
+                check=True,
+                universal_newlines=True,
+            )
+
     _clean()
     yield
     _clean()
@@ -76,13 +86,13 @@ def ensure_env_missing(env_name):
 # ----------------------------------------------------------------------------
 # FIXTURES
 #
-@pytest.fixture(scope='module')
+@pytest.fixture(scope="module")
 def recipes_fixture():
     """
     Writes example recipes (based on test_case.yaml), figures out the package
     paths and attaches them to the Recipes instance, and cleans up afterward.
     """
-    rcp = Recipes('test_case.yaml')
+    rcp = Recipes("test_case.yaml")
     rcp.write_recipes()
     rcp.pkgs = {}
     for key, val in rcp.recipe_dirs.items():
@@ -93,15 +103,16 @@ def recipes_fixture():
             ensure_missing(pkg)
 
 
-@pytest.fixture(scope='module')
+@pytest.fixture(scope="module")
 def config_fixture():
     """Loads config"""
     config = utils.load_config(
-        os.path.join(os.path.dirname(__file__), "test-config.yaml"))
+        os.path.join(os.path.dirname(__file__), "test-config.yaml")
+    )
     yield config
 
 
-@pytest.fixture(scope='module', params=PARAMS, ids=IDS)
+@pytest.fixture(scope="module", params=PARAMS, ids=IDS)
 def single_build(request, recipes_fixture):
     """
     Builds the "one" recipe.
@@ -109,49 +120,59 @@ def single_build(request, recipes_fixture):
     if request.param:
         logger.error("Making recipe builder")
         docker_builder = docker_utils.RecipeBuilder(
-            use_host_conda_bld=True,
-            docker_base_image=DOCKER_BASE_IMAGE)
+            use_host_conda_bld=True, docker_base_image=DOCKER_BASE_IMAGE
+        )
         mulled_test = True
         logger.error("DONE")
     else:
         docker_builder = None
         mulled_test = False
-    logger.error("Fixture: Building 'one' %s",
-                 "within docker" if docker_builder else "locally")
+    logger.error(
+        "Fixture: Building 'one' %s", "within docker" if docker_builder else "locally"
+    )
     build.build(
-        recipe=recipes_fixture.recipe_dirs['one'],
-        pkg_paths=recipes_fixture.pkgs['one'],
+        recipe=recipes_fixture.recipe_dirs["one"],
+        pkg_paths=recipes_fixture.pkgs["one"],
         docker_builder=docker_builder,
         mulled_test=mulled_test,
     )
-    logger.error("Fixture: Building 'one' %s -- DONE",
-                 "within docker" if docker_builder else "locally")
-    yield recipes_fixture.pkgs['one']
-    for pkg in recipes_fixture.pkgs['one']:
+    logger.error(
+        "Fixture: Building 'one' %s -- DONE",
+        "within docker" if docker_builder else "locally",
+    )
+    yield recipes_fixture.pkgs["one"]
+    for pkg in recipes_fixture.pkgs["one"]:
         ensure_missing(pkg)
 
 
-@pytest.fixture(scope='module', params=PARAMS, ids=IDS)
+@pytest.fixture(scope="module", params=PARAMS, ids=IDS)
 def multi_build(request, recipes_fixture, config_fixture):
     """
     Builds the "one", "two", and "three" recipes.
     """
     if request.param:
         docker_builder = docker_utils.RecipeBuilder(
-            use_host_conda_bld=True,
-            docker_base_image=DOCKER_BASE_IMAGE)
+            use_host_conda_bld=True, docker_base_image=DOCKER_BASE_IMAGE
+        )
         mulled_test = True
     else:
         docker_builder = None
         mulled_test = False
-    logger.error("Fixture: Building one/two/three %s",
-                 "within docker" if docker_builder else "locally")
-    build.build_recipes(recipes_fixture.basedir, config_fixture,
-                        recipes_fixture.recipe_dirnames,
-                        docker_builder=docker_builder,
-                        mulled_test=mulled_test)
-    logger.error("Fixture: Building one/two/three %s -- DONE",
-                 "within docker" if docker_builder else "locally")
+    logger.error(
+        "Fixture: Building one/two/three %s",
+        "within docker" if docker_builder else "locally",
+    )
+    build.build_recipes(
+        recipes_fixture.basedir,
+        config_fixture,
+        recipes_fixture.recipe_dirnames,
+        docker_builder=docker_builder,
+        mulled_test=mulled_test,
+    )
+    logger.error(
+        "Fixture: Building one/two/three %s -- DONE",
+        "within docker" if docker_builder else "locally",
+    )
     built_packages = recipes_fixture.pkgs
     yield built_packages
     for pkgs in built_packages.values():
@@ -159,7 +180,7 @@ def multi_build(request, recipes_fixture, config_fixture):
             ensure_missing(pkg)
 
 
-@pytest.fixture(scope='module', params=PARAMS, ids=IDS)
+@pytest.fixture(scope="module", params=PARAMS, ids=IDS)
 def multi_build_exclude(request, recipes_fixture, config_fixture):
     """
     Builds the "one" and "two" recipes; provides (but then excludes) the
@@ -167,22 +188,28 @@ def multi_build_exclude(request, recipes_fixture, config_fixture):
     """
     if request.param:
         docker_builder = docker_utils.RecipeBuilder(
-            use_host_conda_bld=True,
-            docker_base_image=DOCKER_BASE_IMAGE)
+            use_host_conda_bld=True, docker_base_image=DOCKER_BASE_IMAGE
+        )
         mulled_test = True
     else:
         docker_builder = None
         mulled_test = False
-    logger.error("Fixture: Building one/two (and not three) %s",
-                 "within docker" if docker_builder else "locally")
-    build.build_recipes(recipes_fixture.basedir, config_fixture,
-                        recipes_fixture.recipe_dirnames,
-                        docker_builder=docker_builder,
-                        mulled_test=mulled_test,
-                        exclude=['three'],
-                        )
-    logger.error("Fixture: Building one/two (and not three) %s -- DONE",
-                 "within docker" if docker_builder else "locally")
+    logger.error(
+        "Fixture: Building one/two (and not three) %s",
+        "within docker" if docker_builder else "locally",
+    )
+    build.build_recipes(
+        recipes_fixture.basedir,
+        config_fixture,
+        recipes_fixture.recipe_dirnames,
+        docker_builder=docker_builder,
+        mulled_test=mulled_test,
+        exclude=["three"],
+    )
+    logger.error(
+        "Fixture: Building one/two (and not three) %s -- DONE",
+        "within docker" if docker_builder else "locally",
+    )
     built_packages = recipes_fixture.pkgs
     yield built_packages
     for pkgs in built_packages.values():
@@ -190,22 +217,24 @@ def multi_build_exclude(request, recipes_fixture, config_fixture):
             ensure_missing(pkg)
 
 
-@pytest.fixture(scope='module')
+@pytest.fixture(scope="module")
 def single_upload():
     """
     Creates a randomly-named recipe and uploads it using a label so that it
     doesn't affect the main bioconda channel. Tests that depend on this fixture
     get a tuple of name, pakage, recipe dir. Cleans up when it's done.
     """
-    name = 'upload-test-' + str(uuid.uuid4()).split('-')[0]
+    name = "upload-test-" + str(uuid.uuid4()).split("-")[0]
     r = Recipes(
-        '''
+        """
         {0}:
           meta.yaml: |
             package:
               name: {0}
               version: "0.1"
-        '''.format(name), from_string=True)
+        """.format(name),
+        from_string=True,
+    )
     r.write_recipes()
     r.pkgs = {}
     r.pkgs[name] = utils.built_package_paths(r.recipe_dirs[name])
@@ -214,7 +243,7 @@ def single_upload():
         recipe=r.recipe_dirs[name],
         pkg_paths=r.pkgs[name],
         docker_builder=None,
-        mulled_test=False
+        mulled_test=False,
     )
     pkg = r.pkgs[name][0]
 
@@ -223,27 +252,46 @@ def single_upload():
     yield (name, pkg, r.recipe_dirs[name])
 
     sp.run(
-        ['anaconda', '-t', os.environ.get('ANACONDA_TOKEN'), 'remove',
-         'bioconda/{0}'.format(name), '--force'],
-        stdout=sp.PIPE, stderr=sp.STDOUT, check=True,
-        universal_newlines=True)
+        [
+            "anaconda",
+            "-t",
+            os.environ.get("ANACONDA_TOKEN"),
+            "remove",
+            "bioconda/{0}".format(name),
+            "--force",
+        ],
+        stdout=sp.PIPE,
+        stderr=sp.STDOUT,
+        check=True,
+        universal_newlines=True,
+    )
+
 
 # ----------------------------------------------------------------------------
 
 
 @pytest.mark.skipif(
-    not os.environ.get('ANACONDA_TOKEN'),
-    reason='No ANACONDA_TOKEN found'
+    not os.environ.get("ANACONDA_TOKEN"), reason="No ANACONDA_TOKEN found"
 )
 def test_upload(single_upload):
     name, pkg, recipe = single_upload
-    env_name = 'bioconda-utils-test-' + str(uuid.uuid4()).split('-')[0]
+    env_name = "bioconda-utils-test-" + str(uuid.uuid4()).split("-")[0]
     with ensure_env_missing(env_name):
         sp.run(
-            ['conda', 'create', '-n', env_name,
-             '-c', 'bioconda/label/{0}'.format(TEST_LABEL), name],
-            stdout=sp.PIPE, stderr=sp.STDOUT, check=True,
-            universal_newlines=True)
+            [
+                "conda",
+                "create",
+                "-n",
+                env_name,
+                "-c",
+                "bioconda/label/{0}".format(TEST_LABEL),
+                name,
+            ],
+            stdout=sp.PIPE,
+            stderr=sp.STDOUT,
+            check=True,
+            universal_newlines=True,
+        )
 
 
 @pytest.mark.long_running_2
@@ -253,7 +301,7 @@ def test_single_build_only(single_build):
         ensure_missing(pkg)
 
 
-@pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
+@pytest.mark.skipif(SKIP_DOCKER_TESTS, reason="skipping on osx")
 @pytest.mark.long_running_2
 def test_single_build_pkg_dir(recipes_fixture):
     """
@@ -263,13 +311,14 @@ def test_single_build_pkg_dir(recipes_fixture):
     docker_builder = docker_utils.RecipeBuilder(
         use_host_conda_bld=True,
         pkg_dir=os.getcwd() + "/output",
-        docker_base_image=DOCKER_BASE_IMAGE)
+        docker_base_image=DOCKER_BASE_IMAGE,
+    )
     mulled_test = False
     logger.error("DONE")
     logger.error("Fixture: Building 'one' within docker with pkg_dir")
     res = build.build(
-        recipe=recipes_fixture.recipe_dirs['one'],
-        pkg_paths=recipes_fixture.pkgs['one'],
+        recipe=recipes_fixture.recipe_dirs["one"],
+        pkg_paths=recipes_fixture.pkgs["one"],
         docker_builder=docker_builder,
         mulled_test=mulled_test,
     )
@@ -277,7 +326,7 @@ def test_single_build_pkg_dir(recipes_fixture):
     assert res.success
 
 
-@pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
+@pytest.mark.skipif(SKIP_DOCKER_TESTS, reason="skipping on osx")
 def test_single_build_with_post_test(single_build):
     for pkg in single_build:
         pkg_test.test_package(pkg)
@@ -293,78 +342,82 @@ def test_multi_build(multi_build):
 
 @pytest.mark.long_running_1
 def test_multi_build_exclude(multi_build_exclude):
-    for (k, v) in multi_build_exclude.items():
+    for k, v in multi_build_exclude.items():
         for pkg in v:
-            if k == 'three':
+            if k == "three":
                 assert not os.path.exists(pkg)
             else:
                 assert os.path.exists(pkg)
                 ensure_missing(pkg)
 
 
-@pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
+@pytest.mark.skipif(SKIP_DOCKER_TESTS, reason="skipping on osx")
 def test_docker_bioconda_utils_version():
     """
     Test for same bioconda-utils version in build container.
     """
     docker_builder = docker_utils.RecipeBuilder(
-        build_script_template=('''
+        build_script_template=(
+            """
 #! /usr/bin/env bash
 python -c '
 import bioconda_utils
 with open("{self.container_staging}/version", "w") as version_file:
     version_file.write(bioconda_utils.__version__)
 '
-'''
+"""
         ),
         docker_base_image=DOCKER_BASE_IMAGE,
     )
     temp_dir = docker_builder.pkg_dir
     # Set recipe_dir to any temporary directory, e.g., docker_builder.pkg_dir.
-    docker_builder.build_recipe(temp_dir, build_args='', env={})
-    with open(os.path.join(temp_dir, 'version')) as container_version_file:
+    docker_builder.build_recipe(temp_dir, build_args="", env={})
+    with open(os.path.join(temp_dir, "version")) as container_version_file:
         assert container_version_file.read() == __version__
 
 
-@pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
+@pytest.mark.skipif(SKIP_DOCKER_TESTS, reason="skipping on osx")
 def test_docker_builder_build(recipes_fixture):
     """
     Tests just the build_recipe method of a RecipeBuilder object.
     """
     docker_builder = docker_utils.RecipeBuilder(
-        use_host_conda_bld=True,
-        docker_base_image=DOCKER_BASE_IMAGE)
-    pkgs = recipes_fixture.pkgs['one']
-    docker_builder.build_recipe(recipes_fixture.recipe_dirs['one'],
-                                build_args='', env={})
+        use_host_conda_bld=True, docker_base_image=DOCKER_BASE_IMAGE
+    )
+    pkgs = recipes_fixture.pkgs["one"]
+    docker_builder.build_recipe(
+        recipes_fixture.recipe_dirs["one"], build_args="", env={}
+    )
     for pkg in pkgs:
         assert os.path.exists(pkg)
         ensure_missing(pkg)
 
 
-@pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
+@pytest.mark.skipif(SKIP_DOCKER_TESTS, reason="skipping on osx")
 def test_docker_build_fails(recipes_fixture, config_fixture):
     """
     Test for expected failure when a recipe fails to build
     """
     docker_builder = docker_utils.RecipeBuilder(
-        docker_base_image=DOCKER_BASE_IMAGE,
-        build_script_template="exit 1")
-    assert docker_builder.build_script_template == 'exit 1'
-    result = build.build_recipes(recipes_fixture.basedir, config_fixture,
-                                 recipes_fixture.recipe_dirnames,
-                                 docker_builder=docker_builder,
-                                 mulled_test=True)
+        docker_base_image=DOCKER_BASE_IMAGE, build_script_template="exit 1"
+    )
+    assert docker_builder.build_script_template == "exit 1"
+    result = build.build_recipes(
+        recipes_fixture.basedir,
+        config_fixture,
+        recipes_fixture.recipe_dirnames,
+        docker_builder=docker_builder,
+        mulled_test=True,
+    )
     assert not result
 
 
-@pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
+@pytest.mark.skipif(SKIP_DOCKER_TESTS, reason="skipping on osx")
 def test_docker_build_image_fails():
-    template = (
-        f"""
+    template = f"""
         FROM {DOCKER_BASE_IMAGE}
         RUN nonexistent command
-        """)
+        """
     with pytest.raises(sp.CalledProcessError):
         docker_utils.RecipeBuilder(dockerfile_template=template, build_image=True)
 
@@ -395,15 +448,17 @@ def test_get_deps():
                 - one
               run:
                 - two
-    """, from_string=True)
+    """,
+        from_string=True,
+    )
     r.write_recipes()
-    assert list(utils.get_deps(r.recipe_dirs['two'])) == ['one']
-    assert list(utils.get_deps(r.recipe_dirs['three'], build=True)) == ['one']
-    assert list(utils.get_deps(r.recipe_dirs['three'], build=False)) == ['two']
+    assert list(utils.get_deps(r.recipe_dirs["two"])) == ["one"]
+    assert list(utils.get_deps(r.recipe_dirs["three"], build=True)) == ["one"]
+    assert list(utils.get_deps(r.recipe_dirs["three"], build=False)) == ["two"]
 
 
 @pytest.mark.long_running_1
-@pytest.mark.parametrize('mulled_test', PARAMS, ids=IDS)
+@pytest.mark.parametrize("mulled_test", PARAMS, ids=IDS)
 def test_conda_as_dep(config_fixture, mulled_test):
     docker_builder = None
     if mulled_test:
@@ -426,10 +481,13 @@ def test_conda_as_dep(config_fixture, mulled_test):
             test:
               commands:
                 - test -e "${PREFIX}/bin/conda"
-        """, from_string=True)
+        """,
+        from_string=True,
+    )
     r.write_recipes()
     build_result = build.build_recipes(
-        r.basedir, config_fixture,
+        r.basedir,
+        config_fixture,
         r.recipe_dirnames,
         testonly=False,
         force=False,
@@ -442,6 +500,7 @@ def test_conda_as_dep(config_fixture, mulled_test):
         for i in utils.built_package_paths(v):
             assert os.path.exists(i)
             ensure_missing(i)
+
 
 # TODO replace the filter tests with tests for utils.get_package_paths()
 # def test_filter_recipes_no_skipping():
@@ -617,22 +676,27 @@ def test_built_package_paths():
             build:
               number: 0
               string: ncurses{{ CONDA_NCURSES }}_{{ PKG_BUILDNUM }}
-        """, from_string=True)
+        """,
+        from_string=True,
+    )
     r.write_recipes()
 
     # Newer conda-build versions add the channel_targets and target_platform to the hash
-    platform = 'linux' if sys.platform == 'linux' else 'osx'
-    d = {"channel_targets": "bioconda main", "target_platform": "{}-64".format(platform)}
+    platform = "linux" if sys.platform == "linux" else "osx"
+    d = {
+        "channel_targets": "bioconda main",
+        "target_platform": "{}-64".format(platform),
+    }
     h = metadata._hash_dependencies(d, 7)
 
     assert os.path.basename(
-        utils.built_package_paths(r.recipe_dirs['one'])[0]
-    ) == 'one-0.1-py36{}_0.conda'.format(h)
+        utils.built_package_paths(r.recipe_dirs["one"])[0]
+    ) == "one-0.1-py36{}_0.conda".format(h)
 
 
 def test_string_or_float_to_integer_python():
     f = utils._string_or_float_to_integer_python
-    assert f(27) == f('27') == f(2.7) == f('2.7') == 27
+    assert f(27) == f("27") == f(2.7) == f("2.7") == 27
 
 
 def test_rendering_sandboxing():
@@ -645,15 +709,17 @@ def test_rendering_sandboxing():
               version: 0.1
             extra:
               var: {{ GITHUB_TOKEN }}
-    """, from_string=True)
+    """,
+        from_string=True,
+    )
 
     r.write_recipes()
     env = {
         # None of these should be passed to the recipe
-        'CONDA_ARBITRARY_VAR': 'conda-val-here',
-        'TRAVIS_ARBITRARY_VAR': 'travis-val-here',
-        'GITHUB_TOKEN': 'asdf',
-        'BUILDKITE_TOKEN': 'asdf',
+        "CONDA_ARBITRARY_VAR": "conda-val-here",
+        "TRAVIS_ARBITRARY_VAR": "travis-val-here",
+        "GITHUB_TOKEN": "asdf",
+        "BUILDKITE_TOKEN": "asdf",
     }
 
     # If GITHUB_TOKEN is already set in the bash environment, then we get
@@ -665,22 +731,22 @@ def test_rendering_sandboxing():
     # In both cases we're passing in the `env` dict, which does contain
     # GITHUB_TOKEN.
 
-    if 'GITHUB_TOKEN' in os.environ:
+    if "GITHUB_TOKEN" in os.environ:
         with pytest.raises(sp.CalledProcessError) as excinfo:
-            pkg_paths = utils.built_package_paths(r.recipe_dirs['one'])
+            pkg_paths = utils.built_package_paths(r.recipe_dirs["one"])
             build.build(
-                recipe=r.recipe_dirs['one'],
+                recipe=r.recipe_dirs["one"],
                 pkg_paths=pkg_paths,
                 mulled_test=False,
                 raise_error=True,
             )
-        assert ("'GITHUB_TOKEN' is undefined" in str(excinfo.value.stdout))
+        assert "'GITHUB_TOKEN' is undefined" in str(excinfo.value.stdout)
     else:
         # recipe for "one" should fail because GITHUB_TOKEN is not a jinja var.
         with pytest.raises(exceptions.CondaBuildUserError) as excinfo:
-            pkg_paths = utils.built_package_paths(r.recipe_dirs['one'])
+            pkg_paths = utils.built_package_paths(r.recipe_dirs["one"])
             build.build(
-                recipe=r.recipe_dirs['one'],
+                recipe=r.recipe_dirs["one"],
                 pkg_paths=pkg_paths,
                 mulled_test=False,
             )
@@ -689,19 +755,19 @@ def test_rendering_sandboxing():
 
 def test_sandboxed():
     env = {
-        'PATH': '/foo/bar',
-        'CONDA_ARBITRARY_VAR': 'conda-val-here',
-        'TRAVIS_ARBITRARY_VAR': 'travis-val-here',
-        'GITHUB_TOKEN': 'asdf',
-        'BUILDKITE_TOKEN': 'asdf',
+        "PATH": "/foo/bar",
+        "CONDA_ARBITRARY_VAR": "conda-val-here",
+        "TRAVIS_ARBITRARY_VAR": "travis-val-here",
+        "GITHUB_TOKEN": "asdf",
+        "BUILDKITE_TOKEN": "asdf",
     }
     with utils.sandboxed_env(env):
         print(os.environ)
-        assert os.environ['PATH'] == '/foo/bar'
-        assert 'CONDA_ARBITRARY_VAR' not in os.environ
-        assert 'TRAVIS_ARBITRARY_VAR' not in os.environ
-        assert 'GITHUB_TOKEN' not in os.environ
-        assert 'BUILDKITE_TOKEN' not in os.environ
+        assert os.environ["PATH"] == "/foo/bar"
+        assert "CONDA_ARBITRARY_VAR" not in os.environ
+        assert "TRAVIS_ARBITRARY_VAR" not in os.environ
+        assert "GITHUB_TOKEN" not in os.environ
+        assert "BUILDKITE_TOKEN" not in os.environ
 
 
 def test_env_sandboxing():
@@ -721,16 +787,14 @@ def test_env_sandboxing():
                 echo "\$GITHUB_TOKEN has leaked into the build environment!"
                 exit 1
             fi
-        """, from_string=True)
+        """,
+        from_string=True,
+    )
     r.write_recipes()
-    pkg_paths = utils.built_package_paths(r.recipe_dirs['one'])
+    pkg_paths = utils.built_package_paths(r.recipe_dirs["one"])
 
-    with utils.temp_env({'GITHUB_TOKEN': 'token_here'}):
-        build.build(
-            recipe=r.recipe_dirs['one'],
-            pkg_paths=pkg_paths,
-            mulled_test=False
-        )
+    with utils.temp_env({"GITHUB_TOKEN": "token_here"}):
+        build.build(recipe=r.recipe_dirs["one"], pkg_paths=pkg_paths, mulled_test=False)
 
     for pkg in pkg_paths:
         assert os.path.exists(pkg)
@@ -764,7 +828,9 @@ def test_skip_dependencies(config_fixture):
                 - skip_dependencies_one
               run:
                 - skip_dependencies_two
-    """, from_string=True)
+    """,
+        from_string=True,
+    )
     r.write_recipes()
     pkgs = {}
     for k, v in r.recipe_dirs.items():
@@ -774,16 +840,19 @@ def test_skip_dependencies(config_fixture):
         for pkg in _pkgs:
             ensure_missing(pkg)
 
-    build.build_recipes(r.basedir, config_fixture,
-                        r.recipe_dirnames,
-                        testonly=False,
-                        force=False,
-                        mulled_test=False)
-    for pkg in pkgs['one']:
+    build.build_recipes(
+        r.basedir,
+        config_fixture,
+        r.recipe_dirnames,
+        testonly=False,
+        force=False,
+        mulled_test=False,
+    )
+    for pkg in pkgs["one"]:
         assert os.path.exists(pkg)
-    for pkg in pkgs['two']:
+    for pkg in pkgs["two"]:
         assert not os.path.exists(pkg)
-    for pkg in pkgs['three']:
+    for pkg in pkgs["three"]:
         assert not os.path.exists(pkg)
 
     # clean up
@@ -794,17 +863,21 @@ def test_skip_dependencies(config_fixture):
 
 class TestSubdags(object):
     def _build(self, recipes_fixture, config_fixture, n_workers, worker_offset):
-        build.build_recipes(recipes_fixture.basedir, config_fixture,
-                            recipes_fixture.recipe_dirnames,
-                            n_workers=n_workers, worker_offset=worker_offset,
-                            mulled_test=False)
+        build.build_recipes(
+            recipes_fixture.basedir,
+            config_fixture,
+            recipes_fixture.recipe_dirnames,
+            n_workers=n_workers,
+            worker_offset=worker_offset,
+            mulled_test=False,
+        )
 
     def test_subdags_out_of_range(self, recipes_fixture, config_fixture):
         with pytest.raises(ValueError):
             self._build(recipes_fixture, config_fixture, 2, 4)
 
 
-@pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
+@pytest.mark.skipif(SKIP_DOCKER_TESTS, reason="skipping on osx")
 def test_build_empty_extra_container():
     r = Recipes(
         """
@@ -816,12 +889,14 @@ def test_build_empty_extra_container():
             extra:
               container:
                 # empty
-        """, from_string=True)
+        """,
+        from_string=True,
+    )
     r.write_recipes()
-    pkgs = utils.built_package_paths(r.recipe_dirs['one'])
+    pkgs = utils.built_package_paths(r.recipe_dirs["one"])
 
     build_result = build.build(
-        recipe=r.recipe_dirs['one'],
+        recipe=r.recipe_dirs["one"],
         pkg_paths=pkgs,
         mulled_test=True,
     )
@@ -831,7 +906,7 @@ def test_build_empty_extra_container():
         ensure_missing(pkg)
 
 
-@pytest.mark.skipif(SKIP_DOCKER_TESTS, reason='skipping on osx')
+@pytest.mark.skipif(SKIP_DOCKER_TESTS, reason="skipping on osx")
 @pytest.mark.long_running_1
 @pytest.mark.xfail
 def test_build_container_no_default_gcc(tmpdir):
@@ -845,7 +920,9 @@ def test_build_container_no_default_gcc(tmpdir):
             test:
               commands:
                 - gcc --version
-        """, from_string=True)
+        """,
+        from_string=True,
+    )
     r.write_recipes()
 
     # Tests with the repository's Dockerfile instead of already uploaded images.
@@ -865,9 +942,9 @@ def test_build_container_no_default_gcc(tmpdir):
         image_build_dir=image_build_dir,
     )
 
-    pkg_paths = utils.built_package_paths(r.recipe_dirs['one'])
+    pkg_paths = utils.built_package_paths(r.recipe_dirs["one"])
     build_result = build.build(
-        recipe=r.recipe_dirs['one'],
+        recipe=r.recipe_dirs["one"],
         pkg_paths=pkg_paths,
         docker_builder=docker_builder,
         mulled_test=False,
@@ -896,13 +973,18 @@ def no_test_conda_forge_pins(caplog, config_fixture):
             requirements:
               run:
                 - zlib {{ zlib }}
-        """, from_string=True)
+        """,
+        from_string=True,
+    )
     r.write_recipes()
-    build_result = build.build_recipes(r.basedir, config_fixture,
-                                       r.recipe_dirnames,
-                                       testonly=False,
-                                       force=False,
-                                       mulled_test=False)
+    build_result = build.build_recipes(
+        r.basedir,
+        config_fixture,
+        r.recipe_dirnames,
+        testonly=False,
+        force=False,
+        mulled_test=False,
+    )
     assert build_result
 
     for k, v in r.recipe_dirs.items():
@@ -927,13 +1009,18 @@ def test_bioconda_pins(caplog, config_fixture):
             requirements:
               run:
                 - htslib
-        """, from_string=True)
+        """,
+        from_string=True,
+    )
     r.write_recipes()
-    build_result = build.build_recipes(r.basedir, config_fixture,
-                                       r.recipe_dirnames,
-                                       testonly=False,
-                                       force=False,
-                                       mulled_test=False)
+    build_result = build.build_recipes(
+        r.basedir,
+        config_fixture,
+        r.recipe_dirnames,
+        testonly=False,
+        force=False,
+        mulled_test=False,
+    )
     assert build_result
 
     for k, v in r.recipe_dirs.items():
@@ -955,9 +1042,11 @@ def test_load_meta_skipping():
               version: "0.1"
             build:
               skip: true
-        """, from_string=True)
+        """,
+        from_string=True,
+    )
     r.write_recipes()
-    recipe = r.recipe_dirs['one']
+    recipe = r.recipe_dirs["one"]
     assert utils.load_all_meta(recipe) == []
 
 
@@ -1011,15 +1100,20 @@ def test_native_platform_skipping():
               additional-platforms:
                 - linux-aarch64
                 - osx-arm64
-        """, from_string=True)
+        """,
+        from_string=True,
+    )
     r.write_recipes()
     # Make sure RepoData singleton init
     utils.RepoData.register_config(config_fixture)
     for recipe_name, platform, result in expections:
         recipe_folder = os.path.dirname(r.recipe_dirs[recipe_name])
-        assert build.do_not_consider_for_additional_platform(recipe_folder,
-                                                             r.recipe_dirs[recipe_name],
-                                                             platform) == result
+        assert (
+            build.do_not_consider_for_additional_platform(
+                recipe_folder, r.recipe_dirs[recipe_name], platform
+            )
+            == result
+        )
 
 
 def test_variants():
@@ -1036,21 +1130,25 @@ def test_variants():
             requirements:
               build:
                 - mypkg {{ mypkg }}
-        """, from_string=True)
+        """,
+        from_string=True,
+    )
     r.write_recipes()
-    recipe = r.recipe_dirs['one']
+    recipe = r.recipe_dirs["one"]
 
     # Write a temporary conda_build_config.yaml that we'll point the config
     # object to:
     tmp = tempfile.NamedTemporaryFile(delete=False).name
-    with open(tmp, 'w') as fout:
+    with open(tmp, "w") as fout:
         fout.write(
             dedent(
                 """
                 mypkg:
                   - 1.0
                   - 2.0
-                """))
+                """
+            )
+        )
     config = utils.load_conda_build_config()
     config.exclusive_config_files = [tmp]
 
@@ -1074,15 +1172,20 @@ def test_cb3_outputs(config_fixture):
                   - {{ pin_subpackage('libone', exact=True) }}
                   - python  {{ python }}
 
-        """, from_string=True)
+        """,
+        from_string=True,
+    )
     r.write_recipes()
-    r.recipe_dirs['one']
+    r.recipe_dirs["one"]
 
-    build_result = build.build_recipes(r.basedir, config_fixture,
-                                       r.recipe_dirnames,
-                                       testonly=False,
-                                       force=False,
-                                       mulled_test=False)
+    build_result = build.build_recipes(
+        r.basedir,
+        config_fixture,
+        r.recipe_dirnames,
+        testonly=False,
+        force=False,
+        mulled_test=False,
+    )
     assert build_result
 
     for k, v in r.recipe_dirs.items():
@@ -1107,13 +1210,18 @@ def test_compiler(config_fixture):
                 - python
               run:
                 - python
-        """, from_string=True)
+        """,
+        from_string=True,
+    )
     r.write_recipes()
-    build_result = build.build_recipes(r.basedir, config_fixture,
-                                       r.recipe_dirnames,
-                                       testonly=False,
-                                       force=False,
-                                       mulled_test=False)
+    build_result = build.build_recipes(
+        r.basedir,
+        config_fixture,
+        r.recipe_dirnames,
+        testonly=False,
+        force=False,
+        mulled_test=False,
+    )
     assert build_result
 
     for k, v in r.recipe_dirs.items():
@@ -1121,13 +1229,13 @@ def test_compiler(config_fixture):
             assert os.path.exists(i)
             ensure_missing(i)
 
+
 @pytest.mark.long_running_2
 def test_nested_recipes(config_fixture):
     """
     Test get_recipes ability to identify different nesting depths of recipes
     """
     r = Recipes(
-
         """
         shallow:
             meta.yaml: |
@@ -1175,14 +1283,19 @@ def test_nested_recipes(config_fixture):
                         - python 3.6
                     run:
                         - python 3.6
-        """, from_string=True)
+        """,
+        from_string=True,
+    )
     r.write_recipes()
 
-    build_results = build.build_recipes(r.basedir, config_fixture,
-                                        r.recipe_dirnames,
-                                        testonly=False,
-                                        force=False,
-                                        mulled_test=False)
+    build_results = build.build_recipes(
+        r.basedir,
+        config_fixture,
+        r.recipe_dirnames,
+        testonly=False,
+        force=False,
+        mulled_test=False,
+    )
     assert build_results
 
     assert len(list(utils.get_recipes(r.basedir))) == 4
@@ -1193,7 +1306,7 @@ def test_nested_recipes(config_fixture):
             ensure_missing(i)
 
 
-@pytest.mark.skipif(SKIP_NOT_OSX, reason='osx-only test')
+@pytest.mark.skipif(SKIP_NOT_OSX, reason="osx-only test")
 def test_conda_build_sysroot(config_fixture):
     """
     Test if CONDA_BUILD_SYSROOT is empty/unset and correctly set after compiler activation.
@@ -1221,13 +1334,18 @@ def test_conda_build_sysroot(config_fixture):
             requirements:
               build:
                 - {{ compiler('c') }}
-        """, from_string=True)
+        """,
+        from_string=True,
+    )
     r.write_recipes()
-    build_result = build.build_recipes(r.basedir, config_fixture,
-                                       r.recipe_dirnames,
-                                       testonly=False,
-                                       force=False,
-                                       mulled_test=False)
+    build_result = build.build_recipes(
+        r.basedir,
+        config_fixture,
+        r.recipe_dirnames,
+        testonly=False,
+        force=False,
+        mulled_test=False,
+    )
     assert build_result
 
     for k, v in r.recipe_dirs.items():
@@ -1265,18 +1383,24 @@ def test_skip_unsatisfiable_pin_compatible(config_fixture):
             one:
               - 0.1
               - 0.2
-        """, from_string=True)
+        """,
+        from_string=True,
+    )
     r.write_recipes()
     build_result = build.build_recipes(
-        r.basedir, config_fixture, [r.recipe_dirs["one"]],
-        testonly=False, force=False, mulled_test=False,
+        r.basedir,
+        config_fixture,
+        [r.recipe_dirs["one"]],
+        testonly=False,
+        force=False,
+        mulled_test=False,
     )
     assert build_result
     assert len(utils.load_all_meta(r.recipe_dirs["two"])) == 1
 
 
-@pytest.mark.parametrize('mulled_test', PARAMS, ids=IDS)
-@pytest.mark.parametrize('pkg_format', ["1", "2"])
+@pytest.mark.parametrize("mulled_test", PARAMS, ids=IDS)
+@pytest.mark.parametrize("pkg_format", ["1", "2"])
 def test_pkg_test_conda_package_format(
     config_fixture, pkg_format, mulled_test, tmp_path, monkeypatch
 ):
@@ -1291,11 +1415,14 @@ def test_pkg_test_conda_package_format(
     else:
         monkeypatch.setitem(cc_conda_build, "pkg_format", pkg_format)
     from conda.base.context import context
+
     monkeypatch.setitem(context.conda_build, "pkg_format", pkg_format)
     condarc = Path(tmp_path, ".condarc")
     condarc.write_text(f"conda_build:\n  pkg_format: {pkg_format}\n")
     monkeypatch.setenv("CONDARC", str(condarc))
-    monkeypatch.setattr(utils, "ENV_VAR_WHITELIST", ["CONDARC", *utils.ENV_VAR_WHITELIST])
+    monkeypatch.setattr(
+        utils, "ENV_VAR_WHITELIST", ["CONDARC", *utils.ENV_VAR_WHITELIST]
+    )
 
     r = Recipes(
         f"""

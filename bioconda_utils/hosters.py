@@ -15,7 +15,6 @@ to match links and extract their version.
 
 """
 
-
 import abc
 import inspect
 import json
@@ -26,8 +25,19 @@ from contextlib import redirect_stdout, redirect_stderr
 from distutils.version import LooseVersion
 from html.parser import HTMLParser
 from itertools import chain
-from typing import (Any, Dict, List, Match, Mapping, Pattern, Set, Tuple, Type,
-                    Optional, TYPE_CHECKING)
+from typing import (
+    Any,
+    Dict,
+    List,
+    Match,
+    Mapping,
+    Pattern,
+    Set,
+    Tuple,
+    Type,
+    Optional,
+    TYPE_CHECKING,
+)
 from urllib.parse import urljoin
 
 import regex as re
@@ -41,8 +51,11 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 #: This is so complicated because we need to parse matched, not-escaped
 #: parentheses to determine where the clause ends.
 #: Requires regex package for recursion.
-RE_CAPGROUP = re.compile(r"\(\?P<(\w+)>(?>[^()]+|\\\(|\\\)|(\((?>[^()]+|\\\(|\\\)|(?2))*\)))*\)")
+RE_CAPGROUP = re.compile(
+    r"\(\?P<(\w+)>(?>[^()]+|\\\(|\\\)|(\((?>[^()]+|\\\(|\\\)|(?2))*\)))*\)"
+)
 RE_REFGROUP = re.compile(r"\(\?P=(\w+)\)")
+
 
 def dedup_named_capture_group(pattern):
     """Replaces repetitions of capture groups with matches to first instance"""
@@ -55,17 +68,20 @@ def dedup_named_capture_group(pattern):
             return f"(?P={name})"
         seen.add(name)
         return match.group(0)
+
     return re.sub(RE_CAPGROUP, replace, pattern)
 
 
 def replace_named_capture_group(pattern, vals: Dict[str, str]):
     """Replaces capture groups with values from **vals**"""
+
     def replace(match):
         "inner replace"
         name = match.group(1)
         if name in vals:
             return vals[name] or ""
         return match.group(0)
+
     res = re.sub(RE_CAPGROUP, replace, pattern)
     res = re.sub(RE_REFGROUP, replace, res)
     return res
@@ -80,8 +96,9 @@ class HosterMeta(abc.ABCMeta):
 
     hoster_types: List["HosterMeta"] = []
 
-    def __new__(cls, name: str, bases: Tuple[type, ...],
-                namespace: Dict[str, Any], **kwargs) -> type:
+    def __new__(
+        cls, name: str, bases: Tuple[type, ...], namespace: Dict[str, Any], **kwargs
+    ) -> type:
         """Creates Hoster classes
 
         - expands references among ``{var}_pattern`` attributes
@@ -95,8 +112,11 @@ class HosterMeta(abc.ABCMeta):
         if not typ.__name__.startswith("Custom"):
             cls.hoster_types.append(typ)
 
-        patterns = {attr.replace("_pattern", ""): getattr(typ, attr)
-                    for attr in dir(typ) if attr.endswith("_pattern")}
+        patterns = {
+            attr.replace("_pattern", ""): getattr(typ, attr)
+            for attr in dir(typ)
+            if attr.endswith("_pattern")
+        }
 
         for pat in patterns:
             # expand pattern references:
@@ -106,7 +126,8 @@ class HosterMeta(abc.ABCMeta):
                 pattern = new_pattern
                 new_pattern = re.sub(r"(\{\d+,?\d*\})", r"{\1}", pattern)
                 new_pattern = new_pattern.format_map(
-                    {k: v.rstrip("$") for k, v in patterns.items()})
+                    {k: v.rstrip("$") for k, v in patterns.items()}
+                )
             patterns[pat] = pattern
             # repair duplicate capture groups:
             pattern = dedup_named_capture_group(pattern)
@@ -139,13 +160,15 @@ class Hoster(metaclass=HosterMeta):
     #: - then only numbers, characters or one of -, +, ., :, ~
     #: - at most 31 characters length (to avoid matching checksums)
     #: - accept v or r as prefix if after slash, dot, underscore or dash
-    version_pattern: str = r"(?:(?<=[/._-])[rv])?(?P<version>\d[\da-zA-Z\-+\.:\~_]{0,30})"
+    version_pattern: str = (
+        r"(?:(?<=[/._-])[rv])?(?P<version>\d[\da-zA-Z\-+\.:\~_]{0,30})"
+    )
 
     #: matches archive file extensions
     ext_pattern: str = r"(?P<ext>(?i)\.(?:(?:(tar\.|t)(?:xz|bz2|gz))|zip|jar))"
 
     #: named patterns that will change with a version upgrade
-    exclude = ['version']
+    exclude = ["version"]
 
     @property
     @abc.abstractmethod
@@ -168,22 +191,21 @@ class Hoster(metaclass=HosterMeta):
     def __init__(self, url: str, match: Match[str]) -> None:
         self.vals = {k: v or "" for k, v in match.groupdict().items()}
         self.releases_urls = [
-            template.format_map(self.vals)
-            for template in self.releases_formats
+            template.format_map(self.vals) for template in self.releases_formats
         ]
-        logger.debug("%s matched %s with %s",
-                     self.__class__.__name__, url, self.vals)
+        logger.debug("%s matched %s with %s", self.__class__.__name__, url, self.vals)
 
     @classmethod
-    def try_make_hoster(cls: Type["Hoster"], url: str,
-                        config: Dict[str, str]) -> Optional["Hoster"]:
+    def try_make_hoster(
+        cls: Type["Hoster"], url: str, config: Dict[str, str]
+    ) -> Optional["Hoster"]:
         """Creates hoster if **url** is matched by its **url_pattern**"""
         if config:
             try:
                 klass: Type["Hoster"] = type(
                     "Customized" + cls.__name__,
                     (cls,),
-                    {key+"_pattern":val for key, val in config.items()}
+                    {key + "_pattern": val for key, val in config.items()},
                 )
             except KeyError:
                 logger.debug("Overrides invalid for %s - skipping", cls.__name__)
@@ -197,12 +219,15 @@ class Hoster(metaclass=HosterMeta):
 
     @classmethod
     @abc.abstractmethod
-    def get_versions(cls, req: "AsyncRequests", orig_version: str) -> List[Mapping[str, Any]]:
+    def get_versions(
+        cls, req: "AsyncRequests", orig_version: str
+    ) -> List[Mapping[str, Any]]:
         "Gets list of versions from upstream hosting site"
 
 
 class HrefParser(HTMLParser):
     """Extract link targets from HTML"""
+
     def __init__(self, link_re: Pattern[str]) -> None:
         super().__init__()
         self.link_re = link_re
@@ -233,6 +258,7 @@ class HrefParser(HTMLParser):
 
 class IncludeFragmentParser(HTMLParser):
     """Extract include-fragment targets from HTML"""
+
     def __init__(self, link_re: Pattern[str]) -> None:
         super().__init__()
         self.link_re = link_re
@@ -267,9 +293,7 @@ class HTMLHoster(Hoster):
 
     async def get_versions(self, req, orig_version):
         exclude = set(self.exclude)
-        vals = {key: val
-                for key, val in self.vals.items()
-                if key not in exclude}
+        vals = {key: val for key, val in self.vals.items() if key not in exclude}
         link_pattern = replace_named_capture_group(self.link_pattern_compiled, vals)
         link_re = re.compile(link_pattern)
         result = []
@@ -287,11 +311,10 @@ class HTMLHoster(Hoster):
 
 class FTPHoster(Hoster):
     """Scans for updates on FTP servers"""
+
     async def get_versions(self, req, orig_version):
         exclude = set(self.exclude)
-        vals = {key: val
-                for key, val in self.vals.items()
-                if key not in exclude}
+        vals = {key: val for key, val in self.vals.items() if key not in exclude}
         link_pattern = replace_named_capture_group(self.link_pattern_compiled, vals)
         link_re = re.compile(link_pattern)
         result = []
@@ -301,9 +324,9 @@ class FTPHoster(Hoster):
                 match = link_re.search(fname)
                 if match:
                     data = match.groupdict()
-                    data['fn'] = fname
-                    data['link'] = "ftp://" + vals['host'] + fname
-                    data['releases_url'] = url
+                    data["fn"] = fname
+                    data["link"] = "ftp://" + vals["host"] + fname
+                    data["releases_url"] = url
                     result.append(data)
         return result
 
@@ -336,17 +359,18 @@ class OrderedHTMLHoster(HTMLHoster):
                 break
         if num is None:
             return matches
-        return matches[:num + 1]
+        return matches[: num + 1]
 
 
 class GithubBase(OrderedHTMLHoster):
     """Base class for software hosted on github.com"""
-    exclude = ['version', 'fname']
+
+    exclude = ["version", "fname"]
     account_pattern = r"(?P<account>[-\w]+)"
     project_pattern = r"(?P<project>[-.\w]+)"
     prefix_pattern = r"(?P<prefix>[-_./\w]+?)"
     suffix_pattern = r"(?P<suffix>[-_](lin)?)"
-    #tag_pattern = "{prefix}??{version}{suffix}??"
+    # tag_pattern = "{prefix}??{version}{suffix}??"
     tag_pattern = "{prefix}??{version}"
     url_pattern = r"github\.com{link}"
     fname_pattern = r"(?P<fname>[^/]+)"
@@ -355,8 +379,11 @@ class GithubBase(OrderedHTMLHoster):
 
 class GithubRelease(GithubBase):
     """Matches release artifacts uploaded to Github"""
+
     link_pattern = r"/{account}/{project}/releases/download/{tag}/{fname}{ext}?"
-    expanded_assets_pattern = r"https://github.com/{account}/{project}/releases/expanded_assets/{version}"
+    expanded_assets_pattern = (
+        r"https://github.com/{account}/{project}/releases/expanded_assets/{version}"
+    )
     alt_releases_formats = ["https://api.github.com/repos/{account}/{project}/releases"]
 
     async def get_versions(self, req, orig_version):
@@ -364,51 +391,53 @@ class GithubRelease(GithubBase):
         matches = await super().get_versions(req, orig_version)
         if len(matches) > 0:
             return matches
-        
+
         # now try the expanded webpage parsing, this may break if the HTML page changes in the future
         matches = await self.get_expanded_versions(req, orig_version)
         if len(matches) > 0:
             return matches
-        
+
         # now try the github API parsing, this will hit the API rate limit
         matches = await self.get_api_versions(req, orig_version)
         return matches
-    
+
     async def get_expanded_versions(self, req, orig_version):
         # this version will parse the releases page and expand sub-pages that are collapsed in the initial download
         # this section is basically copied from HTMLHoster, but we need the raw contents of the webpage to look for expanded assets
         exclude = set(self.exclude)
-        vals = {key: val
-                for key, val in self.vals.items()
-                if key not in exclude}
-        
+        vals = {key: val for key, val in self.vals.items() if key not in exclude}
+
         # this is the pattern for the expanded assets, which auto-expand when viewed via web
-        expanded_assets_pattern = replace_named_capture_group(self.expanded_assets_pattern_compiled, vals)
+        expanded_assets_pattern = replace_named_capture_group(
+            self.expanded_assets_pattern_compiled, vals
+        )
         expanded_assets_re = re.compile(expanded_assets_pattern)
 
         # after we expand an asset, we still need to look for the original link pattern within the asset
         link_pattern = replace_named_capture_group(self.link_pattern_compiled, vals)
         link_re = re.compile(link_pattern)
-        
+
         result = []
         for url in self.releases_urls:
             # we cannot use the HrefParser because it's not in an <a> tag
             parser = IncludeFragmentParser(expanded_assets_re)
             parser.feed(await req.get_text_from_url(url))
-            
+
             # now iterate over each expanded asset we find
             for match in parser.get_matches():
                 # fetch the expansion and look for the primary URL
                 link_parser = HrefParser(link_re)
                 link_parser.feed(await req.get_text_from_url(match["href"]))
-                
+
                 for lp_match in link_parser.get_matches():
                     # we found a match in the expansion
-                    result.append({
-                        'link' : urljoin(url, lp_match["href"]),
-                        'version' : lp_match['version'],
-                        'vals' : vals
-                    })
+                    result.append(
+                        {
+                            "link": urljoin(url, lp_match["href"]),
+                            "version": lp_match["version"],
+                            "vals": vals,
+                        }
+                    )
 
                 if match["version"] == self.vals["version"]:
                     # we hit the current version, early exit so we do not fetch every expanded asset on the full page
@@ -422,16 +451,13 @@ class GithubRelease(GithubBase):
         #   that can track the etags or last-modified so we do not hit this limit except in the initial spin-up
         #   more information on etags: https://docs.github.com/en/rest/overview/resources-in-the-rest-api?apiVersion=2022-11-28#conditional-requests
         self.releases_urls = [
-            template.format_map(self.vals)
-            for template in self.alt_releases_formats
+            template.format_map(self.vals) for template in self.alt_releases_formats
         ]
 
         # this is basically copied from a mixture of the base version and the JSON version
         # need to compile the link regex
         exclude = set(self.exclude)
-        vals = {key: val
-                for key, val in self.vals.items()
-                if key not in exclude}
+        vals = {key: val for key, val in self.vals.items() if key not in exclude}
         link_pattern = replace_named_capture_group(self.link_pattern_compiled, vals)
         link_re = re.compile(link_pattern)
 
@@ -444,21 +470,23 @@ class GithubRelease(GithubBase):
             # structured as an array of tagged releases
             for tag_dict in data:
                 # each release has an asset dict
-                for asset_dict in tag_dict.get('assets', []):
+                for asset_dict in tag_dict.get("assets", []):
                     # there is a direct download link for each asset, which should make the typical pattern for an HTML user
-                    download_url = asset_dict['browser_download_url']
+                    download_url = asset_dict["browser_download_url"]
                     re_match = link_re.search(download_url)
-            
+
                     if re_match:
                         # this one matches the pattern
                         # link - just copy the download_url in full
                         # version - pull out of the regex match
                         data = re_match.groupdict()
-                        matches.append({
-                            'link' : download_url,
-                            'version' : data['version'],
-                            'vals' : vals
-                        })
+                        matches.append(
+                            {
+                                "link": download_url,
+                                "version": data["version"],
+                                "vals": vals,
+                            }
+                        )
 
         # now strip down to the version(s) that are more recent than what currently is in bioconda
         num = None
@@ -467,39 +495,50 @@ class GithubRelease(GithubBase):
                 break
         if num is None:
             return matches
-        return matches[:num + 1]
+        return matches[: num + 1]
+
 
 class GithubTag(GithubBase):
     """Matches GitHub repository archives created automatically from tags"""
+
     link_pattern = r"/{account}/{project}/archive(/refs/tags)?/{tag}{ext}"
     releases_formats = ["https://github.com/{account}/{project}/tags"]
 
 
 class GithubReleaseAttachment(GithubBase):
     """Matches release artifacts uploaded as attachment to release notes"""
+
     link_pattern = r"/{account}/{project}/files/\d+/{tag}{ext}"
 
 
 class GithubRepoStore(GithubBase):
     """Matches release artifacts stored in a github repo"""
+
     branch_pattern = r"(master|[\da-f]{40})"
     subdir_pattern = r"(?P<subdir>([-._\w]+/)+)"
     link_pattern = r"/{account}/{project}/blob/master/{subdir}{tag}{ext}"
-    url_pattern = (r"(?:(?P<raw>raw\.githubusercontent)|github)\.com/"
-                   r"{account}/{project}/(?(raw)|(?:(?P<blob>blob/)|raw/))"
-                   r"{branch}/{subdir}?{tag}{ext}(?(blob)\?raw|)")
+    url_pattern = (
+        r"(?:(?P<raw>raw\.githubusercontent)|github)\.com/"
+        r"{account}/{project}/(?(raw)|(?:(?P<blob>blob/)|raw/))"
+        r"{branch}/{subdir}?{tag}{ext}(?(blob)\?raw|)"
+    )
     releases_formats = ["https://github.com/{account}/{project}/tree/master/{subdir}"]
+
 
 class Bioconductor(HTMLHoster):
     """Matches R packages hosted at Bioconductor"""
+
     link_pattern = r"/src/contrib/(?P<package>[^/]+)_{version}{ext}"
     section_pattern = r"/(bioc|data/annotation|data/experiment)"
     url_pattern = r"bioconductor.org/packages/(?P<bioc>[\d\.]+){section}{link}"
-    releases_formats = ["https://bioconductor.org/packages/{bioc}/bioc/html/{package}.html"]
+    releases_formats = [
+        "https://bioconductor.org/packages/{bioc}/bioc/html/{package}.html"
+    ]
 
 
 class CargoPort(HTMLHoster):
     """Matches source backup urls created by cargo-port"""
+
     os_pattern = r"_(?P<os>src_all|linux_x86|darwin_x86)"
     link_pattern = r"(?P<package>[^/]+)_{version}{os}{ext}"
     url_pattern = r"depot.galaxyproject.org/software/(?P<package>[^/]+)/{link}"
@@ -508,9 +547,12 @@ class CargoPort(HTMLHoster):
 
 class SourceForge(HTMLHoster):
     """Matches packages hosted at SourceForge"""
+
     project_pattern = r"(?P<project>[-\w]+)"
     subproject_pattern = r"((?P<subproject>[-\w%]+)/)?"
-    baseurl_pattern = r"sourceforge\.net/project(s)?/{project}/(?(1)files/|){subproject}"
+    baseurl_pattern = (
+        r"sourceforge\.net/project(s)?/{project}/(?(1)files/|){subproject}"
+    )
 
     package_pattern = r"(?P<package>[-\w_\.+]*?[a-zA-Z+])"
     type_pattern = r"(?P<type>((linux|x?(64|86)|src|source|all|core|java\d?)[-_.])*)"
@@ -525,6 +567,7 @@ class SourceForge(HTMLHoster):
 
 class JSONHoster(Hoster):
     """Base for Hosters handling release listings in JSON format"""
+
     async def get_versions(self, req, orig_version: str):
         result = []
         for url in self.releases_urls:
@@ -532,30 +575,33 @@ class JSONHoster(Hoster):
             data = json.loads(text)
             matches = await self.get_versions_from_json(data, req, orig_version)
             for match in matches:
-                match['releases_url'] = url
+                match["releases_url"] = url
             result.extend(matches)
         return result
+
     link_pattern = "https://{url}"
 
     @abc.abstractmethod
-    async def get_versions_from_json(self, data, req, orig_version) -> List[Dict[str, Any]]:
-        """Extract matches from json data in **data**
-        """
+    async def get_versions_from_json(
+        self, data, req, orig_version
+    ) -> List[Dict[str, Any]]:
+        """Extract matches from json data in **data**"""
 
 
 class PyPi(JSONHoster):
     """Scans PyPi for updates"""
+
     async def get_versions_from_json(self, data, req, orig_version):
         latest = data["info"]["version"]
         result = []
         for vers in list(set([latest, orig_version])):
-            if vers not in data['releases']:
+            if vers not in data["releases"]:
                 continue
-            for rel in data['releases'][vers]:
+            for rel in data["releases"][vers]:
                 if rel["packagetype"] == "sdist":
                     rel["link"] = rel["url"]
                     rel["version"] = vers
-                    rel["info"] = data['info']
+                    rel["info"] = data["info"]
                     result.append(rel)
         return result
 
@@ -572,8 +618,16 @@ class PyPi(JSONHoster):
         with open("/dev/null", "w") as devnull:
             with redirect_stdout(devnull), redirect_stderr(devnull):
                 try:
-                    pkg_info = get_pkginfo(package, fname, url, digest, python_version,
-                                           [], build_config, [])
+                    pkg_info = get_pkginfo(
+                        package,
+                        fname,
+                        url,
+                        digest,
+                        python_version,
+                        [],
+                        build_config,
+                        [],
+                    )
                     requirements = get_requirements(package, pkg_info)
                 except SystemExit as exc:
                     raise Exception(exc) from None
@@ -584,8 +638,8 @@ class PyPi(JSONHoster):
             requirements = requirements[0]
         requirements_fixed = []
         for req in requirements:
-            if '\n' in req:
-                requirements_fixed.extend(req.split('\n'))
+            if "\n" in req:
+                requirements_fixed.extend(req.split("\n"))
             else:
                 requirements_fixed.append(req)
 
@@ -594,45 +648,50 @@ class PyPi(JSONHoster):
     @staticmethod
     def _get_python_version(rel):
         """Try to determine correct python version"""
-        choose_from = ('3.6', '3.5', '3.7', '2.7')
+        choose_from = ("3.6", "3.5", "3.7", "2.7")
 
-        requires_python = rel.get('requires_python')
+        requires_python = rel.get("requires_python")
         if requires_python:
             requires_python = requires_python.replace(" ", "")
             checks = []
             for check in requires_python.split(","):
-                for key, func in (('==', lambda x, y: x == y),
-                                  ('!=', lambda x, y: x != y),
-                                  ('<=', lambda x, y: x <= y),
-                                  ('>=', lambda x, y: x >= y),
-                                  ('>', lambda x, y: x > y),
-                                  ('<', lambda x, y: x > y),
-                                  ('~=', lambda x, y: x == y)):
+                for key, func in (
+                    ("==", lambda x, y: x == y),
+                    ("!=", lambda x, y: x != y),
+                    ("<=", lambda x, y: x <= y),
+                    (">=", lambda x, y: x >= y),
+                    (">", lambda x, y: x > y),
+                    ("<", lambda x, y: x > y),
+                    ("~=", lambda x, y: x == y),
+                ):
                     if check.startswith(key):
-                        checks.append((func, check[len(key):]))
+                        checks.append((func, check[len(key) :]))
                         break
                 else:
                     checks.append((lambda x, y: x == y, check))
 
             for vers in choose_from:
                 try:
-                    if all(op(LooseVersion(vers), LooseVersion(check))
-                           for op, check in checks):
+                    if all(
+                        op(LooseVersion(vers), LooseVersion(check))
+                        for op, check in checks
+                    ):
                         return vers
                 except TypeError:
-                    logger.exception("Failed to compare %s to %s", vers, requires_python)
+                    logger.exception(
+                        "Failed to compare %s to %s", vers, requires_python
+                    )
 
         python_versions = [
-            classifier.split('::')[-1].strip()
-            for classifier in rel['info'].get('classifiers', [])
-            if classifier.startswith('Programming Language :: Python ::')
+            classifier.split("::")[-1].strip()
+            for classifier in rel["info"].get("classifiers", [])
+            if classifier.startswith("Programming Language :: Python ::")
         ]
         for vers in choose_from:
             if vers in python_versions:
                 return vers
 
-        return '2.7'
-
+        return "2.7"
 
     async def get_deps(self, pipeline, build_config, package, rel):
         """Get dependencies for **package** using version data **rel**
@@ -645,10 +704,10 @@ class PyPi(JSONHoster):
         """
         req = pipeline.req
         # We download ourselves to get async benefits
-        target_file = rel['filename']
+        target_file = rel["filename"]
         target_path = os.path.join(build_config.src_cache, target_file)
         if not os.path.exists(target_path):
-            await req.get_file_from_url(target_path, rel['link'], target_file)
+            await req.get_file_from_url(target_path, rel["link"], target_file)
 
         python_version = self._get_python_version(rel)
 
@@ -657,12 +716,19 @@ class PyPi(JSONHoster):
             try:
                 pkg_info, depends = await pipeline.run_sp(
                     self._get_requirements,
-                    package, target_file, rel['link'],
-                    ('sha256', rel['digests']['sha256']),
-                    python_version, build_config)
+                    package,
+                    target_file,
+                    rel["link"],
+                    ("sha256", rel["digests"]["sha256"]),
+                    python_version,
+                    build_config,
+                )
             except Exception:  # pylint: disable=broad-except
-                logger.info("Failed to get depends for PyPi %s (py=%s)",
-                            target_file, python_version)
+                logger.info(
+                    "Failed to get depends for PyPi %s (py=%s)",
+                    target_file,
+                    python_version,
+                )
                 logger.debug("Exception data", exc_info=True)
                 return
 
@@ -671,37 +737,42 @@ class PyPi(JSONHoster):
         # Convert into dict
         deps = {}
         for dep in depends:
-            match = re.search(r'([^<>= ]+)(.*)', dep)
+            match = re.search(r"([^<>= ]+)(.*)", dep)
             if match:
                 deps[match.group(1)] = match.group(2)
         # Write to rel dict for return
-        rel['depends'] = {'host': deps, 'run': deps}
+        rel["depends"] = {"host": deps, "run": deps}
 
     releases_formats = ["https://pypi.org/pypi/{package}/json"]
     package_pattern = r"(?P<package>[\w\-\.]+)"
     source_pattern = r"{package}[-_]{version}{ext}"
-    hoster_pattern = (r"(?P<hoster>"
-                      r"files.pythonhosted.org/packages|"
-                      r"pypi.python.org/packages|"
-                      r"pypi.org/packages|"
-                      r"pypi.io/packages)")
+    hoster_pattern = (
+        r"(?P<hoster>"
+        r"files.pythonhosted.org/packages|"
+        r"pypi.python.org/packages|"
+        r"pypi.org/packages|"
+        r"pypi.io/packages)"
+    )
     url_pattern = r"{hoster}/.*/{source}"
 
 
 class Bioarchive(JSONHoster):
     """Scans for updates to packages hosted on bioarchive.galaxyproject.org"""
+
     async def get_versions_from_json(self, data, req, orig_version):
         try:
             latest = data["info"]["Version"]
-            vals = {key: val
-                    for key, val in self.vals.items()
-                    if key not in self.exclude}
-            vals['version'] = latest
+            vals = {
+                key: val for key, val in self.vals.items() if key not in self.exclude
+            }
+            vals["version"] = latest
             link = replace_named_capture_group(self.link_pattern, vals)
-            return [{
-                "link": link,
-                "version": latest,
-            }]
+            return [
+                {
+                    "link": link,
+                    "version": latest,
+                }
+            ]
         except KeyError:
             return []
 
@@ -712,53 +783,55 @@ class Bioarchive(JSONHoster):
 
 class CPAN(JSONHoster):
     """Scans for updates to Perl packages hosted on CPAN"""
+
     @staticmethod
     def parse_deps(data):
         """Parse CPAN format dependencies"""
         run_deps = {}
         host_deps = {}
         for dep in data:
-            if dep['relationship'] != 'requires':
+            if dep["relationship"] != "requires":
                 continue
-            if dep['module'] in ('strict', 'warnings'):
+            if dep["module"] in ("strict", "warnings"):
                 continue
-            name = dep['module'].lower().replace('::', '-')
-            if 'version' in dep and dep['version'] not in ('0', None, 'undef'):
-                version = ">="+str(dep['version'])
+            name = dep["module"].lower().replace("::", "-")
+            if "version" in dep and dep["version"] not in ("0", None, "undef"):
+                version = ">=" + str(dep["version"])
             else:
-                version = ''
-            if name != 'perl':
-                name = 'perl-' + name
+                version = ""
+            if name != "perl":
+                name = "perl-" + name
             else:
-                version = ''
+                version = ""
 
-            if dep['phase'] == 'runtime':
+            if dep["phase"] == "runtime":
                 run_deps[name] = version
-            elif dep['phase'] in ('build', 'configure', 'test'):
+            elif dep["phase"] in ("build", "configure", "test"):
                 host_deps[name] = version
 
-        return {'host': host_deps, 'run': run_deps}
+        return {"host": host_deps, "run": run_deps}
 
     async def get_versions_from_json(self, data, req, orig_version):
         try:
             version = {
-                'link': data['download_url'],
-                'version': str(data['version']),
-                'depends': self.parse_deps(data['dependency'])
+                "link": data["download_url"],
+                "version": str(data["version"]),
+                "depends": self.parse_deps(data["dependency"]),
             }
             result = [version]
 
-            if version['version'] != orig_version:
-                url = self.orig_release_format.format(vers=orig_version,
-                                                      dist=data['distribution'])
+            if version["version"] != orig_version:
+                url = self.orig_release_format.format(
+                    vers=orig_version, dist=data["distribution"]
+                )
                 text = await req.get_text_from_url(url)
                 data2 = json.loads(text)
-                if data2['hits']['total']:
-                    data = data2['hits']['hits'][0]['_source']
+                if data2["hits"]["total"]:
+                    data = data2["hits"]["hits"][0]["_source"]
                 orig_vers = {
-                    'link': data['download_url'],
-                    'version': str(data['version']),
-                    'depends': self.parse_deps(data['dependency'])
+                    "link": data["download_url"],
+                    "version": str(data["version"]),
+                    "depends": self.parse_deps(data["dependency"]),
                 }
                 result.append(orig_vers)
             return result
@@ -767,47 +840,58 @@ class CPAN(JSONHoster):
 
     package_pattern = r"(?P<package>[-\w.+]+)"
     author_pattern = r"(?P<author>[A-Z]+)"
-    url_pattern = (r"(www.cpan.org|cpan.metacpan.org|search.cpan.org/CPAN)"
-                   r"/authors/id/./../{author}/([^/]+/|){package}-v?{version}{ext}")
+    url_pattern = (
+        r"(www.cpan.org|cpan.metacpan.org|search.cpan.org/CPAN)"
+        r"/authors/id/./../{author}/([^/]+/|){package}-v?{version}{ext}"
+    )
     releases_formats = ["https://fastapi.metacpan.org/v1/release/{package}"]
-    orig_release_format = ("https://fastapi.metacpan.org/v1/release/_search"
-                           "?q=distribution:{dist}%20AND%20version:{vers}")
+    orig_release_format = (
+        "https://fastapi.metacpan.org/v1/release/_search"
+        "?q=distribution:{dist}%20AND%20version:{vers}"
+    )
 
 
 class CRAN(JSONHoster):
     """R packages hosted on r-project.org (CRAN)"""
+
     async def get_versions_from_json(self, data, _, orig_version):
         res = []
         versions = list(set((str(data["latest"]), self.vals["version"], orig_version)))
         for vers in versions:
-            if vers not in data['versions']:
+            if vers not in data["versions"]:
                 continue
-            vdata = data['versions'][vers]
+            vdata = data["versions"][vers]
             depends = {
-                "r-" + pkg.lower() if pkg != 'R' else 'r-base':
-                spec.replace(" ", "").replace("\n", "").replace("*", "")
-                for pkg, spec in chain(vdata.get('Depends', {}).items(),
-                                       vdata.get('Imports', {}).items(),
-                                       vdata.get('LinkingTo', {}).items())
+                "r-" + pkg.lower() if pkg != "R" else "r-base": spec.replace(" ", "")
+                .replace("\n", "")
+                .replace("*", "")
+                for pkg, spec in chain(
+                    vdata.get("Depends", {}).items(),
+                    vdata.get("Imports", {}).items(),
+                    vdata.get("LinkingTo", {}).items(),
+                )
             }
             version = {
-                'link': '',
-                'version': vers,
-                'depends': {'host': depends, 'run': depends},
+                "link": "",
+                "version": vers,
+                "depends": {"host": depends, "run": depends},
             }
             res.append(version)
         return res
 
     package_pattern = r"(?P<package>[\w.]+)"
-    url_pattern = (r"r-project\.org/src/contrib"
-                   r"(/Archive)?/{package}(?(1)/{package}|)"
-                   r"_{version}{ext}")
+    url_pattern = (
+        r"r-project\.org/src/contrib"
+        r"(/Archive)?/{package}(?(1)/{package}|)"
+        r"_{version}{ext}"
+    )
     releases_formats = ["https://crandb.r-pkg.org/{package}/all"]
 
 
 # pylint: disable=abstract-method
 class BitBucketBase(OrderedHTMLHoster):  # abstract
     """Base class for hosting at bitbucket.org"""
+
     account_pattern = r"(?P<account>[-\w]+)"
     project_pattern = r"(?P<project>[-.\w]+)"
     prefix_pattern = r"(?P<prefix>[-_./\w]+?)??"
@@ -816,24 +900,33 @@ class BitBucketBase(OrderedHTMLHoster):  # abstract
 
 class BitBucketTag(BitBucketBase):
     """Tag based releases hosted at bitbucket.org"""
+
     link_pattern = "/{account}/{project}/get/{prefix}{version}{ext}"
-    releases_formats = ["https://bitbucket.org/{account}/{project}/downloads/?tab=tags",
-                        "https://bitbucket.org/{account}/{project}/downloads/?tab=branches"]
+    releases_formats = [
+        "https://bitbucket.org/{account}/{project}/downloads/?tab=tags",
+        "https://bitbucket.org/{account}/{project}/downloads/?tab=branches",
+    ]
 
 
 class BitBucketDownload(BitBucketBase):
     """Uploaded releases hosted at bitbucket.org"""
+
     link_pattern = "/{account}/{project}/downloads/{prefix}{version}{ext}"
-    releases_formats = ["https://bitbucket.org/{account}/{project}/downloads/?tab=downloads"]
+    releases_formats = [
+        "https://bitbucket.org/{account}/{project}/downloads/?tab=downloads"
+    ]
 
 
 class GitlabTag(OrderedHTMLHoster):
     """Tag based releases hosted at gitlab.com"""
+
     account_pattern = r"(?P<account>[-\w]+)"
     subgroup_pattern = r"(?P<subgroup>(?:/[-\w]+|))"
     project_pattern = r"(?P<project>[-.\w]+)"
-    link_pattern = (r"/{account}{subgroup}/{project}/(repository|-/archive)/"
-                    r"{version}/(archive|{project}-{version}){ext}")
+    link_pattern = (
+        r"/{account}{subgroup}/{project}/(repository|-/archive)/"
+        r"{version}/(archive|{project}-{version}){ext}"
+    )
     url_pattern = r"gitlab\.com{link}"
     releases_formats = ["https://gitlab.com/{account}{subgroup}/{project}/tags"]
 

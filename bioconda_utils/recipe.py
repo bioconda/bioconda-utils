@@ -39,7 +39,7 @@ yaml = YAML(typ="rt")  # pylint: disable=invalid-name
 
 # Hack: mirror stringify from conda-build in removing implicit
 #       resolution of numbers
-for digit in '0123456789':
+for digit in "0123456789":
     if digit in yaml.resolver.versioned_resolver:
         del yaml.resolver.versioned_resolver[digit]
 
@@ -69,21 +69,25 @@ class DuplicateKey(RecipeError):
     For duplicate keys that are a result of ``# [osx]`` style line selectors,
     `Recipe` attempts to resolve them as a list of dictionaries instead.
     """
+
     template = "has duplicate key"
 
 
 class MissingKey(RecipeError):
     """Raised if a recipe is missing package/version or package/name"""
+
     template = "has missing key"
 
 
 class EmptyRecipe(RecipeError):
     """Raised if the recipe file is empty"""
+
     template = "is empty"
 
 
 class MissingBuild(RecipeError):
     """Raised if the recipe is missing the build section"""
+
     template = "is missing build section"
 
 
@@ -91,6 +95,7 @@ class HasSelector(RecipeError):
     """Raised when recplacements fail due to ``# [cond]`` line selectors
     FIXME: This should no longer be an error
     """
+
     template = "has selector in line %i (replace failed)"
 
 
@@ -99,10 +104,13 @@ class MissingMetaYaml(RecipeError):
 
     self.item is NOT a Recipe but a str here
     """
+
     template = "has missing file `meta.yaml`"
+
 
 class CondaRenderFailure(RecipeError):
     """Raised when conda_build.api.render fails"""
+
     template = "could not be rendered by conda-build: %s"
 
 
@@ -111,10 +119,11 @@ class RenderFailure(RecipeError):
 
     May have self.line
     """
+
     template = "failed to render in Jinja2. Error was: %s"
 
 
-class Recipe():
+class Recipe:
     """Represents a recipe (meta.yaml) in editable form
 
     Using conda-build to render recipe is slow and a one-way
@@ -133,31 +142,32 @@ class Recipe():
       recipe_dir: path to specific recipe
     """
 
-
     #: Variables to pass to Jinja when rendering recipe
     JINJA_VARS = {
         "cran_mirror": "https://cloud.r-project.org",
         "compiler": lambda x: f"compiler_{x}",
-        "pin_compatible": lambda x, max_pin=None, min_pin=None, upper_bound=None, lower_bound=None: f"{x}",
-        "cdt": lambda x: x
+        "pin_compatible": lambda x,
+        max_pin=None,
+        min_pin=None,
+        upper_bound=None,
+        lower_bound=None: f"{x}",
+        "cdt": lambda x: x,
     }
-
 
     def __init__(self, recipe_dir, recipe_folder):
         if not recipe_dir.startswith(recipe_folder):
             raise RuntimeError(f"'{recipe_dir}' not inside '{recipe_folder}'")
 
-
         #: path to folder containing recipes
         self.basedir = recipe_folder
         #: relative path to recipe dir from folder containing recipes
-        self.reldir = recipe_dir[len(recipe_folder):].strip("/")
+        self.reldir = recipe_dir[len(recipe_folder) :].strip("/")
 
         # Filled in by render()
         #: Parsed recipe YAML
         self.meta: Dict[str, Any] = {}
 
-        self.conda_build_config: str = ''
+        self.conda_build_config: str = ""
         self.build_scripts: Dict[str, str] = {}
 
         # These will be filled in by load_from_string()
@@ -207,17 +217,17 @@ class Recipe():
 
     def read_conda_build_config(self):
         # Cache contents of conda_build_config.yaml for conda_render.
-        path = Path(self.dir, 'conda_build_config.yaml')
+        path = Path(self.dir, "conda_build_config.yaml")
         if path.is_file():
             self.conda_build_config = path.read_text()
         else:
-            self.conda_build_config = ''
+            self.conda_build_config = ""
 
     def read_build_scripts(self):
         # Cache contents of build scripts for conda_render since conda-build
         # inspects build scripts for used variant variables.
-        scripts = ['build.sh'] + [
-            output.get('script') for output in self.meta.get('outputs') or ()
+        scripts = ["build.sh"] + [
+            output.get("script") for output in self.meta.get("outputs") or ()
         ]
         self.build_scripts.clear()
         for script in scripts:
@@ -243,7 +253,7 @@ class Recipe():
             recipe_fname = os.path.dirname(recipe_fname)
         recipe = cls(recipe_fname, recipe_dir)
         try:
-            with open(os.path.join(recipe_fname, 'meta.yaml')) as text:
+            with open(os.path.join(recipe_fname, "meta.yaml")) as text:
                 recipe.load_from_string(text.read())
         except FileNotFoundError:
             exc = MissingMetaYaml(recipe_fname)
@@ -323,12 +333,16 @@ class Recipe():
                 else:
                     new_lines.append("".join((" " * (block_left + 2), line)))
 
-        logger.debug("Replacing: lines %i - %i with %i lines:\n%s\n---\n%s",
-                     block_top, block_top+block_height, len(new_lines),
-                     "\n".join(lines[block_top:block_top+block_height]),
-                     "\n".join(new_lines))
+        logger.debug(
+            "Replacing: lines %i - %i with %i lines:\n%s\n---\n%s",
+            block_top,
+            block_top + block_height,
+            len(new_lines),
+            "\n".join(lines[block_top : block_top + block_height]),
+            "\n".join(new_lines),
+        )
 
-        lines[block_top:block_top+block_height] = new_lines
+        lines[block_top : block_top + block_height] = new_lines
         return "\n".join(lines)
 
     def get_template(self):
@@ -337,9 +351,7 @@ class Recipe():
         # Storing it means the recipe cannot be pickled, which in turn
         # means we cannot pass it to ProcessExecutors.
         try:
-            return utils.jinja_silent_undef.from_string(
-                "\n".join(self.meta_yaml)
-            )
+            return utils.jinja_silent_undef.from_string("\n".join(self.meta_yaml))
         except jinja2.exceptions.TemplateSyntaxError as exc:
             raise RenderFailure(self, message=exc.message, line=exc.lineno)
         except jinja2.exceptions.TemplateError as exc:
@@ -359,7 +371,7 @@ class Recipe():
             attr: getattr(template.module, attr)
             for attr in dir(template.module)
             if not attr.startswith("_")
-            and not hasattr(getattr(template.module, attr), '__call__')
+            and not hasattr(getattr(template.module, attr), "__call__")
         }
 
     def render(self) -> None:
@@ -378,8 +390,9 @@ class Recipe():
             column = err.problem_mark.column + 1
             logger.debug("fixing duplicate key at %i:%i", line, column)
             # We may have encountered a recipe with linux/osx variants using line selectors
-            yaml_text = self._rewrite_selector_block(yaml_text, err.context_mark.line,
-                                                     err.context_mark.column)
+            yaml_text = self._rewrite_selector_block(
+                yaml_text, err.context_mark.line, err.context_mark.column
+            )
             if yaml_text:
                 try:
                     self.meta = yaml.load(yaml_text)
@@ -388,22 +401,28 @@ class Recipe():
             else:
                 raise DuplicateKey(self, line=line, column=column)
 
-        if "package" not in self.meta \
-           or "version" not in self.meta["package"] \
-           or "name" not in self.meta["package"]:
+        if (
+            "package" not in self.meta
+            or "version" not in self.meta["package"]
+            or "name" not in self.meta["package"]
+        ):
             raise MissingKey(self)
 
     @property
     def maintainers(self):
         """List of recipe maintainers"""
-        if 'extra' in self.meta and 'recipe-maintainers' in self.meta['extra']:
-            return utils.ensure_list(self.meta['extra']['recipe-maintainers'])
+        if "extra" in self.meta and "recipe-maintainers" in self.meta["extra"]:
+            return utils.ensure_list(self.meta["extra"]["recipe-maintainers"])
         return []
 
     @property
     def extra_additional_platforms(self) -> list:
         """The extra additional-platforms list"""
-        if 'extra' in self.meta and self.meta['extra'] and 'additional-platforms' in self.meta['extra']:
+        if (
+            "extra" in self.meta
+            and self.meta["extra"]
+            and "additional-platforms" in self.meta["extra"]
+        ):
             return list(self.meta["extra"]["additional-platforms"])
         return []
 
@@ -428,7 +447,7 @@ class Recipe():
     def _walk(self, path, noraise=False):
         nodes = [self.meta]
         keys = []
-        for key in path.split('/'):
+        for key in path.split("/"):
             last = nodes[-1]
             if key.isdigit():
                 number = int(key)
@@ -483,7 +502,7 @@ class Recipe():
             else:
                 node_keys = list(node.keys())
                 if key != node_keys[-1]:
-                    next_key = node_keys[node_keys.index(key)+1]
+                    next_key = node_keys[node_keys.index(key) + 1]
                     end_row, end_col = node.lc.key(next_key)
                     break
         else:  # reached end of file
@@ -521,7 +540,7 @@ class Recipe():
         lines.append(self.meta_yaml[end_row][:end_col])
         return "\n".join(lines).strip()
 
-    def get(self, path: str, default: Any=KeyError) -> Any:
+    def get(self, path: str, default: Any = KeyError) -> Any:
         """Get a value or section from the recipe
 
         >>> recipe.get('requirements/build')
@@ -563,15 +582,15 @@ class Recipe():
         nodes, keys = self._walk(path, noraise=True)
 
         # "mkdir -p"
-        found_path = '/'.join(str(key) for key in keys)
+        found_path = "/".join(str(key) for key in keys)
         if found_path != path:
             _, col, row, _ = self.get_raw_range(found_path)
             backup = deepcopy(self.meta_yaml)
-            for key in path.split('/')[len(keys):]:
-                self.meta_yaml.insert(row, ' ' * col + key + ':')
+            for key in path.split("/")[len(keys) :]:
+                self.meta_yaml.insert(row, " " * col + key + ":")
                 row += 1
                 col += 2
-            self.meta_yaml[row-1] += " marker"
+            self.meta_yaml[row - 1] += " marker"
             self.render()
 
         # get old content
@@ -587,14 +606,18 @@ class Recipe():
         """List of the packages built by this recipe (including outputs)"""
         packages = [self.name]
         if "outputs" in self.meta:
-            packages.extend(output['name']
-                            for output in self.meta['outputs']
-                            if output != self.name)
+            packages.extend(
+                output["name"] for output in self.meta["outputs"] if output != self.name
+            )
         return packages
 
-    def replace(self, before: str, after: str,
-                within: Sequence[str] = ("package", "source"),
-                with_fuzz=False) -> int:
+    def replace(
+        self,
+        before: str,
+        after: str,
+        within: Sequence[str] = ("package", "source"),
+        with_fuzz=False,
+    ) -> int:
         """Runs string replace on parts of recipe text.
 
         - Lines considered are those containing Jinja set statements
@@ -651,7 +674,7 @@ class Recipe():
             replacements += 1
         return replacements
 
-    def reset_buildnumber(self, n: int=0):
+    def reset_buildnumber(self, n: int = 0):
         """Resets the build number
 
         If the build number is missing, it is added after build.
@@ -663,12 +686,12 @@ class Recipe():
                 build = self.meta["build"]
                 first_in_build = next(iter(build))
                 lineno, colno = build.lc.key(first_in_build)
-                self.meta_yaml.insert(lineno, " "*colno + "number: 0")
+                self.meta_yaml.insert(lineno, " " * colno + "number: 0")
             else:
                 raise MissingBuild(self)
 
         line = self.meta_yaml[lineno]
-        line = re.sub("number: [0-9]+", "number: "+str(n), line)
+        line = re.sub("number: [0-9]+", "number: " + str(n), line)
         self.meta_yaml[lineno] = line
         self.render()
 
@@ -677,30 +700,32 @@ class Recipe():
 
     def get_deps_dict(self, sections=None, outputs=True):
         if not sections:
-            sections = ('build', 'run', 'host')
+            sections = ("build", "run", "host")
         else:
             sections = utils.ensure_list(sections)
         check_paths = []
         for section in sections:
-            check_paths.append(f'requirements/{section}')
+            check_paths.append(f"requirements/{section}")
         if outputs:
             for section in sections:
-                for n in range(len(self.get('outputs', []))):
-                    check_paths.append(f'outputs/{n}/requirements/{section}')
+                for n in range(len(self.get("outputs", []))):
+                    check_paths.append(f"outputs/{n}/requirements/{section}")
         deps = {}
         for path in check_paths:
             for n, spec in enumerate(self.get(path, [])):
                 if spec is None:  # Fixme: lint this
                     continue
-                dep = re.split(r'[\s<=>]', spec)[0]
+                dep = re.split(r"[\s<=>]", spec)[0]
                 deps.setdefault(dep, []).append(f"{path}/{n}")
         return deps
 
-    def conda_render(self,
-                     bypass_env_check=True,
-                     finalize=True,
-                     permit_unsatisfiable_variants=False,
-                     **kwargs) -> List[Tuple[MetaData, bool, bool]]:
+    def conda_render(
+        self,
+        bypass_env_check=True,
+        finalize=True,
+        permit_unsatisfiable_variants=False,
+        **kwargs,
+    ) -> List[Tuple[MetaData, bool, bool]]:
         """Handles calling conda_build.api.render
 
         ``conda_build.api.render`` is fragile, loud and slow. Avoid using this
@@ -752,8 +777,8 @@ class Recipe():
 
         self._conda_tempdir = tempfile.TemporaryDirectory()
 
-        with open(os.path.join(self._conda_tempdir.name, 'meta.yaml'), 'w') as tmpfile:
-                tmpfile.write(self.dump())
+        with open(os.path.join(self._conda_tempdir.name, "meta.yaml"), "w") as tmpfile:
+            tmpfile.write(self.dump())
 
         if self.conda_build_config:
             cbc_path = Path(self._conda_tempdir.name, "conda_build_config.yaml")
@@ -765,8 +790,10 @@ class Recipe():
 
         old_exit = sys.exit
         if isinstance(sys.exit, types.FunctionType):
+
             def new_exit(args=None):
                 raise SystemExit(args)
+
             sys.exit = new_exit
 
         try:
@@ -777,20 +804,24 @@ class Recipe():
                         finalize=finalize,
                         bypass_env_check=bypass_env_check,
                         permit_unsatisfiable_variants=permit_unsatisfiable_variants,
-                        **kwargs)
+                        **kwargs,
+                    )
         except RuntimeError as exc:
             if exc.args[0].startswith("Couldn't extract raw recipe text"):
                 line = self.meta_yaml[0]
-                if not line.startswith('package') or line.startswith('build'):
-                    raise CondaRenderFailure(self, "Must start with package or build section")
+                if not line.startswith("package") or line.startswith("build"):
+                    raise CondaRenderFailure(
+                        self, "Must start with package or build section"
+                    )
             raise
         except SystemExit as exc:
             msg = exc.args[0]
             if msg.startswith("Error: Failed to render jinja"):
-                msg = '; '.join(msg.splitlines()[1:]) if '\n' in msg else msg
+                msg = "; ".join(msg.splitlines()[1:]) if "\n" in msg else msg
                 raise CondaRenderFailure(self, f"Jinja2 Template Error: '{msg}'")
             raise CondaRenderFailure(
-                self, f"Unknown SystemExit raised in Conda-Build Render API: '{msg}'")
+                self, f"Unknown SystemExit raised in Conda-Build Render API: '{msg}'"
+            )
         finally:
             sys.exit = old_exit
         return self._conda_meta
@@ -806,12 +837,16 @@ class Recipe():
 
 def load_parallel_iter(recipe_folder, packages):
     recipes = list(utils.get_recipes(recipe_folder, packages))
-    for recipe in utils.parallel_iter(Recipe.from_file, recipes, "Loading Recipes...",
-                                      recipe_folder, return_exceptions=True):
+    for recipe in utils.parallel_iter(
+        Recipe.from_file,
+        recipes,
+        "Loading Recipes...",
+        recipe_folder,
+        return_exceptions=True,
+    ):
         if isinstance(recipe, RecipeError):
             recipe.log()
         elif isinstance(recipe, Exception):
             logger.error("Could not load recipe %s", recipe)
         else:
             yield recipe
-

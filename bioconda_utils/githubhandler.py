@@ -31,23 +31,27 @@ IssueState = Enum("IssueState", "open closed all")  # pylint: disable=invalid-na
 CheckRunStatus = Enum("CheckRunState", "queued in_progress completed")
 
 #: Conclusion of Github Check Run
-CheckRunConclusion = Enum("CheckRunConclusion",
-                          "success failure neutral cancelled timed_out action_required")
+CheckRunConclusion = Enum(
+    "CheckRunConclusion", "success failure neutral cancelled timed_out action_required"
+)
 
 #: Merge method
 MergeMethod = Enum("MergeMethod", "merge squash rebase")
 
 #: Pull request review state
-ReviewState = Enum("ReviewState", "APPROVED CHANGES_REQUESTED COMMENTED DISMISSED PENDING")
+ReviewState = Enum(
+    "ReviewState", "APPROVED CHANGES_REQUESTED COMMENTED DISMISSED PENDING"
+)
 
 #: ContentType for Project Cards
 CardContentType = Enum("CardContentType", "Issue PullRequest")
+
 
 def iso_now() -> str:
     """Creates ISO 8601 timestamp in format
     ``YYYY-MM-DDTHH:MM:SSZ`` as required by Github
     """
-    return datetime.datetime.utcnow().replace(microsecond=0).isoformat()+'Z'
+    return datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 
 
 class GitHubHandler:
@@ -59,45 +63,49 @@ class GitHubHandler:
       to_user: Target User/Org for PRs
       to_repo: Target repository within **to_user**
     """
-    USER              = "/user"
-    USER_APPS         = "/user/installations"
-    USER_ORGS         = "/user/orgs"
-    USER_TEAMS        = "/user/teams"
 
-    PULLS             = "/repos/{user}/{repo}/pulls{/number}{?head,base,state}"
-    PULL_FILES        = "/repos/{user}/{repo}/pulls/{number}/files"
-    PULL_COMMITS      = "/repos/{user}/{repo}/pulls/{number}/commits"
-    PULL_MERGE        = "/repos/{user}/{repo}/pulls/{number}/merge"
-    PULL_REVIEWS      = "/repos/{user}/{repo}/pulls/{number}/reviews{/review_id}"
-    PULL_UPDATE       = "/repos/{user}/{repo}/pulls/{number}/update-branch"
+    USER = "/user"
+    USER_APPS = "/user/installations"
+    USER_ORGS = "/user/orgs"
+    USER_TEAMS = "/user/teams"
+
+    PULLS = "/repos/{user}/{repo}/pulls{/number}{?head,base,state}"
+    PULL_FILES = "/repos/{user}/{repo}/pulls/{number}/files"
+    PULL_COMMITS = "/repos/{user}/{repo}/pulls/{number}/commits"
+    PULL_MERGE = "/repos/{user}/{repo}/pulls/{number}/merge"
+    PULL_REVIEWS = "/repos/{user}/{repo}/pulls/{number}/reviews{/review_id}"
+    PULL_UPDATE = "/repos/{user}/{repo}/pulls/{number}/update-branch"
     BRANCH_PROTECTION = "/repos/{user}/{repo}/branches/{branch}/protection"
-    ISSUES            = "/repos/{user}/{repo}/issues{/number}"
-    ISSUE_COMMENTS    = "/repos/{user}/{repo}/issues/{number}/comments"
-    COMMENTS          = "/repos/{user}/{repo}/issues/comments{/comment_id}"
-    CHECK_RUN         = "/repos/{user}/{repo}/check-runs{/id}"
-    GET_CHECK_RUNS    = "/repos/{user}/{repo}/commits/{commit}/check-runs"
-    GET_STATUSES      = "/repos/{user}/{repo}/commits/{commit}/statuses"
-    CONTENTS          = "/repos/{user}/{repo}/contents/{path}{?ref}"
-    GIT_REFERENCE     = "/repos/{user}/{repo}/git/refs/{ref}"
-    ORG_MEMBERS       = "/orgs/{user}/members{/username}"
-    ORG               = "/orgs/{user}"
-    ORG_TEAMS         = "/orgs/{user}/teams{/team_slug}"
+    ISSUES = "/repos/{user}/{repo}/issues{/number}"
+    ISSUE_COMMENTS = "/repos/{user}/{repo}/issues/{number}/comments"
+    COMMENTS = "/repos/{user}/{repo}/issues/comments{/comment_id}"
+    CHECK_RUN = "/repos/{user}/{repo}/check-runs{/id}"
+    GET_CHECK_RUNS = "/repos/{user}/{repo}/commits/{commit}/check-runs"
+    GET_STATUSES = "/repos/{user}/{repo}/commits/{commit}/statuses"
+    CONTENTS = "/repos/{user}/{repo}/contents/{path}{?ref}"
+    GIT_REFERENCE = "/repos/{user}/{repo}/git/refs/{ref}"
+    ORG_MEMBERS = "/orgs/{user}/members{/username}"
+    ORG = "/orgs/{user}"
+    ORG_TEAMS = "/orgs/{user}/teams{/team_slug}"
 
-    PROJECTS_BY_REPO  = "/repos/{user}/{repo}/projects"
+    PROJECTS_BY_REPO = "/repos/{user}/{repo}/projects"
     PROJECT_COL_CARDS = "/projects/columns/{column_id}/cards"
-    PROJECT_CARDS     = "/projects/columns/cards/{card_id}"
+    PROJECT_CARDS = "/projects/columns/cards/{card_id}"
 
-    TEAMS_MEMBERSHIP  = "/teams/{team_id}/memberships/{username}"
+    TEAMS_MEMBERSHIP = "/teams/{team_id}/memberships/{username}"
 
-    SEARCH_ISSUES     = "/search/issues?q="
+    SEARCH_ISSUES = "/search/issues?q="
 
     STATE = IssueState
 
-    def __init__(self, token: str = None,
-                 dry_run: bool = False,
-                 to_user: str = "bioconda",
-                 to_repo: str = "bioconda-recipes",
-                 installation: int = None) -> None:
+    def __init__(
+        self,
+        token: str = None,
+        dry_run: bool = False,
+        to_user: str = "bioconda",
+        to_repo: str = "bioconda-recipes",
+        installation: int = None,
+    ) -> None:
         #: API Bearer Token
         self.token = token
         #: If set, no actual modifying actions are taken
@@ -109,8 +117,7 @@ class GitHubHandler:
         #: Name of the Repo
         self.repo = to_repo
         #: Default variables for API calls
-        self.var_default = {'user': to_user,
-                            'repo': to_repo}
+        self.var_default = {"user": to_user, "repo": to_repo}
 
         # filled in by login():
         #: Gidgethub API object
@@ -143,7 +150,8 @@ class GitHubHandler:
     def get_file_relurl(self, path: str, branch_name: str = "master") -> str:
         """Format domain relative url for **path** on **branch_name**"""
         return "/{user}/{repo}/tree/{branch_name}/{path}".format(
-            branch_name=branch_name, path=path, **self.var_default)
+            branch_name=branch_name, path=path, **self.var_default
+        )
 
     async def login(self, *args, **kwargs) -> bool:
         """Log into API (fills `username`)"""
@@ -181,7 +189,7 @@ class GitHubHandler:
           Empty list if the request failed
         """
         try:
-            return [org['login'] for org in await self.api.getitem(self.USER_ORGS)]
+            return [org["login"] for org in await self.api.getitem(self.USER_ORGS)]
         except gidgethub.GitHubException:
             return []
 
@@ -195,8 +203,9 @@ class GitHubHandler:
         async for team in self.api.getiter(self.ORG_TEAMS, self.var_default):
             yield team
 
-    async def get_team_id(self, team_slug: str = None,
-                          team_name: str = None) -> Optional[int]:
+    async def get_team_id(
+        self, team_slug: str = None, team_name: str = None
+    ) -> Optional[int]:
         """Get the Team ID from the Team slug
 
         If both are set, **team_slug** is tried first.
@@ -210,19 +219,19 @@ class GitHubHandler:
         """
         if team_slug:
             var_data = copy(self.var_default)
-            var_data['team_slug'] = team_slug
+            var_data["team_slug"] = team_slug
             try:
                 team = await self.api.getitem(self.ORG_TEAMS, var_data)
-                if team and 'id' in team:
-                    return team['id']
+                if team and "id" in team:
+                    return team["id"]
             except gidgethub.BadRequest as exc:
                 if exc.status_code != 404:
                     raise
 
         if team_name:
             async for team in self.iter_teams():
-                if team.get('name') == team_name:
-                    return team.get('id')
+                if team.get("name") == team_name:
+                    return team.get("id")
 
     async def is_team_member(self, username: str, team: Union[str, int]) -> bool:
         """Check if user is a member of given team
@@ -242,20 +251,24 @@ class GitHubHandler:
                 return False
 
         var_data = {
-            'username': username,
-            'team_id': team_id,
+            "username": username,
+            "team_id": team_id,
         }
         accept = "application/vnd.github.hellcat-preview+json"
         try:
-            data = await self.api.getitem(self.TEAMS_MEMBERSHIP, var_data, accept=accept)
-            if data['state'] == "active":
+            data = await self.api.getitem(
+                self.TEAMS_MEMBERSHIP, var_data, accept=accept
+            )
+            if data["state"] == "active":
                 return True
         except gidgethub.BadRequest as exc:
             if exc.status_code != 404:
                 raise
         return False
 
-    async def is_member(self, username: str, team: Optional[Union[str, int]] = None) -> bool:
+    async def is_member(
+        self, username: str, team: Optional[Union[str, int]] = None
+    ) -> bool:
         """Check user membership
 
         Args:
@@ -268,20 +281,21 @@ class GitHubHandler:
         if not username:
             return False
         var_data = copy(self.var_default)
-        var_data['username'] = username
+        var_data["username"] = username
         try:
             await self.api.getitem(self.ORG_MEMBERS, var_data)
         except gidgethub.BadRequest:
-            logger.debug("User %s is not a member of %s", username, var_data['user'])
+            logger.debug("User %s is not a member of %s", username, var_data["user"])
             return False
-        logger.debug("User %s IS a member of %s", username, var_data['user'])
+        logger.debug("User %s IS a member of %s", username, var_data["user"])
 
         if team:
             return await self.is_team_member(username, team)
         return True
 
-    async def search_issues(self, author=None, pr=False, issue=False, sha=None,
-                            closed=None):
+    async def search_issues(
+        self, author=None, pr=False, issue=False, sha=None, closed=None
+    ):
         """Search issues/PRs on our repos
 
         Arguments:
@@ -309,7 +323,7 @@ class GitHubHandler:
         if sha:
             query += ["sha:" + sha]
 
-        return await self.api.getitem(self.SEARCH_ISSUES + '+'.join(query))
+        return await self.api.getitem(self.SEARCH_ISSUES + "+".join(query))
 
     async def get_pr_count(self, user) -> int:
         """Get the number of PRs opened by user
@@ -321,7 +335,7 @@ class GitHubHandler:
           Number of PRs that **user** has opened so far
         """
         result = await self.search_issues(pr=True, author=user)
-        return result.get('total_count', 0)
+        return result.get("total_count", 0)
 
     async def is_org(self) -> bool:
         """Check if we are operating on an organization"""
@@ -341,25 +355,32 @@ class GitHubHandler:
           List of PR numbers.
         """
         pr_numbers = []
-        result = await self.search_issues(pr=True, sha=head_sha,
-                                          closed=False if only_open else None)
-        for pull in result.get('items', []):
-            pr_number = int(pull['number'])
+        result = await self.search_issues(
+            pr=True, sha=head_sha, closed=False if only_open else None
+        )
+        for pull in result.get("items", []):
+            pr_number = int(pull["number"])
             logger.error("checking %s", pr_number)
             full_pr = await self.get_prs(number=pr_number)
-            if full_pr['head']['sha'].startswith(head_sha):
+            if full_pr["head"]["sha"].startswith(head_sha):
                 pr_numbers.append(pr_number)
         return pr_numbers
 
     # pylint: disable=too-many-arguments
-    @backoff.on_exception(backoff.fibo, gidgethub.BadRequest, max_tries=10,
-                          giveup=lambda ex: ex.status_code not in [429, 502, 503, 504])
-    async def get_prs(self,
-                      from_branch: Optional[str] = None,
-                      from_user: Optional[str] = None,
-                      to_branch: Optional[str] = None,
-                      number: Optional[int] = None,
-                      state: Optional[IssueState] = None) -> List[Dict[Any, Any]]:
+    @backoff.on_exception(
+        backoff.fibo,
+        gidgethub.BadRequest,
+        max_tries=10,
+        giveup=lambda ex: ex.status_code not in [429, 502, 503, 504],
+    )
+    async def get_prs(
+        self,
+        from_branch: Optional[str] = None,
+        from_user: Optional[str] = None,
+        to_branch: Optional[str] = None,
+        number: Optional[int] = None,
+        state: Optional[IssueState] = None,
+    ) -> List[Dict[Any, Any]]:
         """Retrieve list of PRs matching parameters
 
         Arguments:
@@ -374,15 +395,15 @@ class GitHubHandler:
             from_user = self.username
         if from_branch:
             if from_user:
-                var_data['head'] = f"{from_user}:{from_branch}"
+                var_data["head"] = f"{from_user}:{from_branch}"
             else:
-                var_data['head'] = from_branch
+                var_data["head"] = from_branch
         if to_branch:
-            var_data['base'] = to_branch
+            var_data["base"] = to_branch
         if number:
-            var_data['number'] = str(number)
+            var_data["number"] = str(number)
         if state:
-            var_data['state'] = state.name.lower()
+            var_data["state"] = state.name.lower()
 
         accept = "application/vnd.github.shadow-cat-preview"  # for draft
         try:
@@ -404,13 +425,13 @@ class GitHubHandler:
           if the Issue is a PR.
         """
         var_data = copy(self.var_default)
-        var_data['number'] = str(number)
+        var_data["number"] = str(number)
         return await self.api.getitem(self.ISSUES, var_data)
 
     async def iter_pr_commits(self, number: int):
         """Create iterator over commits in a PR"""
         var_data = copy(self.var_default)
-        var_data['number'] = str(number)
+        var_data["number"] = str(number)
         try:
             async for item in self.api.getiter(self.PULL_COMMITS, var_data):
                 yield item
@@ -418,13 +439,16 @@ class GitHubHandler:
             return
 
     # pylint: disable=too-many-arguments
-    async def create_pr(self, title: str,
-                        from_branch: str,
-                        from_user: Optional[str] = None,
-                        to_branch: Optional[str] = "master",
-                        body: Optional[str] = None,
-                        maintainer_can_modify: bool = True,
-                        draft: bool = False) -> Dict[Any, Any]:
+    async def create_pr(
+        self,
+        title: str,
+        from_branch: str,
+        from_user: Optional[str] = None,
+        to_branch: Optional[str] = "master",
+        body: Optional[str] = None,
+        maintainer_can_modify: bool = True,
+        draft: bool = False,
+    ) -> Dict[Any, Any]:
         """Create new PR
 
         Arguments:
@@ -440,17 +464,17 @@ class GitHubHandler:
         if not from_user:
             from_user = self.username
         data: Dict[str, Any] = {
-            'title': title,
-            'base' : to_branch,
-            'body': body or '',
-            'maintainer_can_modify': maintainer_can_modify,
-            'draft': draft,
+            "title": title,
+            "base": to_branch,
+            "body": body or "",
+            "maintainer_can_modify": maintainer_can_modify,
+            "draft": draft,
         }
 
         if from_user and from_user != self.username:
-            data['head'] = f"{from_user}:{from_branch}"
+            data["head"] = f"{from_user}:{from_branch}"
         else:
-            data['head'] = from_branch
+            data["head"] = from_branch
 
         logger.debug("PR data %s", data)
         if self.dry_run:
@@ -460,14 +484,20 @@ class GitHubHandler:
             if body:
                 logger.info(" body:\n%s\n", body)
 
-            return {'number': -1}
+            return {"number": -1}
         logger.info("Creating PR '%s'", title)
 
         accept = "application/vnd.github.shadow-cat-preview"  # for draft
         return await self.api.post(self.PULLS, var_data, data=data, accept=accept)
 
-    async def merge_pr(self, number: int, title: str = None, message: str = None, sha: str = None,
-                           method: MergeMethod = MergeMethod.squash) -> Tuple[bool, str]:
+    async def merge_pr(
+        self,
+        number: int,
+        title: str = None,
+        message: str = None,
+        sha: str = None,
+        method: MergeMethod = MergeMethod.squash,
+    ) -> Tuple[bool, str]:
         """Merge a PR
 
         Arguments:
@@ -481,20 +511,20 @@ class GitHubHandler:
           Tuple: True if successful and message
         """
         var_data = copy(self.var_default)
-        var_data['number'] = str(number)
+        var_data["number"] = str(number)
         data = {}
         if title:
-            data['commit_title'] = title
+            data["commit_title"] = title
         if message:
-            data['commit_message'] = message
+            data["commit_message"] = message
         if sha:
-            data['sha'] = sha
+            data["sha"] = sha
         if method:
-            data['merge_method'] = method.name
+            data["merge_method"] = method.name
 
         try:
             res = await self.api.put(self.PULL_MERGE, var_data, data=data)
-            return True, res['message']
+            return True, res["message"]
         except gidgethub.BadRequest as exc:
             if exc.status_code in (405, 409):
                 # not allowed / conflict
@@ -511,7 +541,7 @@ class GitHubHandler:
           True if the PR has been merged.
         """
         var_data = copy(self.var_default)
-        var_data['number'] = str(number)
+        var_data["number"] = str(number)
         try:
             await self.api.getitem(self.PULL_MERGE, var_data)
             return True
@@ -526,7 +556,7 @@ class GitHubHandler:
         Merges changes to "base" into "head"
         """
         var_data = copy(self.var_default)
-        var_data['number'] = str(number)
+        var_data["number"] = str(number)
         accept = "application/vnd.github.lydian-preview+json"
         try:
             await self.api.put(self.PULL_UPDATE, var_data, accept=accept, data={})
@@ -538,14 +568,20 @@ class GitHubHandler:
                 # on anything but 200, 201, 204 (see sansio.py:decipher_response).
                 # So we catch and check the status code.
                 return True
-            logger.exception("pr_update_branch_failed (2). status_code=%s, args=%s",
-                             exc.status_code, exc.args)
+            logger.exception(
+                "pr_update_branch_failed (2). status_code=%s, args=%s",
+                exc.status_code,
+                exc.args,
+            )
             return False
 
-    async def modify_issue(self, number: int,
-                           labels: Optional[List[str]] = None,
-                           title: Optional[str] = None,
-                           body: Optional[str] = None) -> Dict[Any, Any]:
+    async def modify_issue(
+        self,
+        number: int,
+        labels: Optional[List[str]] = None,
+        title: Optional[str] = None,
+        body: Optional[str] = None,
+    ) -> Dict[Any, Any]:
         """Modify existing issue (PRs are issues)
 
         Arguments:
@@ -557,11 +593,11 @@ class GitHubHandler:
         var_data["number"] = str(number)
         data: Dict[str, Any] = {}
         if labels:
-            data['labels'] = labels
+            data["labels"] = labels
         if title:
-            data['title'] = title
+            data["title"] = title
         if body:
-            data['body'] = body
+            data["body"] = body
 
         if self.dry_run:
             logger.info("Would modify PR %s", number)
@@ -572,7 +608,7 @@ class GitHubHandler:
             if body:
                 logger.info("New Body:\n%s\n", body)
 
-            return {'number': number}
+            return {"number": number}
         logger.info("Modifying PR %s", number)
         return await self.api.patch(self.ISSUES, var_data, data=data)
 
@@ -585,15 +621,13 @@ class GitHubHandler:
         """
         var_data = copy(self.var_default)
         var_data["number"] = str(number)
-        data = {
-            'body': body
-        }
+        data = {"body": body}
         if self.dry_run:
             logger.info("Would create comment on issue #%i", number)
             return -1
         logger.info("Creating comment on issue #%i", number)
         res = await self.api.post(self.ISSUE_COMMENTS, var_data, data=data)
-        return res['id']
+        return res["id"]
 
     async def iter_comments(self, number: int) -> List[Dict[str, Any]]:
         """List comments for issue"""
@@ -610,15 +644,13 @@ class GitHubHandler:
         """
         var_data = copy(self.var_default)
         var_data["comment_id"] = str(number)
-        data = {
-            'body': body
-        }
+        data = {"body": body}
         if self.dry_run:
-            logger.info("Would update comment %i",  number)
+            logger.info("Would update comment %i", number)
             return -1
         logger.info("Updating comment %i", number)
         res = await self.api.patch(self.COMMENTS, var_data, data=data)
-        return res['id']
+        return res["id"]
 
     async def get_pr_modified_files(self, number: int) -> List[Dict[str, Any]]:
         """Retrieve the list of files modified by the PR
@@ -630,8 +662,9 @@ class GitHubHandler:
         var_data["number"] = str(number)
         return await self.api.getitem(self.PULL_FILES, var_data)
 
-    async def create_check_run(self, name: str, head_sha: str,
-                               details_url: str = None, external_id: str = None) -> int:
+    async def create_check_run(
+        self, name: str, head_sha: str, details_url: str = None, external_id: str = None
+    ) -> int:
         """Create a check run
 
         Arguments:
@@ -645,26 +678,29 @@ class GitHubHandler:
         """
         var_data = copy(self.var_default)
         data = {
-            'name': name,
-            'head_sha': head_sha,
+            "name": name,
+            "head_sha": head_sha,
         }
         if details_url:
-            data['details_url'] = details_url
+            data["details_url"] = details_url
         if external_id:
-            data['external_id'] = external_id
+            data["external_id"] = external_id
 
         accept = "application/vnd.github.antiope-preview+json"
         result = await self.api.post(self.CHECK_RUN, var_data, data=data, accept=accept)
-        return int(result.get('id'))
+        return int(result.get("id"))
 
-    async def modify_check_run(self, number: int,
-                               status: CheckRunStatus = None,
-                               conclusion: CheckRunConclusion = None,
-                               output_title: str = None,
-                               output_summary: str = None,
-                               output_text: str = None,
-                               output_annotations: List[Dict] = None,
-                               actions: List[Dict] = None) -> Dict['str', Any]:
+    async def modify_check_run(
+        self,
+        number: int,
+        status: CheckRunStatus = None,
+        conclusion: CheckRunConclusion = None,
+        output_title: str = None,
+        output_summary: str = None,
+        output_text: str = None,
+        output_annotations: List[Dict] = None,
+        actions: List[Dict] = None,
+    ) -> Dict["str", Any]:
         """Modify a check runs
 
         Arguments:
@@ -684,28 +720,33 @@ class GitHubHandler:
         Returns:
           Check run "object" as dict.
         """
-        logger.info("Modifying check run %i: status=%s conclusion=%s title=%s",
-                    number, status.name, conclusion.name if conclusion else "N/A", output_title)
+        logger.info(
+            "Modifying check run %i: status=%s conclusion=%s title=%s",
+            number,
+            status.name,
+            conclusion.name if conclusion else "N/A",
+            output_title,
+        )
         var_data = copy(self.var_default)
-        var_data['id'] = str(number)
+        var_data["id"] = str(number)
         data = {}
         if status is not None:
-            data['status'] = status.name.lower()
+            data["status"] = status.name.lower()
             if status == CheckRunStatus.in_progress:
-                data['started_at'] = iso_now()
+                data["started_at"] = iso_now()
         if conclusion is not None:
-            data['conclusion'] = conclusion.name.lower()
-            data['completed_at'] = iso_now()
+            data["conclusion"] = conclusion.name.lower()
+            data["completed_at"] = iso_now()
         if output_title:
-            data['output'] = {
-                'title': output_title,
-                'summary': output_summary or "",
-                'text': output_text or "",
+            data["output"] = {
+                "title": output_title,
+                "summary": output_summary or "",
+                "text": output_text or "",
             }
             if output_annotations:
-                data['output']['annotations'] = output_annotations
+                data["output"]["annotations"] = output_annotations
         if actions:
-            data['actions'] = actions
+            data["actions"] = actions
         accept = "application/vnd.github.antiope-preview+json"
         return await self.api.patch(self.CHECK_RUN, var_data, data=data, accept=accept)
 
@@ -718,10 +759,10 @@ class GitHubHandler:
           List of check run "objects"
         """
         var_data = copy(self.var_default)
-        var_data['commit'] = sha
+        var_data["commit"] = sha
         accept = "application/vnd.github.antiope-preview+json"
         res = await self.api.getitem(self.GET_CHECK_RUNS, var_data, accept=accept)
-        return res['check_runs']
+        return res["check_runs"]
 
     async def get_statuses(self, sha: str) -> List[Dict[str, Any]]:
         """List status checks for **sha**
@@ -732,7 +773,7 @@ class GitHubHandler:
           List of status "objects"
         """
         var_data = copy(self.var_default)
-        var_data['commit'] = sha
+        var_data["commit"] = sha
         return await self.api.getitem(self.GET_STATUSES, var_data)
 
     async def get_pr_reviews(self, pr_number: int) -> List[Dict[str, Any]]:
@@ -745,7 +786,7 @@ class GitHubHandler:
           and ``commit_id`` (SHA, `str`) as well as a ``user`` `dict`.
         """
         var_data = copy(self.var_default)
-        var_data['number'] = str(pr_number)
+        var_data["number"] = str(pr_number)
         return await self.api.getitem(self.PULL_REVIEWS, var_data)
 
     async def get_branch_protection(self, branch: str = "master") -> Dict[str, Any]:
@@ -791,8 +832,9 @@ class GitHubHandler:
         res = await self.api.getitem(self.BRANCH_PROTECTION, var_data, accept=accept)
         return res
 
-    async def check_protections(self, pr_number: int,
-                                head_sha: str = None) -> Tuple[Optional[bool], str]:
+    async def check_protections(
+        self, pr_number: int, head_sha: str = None
+    ) -> Tuple[Optional[bool], str]:
         """Check whether PR meets protection requirements
 
         Arguments:
@@ -803,53 +845,59 @@ class GitHubHandler:
         logger.info("Checking protections for PR #%s : %s", pr_number, head_sha)
 
         # check that no new commits were made
-        if head_sha and head_sha != pr['head']['sha']:
+        if head_sha and head_sha != pr["head"]["sha"]:
             return False, "Most recent SHA in PR differs"
-        head_sha = pr['head']['sha']
+        head_sha = pr["head"]["sha"]
         # check whether it's already merged
-        if pr['merged']:
+        if pr["merged"]:
             return False, "PR has already been merged"
         # check whether it's in draft state
-        if pr.get('draft'):
+        if pr.get("draft"):
             return False, "PR is marked as draft"
         # check whether it's mergeable
-        if pr['mergeable'] is None:
+        if pr["mergeable"] is None:
             return None, "PR mergability unknown. Retry again later."
 
         # get required checks for target branch
-        protections = await self.get_branch_protection(pr['base']['ref'])
+        protections = await self.get_branch_protection(pr["base"]["ref"])
 
         # Verify required_checks
-        required_checks = set(protections.get('required_status_checks', {}).get('contexts', []))
+        required_checks = set(
+            protections.get("required_status_checks", {}).get("contexts", [])
+        )
         if required_checks:
             logger.info("Verifying %s required checks", len(required_checks))
             for status in await self.get_statuses(head_sha):
-                if status['state'] == 'success':
-                    required_checks.discard(status['context'])
+                if status["state"] == "success":
+                    required_checks.discard(status["context"])
             for check in await self.get_check_runs(head_sha):
-                if check.get('conclusion') == "success":
-                    required_checks.discard(check['name'])
+                if check.get("conclusion") == "success":
+                    required_checks.discard(check["name"])
             if required_checks:
                 return False, "Not all required checks have passed"
             logger.info("All status checks passed for #%s", pr_number)
 
         # Verify required reviews
-        required_reviews = protections.get('required_pull_request_reviews', {})
+        required_reviews = protections.get("required_pull_request_reviews", {})
         if required_reviews:
-            required_count = required_reviews.get('required_approving_review_count', 1)
-            logger.info("Checking for %s approvng reviews and no change requests",
-                        required_count)
+            required_count = required_reviews.get("required_approving_review_count", 1)
+            logger.info(
+                "Checking for %s approvng reviews and no change requests",
+                required_count,
+            )
             approving_count = 0
             for review in await self.get_pr_reviews(pr_number):
-                user = review['user']['login']
-                if review['state'] == ReviewState.CHANGES_REQUESTED.name:
+                user = review["user"]["login"]
+                if review["state"] == ReviewState.CHANGES_REQUESTED.name:
                     return False, f"Changes have been requested by `@{user}`"
-                if review['state'] == ReviewState.APPROVED.name:
+                if review["state"] == ReviewState.APPROVED.name:
                     logger.info("PR #%s was approved by @%s", pr_number, user)
                     approving_count += 1
             if approving_count < required_count:
-                return False, (f"Insufficient number of approving reviews"
-                               f"({approving_count}/{required_count})")
+                return False, (
+                    f"Insufficient number of approving reviews"
+                    f"({approving_count}/{required_count})"
+                )
         logger.info("PR #%s is passing configured checks", pr_number)
         return True, "LGTM"
 
@@ -868,16 +916,16 @@ class GitHubHandler:
           (Should always be base64)
         """
         var_data = copy(self.var_default)
-        var_data['path'] = path
+        var_data["path"] = path
         if ref:
-            var_data['ref'] = ref
+            var_data["ref"] = ref
         else:
-            ref = 'master'
+            ref = "master"
         result = await self.api.getitem(self.CONTENTS, var_data)
-        if result['encoding'] != 'base64':
+        if result["encoding"] != "base64":
             raise RuntimeError(f"Got unknown encoding for {self}/{path}:{ref}")
-        content_bytes = base64.b64decode(result['content'])
-        content = content_bytes.decode('utf-8')
+        content_bytes = base64.b64decode(result["content"])
+        content = content_bytes.decode("utf-8")
         return content
 
     async def delete_branch(self, ref: str) -> None:
@@ -887,7 +935,7 @@ class GitHubHandler:
           ref: Name of reference/branch
         """
         var_data = copy(self.var_default)
-        var_data['ref'] = ref
+        var_data["ref"] = ref
         await self.api.delete(self.GIT_REFERENCE, var_data)
 
     def _deparse_card_pr_number(self, card: Dict[str, Any]) -> Dict[str, Any]:
@@ -902,22 +950,25 @@ class GitHubHandler:
         Results:
           Card dict with ``issue_number`` field added if card is not a note
         """
-        if 'content_url' not in card:  # not content_url to parse
+        if "content_url" not in card:  # not content_url to parse
             return card
-        if 'issue_number' in card:  # target value already taken
+        if "issue_number" in card:  # target value already taken
             return card
 
         issue_url = gidgethub.sansio.format_url(self.ISSUES, self.var_default)
-        content_url = card['content_url']
+        content_url = card["content_url"]
         if content_url.startswith(issue_url):
             try:
-                card['issue_number'] = int(content_url.lstrip(issue_url))
+                card["issue_number"] = int(content_url.lstrip(issue_url))
             except ValueError:
                 pass
-        if 'issue_number' not in card:
-            logger.error("Failed to deparse content url to issue number.\n"
-                         "content_url=%s\nissue_url=%s\n",
-                         content_url, issue_url)
+        if "issue_number" not in card:
+            logger.error(
+                "Failed to deparse content url to issue number.\n"
+                "content_url=%s\nissue_url=%s\n",
+                content_url,
+                issue_url,
+            )
         return card
 
     async def list_project_cards(self, column_id: int) -> List[Dict[str, Any]]:
@@ -926,7 +977,7 @@ class GitHubHandler:
         Arguments:
           column_id: ID number of project column
         """
-        var_data = {'column_id': str(column_id)}
+        var_data = {"column_id": str(column_id)}
         accept = "application/vnd.github.inertia-preview+json"
         res = await self.api.getitem(self.PROJECT_COL_CARDS, var_data, accept=accept)
         return [self._deparse_card_pr_number(card) for card in res]
@@ -939,7 +990,7 @@ class GitHubHandler:
         Returns:
           Empty dict if the project card was not found
         """
-        var_data = {'card_id': str(card_id)}
+        var_data = {"card_id": str(card_id)}
         accept = "application/vnd.github.inertia-preview+json"
         try:
             res = await self.api.getitem(self.PROJECT_CARDS, var_data, accept=accept)
@@ -948,11 +999,14 @@ class GitHubHandler:
                 return {}
         return self._deparse_card_pr_number(res)
 
-    async def create_project_card(self, column_id: int,
-                                  note: str = None,
-                                  content_id: int = None,
-                                  content_type: CardContentType = None,
-                                  number: int = None) -> Dict[str, Any]:
+    async def create_project_card(
+        self,
+        column_id: int,
+        note: str = None,
+        content_id: int = None,
+        content_type: CardContentType = None,
+        number: int = None,
+    ) -> Dict[str, Any]:
         """Create a new project card
 
         In addition to **column_id**, you must provide *either*:
@@ -976,35 +1030,37 @@ class GitHubHandler:
 
         """
         var_data = copy(self.var_default)
-        var_data['column_id'] = str(column_id)
+        var_data["column_id"] = str(column_id)
         accept = "application/vnd.github.inertia-preview+json"
         data = {}
         if note:
             if content_id or content_type or number:
                 raise ValueError("Project Cards can only be a note or a Issue/PR")
-            data['note'] = note
+            data["note"] = note
         elif content_id:
             if number:
                 raise ValueError("Cannot specify pr/issue number AND content_id")
             if not content_type:
                 raise ValueError("Must specify content_type if giving content_id")
-            data['content_id'] = content_id
-            data['content_type'] = content_type.name
+            data["content_id"] = content_id
+            data["content_type"] = content_type.name
         elif number:
             pullreq = await self.get_prs(number=number)
             if pullreq:
-                data['content_id'] = pullreq['id']
-                data['content_type'] = CardContentType.PullRequest.name
+                data["content_id"] = pullreq["id"]
+                data["content_type"] = CardContentType.PullRequest.name
             else:
                 issue = await self.get_issue(number=number)
-                data['content_id'] = issue['id']
-                data['content_type'] = CardContentType.Issue.name
+                data["content_id"] = issue["id"]
+                data["content_type"] = CardContentType.Issue.name
         else:
-            raise ValueError("Must have at least note or content_id/content_type or "
-                             "number parameter")
+            raise ValueError(
+                "Must have at least note or content_id/content_type or number parameter"
+            )
         try:
-            res = await self.api.post(self.PROJECT_COL_CARDS, var_data, data=data,
-                                       accept=accept)
+            res = await self.api.post(
+                self.PROJECT_COL_CARDS, var_data, data=data, accept=accept
+            )
             return self._deparse_card_pr_number(res)
         except gidgethub.BadRequest:
             logger.exception("Failed to create project card with data=%s", data)
@@ -1018,7 +1074,7 @@ class GitHubHandler:
         Returns:
           True if the deletion succeeded
         """
-        var_data = {'card_id': str(card_id)}
+        var_data = {"card_id": str(card_id)}
         accept = "application/vnd.github.inertia-preview+json"
         try:
             await self.api.delete(self.PROJECT_CARDS, var_data, accept=accept)
@@ -1027,7 +1083,9 @@ class GitHubHandler:
             logger.exception("Failed to delete project cards %s", card_id)
             return False
 
-    async def delete_project_card_from_column(self, column_id: int, number: int) -> bool:
+    async def delete_project_card_from_column(
+        self, column_id: int, number: int
+    ) -> bool:
         """Deletes a project card identified by PR/Issue number from column
 
         Arguments:
@@ -1037,8 +1095,8 @@ class GitHubHandler:
           True if the deleteion succeeded
         """
         for card in await self.list_project_cards(column_id):
-            if card.get('issue_number') == number:
-                return await self.delete_project_card(card['id'])
+            if card.get("issue_number") == number:
+                return await self.delete_project_card(card["id"])
         return False
 
 
@@ -1049,17 +1107,22 @@ class AiohttpGitHubHandler(GitHubHandler):
       session: Aiohttp Client Session object
       requester: Identify self (e.g. user agent)
     """
-    def create_api_object(self, session: aiohttp.ClientSession,
-                          requester: str, *args, **kwargs) -> None:
+
+    def create_api_object(
+        self, session: aiohttp.ClientSession, requester: str, *args, **kwargs
+    ) -> None:
         self.api = gidgethub.aiohttp.GitHubAPI(
-            session, requester, oauth_token=self.token,
-            cache=cachetools.LRUCache(maxsize=500)
+            session,
+            requester,
+            oauth_token=self.token,
+            cache=cachetools.LRUCache(maxsize=500),
         )
         self.session = session
 
 
 class Event(gidgethub.sansio.Event):
     """Adds **get(path)** method to Github Webhook event"""
+
     def get(self, path: str, altvalue=KeyError) -> str:
         """Get subkeys from even data using slash separated path"""
         data = self.data
@@ -1090,6 +1153,7 @@ class GitHubAppHandler:
                      of users via OAUTH
 
     """
+
     #: Github API url for creating an access token for a specific installation
     #: of an app.
     INSTALLATION_TOKEN = "/app/installations/{installation_id}/access_tokens"
@@ -1104,14 +1168,22 @@ class GitHubAppHandler:
     DOMAIN = "https://github.com"
 
     #: URL template for calls to OAUTH authorize
-    AUTHORIZE = '/login/oauth/authorize{?client_id,client_secret,redirect_uri,state,login}'
+    AUTHORIZE = (
+        "/login/oauth/authorize{?client_id,client_secret,redirect_uri,state,login}"
+    )
 
     #: URL templete for calls to OAUTH access_token
-    ACCESS_TOKEN = '/login/oauth/access_token'
+    ACCESS_TOKEN = "/login/oauth/access_token"
 
-    def __init__(self, session: aiohttp.ClientSession,
-                 app_name: str, app_key: str, app_id: str,
-                 client_id: str, client_secret: str) -> None:
+    def __init__(
+        self,
+        session: aiohttp.ClientSession,
+        app_name: str,
+        app_key: str,
+        app_id: str,
+        client_id: str,
+        client_secret: str,
+    ) -> None:
         #: Name of app
         self.name = app_name
         #: ID of app
@@ -1142,9 +1214,9 @@ class GitHubAppHandler:
         if not expires or expires < now + 60:
             expires = now + self.JWT_RENEW_PERIOD
             payload = {
-                'iat': now,
-                'exp': expires,
-                'iss': self.app_id,
+                "iat": now,
+                "exp": expires,
+                "iss": self.app_id,
             }
             token_utf8 = jwt.encode(payload, self.app_key, algorithm="RS256")
             token = token_utf8.decode("utf-8")
@@ -1153,13 +1225,13 @@ class GitHubAppHandler:
         else:
             msg = "Reusing"
 
-        logger.debug("%s JWT valid for %i minutes", msg, (expires - now)/60)
+        logger.debug("%s JWT valid for %i minutes", msg, (expires - now) / 60)
         return token
 
     @staticmethod
     def parse_isotime(timestr: str) -> int:
         """Converts UTC ISO 8601 time stamp to seconds in epoch"""
-        if timestr[-1] != 'Z':
+        if timestr[-1] != "Z":
             raise ValueError(f"Time String '%s' not in UTC")
         return int(time.mktime(time.strptime(timestr[:-1], "%Y-%m-%dT%H:%M:%S")))
 
@@ -1168,43 +1240,52 @@ class GitHubAppHandler:
         if name is None:
             name = installation
         now = int(time.time())
-        expires, token = self._tokens.get(installation, (0, ''))
+        expires, token = self._tokens.get(installation, (0, ""))
         if not expires or expires < now + 60:
-            api = gidgethub.aiohttp.GitHubAPI(self._session, self.name, cache=self._cache)
+            api = gidgethub.aiohttp.GitHubAPI(
+                self._session, self.name, cache=self._cache
+            )
             try:
                 res = await api.post(
                     self.INSTALLATION_TOKEN,
-                    {'installation_id': installation},
+                    {"installation_id": installation},
                     data=b"",
                     accept="application/vnd.github.machine-man-preview+json",
-                    jwt=self.get_app_jwt()
+                    jwt=self.get_app_jwt(),
                 )
             except gidgethub.BadRequest:
                 logger.exception("Failed to get installation token for %s", name)
                 raise
 
-            expires = self.parse_isotime(res['expires_at'])
-            token = res['token']
+            expires = self.parse_isotime(res["expires_at"])
+            token = res["token"]
             self._tokens[installation] = (expires, token)
             msg = "Created new"
         else:
             msg = "Reusing"
 
-        logger.debug("%s token for %i valid for %i minutes",
-                     msg, installation, (expires - now)/60)
+        logger.debug(
+            "%s token for %i valid for %i minutes",
+            msg,
+            installation,
+            (expires - now) / 60,
+        )
         return token
 
     async def get_installation_id(self, user, repo):
         """Retrieve installation ID given user and repo"""
         api = gidgethub.aiohttp.GitHubAPI(self._session, self.name, cache=self._cache)
-        res = await api.getitem(self.INSTALLATION,
-                                {'owner': user, 'repo': repo},
-                                accept="application/vnd.github.machine-man-preview+json",
-                                jwt=self.get_app_jwt())
-        return res['id']
+        res = await api.getitem(
+            self.INSTALLATION,
+            {"owner": user, "repo": repo},
+            accept="application/vnd.github.machine-man-preview+json",
+            jwt=self.get_app_jwt(),
+        )
+        return res["id"]
 
-    async def get_github_api(self, dry_run, to_user, to_repo,
-                             installation=None) -> GitHubHandler:
+    async def get_github_api(
+        self, dry_run, to_user, to_repo, installation=None
+    ) -> GitHubHandler:
         """Returns the GitHubHandler for the installation the event came from"""
         if installation is None:
             installation = await self.get_installation_id(to_user, to_repo)
@@ -1217,8 +1298,10 @@ class GitHubAppHandler:
         else:
             api = AiohttpGitHubHandler(
                 await self.get_installation_token(installation),
-                to_user=to_user, to_repo=to_repo, dry_run=dry_run,
-                installation=installation
+                to_user=to_user,
+                to_repo=to_repo,
+                dry_run=dry_run,
+                installation=installation,
             )
             api.create_api_object(self._session, self.name)
             self._handlers[handler_key] = api
@@ -1242,8 +1325,9 @@ class GitHubAppHandler:
             last_access = now
 
         if len(self._user_handlers) > 50:
-            lru_keys = sorted(self._user_handlers,
-                              key=lambda k: self._user_handlers[k][0])
+            lru_keys = sorted(
+                self._user_handlers, key=lambda k: self._user_handlers[k][0]
+            )
             for key in lru_keys[:10]:
                 del self._user_handlers[key]
 
@@ -1257,7 +1341,7 @@ class GitHubAppHandler:
         Fetches **nbytes** of random data from `os.urandom` and passes them through
         base64 encoding.
         """
-        return base64.b64encode(os.urandom(nbytes), altchars=b'_-').decode()
+        return base64.b64encode(os.urandom(nbytes), altchars=b"_-").decode()
 
     async def oauth_github_user(self, redirect, session, params):
         """Acquires `AiohttpGitHubHandler` for user via OAuth
@@ -1302,11 +1386,11 @@ class GitHubAppHandler:
           The API client object with the user logged in.
 
         """
-        nonce_cookie_name = f'{self.__class__.__name__}::nonce'
-        token_cookie_name = f'{self.__class__.__name__}::token'
+        nonce_cookie_name = f"{self.__class__.__name__}::nonce"
+        token_cookie_name = f"{self.__class__.__name__}::token"
 
-        code = params.get('code')
-        state = params.get('state')
+        code = params.get("code")
+        state = params.get("state")
         nonce = session.get(nonce_cookie_name)
 
         # If we have a token already, try to authenticate the user
@@ -1322,32 +1406,39 @@ class GitHubAppHandler:
         if not code or state != nonce:
             nonce = self.generate_nonce()
             session[nonce_cookie_name] = nonce
-            raise aiohttp.web.HTTPFound(uritemplate.expand(
-                self.DOMAIN + self.AUTHORIZE, {
-                    'client_id': self.client_id,
-                    'redirect_uri': redirect,
-                    'state': nonce,
-                }))
+            raise aiohttp.web.HTTPFound(
+                uritemplate.expand(
+                    self.DOMAIN + self.AUTHORIZE,
+                    {
+                        "client_id": self.client_id,
+                        "redirect_uri": redirect,
+                        "state": nonce,
+                    },
+                )
+            )
 
         # Second pass. We have a code and the state matched the nonce.
         # Fetch the OAUTH token from Github using the code and state.
-        data = {'client_id': self.client_id,
-                'client_secret': self.client_secret,
-                'code': code,
-                'state': nonce}
-        headers = {'Accept': 'application/json'}
-        async with self._session.post(self.DOMAIN + self.ACCESS_TOKEN,
-                                      json=data, headers=headers) as response:
+        data = {
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+            "code": code,
+            "state": nonce,
+        }
+        headers = {"Accept": "application/json"}
+        async with self._session.post(
+            self.DOMAIN + self.ACCESS_TOKEN, json=data, headers=headers
+        ) as response:
             response.raise_for_status()
             result = await response.json()
 
         # We should always get a bearer token. This seems to be a future
         # extension. Check it anyway:
-        if result.get('token_type') != 'bearer':
+        if result.get("token_type") != "bearer":
             raise RuntimeError("Token type not 'bearer'")
 
         # Create the client and get user details to verify token validity
-        handler = await self.get_github_user_api(result.get('access_token'))
+        handler = await self.get_github_user_api(result.get("access_token"))
         if not handler:
             raise RuntimeError("Failed to login")
         session[token_cookie_name] = handler.token
