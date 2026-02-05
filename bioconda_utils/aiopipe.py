@@ -8,6 +8,7 @@ import pickle
 import signal
 
 from concurrent.futures import ProcessPoolExecutor
+
 try:
     from concurrent.futures import BrokenExecutor
 except ImportError:
@@ -17,7 +18,7 @@ except ImportError:
 
 from hashlib import sha256
 from urllib.parse import urlparse
-from typing import Dict, Iterator, List, Generic, Optional, Type, TypeVar
+from typing import Dict, List, Generic, Optional, Type, TypeVar
 
 import aiohttp
 import aioftp
@@ -29,14 +30,17 @@ from .utils import tqdm, threads_to_use
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
-ITEM = TypeVar('ITEM')
+ITEM = TypeVar("ITEM")
+
 
 class EndProcessing(BaseException):
     """Raised by `AsyncFilter` to tell `AsyncPipeline` to stop processing"""
 
+
 class EndProcessingItem(Exception):
     """Raised to indicate that an item should not be processed further"""
-    __slots__ = ['item', 'args']
+
+    __slots__ = ["item", "args"]
     template = "broken: %s"
     level = logging.INFO
 
@@ -62,6 +66,7 @@ class EndProcessingItem(Exception):
 
 class AsyncFilter(abc.ABC, Generic[ITEM]):
     """Function object type called by Scanner"""
+
     def __init__(self, pipeline: "AsyncPipeline", *_args, **_kwargs) -> None:
         self.pipeline = pipeline
 
@@ -109,18 +114,21 @@ class AsyncPipeline(Generic[ITEM]):
         if sig == signal.SIGINT:
             logger.error("Ctrl-C pressed - aborting...")
         self.proc_pool_executor.shutdown()
-        tasks = [t for t in asyncio.Task.all_tasks() if t != asyncio.Task.current_task()]
+        tasks = [
+            t for t in asyncio.Task.all_tasks() if t != asyncio.Task.current_task()
+        ]
         for t in tasks:
             t.cancel()
-        res_and_excs = await asyncio.gather(*tasks, return_exceptions=True)
+        await asyncio.gather(*tasks, return_exceptions=True)
         self.loop.stop()
 
     def run(self) -> bool:
         """Enters the asyncio loop and manages shutdown."""
         # We need to handle KeyboardInterrupt "manually" to get clean shutdown
         # for the ProcessPoolExecutor
-        self.loop.add_signal_handler(signal.SIGINT,
-                                     lambda: asyncio.ensure_future(self.shutdown(signal.SIGINT)))
+        self.loop.add_signal_handler(
+            signal.SIGINT, lambda: asyncio.ensure_future(self.shutdown(signal.SIGINT))
+        )
         try:
             task = asyncio.ensure_future(self._async_run())
             self.loop.run_until_complete(task)
@@ -156,8 +164,10 @@ class AsyncPipeline(Generic[ITEM]):
         tasks.append(asyncio.ensure_future(self.show_progress(progress_q, return_q)))
 
         # setup workers
-        tasks.extend(asyncio.ensure_future(self.worker(source_q, progress_q))
-                     for n in range(self.threads))
+        tasks.extend(
+            asyncio.ensure_future(self.worker(source_q, progress_q))
+            for n in range(self.threads)
+        )
 
         # send items
         await self.queue_items(source_q, return_q)
@@ -222,9 +232,8 @@ class AsyncPipeline(Generic[ITEM]):
         return await self.loop.run_in_executor(self.proc_pool_executor, func, *args)
 
 
-class AsyncRequests():
-    """Provides helpers for async access to URLs
-    """
+class AsyncRequests:
+    """Provides helpers for async access to URLs"""
 
     #: Used as user agent in http requests and as requester in github API requests
     USER_AGENT = "bioconda/bioconda-utils"
@@ -236,8 +245,10 @@ class AsyncRequests():
         #: cache
         self.cache: Optional[Dict[str, Dict[str, str]]] = None
 
-    async def __aenter__(self) -> 'AsyncRequests':
-        session = aiohttp.ClientSession(headers={'User-Agent': self.USER_AGENT}, trust_env=True)
+    async def __aenter__(self) -> "AsyncRequests":
+        session = aiohttp.ClientSession(
+            headers={"User-Agent": self.USER_AGENT}, trust_env=True
+        )
         await session.__aenter__()
         self.session = session
         if self.cache_fn:
@@ -261,8 +272,12 @@ class AsyncRequests():
             with open(self.cache_fn, "wb") as stream:
                 pickle.dump(self.cache, stream)
 
-    @backoff.on_exception(backoff.fibo, aiohttp.ClientResponseError, max_tries=20,
-                          giveup=lambda ex: ex.code not in [429, 502, 503, 504])
+    @backoff.on_exception(
+        backoff.fibo,
+        aiohttp.ClientResponseError,
+        max_tries=20,
+        giveup=lambda ex: ex.code not in [429, 502, 503, 504],
+    )
     async def get_text_from_url(self, url: str) -> str:
         """Fetch content at **url** and return as text
 
@@ -302,8 +317,12 @@ class AsyncRequests():
 
         return res
 
-    @backoff.on_exception(backoff.fibo, aiohttp.ClientResponseError, max_tries=20,
-                          giveup=lambda ex: ex.code not in [429, 502, 503, 504])
+    @backoff.on_exception(
+        backoff.fibo,
+        aiohttp.ClientResponseError,
+        max_tries=20,
+        giveup=lambda ex: ex.code not in [429, 502, 503, 504],
+    )
     async def get_checksum_from_http(self, url: str, desc: str) -> str:
         """Compute sha256 checksum of content at http **url**
 
@@ -313,18 +332,30 @@ class AsyncRequests():
         async with self.session.get(url) as resp:
             resp.raise_for_status()
             size = int(resp.headers.get("Content-Length", 0))
-            with tqdm(total=size, unit='B', unit_scale=True, unit_divisor=1024,
-                      desc=desc, miniters=1, leave=False, disable=None) as progress:
+            with tqdm(
+                total=size,
+                unit="B",
+                unit_scale=True,
+                unit_divisor=1024,
+                desc=desc,
+                miniters=1,
+                leave=False,
+                disable=None,
+            ) as progress:
                 while True:
-                    block = await resp.content.read(1024*1024)
+                    block = await resp.content.read(1024 * 1024)
                     if not block:
                         break
                     progress.update(len(block))
                     checksum.update(block)
         return checksum.hexdigest()
 
-    @backoff.on_exception(backoff.fibo, aiohttp.ClientResponseError, max_tries=20,
-                          giveup=lambda ex: ex.code not in [429, 502, 503, 504])
+    @backoff.on_exception(
+        backoff.fibo,
+        aiohttp.ClientResponseError,
+        max_tries=20,
+        giveup=lambda ex: ex.code not in [429, 502, 503, 504],
+    )
     async def get_file_from_url(self, fname: str, url: str, desc: str) -> None:
         """Fetch file at **url** into **fname**
 
@@ -333,11 +364,19 @@ class AsyncRequests():
         async with self.session.get(url) as resp:
             resp.raise_for_status()
             size = int(resp.headers.get("Content-Length", 0))
-            with tqdm(total=size, unit='B', unit_scale=True, unit_divisor=1024,
-                      desc=desc, miniters=1, leave=False, disable=None) as progress:
+            with tqdm(
+                total=size,
+                unit="B",
+                unit_scale=True,
+                unit_divisor=1024,
+                desc=desc,
+                miniters=1,
+                leave=False,
+                disable=None,
+            ) as progress:
                 with open(fname, "wb") as out:
                     while True:
-                        block = await resp.content.read(1024*1024)
+                        block = await resp.content.read(1024 * 1024)
                         if not block:
                             break
                         out.write(block)
@@ -350,9 +389,9 @@ class AsyncRequests():
             return self.cache["ftp_list"][url]
 
         parsed = urlparse(url)
-        async with aioftp.ClientSession(parsed.netloc,
-                                        password=self.USER_AGENT+"@",
-                                        trust_env=True) as client:
+        async with aioftp.ClientSession(
+            parsed.netloc, password=self.USER_AGENT + "@", trust_env=True
+        ) as client:
             res = [str(path) for path, _info in await client.list(parsed.path)]
         if self.cache:
             self.cache["ftp_list"][url] = res
@@ -366,9 +405,9 @@ class AsyncRequests():
         """
         parsed = urlparse(url)
         checksum = sha256()
-        async with aioftp.ClientSession(parsed.netloc,
-                                        password=self.USER_AGENT+"@",
-                                        trust_env=True) as client:
+        async with aioftp.ClientSession(
+            parsed.netloc, password=self.USER_AGENT + "@", trust_env=True
+        ) as client:
             async with client.download_stream(parsed.path) as stream:
                 async for block in stream.iter_by_block():
                     checksum.update(block)
