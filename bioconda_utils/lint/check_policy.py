@@ -143,20 +143,28 @@ class outputs_name_same_as_package_name(LintCheck):
                     self.message()
 
 
-class no_top_level_requirements_with_outputs(LintCheck):
-    """When outputs: are specified, the top level recipe cannot define requirements
+class disallowed_top_level_section_with_outputs(LintCheck):
+    """When outputs: are specified, a there top level sections don't make any sense
     
-    If (multiple) ``outputs:`` are specified, the top level recipe should not
-    contain a ``requirements:`` section, as it should not be built.
+    If (multiple) ``outputs:`` are specified, the top level recipe will
+    not be built and thus should not contain a ``build: run_exports:``
+    or a ``requirements:`` section.
 
     This enforces accepted CEP 0014: https://conda.org/learn/ceps/cep-0014/#outputs-section
 
     """
+
+    disallowed_sections = (
+        "build/run_exports",
+        "requirements",
+    )
+
     def check_recipe(self, recipe):
         outputs = recipe.get('outputs', '')
-        top_level_requirements = recipe.get('requirements', '')
-        if outputs and top_level_requirements:
-            self.message()
+        if outputs:
+            for section in self.disallowed_sections:
+                if recipe.get('section', ''):
+                    self.message(section=section)
 
 
 class version_starts_with_v(LintCheck):
