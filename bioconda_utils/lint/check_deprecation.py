@@ -11,7 +11,7 @@ class uses_perl_threaded(LintCheck):
     Please use ``perl`` instead.
 
     """
-    def check_deps(self, deps):
+    def check_deps(self, deps, _package_location):
         if 'perl-threaded' in deps:
             self.message(data=True)
 
@@ -28,7 +28,7 @@ class uses_javajdk(LintCheck):
     Please use ``openjdk`` instead.
 
     """
-    def check_deps(self, deps):
+    def check_deps(self, deps, _package_location):
         if 'java-jdk' in deps:
             self.message(data=True)
 
@@ -44,7 +44,7 @@ class deprecated_numpy_spec(LintCheck):
     Please remove the ``x.x`` - pinning is now handled automatically.
 
     """
-    def check_deps(self, deps):
+    def check_deps(self, deps, _package_location):
         if 'numpy' not in deps:
             return
         for path in deps['numpy']:
@@ -65,7 +65,7 @@ class uses_matplotlib(LintCheck):
     unless the package explicitly needs the PyQt interactive plotting backend.
 
     """
-    def check_deps(self, deps):
+    def check_deps(self, deps, _package_location):
         if 'matplotlib' in deps:
             self.message(data=True)
 

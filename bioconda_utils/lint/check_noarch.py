@@ -35,19 +35,22 @@ class should_be_noarch_python(LintCheck):
     subset of packages.
 
     """
-    def check_deps(self, deps):
+    def check_deps(self, deps, package_location):
+        build_section=f"{package_location}build"
+        print(build_section)
+        print(deps)
         if 'python' not in deps:
             return  # not a python package
         if all('build' not in loc for loc in deps['python']):
             return  # only uses python in run/host
         if any(dep.startswith('compiler_') for dep in deps):
             return  # not compiled
-        if self.recipe.get('build/noarch', None) == 'python':
+        if self.recipe.get(f'{build_section}/noarch', None) == 'python':
             return  # already marked noarch: python
-        self.message(section='build', data=True)
+        self.message(section=build_section, data=build_section)
 
-    def fix(self, _message, _data):
-        self.recipe.set('build/noarch', 'python')
+    def fix(self, _message, data):
+        self.recipe.set(f'{data}/noarch', 'python')
         return True
 
 
@@ -90,12 +93,29 @@ class should_not_be_noarch_compiler(LintCheck):
     Please remove the ``build: noarch:`` section.
 
     """
-    def check_deps(self, deps):
-        if not any(dep.startswith('compiler_') for dep in deps):
-            return  # not compiled
-        if self.recipe.get('build/noarch', False) is False:
-            return  # no noarch, or noarch=False
-        self.message(section='build/noarch')
+    def check_deps(self, deps, _package_location):
+        outputs = self.recipe.get('outputs', dict())
+        if outputs:
+            # we have to do the lint per outputs: package
+            for i in range(len(outputs)):
+                noarch_section=f'outputs/{i}/build/noarch'
+                if self.recipe.get(noarch_section, False) is False:
+                    continue  # no noarch, or noarch=False
+                # filter down to dependencies for this outputs: package
+                output_deps = []
+                for dep in deps:
+                    if any(f"outputs/{i}" in d for d in deps[dep]):
+                        output_deps.append(dep)
+                if not any(dep.startswith('compiler_') for dep in output_deps):
+                    continue  # not compiled
+                self.message(section=noarch_section)
+        else:
+            noarch_section='build/noarch'
+            if not any(dep.startswith('compiler_') for dep in deps):
+                return  # not compiled
+            if self.recipe.get(noarch_section, False) is False:
+                return  # no noarch, or noarch=False
+            self.message(section=noarch_section)
 
 
 class should_not_be_noarch_skip(LintCheck):
@@ -131,7 +151,7 @@ class should_not_use_skip_python(LintCheck):
     """
     bad_skip_terms = ('py2k', 'py3k', 'python')
 
-    def check_deps(self, deps):
+    def check_deps(self, deps, _package_location):
         if 'python' not in deps:
             return  # not a python package
         if any(dep.startswith('compiler_') for dep in deps):

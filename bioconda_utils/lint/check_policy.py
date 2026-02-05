@@ -115,7 +115,7 @@ class cran_packages_to_conda_forge(LintCheck):
     from Bioconda. It should therefore be moved to Conda-Forge.
 
     """
-    def check_deps(self, deps):
+    def check_deps(self, deps, _package_location):
         # must have R in run a run dep
         if 'R' in deps and any('run' in dep for dep in deps['R']):
             # and all deps satisfied in conda-forge
