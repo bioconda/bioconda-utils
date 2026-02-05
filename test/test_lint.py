@@ -25,9 +25,10 @@ def linter(config_file, recipes_folder):
     yield lint.Linter(config, str(recipes_folder), nocatch=True)
 
 
+@pytest.mark.parametrize('repodata', (TEST_DATA['setup']['repodata'],))
 @pytest.mark.parametrize('recipe_data', TEST_RECIPES, ids=TEST_RECIPE_IDS)
 @pytest.mark.parametrize('case', TEST_CASES, ids=TEST_CASE_IDS)
-def test_lint(linter, recipe_dir, case):
+def test_lint(linter, recipe_dir, mock_repodata, case):
     recipes = [str(recipe_dir)]
     linter.clear_messages()
     linter.lint(recipes)
