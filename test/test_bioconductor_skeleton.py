@@ -137,8 +137,9 @@ def test_pkg_version():
     )
     assert b.bioarchive_url is None
     assert b.cargoport_url == (
-        "https://depot.galaxyproject.org/software/bioconductor-deseq2/bioconductor-deseq2_1.14.1_src_all.tar.gz"
-    )  # noqa: E501: line too long
+        "https://depot.galaxyproject.org/software/bioconductor-deseq2/"
+        "bioconductor-deseq2_1.14.1_src_all.tar.gz"
+    )
 
     # bioc version specified, but not package version
     b = bioconductor_skeleton.BioCProjectPage("edgeR", bioc_version="3.5")
@@ -149,8 +150,9 @@ def test_pkg_version():
     )
     assert b.bioarchive_url is None
     assert b.cargoport_url == (
-        "https://depot.galaxyproject.org/software/bioconductor-edger/bioconductor-edger_3.18.1_src_all.tar.gz"
-    )  # noqa: E501: line too long
+        "https://depot.galaxyproject.org/software/bioconductor-edger/"
+        "bioconductor-edger_3.18.1_src_all.tar.gz"
+    )
 
 
 def test_bioarchive_exists_but_not_bioconductor():
