@@ -101,6 +101,9 @@ def upload_pr_artifacts(
                     quay_login = os.environ["QUAY_LOGIN"]
 
                     pattern = f"{tmpdir}/*/images/*.tar.gz"
+                    if artifact_source == "circleci":
+                        pattern = f"{tmpdir}/*/*/images/*.tar.gz"
+
                     logger.info(f"Checking for images at {pattern}.")
                     for img in glob.glob(pattern):
                         m = IMAGE_RE.match(os.path.basename(img))
@@ -109,6 +112,8 @@ def upload_pr_artifacts(
                         if label:
                             # add label to tag
                             tag = f"{tag}-{label}"
+                        if artifact_source == "circleci":
+                            name = name + "-aarch64"
                         target = f"{mulled_upload_target}/{name}:{tag}"
                         # Skopeo can't handle a : in the file name
                         fixed_img_name = img.replace(":", "_")
