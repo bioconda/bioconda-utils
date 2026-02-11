@@ -27,7 +27,7 @@ boltons=25.0.*                #
 jsonschema=4.25.*             # JSON schema verification
 jinja2=3.1.*                  #
 
-anaconda-client=1.13.*        # anaconda_upload
+anaconda-client=1.14.*        # anaconda_upload
 galaxy-tool-util=25.*         # mulled test and container build
 involucro=1.1.*               # mulled test and container build
 skopeo=1.15.*                 # docker upload
