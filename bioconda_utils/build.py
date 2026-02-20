@@ -115,6 +115,13 @@ def build(
     else:
         args += ["--no-anaconda-upload"]
 
+    # When mulled_test is enabled, skip conda-build's test phase to avoid
+    # running tests twice. The mulled test is strictly more rigorous (minimal
+    # environment with only runtime deps). --no-test does not affect package
+    # contents, metadata, or build string computation.
+    if mulled_test and not testonly:
+        args += ["--no-test"]
+
     for channel in channels or ["local"]:
         args += ["-c", channel]
 
