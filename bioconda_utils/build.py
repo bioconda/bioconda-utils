@@ -62,6 +62,8 @@ def build(
     dag: Optional[nx.DiGraph] = None,
     skiplist_leafs: bool = False,
     live_logs: bool = True,
+    presolved_mulled_test: bool = True,
+    mulled_upload_target=None,
 ) -> BuildResult:
     """
     Build a single recipe for a single env
@@ -198,6 +200,8 @@ def build(
     if mulled_test:
         logger.info("TEST START via mulled-build %s", recipe)
         mulled_images = []
+        # Use pre-solved test env unless we need the mulled-build image for upload
+        use_presolved = presolved_mulled_test and not mulled_upload_target
         for pkg_path in pkg_paths:
             try:
                 report_resources(f"Starting mulled build for {pkg_path}")
@@ -206,6 +210,7 @@ def build(
                     base_image=base_image,
                     conda_image=mulled_conda_image,
                     live_logs=live_logs,
+                    presolved=use_presolved,
                 )
             except sp.CalledProcessError:
                 logger.error("TEST FAILED: %s", recipe)
@@ -366,6 +371,7 @@ def build_recipes(
     live_logs: bool = True,
     exclude: List[str] = None,
     subdag_depth: int = None,
+    presolved_mulled_test: bool = True,
 ):
     """
     Build one or many bioconda packages.
@@ -521,6 +527,8 @@ def build_recipes(
             record_build_failure=record_build_failures,
             skiplist_leafs=skiplist_leafs,
             live_logs=live_logs,
+            presolved_mulled_test=presolved_mulled_test,
+            mulled_upload_target=mulled_upload_target,
         )
 
         if not res.success:
