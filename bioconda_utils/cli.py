@@ -619,6 +619,12 @@ from environment, even after successful build and test.""",
     action="store_true",
     help="Disable live logging during the build process",
 )
+@arg(
+    "--no-presolved-mulled-test",
+    action="store_true",
+    help="Disable pre-solved mulled tests: always use mulled-build to solve and install "
+    "the test environment from scratch.",
+)
 @arg("--exclude", nargs="+", help="Packages to exclude during this run")
 @arg(
     "--subdag-depth",
@@ -652,6 +658,7 @@ def build(
     record_build_failures=False,
     skiplist_leafs=False,
     disable_live_logs=False,
+    no_presolved_mulled_test=False,
     exclude=None,
     subdag_depth=None,
 ):
@@ -726,6 +733,7 @@ def build(
         live_logs=(not disable_live_logs),
         exclude=exclude,
         subdag_depth=subdag_depth,
+        presolved_mulled_test=not no_presolved_mulled_test,
     )
     exit(0 if success else 1)
 
