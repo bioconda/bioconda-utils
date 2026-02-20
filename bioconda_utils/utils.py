@@ -1184,12 +1184,14 @@ def _filter_existing_packages(metas, check_channels):
     return new_metas, existing_metas, divergent_builds
 
 
-def get_package_paths(recipe, check_channels, force=False):
+def get_package_paths(recipe, check_channels, force=False, finalize=True):
     if not force:
         if check_recipe_skippable(recipe, check_channels):
             # NB: If we skip early here, we don't detect possible divergent builds.
             return []
-    platform, metas = _load_platform_metas(recipe, finalize=True)
+    if not finalize:
+        logger.debug("Using non-finalized render for %s (fast resolve)", recipe)
+    platform, metas = _load_platform_metas(recipe, finalize=finalize)
 
     # The recipe likely defined skip: True
     if not metas:
