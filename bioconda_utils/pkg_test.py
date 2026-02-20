@@ -115,15 +115,25 @@ def _generate_explicit_spec(spec, channels, conda_bld_dir, tmpdir):
     for ch in channels:
         channel_args += ["-c", ch]
 
-    cmd = [
-        "conda", "create", "--dry-run", "--json",
-        "--override-channels",
-    ] + channel_args + [pkg_spec]
+    cmd = (
+        [
+            "conda",
+            "create",
+            "--dry-run",
+            "--json",
+            "--override-channels",
+        ]
+        + channel_args
+        + [pkg_spec]
+    )
 
     logger.debug("Generating explicit spec: %s", cmd)
     try:
         result = sp.run(
-            cmd, capture_output=True, text=True, timeout=300,
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=300,
         )
         if result.returncode != 0:
             logger.debug("conda create --dry-run failed: %s", result.stderr)
@@ -164,7 +174,9 @@ def _generate_explicit_spec(spec, channels, conda_bld_dir, tmpdir):
         return None
 
 
-def _test_with_explicit_spec(spec_path, tests, base_image, conda_image, conda_bld_dir, live_logs):
+def _test_with_explicit_spec(
+    spec_path, tests, base_image, conda_image, conda_bld_dir, live_logs
+):
     """Run mulled test using a pre-solved explicit spec file.
 
     Parameters
@@ -206,13 +218,18 @@ create-env --conda=: /usr/local
             f.write(test_script)
 
         cmd = [
-            "docker", "run",
+            "docker",
+            "run",
             "-t",
-            "--net", "host",
+            "--net",
+            "host",
             "--rm",
-            "-v", f"{script_path}:/opt/test_script.bash:ro",
-            "-v", f"{spec_path}:/opt/explicit_spec.txt:ro",
-            "-v", f"{conda_bld_dir}:{conda_bld_dir}:ro",
+            "-v",
+            f"{script_path}:/opt/test_script.bash:ro",
+            "-v",
+            f"{spec_path}:/opt/explicit_spec.txt:ro",
+            "-v",
+            f"{conda_bld_dir}:{conda_bld_dir}:ro",
         ]
 
         env_args = []
@@ -300,18 +317,27 @@ def test_package(
         try:
             with tempfile.TemporaryDirectory() as tmpdir:
                 spec_path = _generate_explicit_spec(
-                    spec, resolved_channels, conda_bld_dir, tmpdir,
+                    spec,
+                    resolved_channels,
+                    conda_bld_dir,
+                    tmpdir,
                 )
                 if spec_path is not None:
                     logger.info("Using pre-solved explicit spec for mulled test")
                     return _test_with_explicit_spec(
-                        spec_path, tests, base_image, conda_image,
-                        conda_bld_dir, live_logs,
+                        spec_path,
+                        tests,
+                        base_image,
+                        conda_image,
+                        conda_bld_dir,
+                        live_logs,
                     )
                 else:
                     logger.info("Pre-solve failed, falling back to mulled-build")
         except Exception as exc:
-            logger.info("Pre-solved test failed (%s), falling back to mulled-build", exc)
+            logger.info(
+                "Pre-solved test failed (%s), falling back to mulled-build", exc
+            )
 
     # Original mulled-build path
     channel_args = ["--channels", ",".join(resolved_channels)]
