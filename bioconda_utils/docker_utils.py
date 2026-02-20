@@ -101,20 +101,18 @@ BUILD_SCRIPT_TEMPLATE = r"""
 #!/bin/bash
 set -eo pipefail
 
-# Ensure the CONDARC file exists inside the container. The CONDARC env var
-# may point to a host path that is not mounted into the container. Without
-# a valid file, conda config writes and later pkgs_dirs resolution can fail
-# with NoWritablePkgsDirError.
-if [ -n "$CONDARC" ] && [ ! -f "$CONDARC" ]; then
-    mkdir -p "$(dirname "$CONDARC")"
-    touch "$CONDARC"
-fi
-
-# Share host's repodata/package cache if mounted (read-only).
-# Writable dir must come first to avoid NoWritablePkgsDirError.
+# Copy host's repodata cache into the container's writable pkgs dir.
+# We mount the host cache read-only, but conda-build's clean_pkg_cache()
+# expects every pkgs_dir to be writable, so we cannot add the read-only
+# mount to pkgs_dirs directly. Instead, symlink the repodata cache files
+# and any cached packages so conda can reuse them without re-downloading.
 if [ -d "{self.container_pkgs_cache}" ]; then
-    conda config --prepend pkgs_dirs /opt/conda/pkgs
-    conda config --append pkgs_dirs {self.container_pkgs_cache}
+    for f in {self.container_pkgs_cache}/cache-*; do
+        [ -f "$f" ] && ln -sf "$f" /opt/conda/pkgs/ 2>/dev/null || true
+    done
+    for f in {self.container_pkgs_cache}/*.conda {self.container_pkgs_cache}/*.tar.bz2; do
+        [ -f "$f" ] && ln -sf "$f" /opt/conda/pkgs/ 2>/dev/null || true
+    done
 fi
 
 # Add the host's mounted conda-bld dir so that we can use its contents as
