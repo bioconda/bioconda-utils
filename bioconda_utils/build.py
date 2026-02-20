@@ -489,7 +489,10 @@ def build_recipes(
             # dependency resolution. The --no-fast-resolve flag can override this.
             finalize = (docker_builder is None) if fast_resolve else True
             pkg_paths = utils.get_package_paths(
-                recipe, check_channels, force=force, finalize=finalize,
+                recipe,
+                check_channels,
+                force=force,
+                finalize=finalize,
             )
         except utils.DivergentBuildsError as exc:
             logger.error(
