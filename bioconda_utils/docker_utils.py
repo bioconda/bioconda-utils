@@ -70,6 +70,7 @@ def _get_host_pkgs_dir():
     """Return the host's primary conda package cache directory."""
     try:
         from conda.base.context import context
+
         if context.pkgs_dirs:
             return context.pkgs_dirs[0]
     except Exception:
@@ -100,10 +101,13 @@ BUILD_SCRIPT_TEMPLATE = r"""
 #!/bin/bash
 set -eo pipefail
 
-# Share host's repodata/package cache if mounted (read-only)
+# Share host's repodata/package cache if mounted (read-only).
+# Use --system to write to the system condarc, avoiding interference
+# with the CONDARC env var that may point to a path outside the container.
+# Writable dir must come first to avoid NoWritablePkgsDirError.
 if [ -d "{self.container_pkgs_cache}" ]; then
-    conda config --prepend pkgs_dirs {self.container_pkgs_cache}
-    conda config --append pkgs_dirs /opt/conda/pkgs
+    conda config --system --prepend pkgs_dirs /opt/conda/pkgs
+    conda config --system --append pkgs_dirs {self.container_pkgs_cache}
 fi
 
 # Add the host's mounted conda-bld dir so that we can use its contents as
