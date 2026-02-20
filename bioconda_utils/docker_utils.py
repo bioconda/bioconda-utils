@@ -66,6 +66,23 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _get_host_pkgs_dir():
+    """Return the host's primary conda package cache directory."""
+    try:
+        from conda.base.context import context
+        if context.pkgs_dirs:
+            return context.pkgs_dirs[0]
+    except Exception:
+        pass
+    conda_path = shutil.which("conda")
+    if conda_path:
+        root = os.path.dirname(os.path.dirname(os.path.realpath(conda_path)))
+        pkgs_dir = os.path.join(root, "pkgs")
+        if os.path.isdir(pkgs_dir):
+            return pkgs_dir
+    return None
+
+
 # ----------------------------------------------------------------------------
 # BUILD_SCRIPT_TEMPLATE
 # ----------------------------------------------------------------------------
@@ -82,6 +99,12 @@ logger = logging.getLogger(__name__)
 BUILD_SCRIPT_TEMPLATE = r"""
 #!/bin/bash
 set -eo pipefail
+
+# Share host's repodata/package cache if mounted (read-only)
+if [ -d "{self.container_pkgs_cache}" ]; then
+    conda config --prepend pkgs_dirs {self.container_pkgs_cache}
+    conda config --append pkgs_dirs /opt/conda/pkgs
+fi
 
 # Add the host's mounted conda-bld dir so that we can use its contents as
 # dependencies for building this recipe.
@@ -167,6 +190,7 @@ class RecipeBuilder(object):
         build_image=False,
         image_build_dir=None,
         docker_base_image=None,
+        share_host_cache=True,
     ):
         """
         Class to handle building a custom docker container that can be used for
@@ -248,6 +272,10 @@ class RecipeBuilder(object):
 
         docker_base_image : str or None
             Name of base image that can be used in **dockerfile_template**.
+
+        share_host_cache : bool
+            If True, mount the host's conda package cache read-only in the
+            container so repodata does not need to be re-downloaded.
         """
         self.requirements = requirements
         self.conda_build_args = ""
@@ -295,6 +323,17 @@ class RecipeBuilder(object):
             if not os.path.exists(self.pkg_dir):
                 os.makedirs(self.pkg_dir)
             shutil.copyfile(config_file.path, dst_file)
+        # Set up host package cache sharing
+        self.container_pkgs_cache = "/opt/host-conda-pkgs-cache"
+        if share_host_cache:
+            self.host_pkgs_dir = _get_host_pkgs_dir()
+            if self.host_pkgs_dir:
+                logger.info("Will share host conda pkgs cache: %s", self.host_pkgs_dir)
+            else:
+                logger.debug("Host conda pkgs dir not found, skipping cache sharing")
+        else:
+            self.host_pkgs_dir = None
+
         if self.build_image:
             self._build_image()
 
@@ -479,6 +518,9 @@ class RecipeBuilder(object):
             "-v",
             "{0}:{1}".format(recipe_dir, self.container_recipe),
         ]
+        # Mount host's conda pkgs cache read-only to avoid re-downloading repodata
+        if self.host_pkgs_dir:
+            cmd += ["-v", f"{self.host_pkgs_dir}:{self.container_pkgs_cache}:ro"]
         cmd += env_list
         if self.build_image:
             cmd += [self.docker_temp_image]
