@@ -366,6 +366,7 @@ def build_recipes(
     live_logs: bool = True,
     exclude: List[str] = None,
     subdag_depth: int = None,
+    fast_resolve: bool = True,
 ):
     """
     Build one or many bioconda packages.
@@ -482,7 +483,14 @@ def build_recipes(
 
         logger.info("Determining expected packages for %s", recipe)
         try:
-            pkg_paths = utils.get_package_paths(recipe, check_channels, force=force)
+            # When building with Docker, skip the expensive finalized render
+            # on the host since Docker's conda-build will re-solve anyway.
+            # Non-finalized metas use bypass_env_check which avoids costly
+            # dependency resolution. The --no-fast-resolve flag can override this.
+            finalize = (docker_builder is None) if fast_resolve else True
+            pkg_paths = utils.get_package_paths(
+                recipe, check_channels, force=force, finalize=finalize,
+            )
         except utils.DivergentBuildsError as exc:
             logger.error(
                 "BUILD ERROR: packages with divergent build strings in repository "
