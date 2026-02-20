@@ -619,6 +619,11 @@ from environment, even after successful build and test.""",
     action="store_true",
     help="Disable live logging during the build process",
 )
+@arg(
+    "--no-share-host-cache",
+    action="store_true",
+    help="Do not share the host's conda package cache with Docker containers.",
+)
 @arg("--exclude", nargs="+", help="Packages to exclude during this run")
 @arg(
     "--subdag-depth",
@@ -652,6 +657,7 @@ def build(
     record_build_failures=False,
     skiplist_leafs=False,
     disable_live_logs=False,
+    no_share_host_cache=False,
     exclude=None,
     subdag_depth=None,
 ):
@@ -694,6 +700,7 @@ def build(
             keep_image=keep_image,
             build_image=build_image,
             docker_base_image=docker_base_image,
+            share_host_cache=not no_share_host_cache,
         )
     else:
         docker_builder = None
