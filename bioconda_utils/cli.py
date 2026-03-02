@@ -619,6 +619,12 @@ from environment, even after successful build and test.""",
     action="store_true",
     help="Disable live logging during the build process",
 )
+@arg(
+    "--no-fast-resolve",
+    action="store_true",
+    help="Disable fast resolve: always run the full finalized conda solver on the host, "
+    "even when building with Docker. Useful for debugging build string mismatches.",
+)
 @arg("--exclude", nargs="+", help="Packages to exclude during this run")
 @arg(
     "--subdag-depth",
@@ -652,6 +658,7 @@ def build(
     record_build_failures=False,
     skiplist_leafs=False,
     disable_live_logs=False,
+    no_fast_resolve=False,
     exclude=None,
     subdag_depth=None,
 ):
@@ -726,6 +733,7 @@ def build(
         live_logs=(not disable_live_logs),
         exclude=exclude,
         subdag_depth=subdag_depth,
+        fast_resolve=not no_fast_resolve,
     )
     exit(0 if success else 1)
 
