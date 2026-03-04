@@ -120,7 +120,7 @@ conda index {self.container_staging}
 # Ensure permissions are correct on the host.
 HOST_USER={self.user_info[uid]}
 chown $HOST_USER:$HOST_USER {self.container_staging}/{arch}/*
-"""  # noqa: E501,E122: line too long, continuation line missing indentation or outdented
+"""
 
 
 # ----------------------------------------------------------------------------
@@ -141,7 +141,7 @@ RUN find /opt/conda \
       -exec chgrp --no-dereference lucky {{}} + \
       \! -type l \
       -exec chmod g=u {{}} +
-"""  # noqa: E122 continuation line missing indentation or outdented
+"""
 
 
 class DockerCalledProcessError(sp.CalledProcessError):

@@ -64,14 +64,7 @@ setup:
           - url: https://elsewhere
             sha256: abc
         build:
-          noarch: True
           number: 0
-          run_exports:
-            # add a run export
-            # (note that jinja templating as in reality is not
-            # supported by our test system to the same
-            # extend as in conda build)
-            - "{{ pin_subpackage('meta_package') }}"
         outputs:
           - name: meta_one
             build:
@@ -88,7 +81,6 @@ setup:
           - name: meta_two
             build:
               noarch: True
-              number: 0
               run_exports:
                 # add a run export
                 # (note that jinja templating as in reality is not
@@ -129,7 +121,9 @@ tests:
       meta.yaml: meta.yml
     expect: missing_meta_yaml
   - name: empty_build_section
-    remove: build
+    remove:
+      - build
+      - outputs/*/build
     expect:
       [should_be_noarch_generic, missing_build_number, missing_run_exports]
   - name: missing_home
@@ -422,6 +416,18 @@ tests:
   - name: build_number_needs_bump
     expect: build_number_needs_bump
     add: { package: { version: 0.0.1 } }
+  - name: no_top_level_requirements_with_outputs
+    expect: no_top_level_requirements_with_outputs
+    add:
+      requirements:
+        - something >=4
+      outputs:
+        - name: "else"
+          build:
+            run_exports: "empty"
+      extra:
+        skip-lints:
+          - missing_tests
   - name: outputs_name_same_as_package_name
     expect: outputs_name_same_as_package_name
     add:
