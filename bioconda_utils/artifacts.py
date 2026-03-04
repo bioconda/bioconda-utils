@@ -216,6 +216,7 @@ def get_circleci_artifacts(check_run, platform):
     # Use API v2 because v1.1 does not have a workflow endpoint
     url_wf = f"https://circleci.com/api/v2/workflow/{circleci_workflow_id}/job"
     res_wf = requests.get(url_wf, headers=headers)
+    res_wf.raise_for_status()
     json_wf = json.loads(res_wf.text)
 
     if len(json_wf["items"]) == 0:
