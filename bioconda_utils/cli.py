@@ -620,7 +620,12 @@ from environment, even after successful build and test.""",
     help="Disable live logging during the build process",
 )
 @arg(
+    "--no-share-host-cache",
+    action="store_true",
+    help="Do not share the host's conda package cache with Docker containers.",
     "--no-presolved-mulled-test",
+)
+@arg(
     action="store_true",
     help="Disable pre-solved mulled tests: always use mulled-build to solve and install "
     "the test environment from scratch.",
@@ -664,6 +669,7 @@ def build(
     record_build_failures=False,
     skiplist_leafs=False,
     disable_live_logs=False,
+    no_share_host_cache=False,
     no_presolved_mulled_test=False,
     no_fast_resolve=False,
     exclude=None,
@@ -708,6 +714,7 @@ def build(
             keep_image=keep_image,
             build_image=build_image,
             docker_base_image=docker_base_image,
+            share_host_cache=not no_share_host_cache,
         )
     else:
         docker_builder = None
