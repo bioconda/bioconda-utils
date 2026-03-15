@@ -1,5 +1,39 @@
 # Changelog
 
+## [4.1.0](https://github.com/bioconda/bioconda-utils/compare/v4.0.0...v4.1.0) (2026-03-04)
+
+
+### Features
+
+* eliminate redundant host-side solver run for Docker builds ([#1081](https://github.com/bioconda/bioconda-utils/issues/1081)) ([3d4c9e1](https://github.com/bioconda/bioconda-utils/commit/3d4c9e1110ce0f9d7915685f1a43752bdda3e085))
+* pre-solved environments for mulled tests ([#1082](https://github.com/bioconda/bioconda-utils/issues/1082)) ([af1ac9c](https://github.com/bioconda/bioconda-utils/commit/af1ac9c8ddfa17f4055aab065aa61b93973f8c30))
+
+
+### Bug Fixes
+
+* add raise_for_status to CircleCI workflow API call ([#1083](https://github.com/bioconda/bioconda-utils/issues/1083)) ([2f558ee](https://github.com/bioconda/bioconda-utils/commit/2f558ee0664af9fbd4a2435ca8d7001c6c28cb19))
+
+## [4.0.0](https://github.com/bioconda/bioconda-utils/compare/v3.9.2...v4.0.0) (2026-02-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* also find tests under outputs, ensure all outputs have tests, ensure outputs names are different from package name ([#1057](https://github.com/bioconda/bioconda-utils/issues/1057))
+
+### Bug Fixes
+
+* also find tests under outputs, ensure all outputs have tests, ensure outputs names are different from package name ([#1057](https://github.com/bioconda/bioconda-utils/issues/1057)) ([dd17aa7](https://github.com/bioconda/bioconda-utils/commit/dd17aa76b2410901649fb33c14e876452d26be1b))
+* update actions ([#1076](https://github.com/bioconda/bioconda-utils/issues/1076)) ([e301b5c](https://github.com/bioconda/bioconda-utils/commit/e301b5c6d8139ce80fddb7262c9355cf3284320b))
+* Update anaconda-client version to 1.14.* ([#1075](https://github.com/bioconda/bioconda-utils/issues/1075)) ([0bdd2a9](https://github.com/bioconda/bioconda-utils/commit/0bdd2a9202ec84e00c0ec923a24fafe68e9ee3a0)), closes [#1074](https://github.com/bioconda/bioconda-utils/issues/1074)
+
+## [3.9.2](https://github.com/bioconda/bioconda-utils/compare/v3.9.1...v3.9.2) (2026-01-09)
+
+
+### Bug Fixes
+
+* remove deprecated pkg_resources usage ahead of planned removal in Setuptools ≥81 ([#1058](https://github.com/bioconda/bioconda-utils/issues/1058)) ([0ef2df1](https://github.com/bioconda/bioconda-utils/commit/0ef2df1a5395e0111446fe79b9e1efdd5d67a7af))
+* unexpected arg 'label' ([#1065](https://github.com/bioconda/bioconda-utils/issues/1065)) ([16f2ab9](https://github.com/bioconda/bioconda-utils/commit/16f2ab9b48b8337647e4e4acfc6263c0592dd4b4))
+
 ## [3.9.1](https://github.com/bioconda/bioconda-utils/compare/v3.9.0...v3.9.1) (2025-08-13)
 
 
