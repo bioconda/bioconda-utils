@@ -1,5 +1,18 @@
 # Changelog
 
+## [4.1.0](https://github.com/bioconda/bioconda-utils/compare/v4.0.0...v4.1.0) (2026-03-04)
+
+
+### Features
+
+* eliminate redundant host-side solver run for Docker builds ([#1081](https://github.com/bioconda/bioconda-utils/issues/1081)) ([3d4c9e1](https://github.com/bioconda/bioconda-utils/commit/3d4c9e1110ce0f9d7915685f1a43752bdda3e085))
+* pre-solved environments for mulled tests ([#1082](https://github.com/bioconda/bioconda-utils/issues/1082)) ([af1ac9c](https://github.com/bioconda/bioconda-utils/commit/af1ac9c8ddfa17f4055aab065aa61b93973f8c30))
+
+
+### Bug Fixes
+
+* add raise_for_status to CircleCI workflow API call ([#1083](https://github.com/bioconda/bioconda-utils/issues/1083)) ([2f558ee](https://github.com/bioconda/bioconda-utils/commit/2f558ee0664af9fbd4a2435ca8d7001c6c28cb19))
+
 ## [4.0.0](https://github.com/bioconda/bioconda-utils/compare/v3.9.2...v4.0.0) (2026-02-11)
 
 
