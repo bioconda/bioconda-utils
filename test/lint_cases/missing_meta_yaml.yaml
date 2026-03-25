@@ -1,0 +1,8 @@
+expected_failures:
+  - missing_meta_yaml
+move_files:
+  meta.yaml: ""
+recipes:
+  one:
+    package:
+      name: one

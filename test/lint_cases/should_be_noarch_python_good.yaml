@@ -1,0 +1,29 @@
+recipes:
+  one:
+    package:
+      name: one
+      version: 0.1
+    source:
+      url: https://somewhere
+      sha256: 123
+    build:
+      noarch: python
+      number: 0
+      run_exports:
+        # add a run export
+        # (note that jinja templating as in reality is not
+        # supported by our test system to the same
+        # extend as in conda build)
+        - "{{ pin_subpackage('one') }}"
+    requirements:
+      build:
+        - python
+      run:
+        - python
+    test:
+      commands:
+        - do nothing
+    about:
+      license: BSD
+      home: https://elsewhere
+      summary: the_summary
