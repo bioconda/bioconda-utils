@@ -499,13 +499,11 @@ class Linter:
         )
         self.checks_dag = dag
 
+    def order_and_load_checks(self):
         try:
-            self.checks_ordered = reversed(list(nx.topological_sort(dag)))
+            self.checks_ordered = reversed(list(nx.topological_sort(self.checks_dag)))
         except nx.NetworkXUnfeasible:
             raise RuntimeError("Cycle in LintCheck requirements!")
-        self.reload_checks()
-
-    def reload_checks(self):
         self.check_instances = {str(check): check(self) for check in get_checks()}
 
     def get_skiplist(self) -> Set[str]:
@@ -568,6 +566,7 @@ class Linter:
 
         """
         for recipe_name in utils.tqdm(sorted(recipe_names)):
+            self.order_and_load_checks()
             try:
                 msgs = self.lint_one(recipe_name, fix=fix)
             except Exception:

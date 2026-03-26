@@ -1,0 +1,20 @@
+expected_failures:
+  - missing_run_exports
+recipes:
+  one:
+    package:
+      name: one
+      version: 0.1
+    source:
+      url: https://somewhere
+      sha256: 123
+    build:
+      noarch: True
+      number: 0
+    test:
+      commands:
+        - do nothing
+    about:
+      license: BSD
+      home: https://elsewhere
+      summary: the_summary

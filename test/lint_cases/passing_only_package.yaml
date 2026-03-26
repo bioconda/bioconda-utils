@@ -1,0 +1,16 @@
+recipes:
+  one:
+    package:
+      name: one
+      version: 0.1
+    extra:
+      skip-lints:
+        - missing_home
+        - missing_license
+        - missing_build_number
+        - missing_summary
+        - missing_run_exports
+        - missing_tests
+        - no_tests
+        - gpl_requires_license_distributed
+        - should_be_noarch_generic

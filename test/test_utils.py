@@ -22,7 +22,6 @@ from bioconda_utils import upload
 from bioconda_utils.utils import validate_config
 from helpers import ensure_missing, Recipes
 
-
 logger = logging.getLogger(__name__)
 
 # TODO: need channel order tests. Could probably do this by adding different
@@ -1138,13 +1137,11 @@ def test_variants():
     tmp = tempfile.NamedTemporaryFile(delete=False).name
     with open(tmp, "w") as fout:
         fout.write(
-            dedent(
-                """
+            dedent("""
                 mypkg:
                   - 1.0
                   - 2.0
-                """
-            )
+                """)
         )
     config = utils.load_conda_build_config()
     config.exclusive_config_files = [tmp]

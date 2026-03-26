@@ -7,7 +7,6 @@ import asyncio
 
 from bioconda_utils.hosters import Hoster, HosterMeta
 
-
 with open(op.join(op.dirname(__file__), "hoster_cases.yaml")) as data:
     TEST_CASES = yaml.safe_load(data)
 
