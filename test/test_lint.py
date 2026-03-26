@@ -51,9 +51,7 @@ def test_lint(linter, recipe_dirs, mock_repodata, case):
         )
         found.add(str(msg.check))
     assert len(expected) == len(found), (
-        f"In test '{case['name']}': "
-        "missed expected lint failures. Expected: "
-        f"{expected}"
+        f"In test '{case['name']}': missed expected lint failures. Expected: {expected}"
     )
 
     canfix = set(msg for msg in messages if msg.canfix and str(msg.check) in expected)

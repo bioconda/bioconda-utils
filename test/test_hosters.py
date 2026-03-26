@@ -70,9 +70,9 @@ class TestHoster:
     def setup_params(cls, hoster, caseno, case):
         cls.hoster = hoster
         cls.hoster_cls = AVAIL_HOSTERS.get(hoster)
-        assert (
-            cls.hoster_cls
-        ), f"No (complete) hoster class '{hoster}' found. {AVAIL_HOSTERS}"
+        assert cls.hoster_cls, (
+            f"No (complete) hoster class '{hoster}' found. {AVAIL_HOSTERS}"
+        )
         cls.case = case
         cls.caseno = caseno
         try:
@@ -100,9 +100,9 @@ class TestHoster:
 
     async def get_text_from_url(self, url):
         if "release_links" in self.case:
-            assert (
-                "release_json" not in self.case
-            ), "Test case may not contain both release_links and release_json"
+            assert "release_json" not in self.case, (
+                "Test case may not contain both release_links and release_json"
+            )
             return "\n".join(
                 "<a href={}/>".format(url) for url in self.case["release_links"]
             )
