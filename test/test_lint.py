@@ -12,6 +12,7 @@ yaml = YAML(typ="rt")  # pylint: disable=invalid-name
 
 TEST_DATA = dict()
 
+# gather all linting test case YAML files from lint_cases/ subdirectory
 linting_case_files = glob.glob(op.join(op.dirname(__file__), "lint_cases", "*.yaml"))
 
 for case_file in linting_case_files:
@@ -25,11 +26,8 @@ for case_file in linting_case_files:
         TEST_DATA[case_name]["name"] = case_name
 
 
-#TEST_RECIPES = list(TEST_DATA['setup']['recipes'].values())
-#TEST_RECIPE_IDS = list(TEST_DATA['setup']['recipes'].keys())
 TEST_CASES = list(TEST_DATA.values())
 TEST_CASE_IDS = list(TEST_DATA.keys())
-#TEST_CASE_IDS = [case['name'] for case in TEST_CASES]
 
 
 @pytest.fixture
@@ -39,7 +37,6 @@ def linter(config_file, recipes_folder):
     yield lint.Linter(config, str(recipes_folder), nocatch=True)
 
 
-#@pytest.mark.parametrize('recipe_data', TEST_RECIPES, ids=TEST_RECIPE_IDS)
 @pytest.mark.parametrize('case', TEST_CASES, ids=TEST_CASE_IDS)
 def test_lint(linter, recipe_dirs, mock_repodata, case):
     recipes = [str(p) for p in recipe_dirs]
