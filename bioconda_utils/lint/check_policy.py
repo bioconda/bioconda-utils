@@ -8,8 +8,9 @@ can be mechanically checked).
 import glob
 import os
 
-from . import LintCheck, ERROR, WARNING, INFO
+from . import LintCheck, WARNING
 from bioconda_utils import utils
+
 
 class uses_vcs_url(LintCheck):
     """The recipe downloads source from a VCS
@@ -18,10 +19,12 @@ class uses_vcs_url(LintCheck):
     ``svn_url`` or ``hg_url`` feature of conda.
 
     """
+
     def check_source(self, source, section):
-        for vcs in ('git', 'svn', 'hg'):
+        for vcs in ("git", "svn", "hg"):
             if f"{vcs}_url" in source:
                 self.message(section=f"{section}/{vcs}_url")
+
 
 class folder_and_package_name_must_match(LintCheck):
     """The recipe folder and package name do not match.
@@ -29,10 +32,11 @@ class folder_and_package_name_must_match(LintCheck):
     For clarity, the name of the folder the ``meta.yaml`` resides,
     in and the name of the toplevel package should match.
     """
+
     def check_recipe(self, recipe):
-        recipe_base_folder, _, _ = recipe.reldir.partition('/')
-        if recipe.name !=  recipe_base_folder:
-            self.message(section='package/name')
+        recipe_base_folder, _, _ = recipe.reldir.partition("/")
+        if recipe.name != recipe_base_folder:
+            self.message(section="package/name")
 
 
 class gpl_requires_license_distributed(LintCheck):
@@ -47,13 +51,14 @@ class gpl_requires_license_distributed(LintCheck):
     If the upstream tar ball does not include a copy, please ask the
     authors of the software to add it to their distribution archive.
     """
+
     severity = WARNING
     requires = ["missing_license"]
 
     def check_recipe(self, recipe):
-        if 'gpl' in recipe.get('about/license').lower():
-            if not recipe.get('about/license_file', ''):
-                self.message('about/license')
+        if "gpl" in recipe.get("about/license").lower():
+            if not recipe.get("about/license_file", ""):
+                self.message("about/license")
 
 
 class should_not_use_fn(LintCheck):
@@ -62,9 +67,10 @@ class should_not_use_fn(LintCheck):
     There is no need to specify the filename as the URL should give a name
     and it will in most cases be unpacked automatically.
     """
+
     def check_source(self, source, section):
-        if 'fn' in source:
-            self.message(section=section+'/fn')
+        if "fn" in source:
+            self.message(section=section + "/fn")
 
 
 class has_windows_bat_file(LintCheck):
@@ -78,8 +84,9 @@ class has_windows_bat_file(LintCheck):
     from the recipe directory.
 
     """
+
     def check_recipe(self, recipe):
-        for fname in glob.glob(os.path.join(recipe.dir, '*.bat')):
+        for fname in glob.glob(os.path.join(recipe.dir, "*.bat")):
             self.message(fname=fname)
 
 
@@ -101,11 +108,13 @@ class long_summary(LintCheck):
     description to be one or more paragraphs.
 
     """
+
     severity = WARNING
     max_length = 120
+
     def check_recipe(self, recipe):
-        if len(recipe.get('about/summary', '')) > self.max_length:
-            self.message('about/summary')
+        if len(recipe.get("about/summary", "")) > self.max_length:
+            self.message("about/summary")
 
 
 class cran_packages_to_conda_forge(LintCheck):
@@ -115,18 +124,21 @@ class cran_packages_to_conda_forge(LintCheck):
     from Bioconda. It should therefore be moved to Conda-Forge.
 
     """
+
     def check_deps(self, deps):
         # must have R in run a run dep
-        if 'R' in deps and any('run' in dep for dep in deps['R']):
+        if "R" in deps and any("run" in dep for dep in deps["R"]):
             # and all deps satisfied in conda-forge
-            if all(utils.RepoData().get_package_data(name=dep, channels='conda-forge')
-                   for dep in deps):
-                   self.message()
+            if all(
+                utils.RepoData().get_package_data(name=dep, channels="conda-forge")
+                for dep in deps
+            ):
+                self.message()
 
 
 class outputs_name_same_as_package_name(LintCheck):
     """Output names must differ from main package name
-    
+
     If multiple outputs are specified, their names must be different from the
     main package name.
 
@@ -134,12 +146,13 @@ class outputs_name_same_as_package_name(LintCheck):
     And it prevents hard to debug issues: https://github.com/conda/conda-build/pull/5767
 
     """
+
     def check_recipe(self, recipe):
-        name = recipe.get('package', {}).get('name', '')
-        outputs = recipe.get('outputs', '')
+        name = recipe.get("package", {}).get("name", "")
+        outputs = recipe.get("outputs", "")
         if outputs:
             for o in outputs:
-                if o.get('name', '') == name:
+                if o.get("name", "") == name:
                     self.message()
 
 
@@ -149,6 +162,7 @@ class version_starts_with_v(LintCheck):
     Version numbers in Conda recipes need to follow PEP 386
 
     """
+
     def check_recipe(self, recipe):
-        if recipe.get('package/version', '').startswith('v'):
+        if recipe.get("package/version", "").startswith("v"):
             self.message()

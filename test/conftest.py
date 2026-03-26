@@ -1,9 +1,6 @@
-import contextlib
 import datetime
 import os
-import os.path as op
 import shutil
-import tempfile
 from copy import deepcopy
 
 from ruamel.yaml import YAML
@@ -17,12 +14,9 @@ yaml = YAML(typ="rt")  # pylint: disable=invalid-name
 
 
 # common settings
-TEST_RECIPES_FOLDER = 'recipes'
-TEST_CONFIG_YAML_FNAME = 'config.yaml'
-TEST_CONFIG_YAML = {
-    'blacklists': [],
-    'channels': []
-}
+TEST_RECIPES_FOLDER = "recipes"
+TEST_CONFIG_YAML_FNAME = "config.yaml"
+TEST_CONFIG_YAML = {"blacklists": [], "channels": []}
 
 
 def pytest_runtest_makereport(item, call):
@@ -111,16 +105,16 @@ def dict_merge(base, add):
 @pytest.fixture
 def config_file(tmpdir: py.path.local, case):
     """Prepares Bioconda config.yaml"""
-    if 'add_root_files' in case:
-        for fname, data in case['add_root_files'].items():
-            with tmpdir.join(fname).open('w') as fdes:
+    if "add_root_files" in case:
+        for fname, data in case["add_root_files"].items():
+            with tmpdir.join(fname).open("w") as fdes:
                 fdes.write(data)
-        
+
     data = deepcopy(TEST_CONFIG_YAML)
-    if 'config' in case:
-        dict_merge(data, case['config'])
+    if "config" in case:
+        dict_merge(data, case["config"])
     config_fname = tmpdir.join(TEST_CONFIG_YAML_FNAME)
-    with config_fname.open('w') as fdes:
+    with config_fname.open("w") as fdes:
         yaml.dump(data, fdes)
 
     yield config_fname

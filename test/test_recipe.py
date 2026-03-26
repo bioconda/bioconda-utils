@@ -4,12 +4,17 @@ import os
 import pytest
 
 from ruamel.yaml import YAML
-yaml = YAML(typ="rt")  # pylint: disable=invalid-name
 
 from bioconda_utils.recipe import (
     Recipe,
-    EmptyRecipe, MissingMetaYaml, RenderFailure, DuplicateKey, MissingKey
+    EmptyRecipe,
+    MissingMetaYaml,
+    RenderFailure,
+    DuplicateKey,
+    MissingKey,
 )
+
+yaml = YAML(typ="rt")  # pylint: disable=invalid-name
 
 RECIPE_DATA = """
 recipes:
@@ -68,20 +73,20 @@ def with_recipes(func):
     func = pytest.mark.parametrize('case', [RECIPES])(func)
     return func
 
-    
+
 def test_stub():
-    r = Recipe('recipes/sina', 'recipes/')
-    assert r.path == 'recipes/sina/meta.yaml'
-    assert r.relpath == 'sina/meta.yaml'
-    assert r.reldir == 'sina'
-    assert str(r) == 'sina'
+    r = Recipe("recipes/sina", "recipes/")
+    assert r.path == "recipes/sina/meta.yaml"
+    assert r.relpath == "sina/meta.yaml"
+    assert r.reldir == "sina"
+    assert str(r) == "sina"
 
 
 def test_empty_recipe(tmpdir):
-    r = Recipe('recipes/sina', 'recipes/')
+    r = Recipe("recipes/sina", "recipes/")
     with pytest.raises(EmptyRecipe):
         r.load_from_string("")
-    with open(op.join(tmpdir, 'meta.yaml'), "w"):
+    with open(op.join(tmpdir, "meta.yaml"), "w"):
         pass
     with pytest.raises(EmptyRecipe):
         Recipe.from_file(str(tmpdir), str(tmpdir))
@@ -91,8 +96,8 @@ def test_empty_recipe(tmpdir):
 
 def test_file_not_found():
     with pytest.raises(MissingMetaYaml):
-        Recipe.from_file('/', '/doesnotexist')
-    res = Recipe.from_file('/', '/doesnotexist', return_exceptions=True)
+        Recipe.from_file("/", "/doesnotexist")
+    res = Recipe.from_file("/", "/doesnotexist", return_exceptions=True)
     assert isinstance(res, MissingMetaYaml)
 
 
@@ -146,7 +151,7 @@ def remove_section(data, section):
     start_off = None
     for num, line in enumerate(data):
         off = len(line) - len(line.lstrip())
-        if section + ':' in line:
+        if section + ":" in line:
             start = num
             start_off = off
             continue
@@ -283,6 +288,7 @@ def test_recipe_extra_additional_platforms(recipes):
         recipe.render()
         assert recipe.extra_additional_platforms == ["linux-aarch64", "osx-arm64"]
 
+
 @with_recipes
 def test_recipe_extra_additional_platform_osx(recipes):
     for recipe in recipes:
@@ -294,6 +300,7 @@ def test_recipe_extra_additional_platform_osx(recipes):
         ]
         recipe.render()
         assert recipe.extra_additional_platforms == ["osx-arm64"]
+
 
 @with_recipes
 def test_recipe_extra_additional_platform_linux(recipes):

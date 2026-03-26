@@ -18,7 +18,6 @@ from .githandler import BiocondaRepo
 
 from bioconda_utils.recipe import Recipe
 from bioconda_utils import graph, utils
-from bioconda_utils.githandler import GitHandler
 
 
 logger = logging.getLogger(__name__)
@@ -27,7 +26,7 @@ logger = logging.getLogger(__name__)
 class BuildFailureRecord:
     git_handler = None
 
-    def __init__(self, recipe: Union[str, Recipe], platform: Optional[str]=None):
+    def __init__(self, recipe: Union[str, Recipe], platform: Optional[str] = None):
         if isinstance(recipe, Recipe):
             self.recipe_path = recipe.path
         else:
@@ -41,7 +40,7 @@ class BuildFailureRecord:
             if os.path.getsize(path) == 0:
                 raise IOError("Unable to read build failure record {path}: empty file")
             with open(path, "r") as f:
-                yaml=YAML()
+                yaml = YAML()
                 try:
                     self.inner = dict(yaml.load(f))
                 except ruamel.yaml.reader.ReaderError as e:
@@ -57,8 +56,14 @@ class BuildFailureRecord:
 
     def set_recipe_sha_to_current_recipe(self):
         self.recipe_sha = self.get_recipe_sha()
-    
-    def fill(self, log: Optional[str]=None, reason: Optional[str]=None, category: Optional[str]=None, skiplist: bool=False):
+
+    def fill(
+        self,
+        log: Optional[str] = None,
+        reason: Optional[str] = None,
+        category: Optional[str] = None,
+        skiplist: bool = False,
+    ):
         self.set_recipe_sha_to_current_recipe()
         # if recipe is a leaf (i.e. not used by others as dependency)
         # we can automatically blacklist it if desired
@@ -80,29 +85,47 @@ class BuildFailureRecord:
         if self.skiplist:
             recipe_sha = self.get_recipe_sha()
             if recipe_sha == self.recipe_sha:
-                logger.info(f"Skipping {self.recipe_path} because it is skiplisted in {self.path}.")
+                logger.info(
+                    f"Skipping {self.recipe_path} because it is skiplisted in {self.path}."
+                )
                 return True
             else:
-                logger.info(f"Not skipping {self.recipe_path} as requested in {self.path} because it has been changed (recipe_sha {recipe_sha}) since skiplisting (recipe_sha {self.recipe_sha}).")
+                logger.info(
+                    f"Not skipping {self.recipe_path} as requested in {self.path} because it has been changed (recipe_sha {recipe_sha}) since skiplisting (recipe_sha {self.recipe_sha})."
+                )
         return False
 
     def write(self):
         logger.info(f"Storing build failure record for recipe {self.recipe_path}")
         with open(self.path, "w") as f:
-            yaml=YAML()
+            yaml = YAML()
             commented_map = CommentedMap()
-            commented_map.insert(0, "recipe_sha", self.recipe_sha, comment="The hash of the recipe's meta.yaml at which this recipe failed to build.")
-            commented_map.insert(1, "skiplist", self.skiplist, comment="Set to true to skiplist this recipe so that it will be ignored as long as its latest commit is the one given above.")
+            commented_map.insert(
+                0,
+                "recipe_sha",
+                self.recipe_sha,
+                comment="The hash of the recipe's meta.yaml at which this recipe failed to build.",
+            )
+            commented_map.insert(
+                1,
+                "skiplist",
+                self.skiplist,
+                comment="Set to true to skiplist this recipe so that it will be ignored as long as its latest commit is the one given above.",
+            )
             i = 2
 
             _log = self.inner.get("log", "")
             if _log:
                 commented_map.insert(
                     i,
-                    "log", 
+                    "log",
                     # remove invalid chars and keep only the last 100 lines
-                    LiteralScalarString("\n".join(utils.yaml_remove_invalid_chars(_log).splitlines()[-100:])),
-                    comment="Last 100 lines of the build log."
+                    LiteralScalarString(
+                        "\n".join(
+                            utils.yaml_remove_invalid_chars(_log).splitlines()[-100:]
+                        )
+                    ),
+                    comment="Last 100 lines of the build log.",
                 )
                 i += 1
             if self.reason:
@@ -120,9 +143,22 @@ class BuildFailureRecord:
     def commit_and_push_changes(self):
         """Commit and push any changes, including removal of the record."""
         utils.run(["git", "add", self.path], mask=False)
-        if utils.run(["git", "diff", "--quiet", "--exit-code", "HEAD", "--", self.path], mask=False, check=False, quiet_failure=True).returncode:
+        if utils.run(
+            ["git", "diff", "--quiet", "--exit-code", "HEAD", "--", self.path],
+            mask=False,
+            check=False,
+            quiet_failure=True,
+        ).returncode:
             operation = "add" if os.path.exists(self.path) else "remove"
-            utils.run(["git", "commit", "-m", f"[ci skip] {operation} build failure record for recipe {self.recipe_path}"], mask=False)
+            utils.run(
+                [
+                    "git",
+                    "commit",
+                    "-m",
+                    f"[ci skip] {operation} build failure record for recipe {self.recipe_path}",
+                ],
+                mask=False,
+            )
             for _ in range(3):
                 try:
                     # Rebase is "safe" here because this is meant to be run only on the bulk branch,
@@ -139,9 +175,12 @@ class BuildFailureRecord:
             logger.error(
                 f"Failed to push build failure record for recipe {self.recipe_path}. "
                 "This might be because of raise conditions if multiple jobs do "
-                "this at the same time. Consider trying again later.")
+                "this at the same time. Consider trying again later."
+            )
         else:
-            logger.info("Nothing changed in build failure record. Keeping the current version.")
+            logger.info(
+                "Nothing changed in build failure record. Keeping the current version."
+            )
 
     @property
     def reason(self):
@@ -176,7 +215,7 @@ class BuildFailureRecord:
     @log.setter
     def log(self, value):
         self.inner["log"] = value
-    
+
     @recipe_sha.setter
     def recipe_sha(self, value):
         self.inner["recipe_sha"] = value
@@ -190,16 +229,21 @@ class BuildFailureRecord:
         self.inner["category"] = value
 
 
-def collect_build_failure_dataframe(recipe_folder, config, channel, link_fmt="txt", link_prefix="", git_range=None):
+def collect_build_failure_dataframe(
+    recipe_folder, config, channel, link_fmt="txt", link_prefix="", git_range=None
+):
     def get_build_failure_records(recipe):
         return filter(
-            BuildFailureRecord.exists, 
-            [BuildFailureRecord(recipe, platform=platform) for platform in conda.base.constants.PLATFORM_DIRECTORIES]
+            BuildFailureRecord.exists,
+            [
+                BuildFailureRecord(recipe, platform=platform)
+                for platform in conda.base.constants.PLATFORM_DIRECTORIES
+            ],
         )
 
     def has_build_failure(recipe):
         return any(get_build_failure_records(recipe))
-    
+
     recipes = list(utils.get_recipes(recipe_folder))
 
     if git_range:
@@ -209,12 +253,18 @@ def collect_build_failure_dataframe(recipe_folder, config, channel, link_fmt="tx
         ref = "HEAD" if len(git_range) == 1 else git_range[1]
         repo = BiocondaRepo(recipe_folder)
         changed_recipes = repo.get_recipes_to_build(ref, other)
-        logger.info("Constraining to %s git modified recipes%s.", len(changed_recipes),
-                    utils.ellipsize_recipes(changed_recipes, recipe_folder))
+        logger.info(
+            "Constraining to %s git modified recipes%s.",
+            len(changed_recipes),
+            utils.ellipsize_recipes(changed_recipes, recipe_folder),
+        )
         recipes = [recipe for recipe in recipes if recipe in set(changed_recipes)]
         if len(recipes) != len(changed_recipes):
-            logger.info("Overlap was %s recipes%s.", len(recipes),
-                        utils.ellipsize_recipes(recipes, recipe_folder))
+            logger.info(
+                "Overlap was %s recipes%s.",
+                len(recipes),
+                utils.ellipsize_recipes(recipes, recipe_folder),
+            )
 
     dag, _ = graph.build(recipes, config)
 
@@ -241,18 +291,51 @@ def collect_build_failure_dataframe(recipe_folder, config, channel, link_fmt="tx
 
             limit = 80  # characters in last column to show before putting the rest in "<details>"
             for rec in recs:
-                failures = utils.format_link(rec.path, link_fmt, prefix=link_prefix, label=rec.platform)
+                failures = utils.format_link(
+                    rec.path, link_fmt, prefix=link_prefix, label=rec.platform
+                )
                 categories = rec.category
                 reasons = rec.reason
 
                 if len(reasons) > limit:
-                    reasons = reasons[:limit] + "..." +  "<details>" + reasons[limit:] + "</details>"
+                    reasons = (
+                        reasons[:limit]
+                        + "..."
+                        + "<details>"
+                        + reasons[limit:]
+                        + "</details>"
+                    )
                 skiplisted = rec.skiplist
-                prs = utils.format_link(f"https://github.com/bioconda/bioconda-recipes/pulls?q=is%3Apr+is%3Aopen+{package}", link_fmt, label="show")
-                recipe = recipe.replace('recipes/', '')
+                prs = utils.format_link(
+                    f"https://github.com/bioconda/bioconda-recipes/pulls?q=is%3Apr+is%3Aopen+{package}",
+                    link_fmt,
+                    label="show",
+                )
+                recipe = recipe.replace("recipes/", "")
 
-                yield (recipe, downloads, descendants, skiplisted, categories, failures, prs, reasons)
+                yield (
+                    recipe,
+                    downloads,
+                    descendants,
+                    skiplisted,
+                    categories,
+                    failures,
+                    prs,
+                    reasons,
+                )
 
-    data = pd.DataFrame(get_data(), columns=["recipe", "downloads", "depending", "skiplisted", "category", "build failures", "pull requests", "reason"])
+    data = pd.DataFrame(
+        get_data(),
+        columns=[
+            "recipe",
+            "downloads",
+            "depending",
+            "skiplisted",
+            "category",
+            "build failures",
+            "pull requests",
+            "reason",
+        ],
+    )
     data.sort_values(by=["depending", "downloads"], ascending=False, inplace=True)
     return data

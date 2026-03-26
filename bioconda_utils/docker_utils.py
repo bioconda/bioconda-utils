@@ -52,20 +52,17 @@ import subprocess as sp
 import tempfile
 import pwd
 import grp
-from textwrap import dedent
 from importlib.resources import files, as_file
 import re
 from distutils.version import LooseVersion
 
-import conda
-import conda_build
 
 from conda import exports as conda_exports
 
 from . import utils
-from . import __version__
 
 import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -82,8 +79,7 @@ logger = logging.getLogger(__name__)
 # can add additional attributes to the RecipeBuilder instance and have them
 # filled in here.
 #
-BUILD_SCRIPT_TEMPLATE = \
-r"""
+BUILD_SCRIPT_TEMPLATE = r"""
 #!/bin/bash
 set -eo pipefail
 
@@ -137,8 +133,7 @@ chown $HOST_USER:$HOST_USER {self.container_staging}/{arch}/*
 # The default image is created automatically for releases using the Dockerfile
 # in the bioconda-utils repo.
 
-DOCKERFILE_TEMPLATE = \
-r"""
+DOCKERFILE_TEMPLATE = r"""
 FROM {docker_base_image}
 {proxies}
 RUN find /opt/conda \
@@ -157,12 +152,11 @@ class DockerBuildError(Exception):
     pass
 
 
-
 class RecipeBuilder(object):
     def __init__(
         self,
-        tag='tmp-bioconda-builder',
-        container_recipe='/opt/recipe',
+        tag="tmp-bioconda-builder",
+        container_recipe="/opt/recipe",
         container_staging="/opt/host-conda-bld",
         requirements=None,
         build_script_template=BUILD_SCRIPT_TEMPLATE,
@@ -172,7 +166,7 @@ class RecipeBuilder(object):
         keep_image=False,
         build_image=False,
         image_build_dir=None,
-        docker_base_image=None
+        docker_base_image=None,
     ):
         """
         Class to handle building a custom docker container that can be used for
@@ -272,7 +266,8 @@ class RecipeBuilder(object):
             uid=uid,
             gid=usr.pw_gid,
             groupname=grp.getgrgid(usr.pw_gid).gr_name,
-            username=usr.pw_name)
+            username=usr.pw_name,
+        )
 
         self.container_recipe = container_recipe
         self.container_staging = container_staging
@@ -305,7 +300,9 @@ class RecipeBuilder(object):
 
     def _get_config_path(self, staging_prefix, i, config_file):
         src_basename = os.path.basename(config_file.path)
-        dst_basename = 'conda_build_config_{}_{}_{}'.format(i, config_file.arg, src_basename)
+        dst_basename = "conda_build_config_{}_{}_{}".format(
+            i, config_file.arg, src_basename
+        )
         return os.path.join(staging_prefix, dst_basename)
 
     def __del__(self):
@@ -313,11 +310,10 @@ class RecipeBuilder(object):
 
     def _find_proxy_settings(self):
         res = {}
-        for var in ('http_proxy', 'https_proxy'):
-            values = set([
-                os.environ.get(var, None),
-                os.environ.get(var.upper(), None)
-            ]).difference([None])
+        for var in ("http_proxy", "https_proxy"):
+            values = set(
+                [os.environ.get(var, None), os.environ.get(var.upper(), None)]
+            ).difference([None])
             if len(values) == 1:
                 res[var] = next(iter(values))
             elif len(values) > 1:
@@ -336,26 +332,32 @@ class RecipeBuilder(object):
         else:
             build_dir = self.image_build_dir
 
-        logger.info('DOCKER: Building image "%s" from %s', self.docker_temp_image, build_dir)
-        with open(os.path.join(build_dir, 'requirements.txt'), 'w') as fout:
+        logger.info(
+            'DOCKER: Building image "%s" from %s', self.docker_temp_image, build_dir
+        )
+        with open(os.path.join(build_dir, "requirements.txt"), "w") as fout:
             if self.requirements:
                 fout.write(open(self.requirements).read())
             else:
                 # pkg_resources (deprecated) is replaced with importlib.resources
-                with as_file(files('bioconda_utils') / 'bioconda_utils-requirements.txt') as req_path:
-                    with open(req_path, 'r', encoding='utf-8') as fh:
+                with as_file(
+                    files("bioconda_utils") / "bioconda_utils-requirements.txt"
+                ) as req_path:
+                    with open(req_path, "r", encoding="utf-8") as fh:
                         fout.write(fh.read())
 
-        proxies = "\n".join("ENV {} {}".format(k, v)
-                            for k, v in self._find_proxy_settings())
+        proxies = "\n".join(
+            "ENV {} {}".format(k, v) for k, v in self._find_proxy_settings()
+        )
 
-        with open(os.path.join(build_dir, "Dockerfile"), 'w') as fout:
-            fout.write(self.dockerfile_template.format(
-                docker_base_image=self.docker_base_image,
-                proxies=proxies
-            ))
+        with open(os.path.join(build_dir, "Dockerfile"), "w") as fout:
+            fout.write(
+                self.dockerfile_template.format(
+                    docker_base_image=self.docker_base_image, proxies=proxies
+                )
+            )
 
-        logger.debug('Dockerfile:\n' + open(fout.name).read())
+        logger.debug("Dockerfile:\n" + open(fout.name).read())
 
         # Check if the installed version of docker supports the --network flag
         # (requires version >= 1.13.0)
@@ -366,39 +368,43 @@ class RecipeBuilder(object):
         try:
             s = sp.check_output(["docker", "--version"]).decode()
         except FileNotFoundError:
-            logger.error('DOCKER FAILED: Error checking docker version, is it installed?')
+            logger.error(
+                "DOCKER FAILED: Error checking docker version, is it installed?"
+            )
             raise
         except sp.CalledProcessError:
-            logger.error('DOCKER FAILED: Error checking docker version.')
+            logger.error("DOCKER FAILED: Error checking docker version.")
             raise
-        p = re.compile(r"\d+\.\d+\.\d+")  # three groups of at least on digit separated by dots
+        p = re.compile(
+            r"\d+\.\d+\.\d+"
+        )  # three groups of at least on digit separated by dots
         version_string = re.search(p, s).group(0)
         if LooseVersion(version_string) >= LooseVersion("1.13.0"):
             cmd = [
-                    'docker', 'build',
-                    # xref #5027
-                    '--network', 'host',
-                    '-t', self.docker_temp_image,
-                    build_dir
+                "docker",
+                "build",
+                # xref #5027
+                "--network",
+                "host",
+                "-t",
+                self.docker_temp_image,
+                build_dir,
             ]
         else:
             # Network flag was added in 1.13.0, do not add it for lower versions. xref #5387
-            cmd = [
-                    'docker', 'build',
-                    '-t', self.docker_temp_image,
-                    build_dir
-            ]
+            cmd = ["docker", "build", "-t", self.docker_temp_image, build_dir]
 
         try:
             with utils.Progress():
                 p = utils.run(cmd, mask=False)
         except sp.CalledProcessError as e:
             logger.error(
-                'DOCKER FAILED: Error building docker container %s. ',
-                self.docker_temp_image)
+                "DOCKER FAILED: Error building docker container %s. ",
+                self.docker_temp_image,
+            )
             raise e
 
-        logger.info('DOCKER: Built docker image tag=%s', self.docker_temp_image)
+        logger.info("DOCKER: Built docker image tag=%s", self.docker_temp_image)
         if self.image_build_dir is None:
             shutil.rmtree(build_dir)
         return p
@@ -431,67 +437,76 @@ class RecipeBuilder(object):
         # Attach the build args to self so that it can be filled in by the
         # template.
         if not isinstance(build_args, str):
-            raise ValueError('build_args must be str')
+            raise ValueError("build_args must be str")
         build_args_list = [build_args]
         for i, config_file in enumerate(utils.get_conda_build_config_files()):
             dst_file = self._get_config_path(self.container_staging, i, config_file)
             build_args_list.extend([config_file.arg, quote(dst_file)])
-        self.conda_build_args = ' '.join(build_args_list)
+        self.conda_build_args = " ".join(build_args_list)
 
         # Write build script to tempfile
         build_dir = os.path.realpath(tempfile.mkdtemp())
         # conda_exports.subdir is {platform}-{arch} like: 'linux-64' 'linux-aarch64'
         script = self.build_script_template.format(
-            self=self, arch='noarch' if noarch else conda_exports.subdir)
-        with open(os.path.join(build_dir, 'build_script.bash'), 'w') as fout:
+            self=self, arch="noarch" if noarch else conda_exports.subdir
+        )
+        with open(os.path.join(build_dir, "build_script.bash"), "w") as fout:
             fout.write(script)
         build_script = fout.name
-        logger.debug('DOCKER: Container build script: \n%s', open(fout.name).read())
+        logger.debug("DOCKER: Container build script: \n%s", open(fout.name).read())
 
         # Build the args for env vars. Note can also write these to tempfile
         # and use --env-file arg, but using -e seems clearer in debug output.
         env_list = []
         for k, v in env.items():
-            env_list.append('-e')
-            env_list.append('{0}={1}'.format(k, v))
+            env_list.append("-e")
+            env_list.append("{0}={1}".format(k, v))
 
-        env_list.append('-e')
-        env_list.append('{0}={1}'.format('HOST_USER_ID', self.user_info['uid']))
+        env_list.append("-e")
+        env_list.append("{0}={1}".format("HOST_USER_ID", self.user_info["uid"]))
 
         cmd = [
-            'docker', 'run', '-t',
-            '--net', 'host',
-            '--rm',
-            '-v', '{0}:/opt/build_script.bash'.format(build_script),
-            '-v', '{0}:{1}'.format(self.pkg_dir, self.container_staging),
-            '-v', '{0}:{1}'.format(recipe_dir, self.container_recipe),
+            "docker",
+            "run",
+            "-t",
+            "--net",
+            "host",
+            "--rm",
+            "-v",
+            "{0}:/opt/build_script.bash".format(build_script),
+            "-v",
+            "{0}:{1}".format(self.pkg_dir, self.container_staging),
+            "-v",
+            "{0}:{1}".format(recipe_dir, self.container_recipe),
         ]
         cmd += env_list
         if self.build_image:
             cmd += [self.docker_temp_image]
         else:
             cmd += [self.docker_base_image]
-        cmd += ['/bin/bash', '/opt/build_script.bash']
+        cmd += ["/bin/bash", "/opt/build_script.bash"]
 
-        logger.debug('DOCKER: cmd: %s', cmd)
+        logger.debug("DOCKER: cmd: %s", cmd)
         with utils.Progress():
             p = utils.run(cmd, mask=False, live=live_logs)
         return p
 
     def cleanup(self):
         if self.build_image and not self.keep_image:
-            cmd = ['docker', 'rmi', self.docker_temp_image]
+            cmd = ["docker", "rmi", self.docker_temp_image]
             utils.run(cmd, mask=False)
 
 
 def purgeImage(mulled_upload_target, img):
     pkg_name_and_version, pkg_build_string = img.rsplit("--", 1)
     pkg_name, pkg_version = pkg_name_and_version.rsplit("=", 1)
-    pkg_container_image = f"quay.io/{mulled_upload_target}/{pkg_name}:{pkg_version}--{pkg_build_string}"
-    cmd = ['docker', 'rmi', pkg_container_image]
-    o = utils.run(cmd, mask=False)
+    pkg_container_image = (
+        f"quay.io/{mulled_upload_target}/{pkg_name}:{pkg_version}--{pkg_build_string}"
+    )
+    cmd = ["docker", "rmi", pkg_container_image]
+    utils.run(cmd, mask=False)
 
 
 def pruneStoppedContainers():
-    cmd = ['docker', 'container', 'prune', '-f']
+    cmd = ["docker", "container", "prune", "-f"]
     utils.run(cmd, mask=False)
