@@ -137,7 +137,9 @@ def recipe_dirs(recipes_folder: py.path.local, tmpdir: py.path.local, case):
             yaml.dump(
                 recipe,
                 fdes,
-                transform=lambda string: string.replace("#{%", "{%").replace("#{{", "{{"),
+                transform=lambda string: string.replace("#{%", "{%").replace(
+                    "#{{", "{{"
+                ),
             )
 
         if "add_files" in case:
