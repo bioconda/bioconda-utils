@@ -7,7 +7,6 @@ import pytest
 from bioconda_utils import lint, utils
 from bioconda_utils.utils import ensure_list
 
-
 yaml = YAML(typ="rt")  # pylint: disable=invalid-name
 
 TEST_DATA = dict()
@@ -19,7 +18,7 @@ for case_file in linting_case_files:
     with open(case_file) as data:
         # the case YAML file name is unique by default, so we can use the
         # basename as a unique case_name here
-        case_name = op.splitext( op.basename(case_file) )[0]
+        case_name = op.splitext(op.basename(case_file))[0]
         case_data = yaml.load(data)
         TEST_DATA[case_name] = case_data
         # we need the case_name accessible in some cases
@@ -37,23 +36,25 @@ def linter(config_file, recipes_folder):
     yield lint.Linter(config, str(recipes_folder), nocatch=True)
 
 
-@pytest.mark.parametrize('case', TEST_CASES, ids=TEST_CASE_IDS)
+@pytest.mark.parametrize("case", TEST_CASES, ids=TEST_CASE_IDS)
 def test_lint(linter, recipe_dirs, mock_repodata, case):
     recipes = [str(p) for p in recipe_dirs]
     linter.clear_messages()
     linter.lint(recipes)
     messages = linter.get_messages()
-    expected = set(ensure_list(case.get('expected_failures', [])))
+    expected = set(ensure_list(case.get("expected_failures", [])))
     found = set()
     for msg in messages:
         assert str(msg.check) in expected, (
             f"In test '{case['name']}' on '{msg.recipe.basedir}':"
-            f"'{msg.check}' emitted unexpectedly")
+            f"'{msg.check}' emitted unexpectedly"
+        )
         found.add(str(msg.check))
     assert len(expected) == len(found), (
         f"In test '{case['name']}': "
         "missed expected lint failures. Expected: "
-        f"{expected}")
+        f"{expected}"
+    )
 
     canfix = set(msg for msg in messages if msg.canfix and str(msg.check) in expected)
     if canfix:

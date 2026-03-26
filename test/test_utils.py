@@ -22,7 +22,6 @@ from bioconda_utils import upload
 from bioconda_utils.utils import validate_config
 from helpers import ensure_missing, Recipes
 
-
 logger = logging.getLogger(__name__)
 
 # TODO: need channel order tests. Could probably do this by adding different
@@ -354,16 +353,14 @@ def test_docker_bioconda_utils_version():
     Test for same bioconda-utils version in build container.
     """
     docker_builder = docker_utils.RecipeBuilder(
-        build_script_template=(
-            """
+        build_script_template=("""
 #! /usr/bin/env bash
 python -c '
 import bioconda_utils
 with open("{self.container_staging}/version", "w") as version_file:
     version_file.write(bioconda_utils.__version__)
 '
-"""
-        ),
+"""),
         docker_base_image=DOCKER_BASE_IMAGE,
     )
     temp_dir = docker_builder.pkg_dir
@@ -1137,15 +1134,11 @@ def test_variants():
     # object to:
     tmp = tempfile.NamedTemporaryFile(delete=False).name
     with open(tmp, "w") as fout:
-        fout.write(
-            dedent(
-                """
+        fout.write(dedent("""
                 mypkg:
                   - 1.0
                   - 2.0
-                """
-            )
-        )
+                """))
     config = utils.load_conda_build_config()
     config.exclusive_config_files = [tmp]
 

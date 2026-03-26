@@ -69,8 +69,9 @@ def recipes(recipe_dirs, recipes_folder):
         recipes.append(Recipe.from_file(str(recipes_folder), str(recipe_dir)))
     yield recipes
 
+
 def with_recipes(func):
-    func = pytest.mark.parametrize('case', [RECIPES])(func)
+    func = pytest.mark.parametrize("case", [RECIPES])(func)
     return func
 
 
@@ -104,11 +105,11 @@ def test_file_not_found():
 @with_recipes
 def test_save(recipes):
     for recipe in recipes:
-        with open(recipe.path, 'r') as fdes:
+        with open(recipe.path, "r") as fdes:
             data = fdes.read()
         os.remove(recipe.path)
         recipe.save()
-        with open(recipe.path, 'r') as fdes:
+        with open(recipe.path, "r") as fdes:
             assert data == fdes.read()
 
 
@@ -116,7 +117,7 @@ def test_save(recipes):
 def test_recipe_set_original(recipes):
     for recipe in recipes:
         assert recipe.meta == recipe.orig.meta
-        recipe.meta['package']['name'] = "test"
+        recipe.meta["package"]["name"] = "test"
         assert recipe.meta != recipe.orig.meta
         recipe.set_original()
         assert recipe.meta == recipe.orig.meta
@@ -135,14 +136,14 @@ def test_recipe_get_template(recipes):
 def test_recipe_get_simple_modules(recipes):
     for recipe in recipes:
         modules = recipe.get_simple_modules()
-        assert 'version' in modules
-        assert modules['version'] == '0.1'
+        assert "version" in modules
+        assert modules["version"] == "0.1"
 
 
 @with_recipes
 def test_recipe_render_duplicate_key(recipes):
     for recipe in recipes:
-        recipe.meta_yaml += ['build:']
+        recipe.meta_yaml += ["build:"]
         with pytest.raises(DuplicateKey):
             recipe.render()
 
@@ -164,7 +165,7 @@ def remove_section(data, section):
 @with_recipes
 def test_recipe_render_missing_package_section(recipes):
     for recipe in recipes:
-        remove_section(recipe.meta_yaml, 'package')
+        remove_section(recipe.meta_yaml, "package")
         with pytest.raises(MissingKey):
             recipe.render()
 
@@ -172,7 +173,7 @@ def test_recipe_render_missing_package_section(recipes):
 @with_recipes
 def test_recipe_render_missing_version(recipes):
     for recipe in recipes:
-        remove_section(recipe.meta_yaml, 'version')
+        remove_section(recipe.meta_yaml, "version")
         with pytest.raises(MissingKey):
             recipe.render()
 
@@ -180,7 +181,7 @@ def test_recipe_render_missing_version(recipes):
 @with_recipes
 def test_recipe_render_missing_name(recipes):
     for recipe in recipes:
-        remove_section(recipe.meta_yaml, 'name')
+        remove_section(recipe.meta_yaml, "name")
         with pytest.raises(MissingKey):
             recipe.render()
 
@@ -189,88 +190,86 @@ def test_recipe_render_missing_name(recipes):
 def test_recipe_maintainers(recipes):
     for recipe in recipes:
         assert recipe.maintainers == []
-        recipe.meta_yaml += [
-            'extra:',
-            '  recipe-maintainers:',
-            '    - tester'
-        ]
+        recipe.meta_yaml += ["extra:", "  recipe-maintainers:", "    - tester"]
         recipe.render()
-        assert recipe.maintainers == ['tester']
+        assert recipe.maintainers == ["tester"]
         del recipe.meta_yaml[-1]
-        recipe.meta_yaml[-1] += ' tester'
+        recipe.meta_yaml[-1] += " tester"
         recipe.render()
-        assert recipe.maintainers == ['tester']
+        assert recipe.maintainers == ["tester"]
 
 
 @with_recipes
 def test_recipe_name_version_build(recipes):
     for recipe in recipes:
-        assert recipe.name == recipe.orig['package']['name']
-        assert recipe.version == '0.1'
-        assert str(recipe.build_number) == recipe.orig['build']['number']
+        assert recipe.name == recipe.orig["package"]["name"]
+        assert recipe.version == "0.1"
+        assert str(recipe.build_number) == recipe.orig["build"]["number"]
 
 
 @with_recipes
 def test_recipe_get(recipes):
     for recipe in recipes:
-        assert recipe.get('build/number') == '0'
-        #assert recipe.get('source/sha256') == '123'
+        assert recipe.get("build/number") == "0"
+        # assert recipe.get('source/sha256') == '123'
         with pytest.raises(KeyError):
-            recipe.get('doesnot/exist')
-        assert recipe.get('doesnot/exist', 'abc') == 'abc'
+            recipe.get("doesnot/exist")
+        assert recipe.get("doesnot/exist", "abc") == "abc"
 
 
 @with_recipes
 def test_recipe_get_raw_range(recipes):
     for recipe in recipes:
-        assert recipe.get_raw_range('package') == (2, 2, 4, 0)
-        assert recipe.get_raw_range('package/name') == (2, 8, 3, 2)
+        assert recipe.get_raw_range("package") == (2, 2, 4, 0)
+        assert recipe.get_raw_range("package/name") == (2, 8, 3, 2)
         end = len(recipe.meta_yaml)
-        assert recipe.get_raw_range('about') == (end-3, 2, end-1, 22)
-        assert recipe.get_raw_range('about/summary') == (end-1, 11, end-1, 22)
+        assert recipe.get_raw_range("about") == (end - 3, 2, end - 1, 22)
+        assert recipe.get_raw_range("about/summary") == (end - 1, 11, end - 1, 22)
 
 
 @with_recipes
 def test_recipe_get_raw(recipes):
     for recipe in recipes:
-        assert recipe.get_raw('about/summary') == 'the_summary'
-        assert recipe.get_raw('test/commands/0') == 'do nothing'
-        assert 'number: 0' in recipe.get_raw('build')
+        assert recipe.get_raw("about/summary") == "the_summary"
+        assert recipe.get_raw("test/commands/0") == "do nothing"
+        assert "number: 0" in recipe.get_raw("build")
 
-        recipe.meta_yaml.extend([
-            'testing:',
-            '  inline: [1,2,3]',
-            '  inline2: { a: "asd", b: "edf" }',
-        ])
+        recipe.meta_yaml.extend(
+            [
+                "testing:",
+                "  inline: [1,2,3]",
+                '  inline2: { a: "asd", b: "edf" }',
+            ]
+        )
         recipe.render()
-        assert recipe.get_raw('testing/inline') == '[1,2,3]'
-        assert recipe.get('testing/inline') == ['1', '2', '3']
-        assert recipe.get('testing/inline/0') == '1'
-        assert recipe.get('testing/inline/1') == '2'
-        assert recipe.get('testing/inline/2') == '3'
-        assert recipe.get_raw('testing/inline2/a') == '"asd", '
+        assert recipe.get_raw("testing/inline") == "[1,2,3]"
+        assert recipe.get("testing/inline") == ["1", "2", "3"]
+        assert recipe.get("testing/inline/0") == "1"
+        assert recipe.get("testing/inline/1") == "2"
+        assert recipe.get("testing/inline/2") == "3"
+        assert recipe.get_raw("testing/inline2/a") == '"asd", '
 
 
 @with_recipes
 def test_recipe_set(recipes):
     for recipe in recipes:
-        recipe.set('package/bla/1', 'test')
-        assert recipe.get_raw('package/bla/1') == 'test'
-        recipe.set('package/bla/1', 'test2')
-        assert recipe.get_raw('package/bla/1') == 'test2'
-        recipe.set('package/bla/1', '[test3]')
-        assert recipe.get_raw('package/bla/1') == '[test3]'
-        assert recipe.get('package/bla/1') == ['test3']
-        recipe.set('package/bla/1/0', 'test4')
-        assert recipe.get('package/bla/1/0') == 'test4'
+        recipe.set("package/bla/1", "test")
+        assert recipe.get_raw("package/bla/1") == "test"
+        recipe.set("package/bla/1", "test2")
+        assert recipe.get_raw("package/bla/1") == "test2"
+        recipe.set("package/bla/1", "[test3]")
+        assert recipe.get_raw("package/bla/1") == "[test3]"
+        assert recipe.get("package/bla/1") == ["test3"]
+        recipe.set("package/bla/1/0", "test4")
+        assert recipe.get("package/bla/1/0") == "test4"
 
 
 @with_recipes
 def test_recipe_package_names(recipes):
     for recipe in recipes:
         expected = {
-            'one': ['one'],
-            'two': ['two', 'libtwo', 'two-tools'],
+            "one": ["one"],
+            "two": ["two", "libtwo", "two-tools"],
         }[recipe.name]
         assert recipe.package_names == expected
 
@@ -280,10 +279,10 @@ def test_recipe_extra_additional_platforms(recipes):
     for recipe in recipes:
         assert recipe.extra_additional_platforms == []
         recipe.meta_yaml += [
-            'extra:',
-            '  additional-platforms:',
-            '    - linux-aarch64',
-            '    - osx-arm64'
+            "extra:",
+            "  additional-platforms:",
+            "    - linux-aarch64",
+            "    - osx-arm64",
         ]
         recipe.render()
         assert recipe.extra_additional_platforms == ["linux-aarch64", "osx-arm64"]
@@ -293,11 +292,7 @@ def test_recipe_extra_additional_platforms(recipes):
 def test_recipe_extra_additional_platform_osx(recipes):
     for recipe in recipes:
         assert recipe.extra_additional_platforms == []
-        recipe.meta_yaml += [
-            'extra:',
-            '  additional-platforms:',
-            '    - osx-arm64'
-        ]
+        recipe.meta_yaml += ["extra:", "  additional-platforms:", "    - osx-arm64"]
         recipe.render()
         assert recipe.extra_additional_platforms == ["osx-arm64"]
 
@@ -306,11 +301,7 @@ def test_recipe_extra_additional_platform_osx(recipes):
 def test_recipe_extra_additional_platform_linux(recipes):
     for recipe in recipes:
         assert recipe.extra_additional_platforms == []
-        recipe.meta_yaml += [
-            'extra:',
-            '  additional-platforms:',
-            '    - linux-aarch64'
-        ]
+        recipe.meta_yaml += ["extra:", "  additional-platforms:", "    - linux-aarch64"]
         recipe.render()
         assert recipe.extra_additional_platforms == ["linux-aarch64"]
 
@@ -318,22 +309,24 @@ def test_recipe_extra_additional_platform_linux(recipes):
 @with_recipes
 def test_get_deps_dict(recipes):
     for recipe in recipes:
-        recipe.meta_yaml.extend([
-            'requirements:',
-            '  build:',
-            '    - AA',
-            '    - BB >3',
-            '    - CC>3',
-            '    - DD=1.*',
-            '  run:',
-            '    - AA',
-            '    - BB >3',
-            '    - CC>3',
-            '    - DD=1.*',
-            '    - EE',
-        ])
+        recipe.meta_yaml.extend(
+            [
+                "requirements:",
+                "  build:",
+                "    - AA",
+                "    - BB >3",
+                "    - CC>3",
+                "    - DD=1.*",
+                "  run:",
+                "    - AA",
+                "    - BB >3",
+                "    - CC>3",
+                "    - DD=1.*",
+                "    - EE",
+            ]
+        )
         recipe.render()
         deps = recipe.get_deps_dict()
 
-        for n in 'ABCDE':
-            assert n*2 in deps
+        for n in "ABCDE":
+            assert n * 2 in deps

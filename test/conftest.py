@@ -52,18 +52,18 @@ def mock_repodata(case):
              - version: 0.1
                build_number: 0
     """
-    if 'repodata' in case:
+    if "repodata" in case:
         dataframe = pd.DataFrame(
             (
                 {
-                    'channel': channel,
-                    'name': name,
-                    'build': '',
-                    'build_number': 0,
-                    'version': 0,
-                    'depends': [],
-                    'subdir': '',
-                    'platform': 'noarch',
+                    "channel": channel,
+                    "name": name,
+                    "build": "",
+                    "build_number": 0,
+                    "version": 0,
+                    "depends": [],
+                    "subdir": "",
+                    "platform": "noarch",
                     **item,
                 }
                 for channel, packages in case["repodata"].items()
@@ -121,28 +121,32 @@ def config_file(tmpdir: py.path.local, case):
 
 
 @pytest.fixture
-def recipe_dirs(recipes_folder: py.path.local, tmpdir: py.path.local,
-               case):
+def recipe_dirs(recipes_folder: py.path.local, tmpdir: py.path.local, case):
     """Prepares a recipe from recipe_data in recipes_folder"""
     recipe_dirs = []
     recipes = case.get("recipes")
     if not recipes:
-        raise LookupError("No `recipes:` entry found in this test case's YAML file, and testing nothing is not expected. Check folder lint_cases for the YAML file and include a `recipes:` entry.")
+        raise LookupError(
+            "No `recipes:` entry found in this test case's YAML file, and testing nothing is not expected. Check folder lint_cases for the YAML file and include a `recipes:` entry."
+        )
     for recipe_name in case.get("recipes", []):
         recipe = deepcopy(case.get("recipes").get(recipe_name))
         recipe_dir = recipes_folder.mkdir(recipe_name)
 
-        with recipe_dir.join('meta.yaml').open('w') as fdes:
-            yaml.dump(recipe, fdes,
-                      transform=lambda l: l.replace('#{%', '{%').replace("#{{", "{{"))
+        with recipe_dir.join("meta.yaml").open("w") as fdes:
+            yaml.dump(
+                recipe,
+                fdes,
+                transform=lambda l: l.replace("#{%", "{%").replace("#{{", "{{"),
+            )
 
-        if 'add_files' in case:
-            for fname, data in case['add_files'].items():
-                with recipe_dir.join(fname).open('w') as fdes:
+        if "add_files" in case:
+            for fname, data in case["add_files"].items():
+                with recipe_dir.join(fname).open("w") as fdes:
                     fdes.write(data)
 
-        if 'move_files' in case:
-            for src, dest in case['move_files'].items():
+        if "move_files" in case:
+            for src, dest in case["move_files"].items():
                 src_path = recipe_dir.join(src)
                 if not dest:
                     if os.path.isdir(src_path):
@@ -152,7 +156,7 @@ def recipe_dirs(recipes_folder: py.path.local, tmpdir: py.path.local,
                 else:
                     dest_path = recipe_dir.join(dest)
                     shutil.move(src_path, dest_path)
-        
+
         recipe_dirs.append(recipe_dir)
 
     yield recipe_dirs
