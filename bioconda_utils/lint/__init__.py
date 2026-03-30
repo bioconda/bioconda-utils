@@ -248,10 +248,10 @@ class LintCheck(metaclass=LintCheckMeta):
 
         # Run depends checks, per outputs: package if necessary
         outputs = recipe.get("outputs", dict())
-        deps=recipe.get_deps_dict()
+        deps = recipe.get_deps_dict()
         if outputs:
             for i in range(len(outputs)):
-                output_location=f"outputs/{i}/"
+                output_location = f"outputs/{i}/"
                 # filter down to dependencies for this outputs: package
                 output_deps = dict()
                 for dep in deps:
@@ -304,7 +304,7 @@ class LintCheck(metaclass=LintCheckMeta):
                             level in single-package recipes, something like
                             ``outputs/0/`` for recipes with packages specified
                             in an outputs section.
-                            
+
         """
 
     def fix(self, message, data) -> LintMessage:
@@ -626,11 +626,15 @@ class Linter:
             return [check_cls.make_message(recipe=recipe, line=getattr(exc, "line"))]
 
         # collect recipes to skip
-        if isinstance(recipe.get('extra/skip-recipes', []), list):
-            if any(recipe_name.endswith(name) for name in recipe.get('extra/skip-recipes')):
-                return [skipping_recipe.make_message(
-                    recipe=recipe,
-                )]
+        if isinstance(recipe.get("extra/skip-recipes", []), list):
+            if any(
+                recipe_name.endswith(name) for name in recipe.get("extra/skip-recipes")
+            ):
+                return [
+                    skipping_recipe.make_message(
+                        recipe=recipe,
+                    )
+                ]
 
         # collect checks to skip
         checks_to_skip = set(self.skip[recipe_name])

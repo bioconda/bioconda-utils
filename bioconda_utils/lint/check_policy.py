@@ -158,7 +158,7 @@ class outputs_name_same_as_package_name(LintCheck):
 
 class disallowed_top_level_section_with_outputs(LintCheck):
     """When outputs: are specified, a there top level sections don't make any sense
-    
+
     If (multiple) ``outputs:`` are specified, the top level recipe will
     not be built and thus should not contain a ``build: run_exports:``
     or a ``requirements:`` section.
@@ -173,10 +173,10 @@ class disallowed_top_level_section_with_outputs(LintCheck):
     )
 
     def check_recipe(self, recipe):
-        outputs = recipe.get('outputs', '')
+        outputs = recipe.get("outputs", "")
         if outputs:
             for section in self.disallowed_sections:
-                if recipe.get('section', ''):
+                if recipe.get("section", ""):
                     self.message(section=section)
 
 
