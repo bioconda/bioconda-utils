@@ -628,7 +628,7 @@ class Linter:
         # collect recipes to skip
         if isinstance(recipe.get("extra/skip-recipes", []), list):
             if any(
-                recipe_name.endswith(name) for name in recipe.get("extra/skip-recipes")
+                recipe_name.endswith(name) for name in recipe.get("extra/skip-recipes", [])
             ):
                 return [
                     skipping_recipe.make_message(
