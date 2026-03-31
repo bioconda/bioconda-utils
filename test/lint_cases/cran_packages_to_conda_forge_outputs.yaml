@@ -1,0 +1,57 @@
+expected_failures:
+  - cran_packages_to_conda_forge
+repodata:
+  conda-forge: # offending entry
+    three:
+      - version: 1.0
+    R:
+      - version: 1.0
+recipes:
+  meta_package:
+    package:
+      name: meta_package
+      version: 0.1
+    source:
+      - url: https://somewhere
+        sha256: 123
+      - url: https://elsewhere
+        sha256: abc
+    build:
+      noarch: True
+      number: 0
+    outputs:
+      - name: meta_one
+        build:
+          noarch: True
+          run_exports:
+            # add a run export
+            # (note that jinja templating as in reality is not
+            # supported by our test system to the same
+            # extend as in conda build)
+            - "{{ pin_subpackage('meta_one') }}"
+        requirements:
+          run:
+            - R # offending entry
+            - three # offending entry
+        test:
+          commands:
+            - do nothing
+      - name: meta_two
+        build:
+          noarch: True
+          run_exports:
+            # add a run export
+            # (note that jinja templating as in reality is not
+            # supported by our test system to the same
+            # extend as in conda build)
+            - "{{ pin_subpackage('meta_two') }}"
+        requirements:
+          run:
+            - R # offending entry
+        test:
+          imports:
+            - no imports to see here
+    about:
+      license: MIT
+      home: https://elsewhere
+      summary: another_summary

@@ -1,7 +1,7 @@
 expected_failures:
   - cran_packages_to_conda_forge
 repodata:
-  conda-forge:
+  conda-forge: # offending entry
     three:
       - version: 1.0
     R:
@@ -25,7 +25,7 @@ recipes:
         - "{{ pin_subpackage('one') }}"
     requirements:
       run:
-        - R
+        - R # offending entry
         - three # offending entry
     test:
       commands:

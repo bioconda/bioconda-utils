@@ -1,0 +1,45 @@
+expected_failures:
+  - compilers_must_be_in_build
+recipes:
+  meta_package:
+    package:
+      name: meta_package
+      version: 0.1
+    source:
+      - url: https://somewhere
+        sha256: 123
+      - url: https://elsewhere
+        sha256: abc
+    build:
+      number: 0
+    outputs:
+      - name: meta_one
+        build:
+          run_exports:
+            # add a run export
+            # (note that jinja templating as in reality is not
+            # supported by our test system to the same
+            # extend as in conda build)
+            - "{{ pin_subpackage('meta_one') }}"
+        requirements:
+          host:
+            - '{{compiler("c")}}' # offending entry
+        test:
+          commands:
+            - do nothing
+      - name: meta_two
+        build:
+          noarch: True
+          run_exports:
+            # add a run export
+            # (note that jinja templating as in reality is not
+            # supported by our test system to the same
+            # extend as in conda build)
+            - "{{ pin_subpackage('meta_two') }}"
+        test:
+          imports:
+            - no imports to see here
+    about:
+      license: MIT
+      home: https://elsewhere
+      summary: another_summary
