@@ -570,6 +570,28 @@ class Recipe:
             return default
         return res
 
+    def get_all_section_occurrences(
+        self,
+        section: str = None,
+        outputs_exclusive: bool = False,
+        ) -> List[dict]:
+        """Get all occurrences of a section, including from outputs: definitions
+
+        If just a single package is created from the main recipe section, just
+        one dict is returned. If an outputs: section defines multiple packages
+        that are to be built, all of the section dicts from all outputs and the
+        main section are returned, unless the outputs_exclusive variable is set
+        to True.
+        """
+        sections = [self.meta.get(section, dict())]
+        outputs = self.get("outputs", dict())
+        if outputs:
+            if outputs_exclusive:
+                sections = [o.get(section, dict()) for o in outputs]
+            else:
+                sections.extend([o.get(section, dict()) for o in outputs])
+        return sections
+
     def set(self, path, value):
         """Set a value or section in the recipe
 
