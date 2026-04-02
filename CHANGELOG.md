@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.2.0](https://github.com/bioconda/bioconda-utils/compare/v4.1.0...v4.2.0) (2026-04-02)
+
+
+### Features
+
+* Bump deps 4-2-2026 ([#1087](https://github.com/bioconda/bioconda-utils/issues/1087)) ([9e5e044](https://github.com/bioconda/bioconda-utils/commit/9e5e0441799d2c52f5459751f1ebea8c2a3cfa13))
+
 ## [4.1.0](https://github.com/bioconda/bioconda-utils/compare/v4.0.0...v4.1.0) (2026-03-04)
 
 
