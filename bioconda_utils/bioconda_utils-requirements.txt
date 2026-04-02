@@ -19,7 +19,7 @@ argh=0.31.*                   # CLI
 colorlog=6.*                  # Logging
 tqdm=4.67.*                   # Progress monitor
 yaspin=3.*                    #
-ruamel.yaml=0.19.*            # Recipe YAML parsing
+ruamel.yaml=0.18.*            # Recipe YAML parsing
 pyaml=26.2.*                  # Faster YAML parser (deprecate?)
 networkx=3.6.*                # (networkx>3.3 needs python>=3.10)
 pandas=3.0.*                  #
