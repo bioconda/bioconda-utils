@@ -1056,7 +1056,9 @@ class BioCProjectPage(object):
         if (
             self.linkingto != []
             or len(
-                set(["compiler_c", "compiler_cxx", "compiler_fortran", "stdlib_c"]).intersection(self._cb3_build_reqs.keys())
+                set(
+                    ["compiler_c", "compiler_cxx", "compiler_fortran", "stdlib_c"]
+                ).intersection(self._cb3_build_reqs.keys())
             )
             > 0
         ):
