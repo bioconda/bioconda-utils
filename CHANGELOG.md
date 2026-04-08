@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.3.0](https://github.com/bioconda/bioconda-utils/compare/v4.2.0...v4.3.0) (2026-04-08)
+
+
+### Features
+
+* allow and require {{ stdlib("c") }} in recipes ([#1091](https://github.com/bioconda/bioconda-utils/issues/1091)) ([7969780](https://github.com/bioconda/bioconda-utils/commit/7969780d1ef45491e0d3a96e10db6669c4b13c84))
+* bump deps 4-7-2026 ([#1094](https://github.com/bioconda/bioconda-utils/issues/1094)) ([3dcb072](https://github.com/bioconda/bioconda-utils/commit/3dcb07274a94b10bc8741b2acda98ef5f45077ca))
+
 ## [4.2.0](https://github.com/bioconda/bioconda-utils/compare/v4.1.0...v4.2.0) (2026-04-02)
 
 
