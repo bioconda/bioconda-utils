@@ -48,11 +48,10 @@ _old_find_used_variables_in_text = conda_build.metadata.find_used_variables_in_t
 
 def _patched_find_used_variables_in_text(variant, recipe_text, selectors_only=False):
     used = _old_find_used_variables_in_text(variant, recipe_text, selectors_only)
-    if not selectors_only:
+    if not selectors_only and "__glibc" in variant:
         # Match stdlib('c')
         if re.search(r"\{\{\s*stdlib\(\s*[\'\"]c[\'\"]\s*\)", recipe_text):
-            if "__glibc" in variant:
-                used.add("__glibc")
+            used.add("__glibc")
     return used
 
 
