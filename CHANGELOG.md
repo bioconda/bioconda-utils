@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.3.1](https://github.com/bioconda/bioconda-utils/compare/v4.3.0...v4.3.1) (2026-04-09)
+
+
+### Bug Fixes
+
+* **utils:** patch conda-build to include __glibc in hashes when using stdlib('c') ([#1096](https://github.com/bioconda/bioconda-utils/issues/1096)) ([027cbc8](https://github.com/bioconda/bioconda-utils/commit/027cbc85d1f9aa15f932901e58ab18f4cfb75ae3))
+
 ## [4.3.0](https://github.com/bioconda/bioconda-utils/compare/v4.2.0...v4.3.0) (2026-04-08)
 
 
