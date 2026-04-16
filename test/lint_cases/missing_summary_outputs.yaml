@@ -14,7 +14,7 @@ recipes:
       noarch: True
       number: 0
     outputs:
-      - name: meta_one # missing about: summary: section
+      - name: meta_one
         build:
           noarch: True
           run_exports:
@@ -28,7 +28,7 @@ recipes:
             - do nothing
         about:
           summary: some summary
-      - name: meta_two
+      - name: meta_two # missing about: summary: section
         build:
           noarch: True
           run_exports:
