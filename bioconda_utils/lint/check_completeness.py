@@ -39,16 +39,31 @@ class missing_home(LintCheck):
 class missing_summary(LintCheck):
     """The recipe is missing a summary
 
-    Please add::
+    If the recipe specifies just one package, please add::
 
        about:
          summary: One line briefly describing package
 
+    If the recipe specifies multiple `outputs:` packages, each needs to have
+    an `about: summary:` defined. Each package can either inherit this from the
+    global recipe (if it has this section!), or specify its own. For example,
+    package `one` inherits and package `two` specifies its own::
+
+       outputs:
+         one:
+           ...
+         two:
+           about:
+             summary: Another one-liner
+       about:
+         summary: Some one-liner
+
     """
 
     def check_recipe(self, recipe):
-        if not recipe.get("about/summary", ""):
-            self.message(section="about")
+        missing_section = recipe.check_for_missing_inherited_section("about/summary")
+        if missing_section:
+            self.message(section=missing_section)
 
 
 class missing_license(LintCheck):
