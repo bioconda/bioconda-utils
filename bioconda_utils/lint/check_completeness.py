@@ -22,6 +22,29 @@ class missing_build_number(LintCheck):
 
 
 class missing_home(LintCheck):
+    """The recipe is missing an ``about/home`` entry with a homepage URL.
+
+    If the recipe specifies just one package, please add::
+
+        about:
+            home: <URL to homepage>
+
+    If the recipe specifies multiple `outputs:` packages, each needs to have
+    an `about: summary:` defined. Each package can either inherit this from the
+    global recipe (if it has this section!), or specify its own. For example,
+    package `one` inherits and package `two` specifies its own::
+
+        outputs:
+            one:
+                ...
+            two:
+                about:
+                    home: <URL to other homepage>
+        about:
+            home: <URL to homepage>
+
+    """
+
     """The recipe is missing a homepage URL
 
     Please add::
@@ -32,31 +55,32 @@ class missing_home(LintCheck):
     """
 
     def check_recipe(self, recipe):
-        if not recipe.get("about/home", ""):
-            self.message(section="about")
+        missing_section = recipe.check_for_missing_inherited_section("about/home")
+        if missing_section:
+            self.message(section=missing_section)
 
 
 class missing_summary(LintCheck):
-    """The recipe is missing a summary
+    """The recipe is missing an ``about/summary`` section.
 
     If the recipe specifies just one package, please add::
 
-       about:
-         summary: One line briefly describing package
+        about:
+            summary: One line briefly describing package
 
     If the recipe specifies multiple `outputs:` packages, each needs to have
     an `about: summary:` defined. Each package can either inherit this from the
     global recipe (if it has this section!), or specify its own. For example,
     package `one` inherits and package `two` specifies its own::
 
-       outputs:
-         one:
-           ...
-         two:
-           about:
-             summary: Another one-liner
-       about:
-         summary: Some one-liner
+        outputs:
+            one:
+                ...
+            two:
+                about:
+                    summary: Another one-liner
+        about:
+            summary: Some one-liner
 
     """
 
@@ -67,18 +91,33 @@ class missing_summary(LintCheck):
 
 
 class missing_license(LintCheck):
-    """The recipe is missing the ``about/license`` key.
+    """The recipe is missing an ``about/license`` section.
 
-    Please add::
+    If the recipe specifies just one package, please add::
 
         about:
-           license: <name of license>
+            license: <name of license>
+
+    If the recipe specifies multiple `outputs:` packages, each needs to have
+    an `about: license:` defined. Each package can either inherit this from the
+    global recipe (if it has this section!), or specify its own. For example,
+    package `one` inherits and package `two` specifies its own::
+
+        outputs:
+            one:
+                ...
+            two:
+            about:
+                license: <name of license>
+        about:
+            license: <name of license>
 
     """
 
     def check_recipe(self, recipe):
-        if not recipe.get("about/license", ""):
-            self.message(section="about")
+        missing_section = recipe.check_for_missing_inherited_section("about/license")
+        if missing_section:
+            self.message(section=missing_section)
 
 
 class missing_tests(LintCheck):
