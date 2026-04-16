@@ -591,6 +591,34 @@ class Recipe:
             else:
                 sections.extend([o.get(section, dict()) for o in outputs])
         return sections
+    
+    def check_for_missing_inherited_section(self, section: str = None,) -> str:
+        """Return any required sections that are missing
+
+        For a required section like `about/summary`, check whether this is
+        specified for all defined packages of the recipe, including for recipes
+        with multiple `outputs:`. In this case, check whether each output has
+        this defined by itself or inherits it from the respective global recipe
+        section.
+
+        Returns:
+          full dpath to section where an entry is missing
+        """
+        # only go looking for `outputs:`, if the global section doesn't have it
+        if not self.get(section, ""):
+            outputs = self.get("outputs", "")
+            if outputs:
+                for o in range(len(outputs)):
+                    output_section = f"outputs/{o}/{section}"
+                    try:
+                        self.get(output_section)
+                    except KeyError:
+                        return output_section
+            # section missing globally, and no outputs specified, so it's missing
+            else:
+                return section
+        return ""
+
 
     def set(self, path, value):
         """Set a value or section in the recipe
