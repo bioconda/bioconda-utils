@@ -1071,6 +1071,31 @@ def changed_since_master(recipe_folder):
     ]
 
 
+# Recipe patterns whose rendered hash depends on solver state (run_exports from
+# e.g. sysroot_linux-64 inject __glibc into the variant during a real solve but
+# not under bypass_env_check=True). When any of these appear we must finalize.
+_SOLVER_DEPENDENT_JINJA = re.compile(r"\{\{\s*(stdlib|compiler|pin_compatible)\s*\(")
+
+
+def recipe_requires_finalized_render(recipe):
+    """
+    Return True if the recipe's rendered hash can depend on solver state and
+    therefore must be rendered with ``finalize=True`` to match what conda-build
+    will produce during a real build.
+
+    Detects use of ``stdlib(...)``, ``compiler(...)``, or ``pin_compatible(...)``
+    jinja functions, whose run_exports are only applied during a real solve.
+    See https://github.com/bioconda/bioconda-utils/issues/1095.
+    """
+    meta_path = os.path.join(recipe, "meta.yaml")
+    try:
+        with open(meta_path, "r", encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return False
+    return bool(_SOLVER_DEPENDENT_JINJA.search(text))
+
+
 def _load_platform_metas(recipe, finalize=True):
     # check if package is noarch, if so, build only on linux
     # with temp_os, we can fool the MetaData if needed.

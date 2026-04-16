@@ -498,6 +498,31 @@ def test_conda_as_dep(config_fixture, mulled_test):
             ensure_missing(i)
 
 
+def test_recipe_requires_finalized_render(tmp_path):
+    def _write(meta):
+        recipe = tmp_path / uuid.uuid4().hex
+        recipe.mkdir()
+        (recipe / "meta.yaml").write_text(meta)
+        return str(recipe)
+
+    assert not utils.recipe_requires_finalized_render(
+        _write("package:\n  name: pure-python\n  version: '1.0'\n")
+    )
+    assert utils.recipe_requires_finalized_render(
+        _write("requirements:\n  build:\n    - {{ stdlib('c') }}\n")
+    )
+    assert utils.recipe_requires_finalized_render(
+        _write("requirements:\n  build:\n    - {{ compiler('c') }}\n")
+    )
+    assert utils.recipe_requires_finalized_render(
+        _write("requirements:\n  run:\n    - {{ pin_compatible('foo') }}\n")
+    )
+    # Missing meta.yaml -> False (don't crash)
+    missing = tmp_path / "missing"
+    missing.mkdir()
+    assert not utils.recipe_requires_finalized_render(str(missing))
+
+
 # TODO replace the filter tests with tests for utils.get_package_paths()
 # def test_filter_recipes_no_skipping():
 #     """

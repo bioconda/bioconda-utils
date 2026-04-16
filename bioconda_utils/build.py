@@ -493,7 +493,19 @@ def build_recipes(
             # on the host since Docker's conda-build will re-solve anyway.
             # Non-finalized metas use bypass_env_check which avoids costly
             # dependency resolution. The --no-fast-resolve flag can override this.
-            finalize = (docker_builder is None) if fast_resolve else True
+            #
+            # Two cases force finalize on to keep host and Docker hashes in sync
+            # (see https://github.com/bioconda/bioconda-utils/issues/1095):
+            #   1. Recipes using stdlib()/compiler()/pin_compatible() — their
+            #      run_exports (e.g. sysroot_linux-64 -> __glibc) are only
+            #      applied during a real solve.
+            #   2. linux-64 hosts — sysroot run_exports inject __glibc here
+            #      regardless of the recipe's text form.
+            finalize = docker_builder is None or not fast_resolve
+            if not finalize and utils.RepoData.native_platform() == "linux":
+                finalize = True
+            if not finalize and utils.recipe_requires_finalized_render(recipe):
+                finalize = True
             pkg_paths = utils.get_package_paths(
                 recipe,
                 check_channels,
