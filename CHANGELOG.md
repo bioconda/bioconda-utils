@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.3.2](https://github.com/bioconda/bioconda-utils/compare/v4.3.1...v4.3.2) (2026-04-19)
+
+
+### Bug Fixes
+
+* force finalized render on linux-64 / compiled recipes; drop no-op __glibc monkeypatch ([#1095](https://github.com/bioconda/bioconda-utils/issues/1095)) ([#1100](https://github.com/bioconda/bioconda-utils/issues/1100)) ([be77f11](https://github.com/bioconda/bioconda-utils/commit/be77f11587e35d4fcb38af740dbee9ccb85ea017))
+
 ## [4.3.1](https://github.com/bioconda/bioconda-utils/compare/v4.3.0...v4.3.1) (2026-04-09)
 
 
