@@ -517,6 +517,10 @@ def test_recipe_requires_finalized_render(tmp_path):
     assert utils.recipe_requires_finalized_render(
         _write("requirements:\n  run:\n    - {{ pin_compatible('foo') }}\n")
     )
+    # ignore if within comments
+    assert not utils.recipe_requires_finalized_render(
+        _write("requirements:\n  run:\n    - foo  # {{ pin_compatible('foo') }}\n")
+    )
     # Missing meta.yaml -> False (don't crash)
     missing = tmp_path / "missing"
     missing.mkdir()
