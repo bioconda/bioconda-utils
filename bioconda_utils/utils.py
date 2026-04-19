@@ -1090,7 +1090,7 @@ def recipe_requires_finalized_render(recipe):
     meta_path = os.path.join(recipe, "meta.yaml")
     try:
         with open(meta_path, "r", encoding="utf-8") as f:
-            text = f.read()
+            text = re.sub(r"#.*", "", f.read())
     except OSError:
         return False
     return bool(_SOLVER_DEPENDENT_JINJA.search(text))
