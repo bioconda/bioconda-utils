@@ -6,46 +6,47 @@
 conda-forge-pinning=2026.01.07.13.16.30
 
 # basics
-python=3.12.*
-conda=25.7.*
-conda-libmamba-solver=25.4.*
-conda-build=25.7.*
-conda-index=0.6.*
+python=3.13.*
+setuptools=81.*
+conda=26.3.*
+conda-libmamba-solver=26.3.*
+conda-build=26.3.*
+conda-index=0.10.*
 conda-package-streaming=0.12.*
-mamba=2.3.*
+mamba=2.5.*
 
 argh=0.31.*                   # CLI
 colorlog=6.*                  # Logging
 tqdm=4.67.*                   # Progress monitor
 yaspin=3.*                    #
 ruamel.yaml=0.18.*            # Recipe YAML parsing
-pyaml=25.7.*                  # Faster YAML parser (deprecate?)
-networkx=3.5.*                # (networkx>3.3 needs python>=3.10)
-pandas=2.3.*                  #
+pyaml=26.2.*                  # Faster YAML parser (deprecate?)
+networkx=3.6.*                # (networkx>3.3 needs python>=3.10)
+pandas=3.0.*                  #
 libblas=*=*openblas           # Avoid large mkl package (pulled in by pandas)
 boltons=25.0.*                #
-jsonschema=4.25.*             # JSON schema verification
+jsonschema=4.26.*             # JSON schema verification
 jinja2=3.1.*                  #
 
 anaconda-client=1.14.*        # anaconda_upload
 galaxy-tool-util=25.*         # mulled test and container build
 involucro=1.1.*               # mulled test and container build
-skopeo=1.15.*                 # docker upload
+skopeo=1.22.*                 # docker upload
 findutils                     # find/xargs copy built packages from container
 git=2.*                       # well - git
 
 # hosters - special regex not supported by RE
-regex=2025.*                  #
+regex=2026.*                  #
 
 # asyncio
-aiohttp>=3.12.14              # HTTP lib; pinning to reflect dependabot alert
+aiohttp=3.13.*                # HTTP lib; pinning to reflect dependabot alert
 aiohttp-jinja2                # jinja2 renderer for aiohttp.web
 aiohttp-session               #
 aiohttp-security              #
-aiofiles=24.*                 # async open
-aioftp=0.26.*                 # FTP lib
+aiofiles=25.*                 # async open
+aioftp=0.27.*                 # FTP lib
 backoff=2.2.*                 # retrying of failed API calls
-cachetools=5.3.*              # request caching (NEEDED?)
+cachetools=7.0.*              # request caching (NEEDED?)
 
 # client API wrappers
 gitpython=3.1.*               # githandler
@@ -56,7 +57,7 @@ pyjwt>=2.4.0                  # githubhandler (JWT signing), needs >=2.4.0, CVE-
 beautifulsoup4=4.*            #
 
 # The bioconductor skeleton needs this
-requests=2.32.*               #
+requests=2.33.*               #
 
 # merge handling
 pygithub                      #
@@ -66,7 +67,7 @@ diskcache=5.*                 #
 platformdirs=4.*              #
 
 # build failure output
-tabulate=0.9.*                #
+tabulate=0.10.*               #
 
 # resource reporting for builds
 psutil                        #
