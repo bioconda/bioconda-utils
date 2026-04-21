@@ -1,0 +1,34 @@
+expected_failures:
+  - repodata_patches_no_version_bump
+  - build_number_needs_bump
+repodata:
+  bioconda:
+    bioconda-repodata-patches:
+      - version: "20260421"
+        platform: "noarch"
+      - version: "20250301"
+        platform: "noarch"
+recipes:
+  bioconda-repodata-patches:
+    package:
+      name: bioconda-repodata-patches
+      version: "20260421"
+    source:
+      url: https://somewhere
+      sha256: 123
+    build:
+      noarch: True
+      number: 0
+      run_exports:
+        # add a run export
+        # (note that jinja templating as in reality is not
+        # supported by our test system to the same
+        # extend as in conda build)
+        - "{{ pin_subpackage('one') }}"
+    test:
+      commands:
+        - do nothing
+    about:
+      license: BSD
+      home: https://elsewhere
+      summary: the_summary
