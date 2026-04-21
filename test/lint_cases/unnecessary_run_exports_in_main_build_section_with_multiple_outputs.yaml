@@ -1,5 +1,5 @@
 expected_failures:
-  - outputs_name_same_as_package_name
+  - unnecessary_run_exports_in_main_build_section_with_multiple_outputs
 recipes:
   meta_package:
     package:
@@ -13,8 +13,14 @@ recipes:
     build:
       noarch: True
       number: 0
+      run_exports: # offending entry
+        # add a run export
+        # (note that jinja templating as in reality is not
+        # supported by our test system to the same
+        # extend as in conda build)
+        - "{{ pin_subpackage('meta_package') }}"
     outputs:
-      - name: meta_package # offending entry
+      - name: meta_one
         build:
           noarch: True
           run_exports:

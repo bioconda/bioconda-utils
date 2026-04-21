@@ -41,7 +41,7 @@ class should_use_compilers(LintCheck):
         "rust",
     )
 
-    def check_deps(self, deps):
+    def check_deps(self, deps, _package_location):
         for compiler in self.compilers:
             for location in deps.get(compiler, []):
                 self.message(section=location)
@@ -55,7 +55,7 @@ class compilers_must_be_in_build(LintCheck):
 
     """
 
-    def check_deps(self, deps):
+    def check_deps(self, deps, _package_location):
         for dep in deps:
             if dep.startswith("compiler_"):
                 for location in deps[dep]:
@@ -124,7 +124,7 @@ class setup_py_install_args(LintCheck):
             return True
         return False
 
-    def check_deps(self, deps):
+    def check_deps(self, deps, _package_location):
         if "setuptools" not in deps:
             return  # no setuptools, no problem
 
@@ -150,7 +150,7 @@ class cython_must_be_in_host(LintCheck):
           - cython
     """
 
-    def check_deps(self, deps):
+    def check_deps(self, deps, _package_location):
         if "cython" in deps:
             if any("host" not in location for location in deps["cython"]):
                 self.message()
@@ -169,13 +169,13 @@ class cython_needs_compiler(LintCheck):
 
     severity = WARNING
 
-    def check_deps(self, deps):
+    def check_deps(self, deps, _package_location):
         if "cython" in deps and "compiler_c" not in deps and "compiler_cxx" not in deps:
             self.message()
 
 
 class missing_run_exports(LintCheck):
-    """Recipe should have a run_exports statement that ensures correct pinning in downstream packages
+    """Recipe should have a run_exports statement for each package, ensuring correct pinning in downstream packages
 
     This ensures that the package is automatically pinned to a compatible version if
     it is used as a dependency in another recipe.
@@ -185,6 +185,15 @@ class missing_run_exports(LintCheck):
     This holds for compiled packages (in particular those with shared
     libraries) but also for e.g. Python packages, as those might also
     introduce breaking changes in their APIs or command line interfaces.
+
+    A ``run_exports:`` specification should be specified in the relevant
+    ``build:`` section for all packages that are built. This means either:
+    (i) in the main ``build`` section, if only one package is built from this
+        recipe, or:
+    (ii) in each outputs' ``build:`` section, if multiple ``outputs:`` are
+        specified. In this case, the main recipe ``build:`` section does not
+        refer to a package that is being built, but only to the recipe, so a
+        ``run_exports:`` section for it does not make sense.
 
     We distinguish between four cases.
 
@@ -233,6 +242,32 @@ class missing_run_exports(LintCheck):
     """
 
     def check_recipe(self, recipe):
-        build = recipe.meta.get("build", dict())
-        if "run_exports" not in build:
-            self.message()
+        build_sections = recipe.get_all_section_occurrences(
+            section="build",
+            outputs_exclusive=True,
+        )
+        for build in build_sections:
+            if "run_exports" not in build:
+                self.message()
+
+
+class unnecessary_run_exports_in_main_build_section_with_multiple_outputs(LintCheck):
+    """Recipe should not have a run_exports statement in main build section if it specifies multiple outputs.
+
+    A ``run_exports:`` specification should be specified in the relevant
+    ``build:`` section for all packages that are built. This means either:
+    (i) in the main ``build`` section, if only one package is built from this
+        recipe, or:
+    (ii) in each outputs' ``build:`` section, if multiple ``outputs:`` are
+        specified.
+
+    This recipe specifies multiple ``outputs:``, so the main recipe ``build:``
+    section does not refer to a package that is being built, but only to the
+    recipe. Thus, a ``run_exports:`` section for it does not make sense.
+    """
+
+    def check_recipe(self, recipe):
+        outputs = recipe.get("outputs", dict())
+        if outputs:
+            if "run_exports" in recipe.meta.get("build", dict()):
+                self.message()

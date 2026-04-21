@@ -12,6 +12,8 @@ docs/recipes/
 *~
 _bioconda_recipes
 docs/source/developer/_autosummary
+# user-specific VSCode configs
+.vscode
 
 # Mac OS Files
 .DS_Store

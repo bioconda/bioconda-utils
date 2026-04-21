@@ -571,6 +571,89 @@ class Recipe:
             return default
         return res
 
+    def get_inherited_value(self, output: int, path: str, default: Any = KeyError) -> Any:
+        """Get an inherited value from the recipe.
+
+        >>> recipe.get_inherited_value(0, 'build/number')
+        '1'
+        >>> recipe.get_inherited_value(1, 'package/version')
+        '3.0.0'
+
+        The **path** is a ``/`` separated list of dictionary keys to
+        be walked in the recipe meta data, either from the top level or
+        from the numbered output. 
+
+        Args:
+            output: index into the list of outputs
+            path: Path through YAML
+            default: If not KeyError, this value will be returned
+                    if the path does not exist in the recipe
+        Raises:
+            KeyError if no default given and the path does not exist.
+        """
+        output_entry = self.get(f"outputs/{output}/{path}", "")
+        if output_entry:
+            return output_entry
+        else:
+            top_level_entry = self.get(path, "")
+            if top_level_entry:
+                return top_level_entry
+            else:
+                raise KeyError(
+                    f"Could not find entry {path}, neither at the top level, "
+                    f"nor in requested output {output}."
+                )
+
+    def get_all_section_occurrences(
+        self,
+        section: str = None,
+        outputs_exclusive: bool = False,
+        ) -> List[dict]:
+        """Get all occurrences of a section, including from outputs: definitions
+
+        If just a single package is created from the main recipe section, just
+        one dict is returned. If an outputs: section defines multiple packages
+        that are to be built, all of the section dicts from all outputs and the
+        main section are returned, unless the outputs_exclusive variable is set
+        to True.
+        """
+        sections = [self.meta.get(section, dict())]
+        outputs = self.get("outputs", dict())
+        if outputs:
+            if outputs_exclusive:
+                sections = [o.get(section, dict()) for o in outputs]
+            else:
+                sections.extend([o.get(section, dict()) for o in outputs])
+        return sections
+    
+    def check_for_missing_inherited_section(self, section: str = None,) -> str:
+        """Return any required sections that are missing
+
+        For a required section like `about/summary`, check whether this is
+        specified for all defined packages of the recipe, including for recipes
+        with multiple `outputs:`. In this case, check whether each output has
+        this defined by itself or inherits it from the respective global recipe
+        section.
+
+        Returns:
+            full dpath to section where an entry is missing
+        """
+        # only go looking for `outputs:`, if the global section doesn't have it
+        if not self.get(section, ""):
+            outputs = self.get("outputs", "")
+            if outputs:
+                for o in range(len(outputs)):
+                    output_section = f"outputs/{o}/{section}"
+                    try:
+                        self.get(output_section)
+                    except KeyError:
+                        return output_section
+            # section missing globally, and no outputs specified, so it's missing
+            else:
+                return section
+        return ""
+
+
     def set(self, path, value):
         """Set a value or section in the recipe
 
