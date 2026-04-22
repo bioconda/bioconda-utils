@@ -70,7 +70,7 @@ class compiler_needs_stdlib_c(LintCheck):
     ``requirements: build:`` section.
     """
 
-    def check_deps(self, deps):
+    def check_deps(self, deps, _package_location):
         compiler = False
         stdlib = False
         for dep, locations in deps.items():
