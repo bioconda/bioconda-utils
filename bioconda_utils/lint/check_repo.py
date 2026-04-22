@@ -39,6 +39,8 @@ class build_number_needs_bump(LintCheck):
 
     """
 
+    requires = ["missing_build_number"]
+
     def check_recipe(self, recipe):
         outputs = recipe.get("outputs", "")
         if not outputs:
