@@ -17,8 +17,9 @@ class missing_build_number(LintCheck):
     """
 
     def check_recipe(self, recipe):
-        if not recipe.get("build/number", ""):
-            self.message(section="build")
+        missing_section = recipe.check_for_missing_inherited_section("build/number")
+        if missing_section:
+            self.message(section=missing_section)
 
 
 class missing_home(LintCheck):

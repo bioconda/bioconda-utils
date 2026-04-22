@@ -40,11 +40,24 @@ class build_number_needs_bump(LintCheck):
     """
 
     def check_recipe(self, recipe):
-        bldnos = utils.RepoData().get_package_data(
-            key="build_number", name=recipe.name, version=recipe.version
-        )
-        if bldnos and recipe.build_number <= max(bldnos):
-            self.message("build/number", data=max(bldnos))
+        outputs = recipe.get("outputs", "")
+        if not outputs:
+            bldnos = utils.RepoData().get_package_data(
+                key="build_number", name=recipe.name, version=recipe.version
+            )
+            if bldnos and recipe.build_number <= max(bldnos):
+                self.message("build/number", data=max(bldnos))
+        else:
+            for i in range(len(outputs)):
+                version = recipe.get_inherited_value(i, "package/version")
+                build_number = int(recipe.get_inherited_value(i, "build/number"))
+                bldnos = utils.RepoData().get_package_data(
+                    key="build_number", name=recipe.get(f"outputs/{i}/name"), version=version
+                )
+                print(i)
+                if bldnos and build_number <= max(bldnos):
+                    self.message(f"outputs/{i}/build/number", data=max(bldnos))
+
 
     def fix(self, _message, data):
         self.recipe.reset_buildnumber(data + 1)
@@ -61,11 +74,23 @@ class build_number_needs_reset(LintCheck):
     requires = ["missing_build_number"]
 
     def check_recipe(self, recipe):
-        bldnos = utils.RepoData().get_package_data(
-            key="build_number", name=recipe.name, version=recipe.version
-        )
-        if not bldnos and recipe.build_number > 0:
-            self.message("build/number", data=0)
+        outputs = recipe.get("outputs", "")
+        if not outputs:
+            bldnos = utils.RepoData().get_package_data(
+                key="build_number", name=recipe.name, version=recipe.version
+            )
+            if not bldnos and recipe.build_number > 0:
+                self.message("build/number", data=0)
+        else:
+            for i in range(len(outputs)):
+                version = recipe.get_inherited_value(i, "package/version")
+                build_number = int(recipe.get_inherited_value(i, "build/number"))
+                bldnos = utils.RepoData().get_package_data(
+                    key="build_number", name=recipe.get(f"outputs/{i}/name"), version=version
+                )
+                if not bldnos and build_number > 0:
+                    self.message(f"outputs/{i}/build/number", data=0)
+
 
     def fix(self, _message, data):
         self.recipe.reset_buildnumber(data)
