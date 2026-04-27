@@ -5,6 +5,7 @@ This module collects small pieces of code used throughout :py:mod:`bioconda_util
 """
 
 import asyncio
+import aiofiles
 import contextlib
 import datetime
 import fnmatch
@@ -1429,27 +1430,40 @@ class AsyncRequests:
     )
     async def _async_fetch_one(session, url, desc, cb=None, data=None, fd=None):
         result = []
-        async with session.get(url, timeout=None) as resp:
-            resp.raise_for_status()
-            size = int(resp.headers.get("Content-Length", 0))
-            with tqdm(
-                total=size,
-                unit="B",
-                unit_scale=True,
-                unit_divisor=1024,
-                desc=desc,
-                miniters=1,
-                disable=logger.getEffectiveLevel() > logging.INFO,
-            ) as progress:
-                while True:
-                    block = await resp.content.read(1024 * 16)
-                    if not block:
-                        break
-                    progress.update(len(block))
-                    if fd:
-                        fd.write(block)
-                    else:
-                        result.append(block)
+        if url.startswith("file://"):
+            if os.path.exists(url[7:]):
+                async with aiofiles.open(url[7:], mode='rb') as f:
+                    result.append(await f.read())
+            else:
+                subdir = url.split("/")[-2]
+                d = {"info": {"subdir": subdir},
+                     "packages": dict(),
+                     "packages.conda": dict(),
+                     "removed": list(),
+                     "repodata_version": 1}
+                result.append(json.dumps(d).encode("UTF-8"))
+        else:
+            async with session.get(url, timeout=None) as resp:
+                resp.raise_for_status()
+                size = int(resp.headers.get("Content-Length", 0))
+                with tqdm(
+                    total=size,
+                    unit="B",
+                    unit_scale=True,
+                    unit_divisor=1024,
+                    desc=desc,
+                    miniters=1,
+                    disable=logger.getEffectiveLevel() > logging.INFO,
+                ) as progress:
+                    while True:
+                        block = await resp.content.read(1024 * 16)
+                        if not block:
+                            break
+                        progress.update(len(block))
+                        if fd:
+                            fd.write(block)
+                        else:
+                            result.append(block)
         if cb:
             return cb(b"".join(result), data)
         else:
@@ -1515,6 +1529,7 @@ class RepoData:
         "https://conda.anaconda.org/{channel}/label/{label}/{subdir}/repodata.json"
     )
     REPODATA_DEFAULTS_URL = "https://repo.anaconda.com/pkgs/main/{subdir}/repodata.json"
+    LOCAL_REPODATA = "{channel}/{subdir}/repodata.json"
 
     _load_columns = ["build", "build_number", "name", "version", "depends"]
 
@@ -1585,10 +1600,16 @@ class RepoData:
             url_template = self.REPODATA_DEFAULTS_URL
         else:
             url_template = self.REPODATA_URL
+        local_url_template = self.LOCAL_REPODATA
 
-        url = url_template.format(
-            channel=channel, subdir=self.platform2subdir(platform)
-        )
+        if channel.startswith("file://") :  # Allow local channels
+            url = local_url_template.format(
+                channel=channel, subdir=self.platform2subdir(platform)
+            )
+        else:
+            url = url_template.format(
+                channel=channel, subdir=self.platform2subdir(platform)
+            )
         return url
 
     def _load_channel_dataframe_cached(self):
