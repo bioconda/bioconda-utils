@@ -1432,7 +1432,7 @@ class AsyncRequests:
         result = []
         if url.startswith("file://"):
             if os.path.exists(url[7:]):
-                async with aiofiles.open(url[7:], mode='rb') as f:
+                async with aiofiles.open(url[7:], mode="rb") as f:
                     result.append(await f.read())
             else:
                 subdir = url.split("/")[-2]
@@ -1441,7 +1441,7 @@ class AsyncRequests:
                     "packages": dict(),
                     "packages.conda": dict(),
                     "removed": list(),
-                    "repodata_version": 1
+                    "repodata_version": 1,
                 }
                 result.append(json.dumps(d).encode("UTF-8"))
         else:
