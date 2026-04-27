@@ -1436,11 +1436,13 @@ class AsyncRequests:
                     result.append(await f.read())
             else:
                 subdir = url.split("/")[-2]
-                d = {"info": {"subdir": subdir},
-                     "packages": dict(),
-                     "packages.conda": dict(),
-                     "removed": list(),
-                     "repodata_version": 1}
+                d = {
+                    "info": {"subdir": subdir},
+                    "packages": dict(),
+                    "packages.conda": dict(),
+                    "removed": list(),
+                    "repodata_version": 1
+                }
                 result.append(json.dumps(d).encode("UTF-8"))
         else:
             async with session.get(url, timeout=None) as resp:
@@ -1602,7 +1604,7 @@ class RepoData:
             url_template = self.REPODATA_URL
         local_url_template = self.LOCAL_REPODATA
 
-        if channel.startswith("file://") :  # Allow local channels
+        if channel.startswith("file://"):  # Allow local channels
             url = local_url_template.format(
                 channel=channel, subdir=self.platform2subdir(platform)
             )
