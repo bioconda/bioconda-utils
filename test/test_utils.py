@@ -1,26 +1,21 @@
-import os
-import re
-import sys
-import subprocess as sp
-import pytest
-import tempfile
-import uuid
 import contextlib
 import logging
+import os
+import re
 import shutil
+import subprocess as sp
+import sys
+import tempfile
+import uuid
 from pathlib import Path
 from textwrap import dedent
 
-from conda_build import metadata, exceptions
+import pytest
+from conda_build import exceptions, metadata
+from helpers import Recipes, ensure_missing
 
-from bioconda_utils import __version__
-from bioconda_utils import utils
-from bioconda_utils import pkg_test
-from bioconda_utils import docker_utils
-from bioconda_utils import build
-from bioconda_utils import upload
+from bioconda_utils import __version__, build, docker_utils, pkg_test, upload, utils
 from bioconda_utils.utils import validate_config
-from helpers import ensure_missing, Recipes
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +103,7 @@ def config_fixture():
     yield config
 
 
-@pytest.fixture(scope="module", params=PARAMS, ids=IDS)
+@pytest.fixture(scope="function", params=PARAMS, ids=IDS)
 def single_build(request, recipes_fixture):
     """
     Builds the "one" recipe.
