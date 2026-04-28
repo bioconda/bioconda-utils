@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.4.0](https://github.com/bioconda/bioconda-utils/compare/v4.3.2...v4.4.0) (2026-04-28)
+
+
+### Features
+
+* add support for local (file://) channels ([#1103](https://github.com/bioconda/bioconda-utils/issues/1103)) ([0777f5e](https://github.com/bioconda/bioconda-utils/commit/0777f5ecea969bf52e09eb381437667fa1cfd067))
+
 ## [4.3.2](https://github.com/bioconda/bioconda-utils/compare/v4.3.1...v4.3.2) (2026-04-19)
 
 
