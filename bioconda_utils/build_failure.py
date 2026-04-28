@@ -7,6 +7,7 @@ import logging
 from hashlib import sha256
 
 import ruamel.yaml
+import ruamel.yaml.reader
 from ruamel.yaml import YAML, CommentedMap
 from ruamel.yaml.scalarstring import LiteralScalarString
 import conda.exports

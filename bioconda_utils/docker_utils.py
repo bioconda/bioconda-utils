@@ -54,7 +54,7 @@ import pwd
 import grp
 from importlib.resources import files, as_file
 import re
-from distutils.version import LooseVersion
+from packaging.version import Version
 
 
 from conda import exports as conda_exports
@@ -159,8 +159,8 @@ class RecipeBuilder(object):
         container_recipe="/opt/recipe",
         container_staging="/opt/host-conda-bld",
         requirements=None,
-        build_script_template=BUILD_SCRIPT_TEMPLATE,
-        dockerfile_template=DOCKERFILE_TEMPLATE,
+        build_script_template: str = BUILD_SCRIPT_TEMPLATE,
+        dockerfile_template: str = DOCKERFILE_TEMPLATE,
         use_host_conda_bld=False,
         pkg_dir=None,
         keep_image=False,
@@ -251,7 +251,7 @@ class RecipeBuilder(object):
         """
         self.requirements = requirements
         self.conda_build_args = ""
-        self.build_script_template = build_script_template
+        self.build_script_template: str = build_script_template
         self.dockerfile_template = dockerfile_template
         self.keep_image = keep_image
         self.build_image = build_image
@@ -378,8 +378,11 @@ class RecipeBuilder(object):
         p = re.compile(
             r"\d+\.\d+\.\d+"
         )  # three groups of at least on digit separated by dots
-        version_string = re.search(p, s).group(0)
-        if LooseVersion(version_string) >= LooseVersion("1.13.0"):
+        version_match = re.search(p, s)
+        if version_match is None:
+            raise ValueError(f"Unable to parse docker version from {s!r}")
+        version_string = version_match.group(0)
+        if Version(version_string) >= Version("1.13.0"):
             cmd = [
                 "docker",
                 "build",
@@ -447,8 +450,8 @@ class RecipeBuilder(object):
         # Write build script to tempfile
         build_dir = os.path.realpath(tempfile.mkdtemp())
         # conda_exports.subdir is {platform}-{arch} like: 'linux-64' 'linux-aarch64'
-        script = self.build_script_template.format(
-            self=self, arch="noarch" if noarch else conda_exports.subdir
+        script = self.build_script_template.format_map(
+            {"self": self, "arch": "noarch" if noarch else conda_exports.subdir}
         )
         with open(os.path.join(build_dir, "build_script.bash"), "w") as fout:
             fout.write(script)
@@ -480,10 +483,10 @@ class RecipeBuilder(object):
             "{0}:{1}".format(recipe_dir, self.container_recipe),
         ]
         cmd += env_list
-        if self.build_image:
-            cmd += [self.docker_temp_image]
-        else:
-            cmd += [self.docker_base_image]
+        image = self.docker_temp_image if self.build_image else self.docker_base_image
+        if image is None:
+            raise ValueError("docker_base_image is required when build_image is false")
+        cmd += [image]
         cmd += ["/bin/bash", "/opt/build_script.bash"]
 
         logger.debug("DOCKER: cmd: %s", cmd)

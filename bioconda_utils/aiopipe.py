@@ -18,7 +18,7 @@ except ImportError:
 
 from hashlib import sha256
 from urllib.parse import urlparse
-from typing import Dict, List, Generic, Optional, Type, TypeVar
+from typing import Any, Dict, List, Generic, Optional, Type, TypeVar
 
 import aiohttp
 import aioftp
@@ -74,6 +74,12 @@ class AsyncFilter(abc.ABC, Generic[ITEM]):
     async def apply(self, recipe: ITEM):
         """Process a recipe. Returns False if processing should stop"""
 
+    def get_info(self) -> str:
+        """Return description of filter for logging"""
+        doc = self.__class__.__doc__ or ""
+        docline, _, _ = doc.partition("\n")
+        return docline
+
     async def async_init(self) -> None:
         """Called inside loop before processing"""
 
@@ -84,7 +90,7 @@ class AsyncFilter(abc.ABC, Generic[ITEM]):
 class AsyncPipeline(Generic[ITEM]):
     """Processes items in an asyncio pipeline"""
 
-    def __init__(self, threads: int = None) -> None:
+    def __init__(self, threads: Optional[int] = None) -> None:
         try:  # get or create loop (threads don't have one)
             #: our asyncio loop
             self.loop = asyncio.get_event_loop()
@@ -114,15 +120,13 @@ class AsyncPipeline(Generic[ITEM]):
         if sig == signal.SIGINT:
             logger.error("Ctrl-C pressed - aborting...")
         self.proc_pool_executor.shutdown()
-        tasks = [
-            t for t in asyncio.Task.all_tasks() if t != asyncio.Task.current_task()
-        ]
+        tasks = [t for t in asyncio.all_tasks() if t != asyncio.current_task()]
         for t in tasks:
             t.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         self.loop.stop()
 
-    def run(self) -> bool:
+    def run(self) -> Optional[bool]:
         """Enters the asyncio loop and manages shutdown."""
         # We need to handle KeyboardInterrupt "manually" to get clean shutdown
         # for the ProcessPoolExecutor
@@ -149,7 +153,7 @@ class AsyncPipeline(Generic[ITEM]):
     def get_item_count(self) -> int:
         return 0
 
-    async def _async_run(self) -> bool:
+    async def _async_run(self) -> Optional[bool]:
         """Runner within async loop"""
         # call init functions on filters
         await asyncio.gather(*(filt.async_init() for filt in self.filters))
@@ -238,12 +242,12 @@ class AsyncRequests:
     #: Used as user agent in http requests and as requester in github API requests
     USER_AGENT = "bioconda/bioconda-utils"
 
-    def __init__(self, cache_fn: str = None) -> None:
+    def __init__(self, cache_fn: Optional[str] = None) -> None:
         #: aiohttp session (only exists while running)
-        self.session: aiohttp.ClientSession = None
-        self.cache_fn: str = cache_fn
+        self.session: Optional[aiohttp.ClientSession] = None
+        self.cache_fn = cache_fn
         #: cache
-        self.cache: Optional[Dict[str, Dict[str, str]]] = None
+        self.cache: Optional[Dict[str, Dict[str, Any]]] = None
 
     async def __aenter__(self) -> "AsyncRequests":
         session = aiohttp.ClientSession(
@@ -266,6 +270,7 @@ class AsyncRequests:
         return self
 
     async def __aexit__(self, ext_type, exc, trace):
+        assert self.session is not None
         await self.session.__aexit__(ext_type, exc, trace)
         self.session = None
         if self.cache_fn:
@@ -288,6 +293,7 @@ class AsyncRequests:
         if self.cache and url in self.cache["url_text"]:
             return self.cache["url_text"][url]
 
+        assert self.session is not None
         async with self.session.get(url) as resp:
             resp.raise_for_status()
             res = await resp.text()
@@ -329,6 +335,7 @@ class AsyncRequests:
         Shows TQDM progress monitor with label **desc**.
         """
         checksum = sha256()
+        assert self.session is not None
         async with self.session.get(url) as resp:
             resp.raise_for_status()
             size = int(resp.headers.get("Content-Length", 0))
@@ -361,6 +368,7 @@ class AsyncRequests:
 
         Shows TQDM progress monitor with label **desc**.
         """
+        assert self.session is not None
         async with self.session.get(url) as resp:
             resp.raise_for_status()
             size = int(resp.headers.get("Content-Length", 0))
@@ -389,7 +397,7 @@ class AsyncRequests:
             return self.cache["ftp_list"][url]
 
         parsed = urlparse(url)
-        async with aioftp.ClientSession(
+        async with aioftp.Client.context(
             parsed.netloc, password=self.USER_AGENT + "@", trust_env=True
         ) as client:
             res = [str(path) for path, _info in await client.list(parsed.path)]
@@ -405,7 +413,7 @@ class AsyncRequests:
         """
         parsed = urlparse(url)
         checksum = sha256()
-        async with aioftp.ClientSession(
+        async with aioftp.Client.context(
             parsed.netloc, password=self.USER_AGENT + "@", trust_env=True
         ) as client:
             async with client.download_stream(parsed.path) as stream:

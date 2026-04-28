@@ -13,6 +13,7 @@ from collections import OrderedDict
 import logging
 import json
 from datetime import date
+from typing import Any, Optional
 
 import pyaml
 import requests
@@ -466,7 +467,13 @@ def packagesNeedingX(packages):
 
 
 class BioCProjectPage(object):
-    def __init__(self, package, bioc_version=None, pkg_version=None, packages=None):
+    def __init__(
+        self,
+        package: str,
+        bioc_version: Optional[str] = None,
+        pkg_version: Optional[str] = None,
+        packages=None,
+    ):
         """
         Represents a single Bioconductor package page and provides access to
         scraped data.
@@ -481,16 +488,17 @@ class BioCProjectPage(object):
         self._cached_tarball = None
         self._dependencies = None
         self.build_number = 0
-        self.bioc_version = bioc_version
+        self.bioc_version = bioc_version or ""
         self._pkg_version = pkg_version
+        self._auto = bioc_version is None
         self._cargoport_url = None
         self._bioarchive_url = None
         self._tarball_url = None
         self._bioconductor_tarball_url = None
         self.is_data_package = False
         self.package_lower = package.lower()
-        self.version = pkg_version
-        self.extra = None
+        self.version = pkg_version or ""
+        self.extra: Optional[OrderedDict[Any, Any]] = None
         self.patches = None
         self.needsX = False
 
@@ -585,8 +593,8 @@ class BioCProjectPage(object):
         url = os.path.join(
             base_url,
             self.bioc_version,
-            self.packages[self.package]["URLprefix"],
-            self.packages[self.package]["source.ver"],
+            str(self.packages[self.package]["URLprefix"]),
+            str(self.packages[self.package]["source.ver"]),
         )
         response = requests.head(url)
         if response.status_code == 200:
@@ -1080,7 +1088,7 @@ class BioCProjectPage(object):
                 )
             )
 
-        d = OrderedDict(
+        d: OrderedDict[str, Any] = OrderedDict(
             (
                 (
                     "package",
@@ -1486,9 +1494,9 @@ def write_recipe(
 
         if "extra" in current_meta:
             exclude = set(["final", "copy_test_source_files"])
-            proj.extra = {
-                x: y for x, y in current_meta["extra"].items() if x not in exclude
-            }
+            proj.extra = OrderedDict(
+                (x, y) for x, y in current_meta["extra"].items() if x not in exclude
+            )
 
     with open(os.path.join(recipe_dir, "meta.yaml"), "w") as fout:
         fout.write(open(proj.meta_yaml).read())

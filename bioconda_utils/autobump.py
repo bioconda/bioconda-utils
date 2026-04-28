@@ -49,7 +49,7 @@ import random
 
 from collections import defaultdict, Counter
 from urllib.parse import urlparse
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple, Union
 
 import aiofiles
 from aiohttp import ClientResponseError
@@ -121,12 +121,13 @@ class RecipeSource:
     def __init__(
         self,
         recipe_base: str,
-        packages: List[str],
+        packages: Union[str, List[str]],
         exclude: List[str],
         shuffle: bool = True,
     ) -> None:
         self.recipe_base = recipe_base
-        self.recipe_dirs = list(utils.get_recipes(recipe_base, packages, exclude))
+        self.packages = [packages] if isinstance(packages, str) else packages
+        self.recipe_dirs = list(utils.get_recipes(recipe_base, self.packages, exclude))
         if shuffle:
             random.shuffle(self.recipe_dirs)
         logger.warning("Selected %i packages", len(self.recipe_dirs))
@@ -155,18 +156,18 @@ class RecipeGraphSource(RecipeSource):
     def __init__(
         self,
         recipe_base: str,
-        packages: List[str],
+        packages: Union[str, List[str]],
         exclude: List[str],
         shuffle: bool,
         config: Dict[str, str],
-        cache_fn: str = None,
+        cache_fn: Optional[str] = None,
     ) -> None:
         super().__init__(recipe_base, packages, exclude, shuffle)
         self.config = config
         self.cache_fn = cache_fn
         self.shuffle = shuffle
         self.dag = self.load_graph()
-        self.dag = graph.filter_recipe_dag(self.dag, packages, exclude)
+        self.dag = graph.filter_recipe_dag(self.dag, self.packages, exclude)
         logger.warning("Graph contains %i packages (blacklist excluded)", len(self.dag))
 
     async def queue_items(self, send_q, return_q):
@@ -220,9 +221,9 @@ class Scanner(AsyncPipeline[Recipe]):
 
     def __init__(
         self,
-        recipe_source: Iterable[Recipe],
-        cache_fn: str = None,
-        status_fn: str = None,
+        recipe_source: RecipeSource,
+        cache_fn: Optional[str] = None,
+        status_fn: Optional[str] = None,
     ) -> None:
         super().__init__()
         #: recipe source
@@ -230,13 +231,13 @@ class Scanner(AsyncPipeline[Recipe]):
         #: counter to gather stats on various states
         self.stats: Counter = Counter()
         #: collect end status for each recipe
-        self.status: List[Tuple[str, str]] = []
+        self.status: List[Tuple[str, EndProcessingItem]] = []
         #: filename to write statuses to
-        self.status_fn: str = status_fn
+        self.status_fn = status_fn
         #: async requests helper
         self.req = AsyncRequests(cache_fn)
 
-    def run(self) -> bool:
+    def run(self) -> Optional[bool]:
         """Runs scanner"""
         logger.info("Running pipeline with these steps:")
         for n, filt in enumerate(self.filters):
@@ -259,13 +260,14 @@ class Scanner(AsyncPipeline[Recipe]):
     def get_item_count(self):
         return self.recipe_source.get_item_count()
 
-    async def _async_run(self) -> bool:
+    async def _async_run(self) -> Optional[bool]:
         """Runner within async loop"""
         async with self.req:
             return await super()._async_run()
 
-    async def process(self, recipe: Recipe) -> bool:
+    async def process(self, item: Recipe) -> bool:
         """Applies the filters to a recipe"""
+        recipe = item
         try:
             res = False
             if await super().process(recipe):
@@ -286,7 +288,8 @@ class Filter(AsyncFilter[Recipe]):
 
     def get_info(self) -> str:
         """Return description of filter for logging"""
-        docline, _, _ = self.__class__.__doc__.partition("\n")
+        doc = self.__class__.__doc__ or ""
+        docline, _, _ = doc.partition("\n")
         return docline
 
     @abc.abstractmethod
@@ -691,16 +694,20 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
         if not sources:
             raise self.Metapackage(recipe)
 
-        if isinstance(sources, Sequence):
-            source_iter = iter(sources)
-            versions = await self.get_versions(recipe, next(source_iter), 0)
-            for num, source in enumerate(source_iter):
-                add_versions = await self.get_versions(recipe, source, num + 1)
-                for vers, files in add_versions.items():
-                    for fname, data in files.items():
-                        versions[vers][fname] = data
+        if isinstance(sources, Mapping):
+            source_items = [sources]
+        elif isinstance(sources, Sequence) and not isinstance(sources, (str, bytes)):
+            source_items = sources
         else:
-            versions = await self.get_versions(recipe, sources, 0)
+            raise self.NoUrlInSource(recipe, 1)
+
+        versions = {}
+        for source_idx, source in enumerate(source_items):
+            if not isinstance(source, Mapping):
+                raise self.NoUrlInSource(recipe, source_idx + 1)
+            add_versions = await self.get_versions(recipe, source, source_idx)
+            for vers, files in add_versions.items():
+                versions.setdefault(vers, {}).update(files)
 
         if not versions:
             raise self.NoReleases(recipe)
@@ -794,7 +801,7 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
                 norm_pkg = pkg.replace("-", "_")
                 try:
                     mspec = MatchSpec(version=spec.replace(" ", ""))
-                except conda.exceptions.InvalidVersionSpecError:
+                except conda.exceptions.InvalidVersionSpec:
                     logger.error(
                         "Recipe %s: invalid upstream spec %s %s",
                         recipe,
@@ -1279,7 +1286,9 @@ class CreatePullRequest(GitFilter):
                 "r": recipe,
                 "recipe_relurl": self.ghub.get_file_relurl(recipe.dir, branch_name),
                 "author": author,
-                "author_is_member": await self.ghub.is_member(author),
+                "author_is_member": await self.ghub.is_member(author)
+                if author
+                else False,
                 "dependency_diff": self.render_deps_diff(recipe),
                 "version": __version__,
             }

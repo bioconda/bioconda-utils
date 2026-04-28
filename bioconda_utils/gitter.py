@@ -6,7 +6,7 @@ import abc
 import logging
 import json
 
-from typing import Any, List, Mapping, Tuple, NamedTuple, AsyncIterator
+from typing import Any, AsyncIterator, Dict, List, Mapping, NamedTuple, Optional, Tuple
 
 import aiohttp
 import uritemplate
@@ -42,7 +42,7 @@ class User(NamedTuple):
     #: Gravatar Version (used to force cache flushing)
     gv: str
     #: List of OAUTH providers for user
-    providers: List[str] = None
+    providers: Optional[List[str]] = None
 
 
 class Mention(NamedTuple):
@@ -56,9 +56,9 @@ class Mention(NamedTuple):
     #: User Name
     screenName: str
     #: User ID
-    userId: str = None
+    userId: Optional[str] = None
     #: User IDs
-    userIds: List[str] = None
+    userIds: Optional[List[str]] = None
 
 
 class Message(NamedTuple):
@@ -98,9 +98,9 @@ class Message(NamedTuple):
     #: Version
     v: str
     #: Gravatar Version (used to force cache flushing)
-    gv: str = None
+    gv: Optional[str] = None
     #: Edit timestamp (ISO)
-    editedAt: str = None
+    editedAt: Optional[str] = None
 
 
 class Room(NamedTuple):
@@ -143,23 +143,23 @@ class Room(NamedTuple):
     #: unknown
     public: str
     #: Last time (ISO) room was accessed
-    lastAccessTime: str = None
+    lastAccessTime: Optional[str] = None
     #: Flag marking this room as favorite
     favourite: bool = False
     #: Flag marking personal chats
-    oneToOne: bool = None
+    oneToOne: Optional[bool] = None
     #: User if one-to-one
-    user: User = None
+    user: Optional[User] = None
     #: Room URI
-    uri: str = None
+    uri: Optional[str] = None
     #: Unknown
-    security: str = None
+    security: Optional[str] = None
     #: unknown
-    noindex: str = None
+    noindex: Optional[str] = None
     #: Unknown
-    group: str = None
+    group: Optional[str] = None
     #: Version
-    v: str = None
+    v: Optional[str] = None
 
 
 class GitterAPI:
@@ -228,7 +228,7 @@ class GitterAPI:
         """
 
     @abc.abstractmethod
-    async def _stream_request(
+    def _stream_request(
         self, method: str, url: str, headers: Mapping[str, str], body: bytes = b""
     ) -> AsyncIterator[bytes]:
         """Execute streaming HTTP request (implement by IO providing subclass)
@@ -246,7 +246,7 @@ class GitterAPI:
     def _prepare_request(
         self,
         url: str,
-        var_dict: Mapping[str, str],
+        var_dict: Dict[str, Any],
         data: Any = None,
         charset: str = "utf-8",
         accept: str = "application/json",
@@ -270,7 +270,7 @@ class GitterAPI:
         self,
         method: str,
         url: str,
-        var_dict: Mapping[str, str],
+        var_dict: Dict[str, Any],
         data: Any = None,
         accept: str = "application/json",
     ) -> Tuple[str, Any]:
@@ -304,7 +304,7 @@ class GitterAPI:
         self,
         method: str,
         url: str,
-        var_dict: Mapping[str, str],
+        var_dict: Dict[str, Any],
         data: Any = None,
         accept: str = "application/json",
     ) -> AsyncIterator[Any]:
@@ -321,7 +321,7 @@ class GitterAPI:
             except json.decoder.JSONDecodeError:
                 logger.error("Failed to decode json in line %s", line_str)
 
-    async def list_rooms(self, name: str = None) -> List[Room]:
+    async def list_rooms(self, name: Optional[str] = None) -> List[Room]:
         """Get list of current user's rooms
 
         The list is filtered to match provided arguments.
@@ -360,7 +360,11 @@ class GitterAPI:
         return True
 
     async def edit_room(
-        self, room: Room, topic: str = None, tags: str = None, noindex: bool = None
+        self,
+        room: Room,
+        topic: Optional[str] = None,
+        tags: Optional[str] = None,
+        noindex: Optional[bool] = None,
     ) -> None:
         """Set **topic**, **tags** or **noindex** for **room**"""
         data = {}

@@ -7,7 +7,7 @@ import os
 import re
 import tempfile
 import subprocess
-from typing import List, Union
+from typing import List, Optional, Union
 
 import git
 import yaml
@@ -98,7 +98,7 @@ class GitHandlerBase:
         self._sign: Union[bool, str] = False
 
         #: Committer and Author
-        self.actor: git.Actor = None
+        self.actor: Optional[git.Actor] = None
 
     def close(self):
         """Release resources allocated"""
@@ -236,7 +236,7 @@ class GitHandlerBase:
     def get_latest_master(self):
         return self.home_remote.fetch("master")[0].commit
 
-    def read_from_branch(self, branch, file_name: str) -> str:
+    def read_from_branch(self, branch, file_name: str) -> Optional[str]:
         """Reads contents of file **file_name** from git branch **branch**"""
         abs_file_name = os.path.abspath(file_name)
         abs_repo_root = os.path.abspath(self.repo.working_dir)
@@ -253,7 +253,9 @@ class GitHandlerBase:
         )
         return None
 
-    def create_local_branch(self, branch_name: str, remote_branch: str = None):
+    def create_local_branch(
+        self, branch_name: str, remote_branch: Optional[str] = None
+    ):
         """Creates local branch from remote **branch_name**"""
         if remote_branch is None:
             remote_branch = self.get_remote_branch(branch_name, try_fetch=False)
@@ -400,7 +402,7 @@ class GitHandlerBase:
             logger.info("Would push branch %s", branch_name)
         return True
 
-    def set_user(self, user: str, email: str = None) -> None:
+    def set_user(self, user: str, email: Optional[str] = None) -> None:
         """Set the user and email to use for committing"""
         self.actor = git.Actor(user, email)
 
@@ -454,11 +456,15 @@ class BiocondaRepoMixin(GitHandlerBase):
         else:
             branch = ref
         config_data = self.read_from_branch(branch, self.config_file)
+        if config_data is None:
+            raise GitHandlerFailure(f"Unable to read {self.config_file} from {branch}")
         config = yaml.safe_load(config_data)
         blacklists = config["blacklists"]
         blacklisted = set()
         for blacklist in blacklists:
             blacklist_data = self.read_from_branch(branch, blacklist)
+            if blacklist_data is None:
+                raise GitHandlerFailure(f"Unable to read {blacklist} from {branch}")
             for line in blacklist_data.splitlines():
                 if line.startswith("#") or not line.strip():
                     continue
@@ -567,7 +573,7 @@ class TempGitHandler(GitHandlerBase):
     repo, it will not break the entire process.
     """
 
-    _local_mirror_tmpdir: Union[str, tempfile.TemporaryDirectory] = None
+    _local_mirror_tmpdir: Optional[Union[str, tempfile.TemporaryDirectory]] = None
 
     @classmethod
     def set_mirror_dir(cls, dirname: str) -> None:
@@ -603,7 +609,12 @@ class TempGitHandler(GitHandlerBase):
 
         # Make location of repo in tmpdir from url
         _, _, fname = url.rpartition("@")
-        tmpname = getattr(cls._local_mirror_tmpdir, "name", cls._local_mirror_tmpdir)
+        if isinstance(cls._local_mirror_tmpdir, tempfile.TemporaryDirectory):
+            tmpname = cls._local_mirror_tmpdir.name
+        else:
+            tmpname = cls._local_mirror_tmpdir
+        assert tmpname is not None
+        assert isinstance(tmpname, str)
         mirror_name = os.path.join(tmpname, fname)
 
         # Re-use or create mirror of remote repo
@@ -638,8 +649,8 @@ class TempGitHandler(GitHandlerBase):
 
     def __init__(
         self,
-        username: str = None,
-        password: str = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
         url_format="https://{userpass}github.com/{user}/{repo}.git",
         home_user="bioconda",
         home_repo="bioconda-recipes",

@@ -23,9 +23,10 @@ import logging
 from collections import defaultdict, Counter
 from functools import partial
 import inspect
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import conda
+import conda.base.constants
 import argh
 from argh import arg, named
 import networkx as nx
@@ -314,7 +315,7 @@ def duplicates(
                     token = ["-t", token]
                 logger.info(
                     utils.run(
-                        [utils.bin_for("anaconda")] + token + subcmd, mask=[token]
+                        [utils.bin_for("anaconda")] + token + subcmd, mask=token
                     ).stdout
                 )
 
@@ -785,6 +786,8 @@ def handle_merged_pr(
     artifact_source="azure",
 ):
     label = os.getenv("BIOCONDA_LABEL", None) or None
+    if git_range is None:
+        raise ValueError("git_range is required")
 
     res = upload_pr_artifacts(
         config,
@@ -846,12 +849,14 @@ def dag(recipe_folder, config, packages="*", format="gml", hide_singletons=False
     elif format == "dot":
         write_dot(dag, sys.stdout)
     elif format == "txt":
-        subdags = sorted(map(sorted, nx.connected_components(dag.to_undirected())))
-        subdags = sorted(subdags, key=len, reverse=True)
-        singletons = []
+        subdags: List[List[str]] = sorted(
+            map(sorted, nx.connected_components(dag.to_undirected()))
+        )
+        subdags.sort(key=len, reverse=True)
+        singletons: List[str] = []
         for i, s in enumerate(subdags):
             if len(s) == 1:
-                singletons += s
+                singletons.extend(s)
                 continue
             print("# subdag {0}".format(i))
             subdag = dag.subgraph(s)
@@ -1358,7 +1363,9 @@ def autobump(
         scanner.add(autobump.ExcludeSubrecipe, always=exclude_subrecipes == "always")
 
     # Exclude recipes with dependencies pending an update
-    if not no_check_pending_deps and not no_follow_graph:
+    if not no_check_pending_deps and isinstance(
+        recipe_source, autobump.RecipeGraphSource
+    ):
         scanner.add(autobump.ExcludeDependencyPending, recipe_source.dag)
 
     # Load recipe
@@ -1479,10 +1486,12 @@ def annotate_build_failures(
     skiplist=False,
     reason=None,
     category=None,
-    platforms=None,
+    platforms: Optional[List[str]] = None,
     existing_only=False,
 ):
     valid_platform_names = set(conda.base.constants.PLATFORM_DIRECTORIES)
+    if platforms is None:
+        platforms = ["linux-64", "osx-64"]
     for recipe in recipes:
         if existing_only:
             platforms = [

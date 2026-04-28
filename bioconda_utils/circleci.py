@@ -4,7 +4,7 @@ CircleCI Web-API Bindings
 
 import abc
 import logging
-from typing import Any, Mapping, Optional, Tuple, List
+from typing import Any, Dict, Mapping, Optional, Tuple, List
 import uritemplate
 import json
 import re
@@ -38,7 +38,7 @@ class CircleAPI(abc.ABC):
         self.debug_once = False
 
     @property
-    def var_data(self):
+    def var_data(self) -> Dict[str, Any]:
         """Defaults for this API instance"""
         return {
             "vcs_type": self.vcs_type,
@@ -57,7 +57,7 @@ class CircleAPI(abc.ABC):
         self,
         method: str,
         url: str,
-        var_dict: Mapping[str, str],
+        var_dict: Dict[str, Any],
         data: Any = None,
         accept: str = "application/json",
     ) -> Any:
@@ -93,10 +93,15 @@ class CircleAPI(abc.ABC):
         try:
             return json.loads(response_text)
         except json.decoder.JSONDecodeError:
+            masked_url = url
+            masked_response = response_text
+            if self.token:
+                masked_url = masked_url.replace(self.token, "******")
+                masked_response = masked_response.replace(self.token, "******")
             logger.error(
                 "Call to '%s' yielded text '%s' - not JSON",
-                url.replace(self.token, "******"),
-                response_text.replace(self.token, "******"),
+                masked_url,
+                masked_response,
             )
         return response_text
 
@@ -111,7 +116,7 @@ class CircleAPI(abc.ABC):
         return await self._make_request("GET", self.LIST_ARTIFACTS, var_data)
 
     async def list_recent_builds(
-        self, path: str, sha: str = None, skip_rebuilt: bool = True
+        self, path: str, sha: Optional[str] = None, skip_rebuilt: bool = True
     ) -> List[Mapping[str, Any]]:
         """List recent builds for **path** (branch or pr)
 

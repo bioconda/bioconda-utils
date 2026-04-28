@@ -1,4 +1,5 @@
 import contextlib
+import importlib
 import logging
 import os
 import re
@@ -246,7 +247,7 @@ def single_upload():
         [
             "anaconda",
             "-t",
-            os.environ.get("ANACONDA_TOKEN"),
+            os.environ["ANACONDA_TOKEN"],
             "remove",
             "bioconda/{0}".format(name),
             "--force",
@@ -1071,23 +1072,23 @@ def test_load_meta_skipping():
 
 
 def test_native_platform_skipping():
-    expections = [
+    expections = (
         # Don't skip linux-x86 for any recipes
-        ["one", "linux", False],
-        ["two", "linux", False],
-        ["three", "linux", False],
-        ["four", "linux", False],
+        ("one", "linux", False),
+        ("two", "linux", False),
+        ("three", "linux", False),
+        ("four", "linux", False),
         # Skip recipes without linux aarch64 enable on linux-aarch64 platform
-        ["one", "linux-aarch64", True],
-        ["three", "linux-aarch64", True],
+        ("one", "linux-aarch64", True),
+        ("three", "linux-aarch64", True),
         # Don't skip recipes with linux aarch64 enable on linux-aarch64 platform
-        ["two", "linux-aarch64", False],
-        ["four", "linux-aarch64", False],
-        ["one", "osx-arm64", True],
-        ["two", "osx-arm64", True],
-        ["three", "osx-arm64", False],
-        ["four", "osx-arm64", False],
-    ]
+        ("two", "linux-aarch64", False),
+        ("four", "linux-aarch64", False),
+        ("one", "osx-arm64", True),
+        ("two", "osx-arm64", True),
+        ("three", "osx-arm64", False),
+        ("four", "osx-arm64", False),
+    )
     r = Recipes(
         """
         one:
@@ -1427,7 +1428,9 @@ def test_pkg_test_conda_package_format(
     """
     # ("1" is .tar.bz2 and "2" is .conda)
     try:
-        from conda_build.conda_interface import cc_conda_build
+        cc_conda_build = importlib.import_module(
+            "conda_build.conda_interface"
+        ).cc_conda_build
     except ImportError:
         pass
     else:

@@ -201,7 +201,10 @@ def get_azure_artifacts(check_run):
 
 
 def parse_azure_build_id(url: str) -> str:
-    return re.search("buildId=(\d+)", url).group(1)
+    match = re.search("buildId=(\d+)", url)
+    if match is None:
+        raise ValueError(f"Could not parse Azure build ID from {url}")
+    return match.group(1)
 
 
 def get_circleci_artifacts(check_run, platform):
@@ -244,7 +247,10 @@ def get_circleci_artifacts(check_run, platform):
 
 def parse_gha_build_id(url: str) -> str:
     # Get workflow run id from URL
-    return re.search("runs/(\d+)/", url).group(1)
+    match = re.search("runs/(\d+)/", url)
+    if match is None:
+        raise ValueError(f"Could not parse GitHub Actions run ID from {url}")
+    return match.group(1)
 
 
 def get_gha_artifacts(check_run, platform, repo):

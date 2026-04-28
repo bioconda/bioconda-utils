@@ -12,9 +12,11 @@ from enum import Enum
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple, Union
 
 import aiohttp
+import aiohttp.web
 import backoff
 import cachetools
 import gidgethub
+import gidgethub.abc
 import gidgethub.aiohttp
 import gidgethub.sansio
 import jwt
@@ -28,7 +30,7 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 IssueState = Enum("IssueState", "open closed all")  # pylint: disable=invalid-name
 
 #: State of Github Check Run
-CheckRunStatus = Enum("CheckRunState", "queued in_progress completed")
+CheckRunStatus = Enum("CheckRunStatus", "queued in_progress completed")
 
 #: Conclusion of Github Check Run
 CheckRunConclusion = Enum(
@@ -51,7 +53,11 @@ def iso_now() -> str:
     """Creates ISO 8601 timestamp in format
     ``YYYY-MM-DDTHH:MM:SSZ`` as required by Github
     """
-    return datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    return (
+        datetime.datetime.now(datetime.timezone.utc)
+        .replace(microsecond=0)
+        .strftime("%Y-%m-%dT%H:%M:%SZ")
+    )
 
 
 class GitHubHandler:
@@ -100,11 +106,11 @@ class GitHubHandler:
 
     def __init__(
         self,
-        token: str = None,
+        token: Optional[str] = None,
         dry_run: bool = False,
         to_user: str = "bioconda",
         to_repo: str = "bioconda-recipes",
-        installation: int = None,
+        installation: Optional[int] = None,
     ) -> None:
         #: API Bearer Token
         self.token = token
@@ -117,15 +123,15 @@ class GitHubHandler:
         #: Name of the Repo
         self.repo = to_repo
         #: Default variables for API calls
-        self.var_default = {"user": to_user, "repo": to_repo}
+        self.var_default: Dict[str, Any] = {"user": to_user, "repo": to_repo}
 
         # filled in by login():
         #: Gidgethub API object
-        self.api: gidgethub.abc.GitHubAPI = None
+        self.api: Any = None
         #: Login username
-        self.username: str = None
+        self.username: Optional[str] = None
         #: User avatar URL
-        self.avatar_url: str = None
+        self.avatar_url: Optional[str] = None
 
     def __str__(self):
         return f"{self.user}/{self.repo}"
@@ -204,7 +210,7 @@ class GitHubHandler:
             yield team
 
     async def get_team_id(
-        self, team_slug: str = None, team_name: str = None
+        self, team_slug: Optional[str] = None, team_name: Optional[str] = None
     ) -> Optional[int]:
         """Get the Team ID from the Team slug
 
@@ -380,7 +386,7 @@ class GitHubHandler:
         to_branch: Optional[str] = None,
         number: Optional[int] = None,
         state: Optional[IssueState] = None,
-    ) -> List[Dict[Any, Any]]:
+    ) -> Any:
         """Retrieve list of PRs matching parameters
 
         Arguments:
@@ -493,9 +499,9 @@ class GitHubHandler:
     async def merge_pr(
         self,
         number: int,
-        title: str = None,
-        message: str = None,
-        sha: str = None,
+        title: Optional[str] = None,
+        message: Optional[str] = None,
+        sha: Optional[str] = None,
         method: MergeMethod = MergeMethod.squash,
     ) -> Tuple[bool, str]:
         """Merge a PR
@@ -663,7 +669,11 @@ class GitHubHandler:
         return await self.api.getitem(self.PULL_FILES, var_data)
 
     async def create_check_run(
-        self, name: str, head_sha: str, details_url: str = None, external_id: str = None
+        self,
+        name: str,
+        head_sha: str,
+        details_url: Optional[str] = None,
+        external_id: Optional[str] = None,
     ) -> int:
         """Create a check run
 
@@ -693,13 +703,13 @@ class GitHubHandler:
     async def modify_check_run(
         self,
         number: int,
-        status: CheckRunStatus = None,
-        conclusion: CheckRunConclusion = None,
-        output_title: str = None,
-        output_summary: str = None,
-        output_text: str = None,
-        output_annotations: List[Dict] = None,
-        actions: List[Dict] = None,
+        status: Optional[CheckRunStatus] = None,
+        conclusion: Optional[CheckRunConclusion] = None,
+        output_title: Optional[str] = None,
+        output_summary: Optional[str] = None,
+        output_text: Optional[str] = None,
+        output_annotations: Optional[List[Dict]] = None,
+        actions: Optional[List[Dict]] = None,
     ) -> Dict["str", Any]:
         """Modify a check runs
 
@@ -723,13 +733,13 @@ class GitHubHandler:
         logger.info(
             "Modifying check run %i: status=%s conclusion=%s title=%s",
             number,
-            status.name,
+            status.name if status else "N/A",
             conclusion.name if conclusion else "N/A",
             output_title,
         )
         var_data = copy(self.var_default)
         var_data["id"] = str(number)
-        data = {}
+        data: Dict[str, Any] = {}
         if status is not None:
             data["status"] = status.name.lower()
             if status == CheckRunStatus.in_progress:
@@ -738,13 +748,14 @@ class GitHubHandler:
             data["conclusion"] = conclusion.name.lower()
             data["completed_at"] = iso_now()
         if output_title:
-            data["output"] = {
+            output: Dict[str, Any] = {
                 "title": output_title,
                 "summary": output_summary or "",
                 "text": output_text or "",
             }
             if output_annotations:
-                data["output"]["annotations"] = output_annotations
+                output["annotations"] = output_annotations
+            data["output"] = output
         if actions:
             data["actions"] = actions
         accept = "application/vnd.github.antiope-preview+json"
@@ -833,7 +844,7 @@ class GitHubHandler:
         return res
 
     async def check_protections(
-        self, pr_number: int, head_sha: str = None
+        self, pr_number: int, head_sha: Optional[str] = None
     ) -> Tuple[Optional[bool], str]:
         """Check whether PR meets protection requirements
 
@@ -901,7 +912,7 @@ class GitHubHandler:
         logger.info("PR #%s is passing configured checks", pr_number)
         return True, "LGTM"
 
-    async def get_contents(self, path: str, ref: str = None) -> str:
+    async def get_contents(self, path: str, ref: Optional[str] = None) -> str:
         """Get contents of a file in repo
 
         Arguments:
@@ -1002,10 +1013,10 @@ class GitHubHandler:
     async def create_project_card(
         self,
         column_id: int,
-        note: str = None,
-        content_id: int = None,
-        content_type: CardContentType = None,
-        number: int = None,
+        note: Optional[str] = None,
+        content_id: Optional[int] = None,
+        content_type: Optional[CardContentType] = None,
+        number: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Create a new project card
 
@@ -1219,7 +1230,11 @@ class GitHubAppHandler:
                 "iss": self.app_id,
             }
             token_utf8 = jwt.encode(payload, self.app_key, algorithm="RS256")
-            token = token_utf8.decode("utf-8")
+            token = (
+                token_utf8.decode("utf-8")
+                if isinstance(token_utf8, bytes)
+                else token_utf8
+            )
             self._jwt = (expires, token)
             msg = "Created new"
         else:
@@ -1235,7 +1250,9 @@ class GitHubAppHandler:
             raise ValueError("Time String '%s' not in UTC")
         return int(time.mktime(time.strptime(timestr[:-1], "%Y-%m-%dT%H:%M:%S")))
 
-    async def get_installation_token(self, installation: str, name: str = None) -> str:
+    async def get_installation_token(
+        self, installation: str, name: Optional[str] = None
+    ) -> str:
         """Returns OAUTH token for installation referenced in **event**"""
         if name is None:
             name = installation
@@ -1307,7 +1324,7 @@ class GitHubAppHandler:
             self._handlers[handler_key] = api
         return api
 
-    async def get_github_user_api(self, token: str) -> GitHubHandler:
+    async def get_github_user_api(self, token: str) -> Optional[GitHubHandler]:
         """Returns the GitHubHandler for a user given a token"""
         now = int(time.time())
         if token not in self._user_handlers:

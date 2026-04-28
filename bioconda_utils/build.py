@@ -8,7 +8,7 @@ import itertools
 import logging
 import os
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from bioconda_utils.skiplist import Skiplist
 from bioconda_utils.build_failure import BuildFailureRecord
 
@@ -50,11 +50,11 @@ def conda_build_purge() -> None:
 
 def build(
     recipe: str,
-    pkg_paths: List[str] = None,
+    pkg_paths: Optional[List[str]] = None,
     testonly: bool = False,
     mulled_test: bool = True,
-    channels: List[str] = None,
-    docker_builder: docker_utils.RecipeBuilder = None,
+    channels: Optional[List[str]] = None,
+    docker_builder: Optional[docker_utils.RecipeBuilder] = None,
     raise_error: bool = False,
     linter=None,
     mulled_conda_image: str = pkg_test.MULLED_CONDA_IMAGE,
@@ -88,6 +88,9 @@ def build(
     """
     if record_build_failure and not dag:
         raise ValueError("record_build_failure requires dag to be set")
+
+    if pkg_paths is None:
+        pkg_paths = []
 
     if linter:
         logger.info("Linting recipe %s", recipe)
@@ -355,13 +358,13 @@ def build_recipes(
     mulled_test: bool = True,
     testonly: bool = False,
     force: bool = False,
-    docker_builder: docker_utils.RecipeBuilder = None,
-    label: str = None,
+    docker_builder: Optional[docker_utils.RecipeBuilder] = None,
+    label: Optional[str] = None,
     anaconda_upload: bool = False,
     mulled_upload_target=None,
-    check_channels: List[str] = None,
-    do_lint: bool = None,
-    lint_exclude: List[str] = None,
+    check_channels: Optional[List[str]] = None,
+    do_lint: Optional[bool] = None,
+    lint_exclude: Optional[List[str]] = None,
     n_workers: int = 1,
     worker_offset: int = 0,
     keep_old_work: bool = False,
@@ -369,8 +372,8 @@ def build_recipes(
     record_build_failures: bool = False,
     skiplist_leafs: bool = False,
     live_logs: bool = True,
-    exclude: List[str] = None,
-    subdag_depth: int = None,
+    exclude: Optional[List[str]] = None,
+    subdag_depth: Optional[int] = None,
     presolved_mulled_test: bool = True,
     fast_resolve: bool = True,
 ):
@@ -422,18 +425,18 @@ def build_recipes(
 
     # setup linting
     if do_lint:
-        always_exclude = ("build_number_needs_bump",)
+        always_exclude = ["build_number_needs_bump"]
         if not lint_exclude:
             lint_exclude = always_exclude
         else:
-            lint_exclude = tuple(set(lint_exclude) | set(always_exclude))
+            lint_exclude = list(set(lint_exclude) | set(always_exclude))
         linter = lint.Linter(config, recipe_folder, lint_exclude)
     else:
         linter = None
 
     failed = []
 
-    dag, name2recipes = graph.build(recipes, config=config_path, blacklist=blacklist)
+    dag, name2recipes = graph.build(recipes, config=config, blacklist=blacklist)
     if exclude:
         for name in exclude:
             dag.remove_node(name)
@@ -457,7 +460,7 @@ def build_recipes(
         for recipe in recipe_list:
             recipe2name[recipe] = name
 
-    recipes = [
+    recipe_jobs: List[Tuple[str, str]] = [
         (recipe, recipe2name[recipe])
         for package in nx.topological_sort(subdag)
         for recipe in name2recipes[package]
@@ -467,7 +470,7 @@ def build_recipes(
     skipped_recipes = []
     failed_uploads = []
 
-    for recipe, name in recipes:
+    for recipe, name in recipe_jobs:
         platform = utils.RepoData().native_platform()
         if not force and do_not_consider_for_additional_platform(
             recipe_folder, recipe, platform

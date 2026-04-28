@@ -100,7 +100,7 @@ import inspect
 import importlib
 from collections import defaultdict
 from enum import IntEnum
-from typing import Any, Dict, List, NamedTuple, Set, Tuple
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Type, cast
 
 from bioconda_utils.skiplist import Skiplist
 import networkx as nx
@@ -137,7 +137,7 @@ class LintMessage(NamedTuple):
     recipe: _recipe.Recipe
 
     #: The check issuing the message
-    check: "LintCheck"
+    check: Type["LintCheck"]
 
     #: The severity of the message
     severity: Severity = ERROR
@@ -175,13 +175,15 @@ class LintCheckMeta(abc.ABCMeta):
     Handles registry
     """
 
-    registry: List["LintCheck"] = []
+    registry: List[Type["LintCheck"]] = []
 
     def __new__(
         cls, name: str, bases: Tuple[type, ...], namespace: Dict[str, Any], **kwargs
     ) -> type:
         """Creates LintCheck classes"""
-        typ = super().__new__(cls, name, bases, namespace, **kwargs)
+        typ = cast(
+            Type["LintCheck"], super().__new__(cls, name, bases, namespace, **kwargs)
+        )
         if name != "LintCheck":  # don't register base class
             cls.registry.append(typ)
         return typ
@@ -217,7 +219,7 @@ class LintCheck(metaclass=LintCheckMeta):
         #: Messages collected running tests
         self.messages: List[LintMessage] = []
         #: Recipe currently being checked
-        self.recipe: _recipe.Recipe = None
+        self.recipe: Any = None
         #: Whether we are supposed to fix
         self.try_fix: bool = False
 
@@ -244,7 +246,8 @@ class LintCheck(metaclass=LintCheckMeta):
             self.check_source(source, "source")
         elif isinstance(source, list):
             for num, src in enumerate(source):
-                self.check_source(src, f"source/{num}")
+                if isinstance(src, dict):
+                    self.check_source(src, f"source/{num}")
 
         # Run depends checks
         self.check_deps(recipe.get_deps_dict())
@@ -289,11 +292,16 @@ class LintCheck(metaclass=LintCheckMeta):
                 to their locations within the recipe.
         """
 
-    def fix(self, message, data) -> LintMessage:
+    def fix(self, _message, _data, /) -> bool:
         """Attempt to fix the problem"""
+        return False
 
     def message(
-        self, section: str = None, fname: str = None, line: int = None, data: Any = None
+        self,
+        section: Optional[str] = None,
+        fname: Optional[str] = None,
+        line: Optional[int] = None,
+        data: Any = None,
     ) -> None:
         """Add a message to the lint results
 
@@ -309,6 +317,8 @@ class LintCheck(metaclass=LintCheckMeta):
           data: Data to be passed to `fix`. If check can fix, set this to
                 something other than None.
         """
+        if self.recipe is None:
+            raise RuntimeError("LintCheck.message called before a recipe was loaded")
         message = self.make_message(self.recipe, section, fname, line, data is not None)
         if data is not None and self.try_fix and self.fix(message, data):
             return
@@ -318,8 +328,8 @@ class LintCheck(metaclass=LintCheckMeta):
     def make_message(
         cls,
         recipe: _recipe.Recipe,
-        section: str = None,
-        fname: str = None,
+        section: Optional[str] = None,
+        fname: Optional[str] = None,
         line=None,
         canfix: bool = False,
     ) -> LintMessage:
@@ -333,7 +343,7 @@ class LintCheck(metaclass=LintCheckMeta):
                  recipe meta.yaml
           line: If specified, sets the line number for the message directly
         """
-        doc = inspect.getdoc(cls)
+        doc = inspect.getdoc(cls) or ""
         doc = doc.replace("::", ":").replace("``", "`")
         title, _, body = doc.partition("\n")
         if section:
@@ -446,7 +456,7 @@ class unknown_check(LintCheck):
 
 
 #: Maps `_recipe.RecipeError` to `LintCheck`
-recipe_error_to_lint_check = {
+recipe_error_to_lint_check: Dict[type, Type[LintCheck]] = {
     _recipe.DuplicateKey: duplicate_key_in_meta_yaml,
     _recipe.MissingKey: missing_version_or_name,
     _recipe.EmptyRecipe: empty_meta_yaml,
@@ -480,7 +490,7 @@ class Linter:
         self,
         config: Dict,
         recipe_folder: str,
-        exclude: List[str] = None,
+        exclude: Optional[List[str]] = None,
         nocatch: bool = False,
     ) -> None:
         self.config = config
@@ -506,7 +516,7 @@ class Linter:
             raise RuntimeError("Cycle in LintCheck requirements!")
         self.check_instances = {str(check): check(self) for check in get_checks()}
 
-    def get_skiplist(self) -> Set[str]:
+    def get_skiplist(self) -> Skiplist:
         """Loads the skiplist as per linter configuration"""
         return Skiplist(self.config, self.recipe_folder)
 

@@ -2,6 +2,7 @@ from textwrap import dedent
 import tempfile
 import yaml
 import os
+from typing import Dict, List
 
 from conda_index.index import update_index
 
@@ -97,6 +98,7 @@ class Recipes(object):
         else:
             self.data = os.path.join(os.path.dirname(__file__), data)
             self.recipes = yaml.safe_load(open(self.data))
+        self.pkgs: Dict[str, List[str]] = {}
 
     def write_recipes(self):
         basedir = tempfile.mkdtemp()

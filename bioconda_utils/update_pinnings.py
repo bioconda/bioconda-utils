@@ -14,7 +14,7 @@ from .utils import RepoData
 from conda_build.metadata import trim_build_only_deps
 
 # for type checking
-from typing import AbstractSet, List, Set
+from typing import AbstractSet, List, Set, Tuple
 from .recipe import Recipe, RecipeError
 from conda_build.metadata import MetaData
 
@@ -103,6 +103,8 @@ def _have_partially_matching_build_id(meta):
     is_noarch = bool(meta.noarch)
     current_build_id = meta.build_id()
     current_matches = _legacy_build_string_prefixes.match(current_build_id)
+    if current_matches is None:
+        return False
     current_prefixes = current_matches.groupdict()
 
     # conda-build add "special" substrings for some packages to the build
@@ -157,6 +159,8 @@ def _have_partially_matching_build_id(meta):
     #     return False
     def is_matching_trimmed_build_id(build_id, current_build_id):
         matches = _legacy_build_string_prefixes.match(build_id)
+        if matches is None:
+            return False
         trimmed_build_id = build_id
         trimmed_current_build_id = current_build_id
         for prefix_key, prefix in matches.groupdict().items():
@@ -290,11 +294,11 @@ class State(enum.Flag):
 
     def needs_bump(self) -> bool:
         """Checks if the state indicates that the recipe needs to be bumped"""
-        return self & self.BUMP
+        return bool(self & State.BUMP)
 
     def failed(self) -> bool:
         """True if the update pinning check failed"""
-        return self & self.FAIL
+        return bool(self & State.FAIL)
 
 
 allowed_build_string_characters = frozenset(
@@ -314,7 +318,7 @@ def check(
     build_config,
     keep_metas=False,
     skip_variant_keys: AbstractSet[str] = frozenset(),
-) -> State:
+) -> Tuple[State, Recipe]:
     """Determine if a given recipe should have its build number increments
     (bumped) due to a recent change in pinnings.
 

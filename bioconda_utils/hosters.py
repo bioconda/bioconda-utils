@@ -22,10 +22,10 @@ import logging
 import os
 
 from contextlib import redirect_stdout, redirect_stderr
-from distutils.version import LooseVersion
+from setuptools._distutils.version import LooseVersion
 from html.parser import HTMLParser
 from itertools import chain
-from typing import Any, Dict, List, Match, Mapping, Pattern, Set, Tuple, Type, Optional
+from typing import Any, Dict, List, Match, Optional, Pattern, Set, Tuple, Type, cast
 from urllib.parse import urljoin
 
 import regex as re
@@ -82,7 +82,7 @@ class HosterMeta(abc.ABCMeta):
     we leave the option to add functions to a Hoster.
     """
 
-    hoster_types: List["HosterMeta"] = []
+    hoster_types: List[Type["Hoster"]] = []
 
     def __new__(
         cls, name: str, bases: Tuple[type, ...], namespace: Dict[str, Any], **kwargs
@@ -93,7 +93,7 @@ class HosterMeta(abc.ABCMeta):
         - compiles ``{var}_pattern`` attributes to ``{var}_re``
         - registers complete classes
         """
-        typ = super().__new__(cls, name, bases, namespace, **kwargs)
+        typ = cast(Type["Hoster"], super().__new__(cls, name, bases, namespace, **kwargs))
 
         if inspect.isabstract(typ):
             return typ
@@ -164,7 +164,9 @@ class Hoster(metaclass=HosterMeta):
         "matches upstream package url"
 
     #: will be generated as each class is created
-    url_re: Pattern[str] = None
+    url_re: Optional[Pattern[str]] = None
+    link_pattern_compiled: str
+    expanded_assets_pattern_compiled: str
 
     @property
     @abc.abstractmethod
@@ -200,16 +202,17 @@ class Hoster(metaclass=HosterMeta):
                 return None
         else:
             klass = cls
+        if klass.url_re is None:
+            return None
         match = klass.url_re.search(url)
         if match:
             return klass(url, match)
         return None
 
-    @classmethod
     @abc.abstractmethod
-    def get_versions(
-        cls, req: "AsyncRequests", orig_version: str
-    ) -> List[Mapping[str, Any]]:
+    async def get_versions(
+        self, req: "AsyncRequests", orig_version: str
+    ) -> List[Dict[str, Any]]:
         "Gets list of versions from upstream hosting site"
 
 
@@ -219,16 +222,18 @@ class HrefParser(HTMLParser):
     def __init__(self, link_re: Pattern[str]) -> None:
         super().__init__()
         self.link_re = link_re
-        self.matches: List[Mapping[str, Any]] = []
+        self.matches: List[Dict[str, Any]] = []
 
-    def get_matches(self) -> List[Mapping[str, Any]]:
+    def get_matches(self) -> List[Dict[str, Any]]:
         """Return matches found for **link_re** in href links"""
         return self.matches
 
-    def handle_starttag(self, tag: str, attrs: List[Tuple[str, str]]) -> None:
+    def handle_starttag(
+        self, tag: str, attrs: List[Tuple[str, Optional[str]]]
+    ) -> None:
         if tag == "a":
             for key, val in attrs:
-                if key == "href":
+                if key == "href" and val is not None:
                     self.handle_a_href(val)
                     break
 
@@ -250,16 +255,18 @@ class IncludeFragmentParser(HTMLParser):
     def __init__(self, link_re: Pattern[str]) -> None:
         super().__init__()
         self.link_re = link_re
-        self.matches: List[Mapping[str, Any]] = []
+        self.matches: List[Dict[str, Any]] = []
 
-    def get_matches(self) -> List[Mapping[str, Any]]:
+    def get_matches(self) -> List[Dict[str, Any]]:
         """Return matches found for **link_re** in href links"""
         return self.matches
 
-    def handle_starttag(self, tag: str, attrs: List[Tuple[str, str]]) -> None:
+    def handle_starttag(
+        self, tag: str, attrs: List[Tuple[str, Optional[str]]]
+    ) -> None:
         if tag == "include-fragment":
             for key, val in attrs:
-                if key == "src":
+                if key == "src" and val is not None:
                     self.handle_a_href(val)
                     break
 
@@ -842,7 +849,7 @@ class CPAN(JSONHoster):
 class CRAN(JSONHoster):
     """R packages hosted on r-project.org (CRAN)"""
 
-    async def get_versions_from_json(self, data, _, orig_version):
+    async def get_versions_from_json(self, data, req, orig_version):
         res = []
         versions = list(set((str(data["latest"]), self.vals["version"], orig_version)))
         for vers in versions:

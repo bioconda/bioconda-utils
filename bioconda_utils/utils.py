@@ -27,7 +27,7 @@ from collections import Counter, defaultdict, namedtuple, deque
 from collections.abc import Iterable
 from itertools import product, chain, groupby, zip_longest
 from functools import partial
-from typing import Sequence, Collection, List, Dict, Any, Union
+from typing import Optional, Sequence, Collection, List, Dict, Any, Union, cast
 from multiprocessing import Pool
 from multiprocessing.pool import ThreadPool
 
@@ -62,7 +62,7 @@ from jsonschema import validate
 from colorlog import ColoredFormatter
 from boltons.funcutils import FunctionBuilder
 
-conda.gateways.logging.initialize_logging = lambda: None
+cast(Any, conda.gateways.logging).initialize_logging = lambda: None
 
 logger = logging.getLogger(__name__)
 
@@ -179,7 +179,11 @@ class LogFuncFilter:
     """
 
     def __init__(
-        self, func, trunc_msg: str = None, max_lines: int = 0, consecutive: bool = True
+        self,
+        func,
+        trunc_msg: Optional[str] = None,
+        max_lines: int = 0,
+        consecutive: bool = True,
     ) -> None:
         self.func = func
         self.max_lines = max_lines + 1
@@ -223,7 +227,7 @@ class LoggingSourceRenameFilter:
 def setup_logger(
     name: str = "bioconda_utils",
     loglevel: Union[str, int] = logging.INFO,
-    logfile: str = None,
+    logfile: Optional[str] = None,
     logfile_level: Union[str, int] = logging.DEBUG,
     log_command_max_lines=None,
     prefix: str = "BIOCONDA ",
@@ -325,9 +329,7 @@ def ellipsize_recipes(
     if not recipes or len(recipes) > m:
         return ""
     if len(recipes) > n:
-        if not isinstance(recipes, Sequence):
-            recipes = list(recipes)
-        recipes = recipes[:n]
+        recipes = list(recipes)[:n]
         append = ", ..."
     else:
         append = ""
@@ -542,7 +544,10 @@ def load_conda_build_config(platform=None, trim_skip=True):
     config = api.Config(no_download_source=True, set_build_id=False)
 
     # get environment root
-    env_root = PurePath(shutil.which("bioconda-utils")).parents[1]
+    bioconda_utils_bin = shutil.which("bioconda-utils")
+    if bioconda_utils_bin is None:
+        raise FileNotFoundError("Unable to find bioconda-utils on PATH")
+    env_root = PurePath(bioconda_utils_bin).parents[1]
     # set path to pinnings from conda forge package
     config.exclusive_config_files = [
         os.path.join(env_root, "conda_build_config.yaml"),
@@ -550,11 +555,12 @@ def load_conda_build_config(platform=None, trim_skip=True):
             os.path.dirname(__file__), "bioconda_utils-conda_build_config.yaml"
         ),
     ]
-    for cfg in chain(config.exclusive_config_files, config.variant_config_files or []):
+    variant_config_files = getattr(config, "variant_config_files", None) or []
+    for cfg in chain(config.exclusive_config_files, variant_config_files):
         assert os.path.exists(cfg), "error: {0} does not exist".format(cfg)
     if platform:
         config.platform = platform
-    config.trim_skip = trim_skip
+    setattr(config, "trim_skip", trim_skip)
     return config
 
 
@@ -613,15 +619,15 @@ def temp_os(platform):
 
 def run(
     cmds: List[str],
-    env: Dict[str, str] = None,
-    mask: List[str] = None,
+    env: Optional[Dict[str, str]] = None,
+    mask: Optional[Union[List[str], bool]] = None,
     mask_envvars: bool = False,
     live: bool = False,
     mylogger: logging.Logger = logger,
     loglevel: int = logging.INFO,
     check=True,
     quiet_failure=False,
-    **kwargs: Dict[Any, Any],
+    **kwargs: Any,
 ) -> sp.CompletedProcess:
     """
     Run a command (with logging, masking, etc)
@@ -668,8 +674,9 @@ def run(
         if mask is False:
             # masking has been deactivated
             return arg
-        for mitem in mask:
-            arg = arg.replace(mitem, "<hidden>")
+        if isinstance(mask, list):
+            for mitem in mask:
+                arg = arg.replace(mitem, "<hidden>")
         return arg
 
     mylogger.log(loglevel, "(COMMAND) %s", " ".join(do_mask(arg) for arg in cmds))
@@ -749,6 +756,7 @@ def run(
                 proc.kill()
                 proc.wait()
         returncode = proc.poll()
+        assert returncode is not None
 
         if returncode:
             if not quiet_failure:
@@ -936,7 +944,7 @@ def get_recipes(recipe_folder, package="*", exclude=None):
                     meta_yaml_found_or_excluded = True
                     yield dir_path
             if not meta_yaml_found_or_excluded and os.path.isdir(new_dir):
-                logger.warn(
+                logger.warning(
                     "No meta.yaml found in %s."
                     " If you want to ignore this directory, add it to the blacklist.",
                     new_dir,
@@ -1560,6 +1568,7 @@ class RepoData:
     @property
     def channels(self):
         """Return channels to load."""
+        assert self.config is not None
         return self.config["channels"]
 
     @property
@@ -1752,7 +1761,7 @@ def get_github_client():
             os.environ["GITHUB_TOKEN"],
             retry=Retry(total=10, status_forcelist=(500, 502, 504), backoff_factor=0.3),
         )
-    logger.warn("GITHUB_TOKEN not found, restrictions may be enforced by GitHub API")
+    logger.warning("GITHUB_TOKEN not found, restrictions may be enforced by GitHub API")
     return Github(
         retry=Retry(total=10, status_forcelist=(500, 502, 504), backoff_factor=0.3),
     )

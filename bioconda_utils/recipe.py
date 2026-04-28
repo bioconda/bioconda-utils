@@ -19,11 +19,10 @@ from collections import defaultdict
 from contextlib import redirect_stdout, redirect_stderr
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, List, Sequence, Tuple, Optional, Pattern
+from typing import Any, Dict, List, Sequence, Optional, Pattern, Union, cast, overload, Literal
 
 
 import conda_build.api
-from conda_build.metadata import MetaData
 
 import jinja2
 
@@ -163,7 +162,7 @@ class Recipe:
 
         # Filled in by render()
         #: Parsed recipe YAML
-        self.meta: Dict[str, Any] = {}
+        self.meta: Any = {}
 
         self.conda_build_config: str = ""
         self.build_scripts: Dict[str, str] = {}
@@ -181,7 +180,7 @@ class Recipe:
         self.data: Dict[str, Any] = {}
 
         # for conda_render() and conda_release()
-        self._conda_meta = None
+        self._conda_meta: Any = None
         self._conda_tempdir = None
 
     @property
@@ -240,7 +239,21 @@ class Recipe:
             self.build_scripts[script] = content
 
     @classmethod
-    def from_file(cls, recipe_dir, recipe_fname, return_exceptions=False) -> "Recipe":
+    @overload
+    def from_file(
+        cls, recipe_dir, recipe_fname, return_exceptions: Literal[False] = False
+    ) -> "Recipe": ...
+
+    @classmethod
+    @overload
+    def from_file(
+        cls, recipe_dir, recipe_fname, return_exceptions: Literal[True]
+    ) -> Union["Recipe", Exception]: ...
+
+    @classmethod
+    def from_file(
+        cls, recipe_dir, recipe_fname, return_exceptions=False
+    ) -> Union["Recipe", Exception]:
         """Create new `Recipe` object from file
 
         Args:
@@ -722,7 +735,7 @@ class Recipe:
         finalize=True,
         permit_unsatisfiable_variants=False,
         **kwargs,
-    ) -> List[Tuple[MetaData, bool, bool]]:
+    ) -> Any:
         """Handles calling conda_build.api.render
 
         ``conda_build.api.render`` is fragile, loud and slow. Avoid using this
@@ -791,7 +804,7 @@ class Recipe:
             def new_exit(args=None):
                 raise SystemExit(args)
 
-            sys.exit = new_exit
+            cast(Any, sys).exit = new_exit
 
         try:
             with open("/dev/null", "w") as devnull:
@@ -820,7 +833,7 @@ class Recipe:
                 self, f"Unknown SystemExit raised in Conda-Build Render API: '{msg}'"
             )
         finally:
-            sys.exit = old_exit
+            cast(Any, sys).exit = old_exit
         return self._conda_meta
 
     def conda_release(self):
