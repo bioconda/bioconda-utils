@@ -5,13 +5,12 @@ import atexit
 import logging
 import os
 import re
-import tempfile
 import subprocess
-from typing import List, Optional, Union
+import tempfile
+from typing import BinaryIO, List, Optional, Protocol, Union
 
 import git
 import yaml
-
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -51,6 +50,18 @@ def install_gpg_key(key) -> str:
 
 class GitHandlerFailure(Exception):
     """Something went wrong interacting with git"""
+
+
+class GitBlob(Protocol):
+    """Subset of GitPython Blob used when reading file contents."""
+
+    @property
+    def data_stream(self) -> BinaryIO: ...
+
+
+def read_git_blob_text(blob: GitBlob) -> str:
+    """Read a GitPython blob as UTF-8 text."""
+    return blob.data_stream.read().decode("utf-8")
 
 
 class GitHandlerBase:
@@ -246,7 +257,7 @@ class GitHandlerBase:
         commit = getattr(branch, "commit", branch)
         blob = commit.tree / rel_file_name
         if blob:
-            return blob.data_stream.read().decode("utf-8")
+            return read_git_blob_text(blob)
 
         logger.error(
             "File %s not found on branch %s commit %s", rel_file_name, branch, commit

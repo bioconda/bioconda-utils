@@ -27,6 +27,7 @@ import conda_build.api
 import jinja2
 
 from ruamel.yaml import YAML
+from ruamel.yaml.comments import CommentedMap
 from ruamel.yaml.constructor import DuplicateKeyError
 
 from . import utils
@@ -162,7 +163,7 @@ class Recipe:
 
         # Filled in by render()
         #: Parsed recipe YAML
-        self.meta: Any = {}
+        self.meta: CommentedMap = CommentedMap()
 
         self.conda_build_config: str = ""
         self.build_scripts: Dict[str, str] = {}
@@ -395,7 +396,7 @@ class Recipe:
         """
         yaml_text = self.get_template().render(self.JINJA_VARS)
         try:
-            self.meta = yaml.load(yaml_text)
+            meta = yaml.load(yaml_text)
         except DuplicateKeyError as err:
             line = err.problem_mark.line + 1
             column = err.problem_mark.column + 1
@@ -406,11 +407,15 @@ class Recipe:
             )
             if yaml_text:
                 try:
-                    self.meta = yaml.load(yaml_text)
+                    meta = yaml.load(yaml_text)
                 except DuplicateKeyError:
                     raise DuplicateKey(self, line=line, column=column)
             else:
                 raise DuplicateKey(self, line=line, column=column)
+
+        if not isinstance(meta, CommentedMap):
+            raise MissingKey(self)
+        self.meta = meta
 
         if (
             "package" not in self.meta

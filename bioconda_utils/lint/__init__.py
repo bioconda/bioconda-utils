@@ -219,9 +219,20 @@ class LintCheck(metaclass=LintCheckMeta):
         #: Messages collected running tests
         self.messages: List[LintMessage] = []
         #: Recipe currently being checked
-        self.recipe: Any = None
+        self._recipe: Optional[_recipe.Recipe] = None
         #: Whether we are supposed to fix
         self.try_fix: bool = False
+
+    @property
+    def recipe(self) -> _recipe.Recipe:
+        """Recipe currently being checked."""
+        if self._recipe is None:
+            raise RuntimeError("LintCheck.recipe accessed before a recipe was loaded")
+        return self._recipe
+
+    @recipe.setter
+    def recipe(self, recipe: _recipe.Recipe) -> None:
+        self._recipe = recipe
 
     def __str__(self):
         return self.__class__.__name__
@@ -317,8 +328,6 @@ class LintCheck(metaclass=LintCheckMeta):
           data: Data to be passed to `fix`. If check can fix, set this to
                 something other than None.
         """
-        if self.recipe is None:
-            raise RuntimeError("LintCheck.message called before a recipe was loaded")
         message = self.make_message(self.recipe, section, fname, line, data is not None)
         if data is not None and self.try_fix and self.fix(message, data):
             return
