@@ -237,7 +237,7 @@ class Scanner(AsyncPipeline[Recipe]):
         #: async requests helper
         self.req = AsyncRequests(cache_fn)
 
-    def run(self) -> Optional[bool]:
+    def run(self) -> None:
         """Runs scanner"""
         logger.info("Running pipeline with these steps:")
         for n, filt in enumerate(self.filters):
@@ -260,10 +260,10 @@ class Scanner(AsyncPipeline[Recipe]):
     def get_item_count(self):
         return self.recipe_source.get_item_count()
 
-    async def _async_run(self) -> Optional[bool]:
+    async def _async_run(self) -> None:
         """Runner within async loop"""
         async with self.req:
-            return await super()._async_run()
+            await super()._async_run()
 
     async def process(self, item: Recipe) -> bool:
         """Applies the filters to a recipe"""

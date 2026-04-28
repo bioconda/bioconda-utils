@@ -93,7 +93,9 @@ class HosterMeta(abc.ABCMeta):
         - compiles ``{var}_pattern`` attributes to ``{var}_re``
         - registers complete classes
         """
-        typ = cast(Type["Hoster"], super().__new__(cls, name, bases, namespace, **kwargs))
+        typ = cast(
+            Type["Hoster"], super().__new__(cls, name, bases, namespace, **kwargs)
+        )
 
         if inspect.isabstract(typ):
             return typ
@@ -228,9 +230,7 @@ class HrefParser(HTMLParser):
         """Return matches found for **link_re** in href links"""
         return self.matches
 
-    def handle_starttag(
-        self, tag: str, attrs: List[Tuple[str, Optional[str]]]
-    ) -> None:
+    def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
         if tag == "a":
             for key, val in attrs:
                 if key == "href" and val is not None:
@@ -261,9 +261,7 @@ class IncludeFragmentParser(HTMLParser):
         """Return matches found for **link_re** in href links"""
         return self.matches
 
-    def handle_starttag(
-        self, tag: str, attrs: List[Tuple[str, Optional[str]]]
-    ) -> None:
+    def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
         if tag == "include-fragment":
             for key, val in attrs:
                 if key == "src" and val is not None:

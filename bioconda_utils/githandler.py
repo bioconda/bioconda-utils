@@ -247,7 +247,7 @@ class GitHandlerBase:
     def get_latest_master(self):
         return self.home_remote.fetch("master")[0].commit
 
-    def read_from_branch(self, branch, file_name: str) -> Optional[str]:
+    def read_from_branch(self, branch, file_name: str) -> str:
         """Reads contents of file **file_name** from git branch **branch**"""
         abs_file_name = os.path.abspath(file_name)
         abs_repo_root = os.path.abspath(self.repo.working_dir)
@@ -259,21 +259,23 @@ class GitHandlerBase:
         if blob:
             return read_git_blob_text(blob)
 
-        logger.error(
-            "File %s not found on branch %s commit %s", rel_file_name, branch, commit
+        raise GitHandlerFailure(
+            f"File {rel_file_name} not found on branch {branch} commit {commit}"
         )
-        return None
 
     def create_local_branch(
         self, branch_name: str, remote_branch: Optional[str] = None
     ):
         """Creates local branch from remote **branch_name**"""
+        remote_branch_name = remote_branch or branch_name
         if remote_branch is None:
             remote_branch = self.get_remote_branch(branch_name, try_fetch=False)
         else:
             remote_branch = self.get_remote_branch(remote_branch, try_fetch=False)
         if remote_branch is None:
-            return None
+            raise GitHandlerFailure(
+                f"Unable to find remote branch {remote_branch_name}"
+            )
         self.repo.create_head(branch_name, remote_branch)
         return self.get_local_branch(branch_name)
 
@@ -293,10 +295,12 @@ class GitHandlerBase:
                the first argument to ``git merge-base``.
 
         Returns:
-          The first merge base for the two references provided if found.
-          May return `None` if no merge base was found. This may for
-          example be the case if branches were deleted or if the
-          repository is shallow and the merge base commit not available.
+          The first merge base for the two references provided.
+
+        Raises:
+          GitHandlerFailure: If no merge base was found. This may for
+          example happen if branches were deleted or if the repository is
+          shallow and the merge base commit is not available.
         """
         if not ref:
             ref = self.repo.active_branch.commit
@@ -314,8 +318,7 @@ class GitHandlerBase:
                 "No merge base found for %s and master at depth %i", ref, depth
             )
         else:
-            logger.error("No merge base found for %s and master", ref)
-            return None  # FIXME: This should raise
+            raise GitHandlerFailure(f"No merge base found for {ref} and master")
         if len(merge_bases) > 1:
             logger.error(
                 "Multiple merge bases found for %s and master: %s", ref, merge_bases
@@ -466,16 +469,14 @@ class BiocondaRepoMixin(GitHandlerBase):
             branch = self.get_local_branch(ref)
         else:
             branch = ref
+        if branch is None:
+            raise GitHandlerFailure(f"Unable to resolve branch {ref}")
         config_data = self.read_from_branch(branch, self.config_file)
-        if config_data is None:
-            raise GitHandlerFailure(f"Unable to read {self.config_file} from {branch}")
         config = yaml.safe_load(config_data)
         blacklists = config["blacklists"]
         blacklisted = set()
         for blacklist in blacklists:
             blacklist_data = self.read_from_branch(branch, blacklist)
-            if blacklist_data is None:
-                raise GitHandlerFailure(f"Unable to read {blacklist} from {branch}")
             for line in blacklist_data.splitlines():
                 if line.startswith("#") or not line.strip():
                     continue

@@ -126,7 +126,7 @@ class AsyncPipeline(Generic[ITEM]):
         await asyncio.gather(*tasks, return_exceptions=True)
         self.loop.stop()
 
-    def run(self) -> Optional[bool]:
+    def run(self) -> None:
         """Enters the asyncio loop and manages shutdown."""
         # We need to handle KeyboardInterrupt "manually" to get clean shutdown
         # for the ProcessPoolExecutor
@@ -153,7 +153,7 @@ class AsyncPipeline(Generic[ITEM]):
     def get_item_count(self) -> int:
         return 0
 
-    async def _async_run(self) -> Optional[bool]:
+    async def _async_run(self) -> None:
         """Runner within async loop"""
         # call init functions on filters
         await asyncio.gather(*(filt.async_init() for filt in self.filters))

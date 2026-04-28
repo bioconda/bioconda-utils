@@ -19,7 +19,18 @@ from collections import defaultdict
 from contextlib import redirect_stdout, redirect_stderr
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, List, Sequence, Optional, Pattern, Union, cast, overload, Literal
+from typing import (
+    Any,
+    Dict,
+    List,
+    Sequence,
+    Optional,
+    Pattern,
+    Union,
+    cast,
+    overload,
+    Literal,
+)
 
 
 import conda_build.api
