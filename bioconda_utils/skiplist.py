@@ -4,7 +4,7 @@ from bioconda_utils.recipe import Recipe
 
 
 class Skiplist:
-    def __init__(self, config: Dict[str, Any], recipe_folder: str):
+    def __init__(self, config: Dict[str, Any], recipe_folder: str) -> None:
         self.recipe_folder = recipe_folder
         self.global_list = set()
         for p in config.get("blacklists", []):
@@ -16,7 +16,7 @@ class Skiplist:
                 ]
             )
 
-    def _get_reldir(self, recipe_path: str):
+    def _get_reldir(self, recipe_path: str) -> str:
         return os.path.relpath(recipe_path, self.recipe_folder)
 
     def is_skiplisted(self, recipe: Union[str, Recipe]) -> bool:

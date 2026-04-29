@@ -2,24 +2,24 @@
 Conda Skeleton for Bioconductor Recipes
 """
 
-import shutil
-import tempfile
-from textwrap import dedent
-import tarfile
-import os
-import sys
-import re
-from collections import OrderedDict
-import logging
+import itertools
 import json
+import logging
+import os
+import re
+import shutil
+import sys
+import tarfile
+import tempfile
+from collections import OrderedDict
 from datetime import date
+from textwrap import dedent
 from typing import Any, Optional
 
+import networkx as nx
 import pyaml
 import requests
 import yaml
-import networkx as nx
-import itertools
 
 from . import utils
 
@@ -671,7 +671,7 @@ class BioCProjectPage(object):
     @property
     def title(self):
         """
-        The Title section fromt he VIEW file
+        The Title section fromt the VIEW file
         """
         return self.packages[self.package]["Title"]
 

@@ -1,5 +1,7 @@
 """Deprecated packages and syntax"""
 
+from typing import Any, Dict, List
+
 from . import LintCheck
 
 
@@ -10,11 +12,11 @@ class uses_perl_threaded(LintCheck):
 
     """
 
-    def check_deps(self, deps):
+    def check_deps(self, deps: Dict[str, List[str]]) -> None:
         if "perl-threaded" in deps:
             self.message(data=True)
 
-    def fix(self, _message, _data):
+    def fix(self, _message: Any, _data: Any) -> bool:
         self.recipe.replace("perl-threaded", "perl", within=("requirements", "outputs"))
         self.recipe.render()
         return True
@@ -27,11 +29,11 @@ class uses_javajdk(LintCheck):
 
     """
 
-    def check_deps(self, deps):
+    def check_deps(self, deps: Dict[str, List[str]]) -> None:
         if "java-jdk" in deps:
             self.message(data=True)
 
-    def fix(self, _message, _data):
+    def fix(self, _message: Any, _data: Any) -> bool:
         self.recipe.replace("java-jdk", "openjdk", within=("requirements", "outputs"))
         return True
 
@@ -43,7 +45,7 @@ class deprecated_numpy_spec(LintCheck):
 
     """
 
-    def check_deps(self, deps):
+    def check_deps(self, deps: Dict[str, List[str]]) -> None:
         if "numpy" not in deps:
             return
         for path in deps["numpy"]:
@@ -51,7 +53,7 @@ class deprecated_numpy_spec(LintCheck):
             if "x.x" in line:
                 self.message(section=path, data=True)
 
-    def fix(self, _message, _data):
+    def fix(self, _message: Any, _data: Any) -> bool:
         self.recipe.replace("numpy x.x", "numpy", within=("requirements", "outputs"))
         return True
 
@@ -64,11 +66,11 @@ class uses_matplotlib(LintCheck):
 
     """
 
-    def check_deps(self, deps):
+    def check_deps(self, deps: Dict[str, List[str]]) -> None:
         if "matplotlib" in deps:
             self.message(data=True)
 
-    def fix(self, _message, _data):
+    def fix(self, _message: Any, _data: Any) -> bool:
         self.recipe.replace(
             "matplotlib", "matplotlib-base", within=("requirements", "outputs")
         )

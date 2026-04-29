@@ -1530,11 +1530,9 @@ def annotate_build_failures(
 # in case of version subdirs, only list if the latest version also has the build failure record.
 # list how many recipes depend on this and sort by it primarily if inner
 @recipe_folder_and_config()
-@arg("--channel", help="Channel with packages to check", default="bioconda")
-@arg(
-    "--output-format", help="Output format", choices=["txt", "markdown"], default="txt"
-)
-@arg("--link-prefix", help="Prefix for links to build failures", default="")
+@arg("--channel", help="Channel with packages to check")
+@arg("--output-format", help="Output format", choices=["txt", "markdown"])
+@arg("--link-prefix", help="Prefix for links to build failures")
 @arg(
     "--git-range",
     nargs="+",
@@ -1543,13 +1541,13 @@ def annotate_build_failures(
      include uncommitted changes).""",
 )
 def list_build_failures(
-    recipe_folder,
-    config,
-    channel=None,
-    output_format=None,
-    link_prefix=None,
-    git_range=None,
-):
+    recipe_folder: str,
+    config: dict,
+    channel: str = "bioconda",
+    output_format: str = "txt",
+    link_prefix: str = "",
+    git_range: Optional[List[str]] = None,
+) -> None:
     """List recipes with build failure records"""
 
     df = collect_build_failure_dataframe(

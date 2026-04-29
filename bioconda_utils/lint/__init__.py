@@ -160,7 +160,7 @@ class LintMessage(NamedTuple):
     #: Whether the problem can be auto fixed
     canfix: bool = False
 
-    def get_level(self):
+    def get_level(self) -> str:
         """Return level string as required by github"""
         if self.severity < WARNING:
             return "notice"
@@ -188,14 +188,14 @@ class LintCheckMeta(abc.ABCMeta):
             cls.registry.append(typ)
         return typ
 
-    def __str__(cls):
+    def __str__(cls) -> str:
         return cls.__name__
 
 
 _checks_loaded = False
 
 
-def get_checks():
+def get_checks() -> List[Type["LintCheck"]]:
     """Loads and returns the available lint checks"""
     global _checks_loaded
     if not _checks_loaded:
@@ -234,7 +234,7 @@ class LintCheck(metaclass=LintCheckMeta):
     def recipe(self, recipe: _recipe.Recipe) -> None:
         self._recipe = recipe
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.__class__.__name__
 
     def run(self, recipe: _recipe.Recipe, fix: bool = False) -> List[LintMessage]:
@@ -254,11 +254,11 @@ class LintCheck(metaclass=LintCheckMeta):
         # Run per source checks
         source = recipe.get("source", None)
         if isinstance(source, dict):
-            self.check_source(source, "source")
+            self.check_source(cast(Dict[str, Any], source), "source")
         elif isinstance(source, list):
             for num, src in enumerate(source):
                 if isinstance(src, dict):
-                    self.check_source(src, f"source/{num}")
+                    self.check_source(cast(Dict[str, Any], src), f"source/{num}")
 
         # Run depends checks
         self.check_deps(recipe.get_deps_dict())
@@ -275,7 +275,7 @@ class LintCheck(metaclass=LintCheckMeta):
           recipe: The recipe under test.
         """
 
-    def check_source(self, source: Dict, section: str) -> None:
+    def check_source(self, source: Dict[str, Any], section: str) -> None:
         """Execute check on each source
 
         Args:
@@ -339,7 +339,7 @@ class LintCheck(metaclass=LintCheckMeta):
         recipe: _recipe.Recipe,
         section: Optional[str] = None,
         fname: Optional[str] = None,
-        line=None,
+        line: Optional[int] = None,
         canfix: bool = False,
     ) -> LintMessage:
         """Create a LintMessage
@@ -518,7 +518,7 @@ class Linter:
         )
         self.checks_dag = dag
 
-    def order_and_load_checks(self):
+    def order_and_load_checks(self) -> None:
         try:
             self.checks_ordered = reversed(list(nx.topological_sort(self.checks_dag)))
         except nx.NetworkXUnfeasible:
@@ -533,7 +533,7 @@ class Linter:
         """Returns the lint messages collected during linting"""
         return self._messages
 
-    def clear_messages(self):
+    def clear_messages(self) -> None:
         """Clears the lint messages stored in linter"""
         self._messages = []
 
@@ -543,7 +543,7 @@ class Linter:
             for msg in self.get_messages()
         )
 
-    def load_skips(self):
+    def load_skips(self) -> Dict[str, List[str]]:
         """Parses lint skips
 
         If :envvar:`LINT_SKIP` or the most recent commit contains ``[

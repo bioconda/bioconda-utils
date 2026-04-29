@@ -4,6 +4,8 @@ Verify that the recipe is not missing anything essential.
 """
 
 import os
+from typing import Any, Dict
+
 from . import LintCheck, _recipe
 
 
@@ -16,7 +18,7 @@ class missing_build_number(LintCheck):
             number: 0
     """
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         if not recipe.get("build/number", ""):
             self.message(section="build")
 
@@ -31,7 +33,7 @@ class missing_home(LintCheck):
 
     """
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         if not recipe.get("about/home", ""):
             self.message(section="about")
 
@@ -46,7 +48,7 @@ class missing_summary(LintCheck):
 
     """
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         if not recipe.get("about/summary", ""):
             self.message(section="about")
 
@@ -61,7 +63,7 @@ class missing_license(LintCheck):
 
     """
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         if not recipe.get("about/license", ""):
             self.message(section="about")
 
@@ -93,7 +95,7 @@ class missing_tests(LintCheck):
 
     test_files = ["run_test.py", "run_test.sh", "run_test.pl"]
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         if any(os.path.exists(os.path.join(recipe.dir, f)) for f in self.test_files):
             return
         # if multiple `outputs:` are specified, we check that
@@ -141,6 +143,6 @@ class missing_hash(LintCheck):
 
     checksum_names = ("md5", "sha1", "sha256")
 
-    def check_source(self, source, section):
+    def check_source(self, source: Dict[str, Any], section: str) -> None:
         if not any(source.get(chk) for chk in self.checksum_names):
             self.message(section=section)
