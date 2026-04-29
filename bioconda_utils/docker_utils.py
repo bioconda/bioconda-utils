@@ -55,8 +55,7 @@ import grp
 from importlib.resources import files, as_file
 import re
 from packaging.version import Version
-from typing import Dict, Optional, Protocol
-
+from typing import Protocol
 
 from conda import exports as conda_exports
 
@@ -128,7 +127,6 @@ HOST_USER={self.user_info[uid]}
 chown $HOST_USER:$HOST_USER {self.container_staging}/{arch}/*
 """  # noqa: E501,E122: line too long, continuation line missing indentation or outdented
 
-
 # ----------------------------------------------------------------------------
 # DOCKERFILE_TEMPLATE
 # ----------------------------------------------------------------------------
@@ -158,21 +156,21 @@ class DockerBuildError(Exception):
     pass
 
 
-class RecipeBuilder(object):
+class RecipeBuilder:
     def __init__(
         self,
         tag: str = "tmp-bioconda-builder",
         container_recipe: str = "/opt/recipe",
         container_staging: str = "/opt/host-conda-bld",
-        requirements: Optional[str] = None,
+        requirements: str | None = None,
         build_script_template: str = BUILD_SCRIPT_TEMPLATE,
         dockerfile_template: str = DOCKERFILE_TEMPLATE,
         use_host_conda_bld: bool = False,
-        pkg_dir: Optional[str] = None,
+        pkg_dir: str | None = None,
         keep_image: bool = False,
         build_image: bool = False,
-        image_build_dir: Optional[str] = None,
-        docker_base_image: Optional[str] = None,
+        image_build_dir: str | None = None,
+        docker_base_image: str | None = None,
     ) -> None:
         """
         Class to handle building a custom docker container that can be used for
@@ -308,20 +306,19 @@ class RecipeBuilder(object):
         self, staging_prefix: str, i: int, config_file: CondaBuildConfigFile
     ) -> str:
         src_basename = os.path.basename(config_file.path)
-        dst_basename = "conda_build_config_{}_{}_{}".format(
-            i, config_file.arg, src_basename
-        )
+        dst_basename = f"conda_build_config_{i}_{config_file.arg}_{src_basename}"
         return os.path.join(staging_prefix, dst_basename)
 
     def __del__(self) -> None:
         self.cleanup()
 
-    def _find_proxy_settings(self) -> Dict[str, str]:
+    def _find_proxy_settings(self) -> dict[str, str]:
         res = {}
         for var in ("http_proxy", "https_proxy"):
-            values = set(
-                [os.environ.get(var, None), os.environ.get(var.upper(), None)]
-            ).difference([None])
+            values = {
+                os.environ.get(var, None),
+                os.environ.get(var.upper(), None),
+            }.difference([None])
             if len(values) == 1:
                 res[var] = next(iter(values))
             elif len(values) > 1:
@@ -341,7 +338,9 @@ class RecipeBuilder(object):
             build_dir = self.image_build_dir
 
         logger.info(
-            'DOCKER: Building image "%s" from %s', self.docker_temp_image, build_dir
+            'DOCKER: Building image "%s" from %s',
+            self.docker_temp_image,
+            build_dir,
         )
         with open(os.path.join(build_dir, "requirements.txt"), "w") as fout:
             if self.requirements:
@@ -351,12 +350,10 @@ class RecipeBuilder(object):
                 with as_file(
                     files("bioconda_utils") / "bioconda_utils-requirements.txt"
                 ) as req_path:
-                    with open(req_path, "r", encoding="utf-8") as fh:
+                    with open(req_path, encoding="utf-8") as fh:
                         fout.write(fh.read())
 
-        proxies = "\n".join(
-            "ENV {} {}".format(k, v) for k, v in self._find_proxy_settings()
-        )
+        proxies = "\n".join(f"ENV {k} {v}" for k, v in self._find_proxy_settings())
 
         with open(os.path.join(build_dir, "Dockerfile"), "w") as fout:
             fout.write(
@@ -424,7 +421,7 @@ class RecipeBuilder(object):
         self,
         recipe_dir: str,
         build_args: str,
-        env: Dict[str, str],
+        env: dict[str, str],
         noarch: bool = False,
         live_logs: bool = True,
     ) -> sp.CompletedProcess:
@@ -478,10 +475,10 @@ class RecipeBuilder(object):
         env_list = []
         for k, v in env.items():
             env_list.append("-e")
-            env_list.append("{0}={1}".format(k, v))
+            env_list.append(f"{k}={v}")
 
         env_list.append("-e")
-        env_list.append("{0}={1}".format("HOST_USER_ID", self.user_info["uid"]))
+        env_list.append("{}={}".format("HOST_USER_ID", self.user_info["uid"]))
 
         cmd = [
             "docker",
@@ -491,11 +488,11 @@ class RecipeBuilder(object):
             "host",
             "--rm",
             "-v",
-            "{0}:/opt/build_script.bash".format(build_script),
+            f"{build_script}:/opt/build_script.bash",
             "-v",
-            "{0}:{1}".format(self.pkg_dir, self.container_staging),
+            f"{self.pkg_dir}:{self.container_staging}",
             "-v",
-            "{0}:{1}".format(recipe_dir, self.container_recipe),
+            f"{recipe_dir}:{self.container_recipe}",
         ]
         cmd += env_list
         image = self.docker_temp_image if self.build_image else self.docker_base_image

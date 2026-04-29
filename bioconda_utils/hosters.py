@@ -15,6 +15,9 @@ to match links and extract their version.
 
 """
 
+from __future__ import annotations
+
+
 import abc
 import inspect
 import json
@@ -22,10 +25,11 @@ import logging
 import os
 
 from contextlib import redirect_stdout, redirect_stderr
-from setuptools._distutils.version import LooseVersion
 from html.parser import HTMLParser
 from itertools import chain
-from typing import Any, Dict, List, Match, Optional, Pattern, Set, Tuple, Type, cast
+from packaging.version import InvalidVersion, parse as parse_version
+from typing import Any, cast
+from re import Match, Pattern
 from urllib.parse import urljoin
 
 import regex as re
@@ -47,7 +51,7 @@ RE_REFGROUP = re.compile(r"\(\?P=(\w+)\)")
 
 def dedup_named_capture_group(pattern):
     """Replaces repetitions of capture groups with matches to first instance"""
-    seen: Set[str] = set()
+    seen: set[str] = set()
 
     def replace(match):
         "inner replace"
@@ -60,7 +64,7 @@ def dedup_named_capture_group(pattern):
     return re.sub(RE_CAPGROUP, replace, pattern)
 
 
-def replace_named_capture_group(pattern, vals: Dict[str, str]):
+def replace_named_capture_group(pattern, vals: dict[str, str]):
     """Replaces capture groups with values from **vals**"""
 
     def replace(match):
@@ -82,10 +86,14 @@ class HosterMeta(abc.ABCMeta):
     we leave the option to add functions to a Hoster.
     """
 
-    hoster_types: List[Type["Hoster"]] = []
+    hoster_types: list[type[Hoster]] = []
 
     def __new__(
-        cls, name: str, bases: Tuple[type, ...], namespace: Dict[str, Any], **kwargs
+        cls,
+        name: str,
+        bases: tuple[type, ...],
+        namespace: dict[str, Any],
+        **kwargs,
     ) -> type:
         """Creates Hoster classes
 
@@ -94,7 +102,8 @@ class HosterMeta(abc.ABCMeta):
         - registers complete classes
         """
         typ = cast(
-            Type["Hoster"], super().__new__(cls, name, bases, namespace, **kwargs)
+            type["Hoster"],
+            super().__new__(cls, name, bases, namespace, **kwargs),
         )
 
         if inspect.isabstract(typ):
@@ -129,7 +138,7 @@ class HosterMeta(abc.ABCMeta):
         return typ
 
     @classmethod
-    def select_hoster(cls, url: str, config: Dict[str, str]) -> Optional["Hoster"]:
+    def select_hoster(cls, url: str, config: dict[str, str]) -> Hoster | None:
         """Select `Hoster` able to handle **url**
 
         Returns: `Hoster` or `None`
@@ -166,7 +175,7 @@ class Hoster(metaclass=HosterMeta):
         "matches upstream package url"
 
     #: will be generated as each class is created
-    url_re: Optional[Pattern[str]] = None
+    url_re: Pattern[str] | None = None
     link_pattern_compiled: str
     expanded_assets_pattern_compiled: str
 
@@ -177,7 +186,7 @@ class Hoster(metaclass=HosterMeta):
 
     @property
     @abc.abstractmethod
-    def releases_formats(self) -> List[str]:
+    def releases_formats(self) -> list[str]:
         "format template for release page URL"
 
     def __init__(self, url: str, match: Match[str]) -> None:
@@ -189,12 +198,12 @@ class Hoster(metaclass=HosterMeta):
 
     @classmethod
     def try_make_hoster(
-        cls: Type["Hoster"], url: str, config: Dict[str, str]
-    ) -> Optional["Hoster"]:
+        cls: type[Hoster], url: str, config: dict[str, str]
+    ) -> Hoster | None:
         """Creates hoster if **url** is matched by its **url_pattern**"""
         if config:
             try:
-                klass: Type["Hoster"] = type(
+                klass: type[Hoster] = type(
                     "Customized" + cls.__name__,
                     (cls,),
                     {key + "_pattern": val for key, val in config.items()},
@@ -213,8 +222,8 @@ class Hoster(metaclass=HosterMeta):
 
     @abc.abstractmethod
     async def get_versions(
-        self, req: "AsyncRequests", orig_version: str
-    ) -> List[Dict[str, Any]]:
+        self, req: AsyncRequests, orig_version: str
+    ) -> list[dict[str, Any]]:
         "Gets list of versions from upstream hosting site"
 
 
@@ -224,13 +233,13 @@ class HrefParser(HTMLParser):
     def __init__(self, link_re: Pattern[str]) -> None:
         super().__init__()
         self.link_re = link_re
-        self.matches: List[Dict[str, Any]] = []
+        self.matches: list[dict[str, Any]] = []
 
-    def get_matches(self) -> List[Dict[str, Any]]:
+    def get_matches(self) -> list[dict[str, Any]]:
         """Return matches found for **link_re** in href links"""
         return self.matches
 
-    def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag == "a":
             for key, val in attrs:
                 if key == "href" and val is not None:
@@ -255,13 +264,13 @@ class IncludeFragmentParser(HTMLParser):
     def __init__(self, link_re: Pattern[str]) -> None:
         super().__init__()
         self.link_re = link_re
-        self.matches: List[Dict[str, Any]] = []
+        self.matches: list[dict[str, Any]] = []
 
-    def get_matches(self) -> List[Dict[str, Any]]:
+    def get_matches(self) -> list[dict[str, Any]]:
         """Return matches found for **link_re** in href links"""
         return self.matches
 
-    def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag == "include-fragment":
             for key, val in attrs:
                 if key == "src" and val is not None:
@@ -577,7 +586,7 @@ class JSONHoster(Hoster):
     @abc.abstractmethod
     async def get_versions_from_json(
         self, data, req, orig_version
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Extract matches from json data in **data**"""
 
 
@@ -587,7 +596,7 @@ class PyPi(JSONHoster):
     async def get_versions_from_json(self, data, req, orig_version):
         latest = data["info"]["version"]
         result = []
-        for vers in list(set([latest, orig_version])):
+        for vers in list({latest, orig_version}):
             if vers not in data["releases"]:
                 continue
             for rel in data["releases"][vers]:
@@ -666,11 +675,11 @@ class PyPi(JSONHoster):
             for vers in choose_from:
                 try:
                     if all(
-                        op(LooseVersion(vers), LooseVersion(check))
+                        op(parse_version(vers), parse_version(check))
                         for op, check in checks
                     ):
                         return vers
-                except TypeError:
+                except (InvalidVersion, TypeError):
                     logger.exception(
                         "Failed to compare %s to %s", vers, requires_python
                     )
@@ -849,7 +858,7 @@ class CRAN(JSONHoster):
 
     async def get_versions_from_json(self, data, req, orig_version):
         res = []
-        versions = list(set((str(data["latest"]), self.vals["version"], orig_version)))
+        versions = list({str(data["latest"]), self.vals["version"], orig_version})
         for vers in versions:
             if vers not in data["versions"]:
                 continue

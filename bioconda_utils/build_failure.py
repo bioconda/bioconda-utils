@@ -1,7 +1,8 @@
 import os
 import sys
 import time
-from typing import Any, Dict, Iterator, Optional, Tuple, Union
+from typing import Any
+from collections.abc import Iterator
 import subprocess as sp
 import logging
 from hashlib import sha256
@@ -20,16 +21,13 @@ from .githandler import BiocondaRepo
 from bioconda_utils.recipe import Recipe
 from bioconda_utils import graph, utils
 
-
 logger = logging.getLogger(__name__)
 
 
 class BuildFailureRecord:
     git_handler = None
 
-    def __init__(
-        self, recipe: Union[str, Recipe], platform: Optional[str] = None
-    ) -> None:
+    def __init__(self, recipe: str | Recipe, platform: str | None = None) -> None:
         if isinstance(recipe, Recipe):
             self.recipe_path = recipe.path
         else:
@@ -41,13 +39,13 @@ class BuildFailureRecord:
 
         def load(path: str) -> None:
             if os.path.getsize(path) == 0:
-                raise IOError("Unable to read build failure record {path}: empty file")
-            with open(path, "r") as f:
+                raise OSError("Unable to read build failure record {path}: empty file")
+            with open(path) as f:
                 yaml = YAML()
                 try:
                     self.inner = dict(yaml.load(f))
                 except ruamel.yaml.reader.ReaderError as e:
-                    raise IOError(f"Unable to read build failure record {path}: {e}")
+                    raise OSError(f"Unable to read build failure record {path}: {e}")
 
         if self.exists():
             load(self.path)
@@ -62,9 +60,9 @@ class BuildFailureRecord:
 
     def fill(
         self,
-        log: Optional[str] = None,
-        reason: Optional[str] = None,
-        category: Optional[str] = None,
+        log: str | None = None,
+        reason: str | None = None,
+        category: str | None = None,
         skiplist: bool = False,
     ) -> None:
         self.set_recipe_sha_to_current_recipe()
@@ -208,7 +206,7 @@ class BuildFailureRecord:
         return self.inner.get("skiplist", False)
 
     @property
-    def recipe_sha(self) -> Optional[str]:
+    def recipe_sha(self) -> str | None:
         return self.inner.get("recipe_sha", None)
 
     @skiplist.setter
@@ -234,11 +232,11 @@ class BuildFailureRecord:
 
 def collect_build_failure_dataframe(
     recipe_folder: str,
-    config: Dict[str, Any],
+    config: dict[str, Any],
     channel: str,
     link_fmt: str = "txt",
     link_prefix: str = "",
-    git_range: Optional[list[str]] = None,
+    git_range: list[str] | None = None,
 ) -> pd.DataFrame:
     def get_build_failure_records(recipe: str) -> Iterator[BuildFailureRecord]:
         return filter(
@@ -276,7 +274,7 @@ def collect_build_failure_dataframe(
 
     dag, _ = graph.build(recipes, config)
 
-    def get_data() -> Iterator[Tuple[str, Any, int, bool, str, str, str, str]]:
+    def get_data() -> Iterator[tuple[str, Any, int, bool, str, str, str, str]]:
         for recipe in utils.tqdm(recipes, desc="Checking recipes"):
             if not has_build_failure(recipe):
                 continue

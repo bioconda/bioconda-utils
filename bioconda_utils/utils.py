@@ -27,7 +27,8 @@ from collections import Counter, defaultdict, namedtuple, deque
 from collections.abc import Iterable
 from itertools import product, chain, groupby, zip_longest
 from functools import partial
-from typing import Optional, Sequence, Collection, List, Dict, Any, Union, cast
+from typing import Any, cast
+from collections.abc import Sequence, Collection
 from multiprocessing import Pool
 from multiprocessing.pool import ThreadPool
 
@@ -150,7 +151,7 @@ def wraps(func, hide_wrapped=False):
         fb_wrapper = FunctionBuilder.from_func(wrapper_func)
         fb.kwonlyargs += fb_wrapper.kwonlyargs
         fb.kwonlydefaults.update(fb_wrapper.kwonlydefaults)
-        fb.body = "return _call(%s)" % fb.get_invocation_str()
+        fb.body = f"return _call({fb.get_invocation_str()})"
         execdict = dict(_call=wrapper_func, _func=func)
         fully_wrapped = fb.get_func(execdict)
         if not hide_wrapped:
@@ -181,7 +182,7 @@ class LogFuncFilter:
     def __init__(
         self,
         func,
-        trunc_msg: Optional[str] = None,
+        trunc_msg: str | None = None,
         max_lines: int = 0,
         consecutive: bool = True,
     ) -> None:
@@ -226,9 +227,9 @@ class LoggingSourceRenameFilter:
 
 def setup_logger(
     name: str = "bioconda_utils",
-    loglevel: Union[str, int] = logging.INFO,
-    logfile: Optional[str] = None,
-    logfile_level: Union[str, int] = logging.DEBUG,
+    loglevel: str | int = logging.INFO,
+    logfile: str | None = None,
+    logfile_level: str | int = logging.DEBUG,
     log_command_max_lines=None,
     prefix: str = "BIOCONDA ",
     msgfmt: str = (
@@ -360,9 +361,7 @@ jinja = Environment(
     lstrip_blocks=True,
 )
 
-
 jinja_silent_undef = Environment(undefined=JinjaSilentUndefined)
-
 
 # Patterns of allowed environment variables that are allowed to be passed to
 # conda-build.
@@ -529,13 +528,11 @@ def load_meta_fast(recipe: str, env=None):
 
     try:
         pth = os.path.join(recipe, "meta.yaml")
-        template = jinja_silent_undef.from_string(
-            open(pth, "r", encoding="utf-8").read()
-        )
+        template = jinja_silent_undef.from_string(open(pth, encoding="utf-8").read())
         meta = yaml.safe_load(template.render(env))
         return (meta, recipe)
     except Exception:
-        raise ValueError("Problem inspecting {0}".format(recipe))
+        raise ValueError(f"Problem inspecting {recipe}")
 
 
 def load_conda_build_config(platform=None, trim_skip=True):
@@ -558,7 +555,7 @@ def load_conda_build_config(platform=None, trim_skip=True):
     ]
     variant_config_files = getattr(config, "variant_config_files", None) or []
     for cfg in chain(config.exclusive_config_files, variant_config_files):
-        assert os.path.exists(cfg), "error: {0} does not exist".format(cfg)
+        assert os.path.exists(cfg), f"error: {cfg} does not exist"
     if platform:
         config.platform = platform
     setattr(config, "trim_skip", trim_skip)
@@ -619,9 +616,9 @@ def temp_os(platform):
 
 
 def run(
-    cmds: List[str],
-    env: Optional[Dict[str, str]] = None,
-    mask: Optional[Union[List[str], bool]] = None,
+    cmds: list[str],
+    env: dict[str, str] | None = None,
+    mask: list[str] | bool | None = None,
     mask_envvars: bool = False,
     live: bool = False,
     mylogger: logging.Logger = logger,
@@ -840,8 +837,7 @@ class EnvMatrix:
         A copy of the entire os.environ dict is updated and yielded for each of
         these sets.
         """
-        for env in product(*flatten_dict(self.env)):
-            yield env
+        yield from product(*flatten_dict(self.env))
 
 
 def get_deps(recipe, build=True):
@@ -998,7 +994,7 @@ class DivergentBuildsError(Exception):
     pass
 
 
-def _string_or_float_to_integer_python(s: Union[str, float]) -> int:
+def _string_or_float_to_integer_python(s: str | float) -> int:
     """
     conda-build 2.0.4 expects CONDA_PY values to be integers (e.g., 27, 35) but
     older versions were OK with strings or even floats.
@@ -1013,11 +1009,11 @@ def _string_or_float_to_integer_python(s: Union[str, float]) -> int:
         else:
             s = int(s)
     except ValueError:
-        raise ValueError("{} is an unrecognized Python version".format(s))
+        raise ValueError(f"{s} is an unrecognized Python version")
     return s
 
 
-def built_package_paths(recipe: str) -> List[str]:
+def built_package_paths(recipe: str) -> list[str]:
     """
     Returns the path to which a recipe would be built.
 
@@ -1060,7 +1056,7 @@ def file_from_commit(commit: str, filename: str) -> str:
     if commit == "HEAD":
         return open(filename).read()
 
-    p = run(["git", "show", "{0}:{1}".format(commit, filename)], mask=False, loglevel=0)
+    p = run(["git", "show", f"{commit}:{filename}"], mask=False, loglevel=0)
     return str(p.stdout)
 
 
@@ -1098,7 +1094,7 @@ def recipe_requires_finalized_render(recipe):
     """
     meta_path = os.path.join(recipe, "meta.yaml")
     try:
-        with open(meta_path, "r", encoding="utf-8") as f:
+        with open(meta_path, encoding="utf-8") as f:
             text = re.sub(r"#.*", "", f.read())
     except OSError:
         return False
@@ -1143,9 +1139,9 @@ def check_recipe_skippable(recipe, check_channels):
                 )
                 return True
 
-    packages = set(
+    packages = {
         (meta.name(), meta.version(), int(meta.build_number() or 0)) for meta in metas
-    )
+    }
     r = RepoData()
     num_existing_pkg_builds = Counter(
         (name, version, build_number, subdir)
@@ -1163,7 +1159,12 @@ def check_recipe_skippable(recipe, check_channels):
         # No packages with same version + build num in channels: no need to skip
         return False
     num_new_pkg_builds = Counter(
-        (meta.name(), meta.version(), int(meta.build_number() or 0), _meta_subdir(meta))
+        (
+            meta.name(),
+            meta.version(),
+            int(meta.build_number() or 0),
+            _meta_subdir(meta),
+        )
         for meta in metas
     )
     if num_new_pkg_builds == num_existing_pkg_builds:
@@ -1269,7 +1270,7 @@ def validate_config(config):
     # Load packaged schema without pkg_resources (deprecated)
     # files('bioconda_utils') returns a Traversable to the package contents
     with as_file(files("bioconda_utils") / "config.schema.yaml") as schema_path:
-        with open(schema_path, "r", encoding="utf-8") as fh:
+        with open(schema_path, encoding="utf-8") as fh:
             schema = yaml.safe_load(fh)
 
     validate(config, schema)
@@ -1503,7 +1504,6 @@ class RepoData:
       upstream, not used by conda. We generate this from the subdir
       information to have it available.
 
-
     Repodata versions:
 
     The version is indicated by the key **repodata_version**, with
@@ -1620,7 +1620,7 @@ class RepoData:
     def _load_channel_dataframe(self):
         repos = list(product(self.channels, self.platforms))
         urls = [self._make_repodata_url(c, p) for c, p in repos]
-        descs = ["{}/{}".format(c, p) for c, p in repos]
+        descs = [f"{c}/{p}" for c, p in repos]
 
         def to_dataframe(json_data, meta_data):
             channel, platform = meta_data
@@ -1643,7 +1643,14 @@ class RepoData:
         else:
             res = pd.DataFrame(columns=self.columns)
 
-        for col in ("channel", "platform", "subdir", "name", "version", "build"):
+        for col in (
+            "channel",
+            "platform",
+            "subdir",
+            "name",
+            "version",
+            "build",
+        ):
             res[col] = res[col].astype("category")
         res = res.reset_index(drop=True)
 

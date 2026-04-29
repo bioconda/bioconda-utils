@@ -11,7 +11,6 @@ from typing import Any
 
 from . import LintCheck, _recipe
 
-
 # Noarch or not checks:
 #
 # - Python packages that use no compiler should be

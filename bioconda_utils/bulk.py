@@ -1,8 +1,6 @@
 import logging
-from typing import Optional
 
 from bioconda_utils import utils
-
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +14,7 @@ def check_branch() -> None:
         exit(1)
 
 
-def commit(message: Optional[str] = None) -> None:
+def commit(message: str | None = None) -> None:
     check_branch()
     utils.run(["git", "commit", "-a", "-m", f"[ci skip] {message}"], mask=False)
 

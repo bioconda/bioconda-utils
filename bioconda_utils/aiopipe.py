@@ -1,5 +1,8 @@
 """Utilities for Asynchronous Processing"""
 
+from __future__ import annotations
+
+
 import abc
 import asyncio
 import logging
@@ -18,7 +21,7 @@ except ImportError:
 
 from hashlib import sha256
 from urllib.parse import urlparse
-from typing import Any, Dict, List, Generic, Optional, Type, TypeVar
+from typing import Any, Generic, TypeVar
 
 import aiohttp
 import aioftp
@@ -67,7 +70,7 @@ class EndProcessingItem(Exception):
 class AsyncFilter(abc.ABC, Generic[ITEM]):
     """Function object type called by Scanner"""
 
-    def __init__(self, pipeline: "AsyncPipeline", *_args, **_kwargs) -> None:
+    def __init__(self, pipeline: AsyncPipeline, *_args, **_kwargs) -> None:
         self.pipeline = pipeline
 
     @abc.abstractmethod
@@ -90,7 +93,7 @@ class AsyncFilter(abc.ABC, Generic[ITEM]):
 class AsyncPipeline(Generic[ITEM]):
     """Processes items in an asyncio pipeline"""
 
-    def __init__(self, threads: Optional[int] = None) -> None:
+    def __init__(self, threads: int | None = None) -> None:
         try:  # get or create loop (threads don't have one)
             #: our asyncio loop
             self.loop = asyncio.get_event_loop()
@@ -105,13 +108,13 @@ class AsyncPipeline(Generic[ITEM]):
         #: (used by PyPi when running skeleton)
         self.conda_sem: asyncio.Semaphore = asyncio.Semaphore(1)
         #: the filters successively applied to each item
-        self.filters: List[AsyncFilter] = []
+        self.filters: list[AsyncFilter] = []
         #: executor running things in separate python processes
         self.proc_pool_executor = ProcessPoolExecutor(self.threads)
 
         self._shutting_down = False
 
-    def add(self, filt: Type[AsyncFilter[ITEM]], *args, **kwargs) -> None:
+    def add(self, filt: type[AsyncFilter[ITEM]], *args, **kwargs) -> None:
         """Adds `Filter` to this `Scanner`"""
         self.filters.append(filt(self, *args, **kwargs))
 
@@ -131,7 +134,8 @@ class AsyncPipeline(Generic[ITEM]):
         # We need to handle KeyboardInterrupt "manually" to get clean shutdown
         # for the ProcessPoolExecutor
         self.loop.add_signal_handler(
-            signal.SIGINT, lambda: asyncio.ensure_future(self.shutdown(signal.SIGINT))
+            signal.SIGINT,
+            lambda: asyncio.ensure_future(self.shutdown(signal.SIGINT)),
         )
         try:
             task = asyncio.ensure_future(self._async_run())
@@ -242,14 +246,14 @@ class AsyncRequests:
     #: Used as user agent in http requests and as requester in github API requests
     USER_AGENT = "bioconda/bioconda-utils"
 
-    def __init__(self, cache_fn: Optional[str] = None) -> None:
+    def __init__(self, cache_fn: str | None = None) -> None:
         #: aiohttp session (only exists while running)
-        self.session: Optional[aiohttp.ClientSession] = None
+        self.session: aiohttp.ClientSession | None = None
         self.cache_fn = cache_fn
         #: cache
-        self.cache: Optional[Dict[str, Dict[str, Any]]] = None
+        self.cache: dict[str, dict[str, Any]] | None = None
 
-    async def __aenter__(self) -> "AsyncRequests":
+    async def __aenter__(self) -> AsyncRequests:
         session = aiohttp.ClientSession(
             headers={"User-Agent": self.USER_AGENT}, trust_env=True
         )

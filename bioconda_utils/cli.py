@@ -23,7 +23,6 @@ import logging
 from collections import defaultdict, Counter
 from functools import partial
 import inspect
-from typing import List, Optional, Tuple
 
 import conda
 import conda.base.constants
@@ -45,7 +44,6 @@ from . import graph
 from . import pkg_test
 from .githandler import BiocondaRepo, install_gpg_key
 
-
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 
 logger = logging.getLogger(__name__)
@@ -66,7 +64,8 @@ def enable_logging(default_loglevel="info", default_file_loglevel="debug"):
         @arg("--logfile", help="Write log to file")
         @arg("--logfile-level", help="Log level for log file")
         @arg(
-            "--log-command-max-lines", help="Limit lines emitted for commands executed"
+            "--log-command-max-lines",
+            help="Limit lines emitted for commands executed",
         )
         @utils.wraps(func, hide_wrapped=True)
         def wrapper(
@@ -158,7 +157,11 @@ def recipe_folder_and_config(allow_missing_for=None):
             nargs="?",
             help="Path to folder containing recipes (default: recipes/)",
         )
-        @arg("config", nargs="?", help="Path to Bioconda config (default: config.yml)")
+        @arg(
+            "config",
+            nargs="?",
+            help="Path to Bioconda config (default: config.yml)",
+        )
         @utils.wraps(func)
         def wrapper(*args, **kwargs):
             allow = any(args[idx] for idx in allow_missing_idx)
@@ -173,7 +176,7 @@ def recipe_folder_and_config(allow_missing_for=None):
     return decorator
 
 
-def get_recipes_to_build(git_range: Tuple[str], recipe_folder: str) -> List[str]:
+def get_recipes_to_build(git_range: tuple[str], recipe_folder: str) -> list[str]:
     """Gets list of modified recipes according to git_range and blacklist
 
     See `BiocondaRepoMixin.get_recipes_to_build()`.
@@ -195,7 +198,7 @@ def get_recipes_to_build(git_range: Tuple[str], recipe_folder: str) -> List[str]
 
 def get_recipes(
     config, recipe_folder, packages, git_range, include_blacklisted=False
-) -> List[str]:
+) -> list[str]:
     """Gets list of paths to recipe folders to be built
 
     Considers all recipes matching globs in packages, constrains to
@@ -249,7 +252,11 @@ def get_recipes(
 
 
 @arg("config", help="Path to yaml file specifying the configuration")
-@arg("--strict-version", action="store_true", help="Require version to strictly match.")
+@arg(
+    "--strict-version",
+    action="store_true",
+    help="Require version to strictly match.",
+)
 @arg(
     "--strict-build",
     action="store_true",
@@ -284,7 +291,9 @@ def duplicates(
     our_channel = channel
     channels = [c for c in config["channels"] if c != our_channel]
     logger.info(
-        "Checking for packages from %s also present in %s", our_channel, channels
+        "Checking for packages from %s also present in %s",
+        our_channel,
+        channels,
     )
 
     check_fields = ["name"]
@@ -301,9 +310,7 @@ def duplicates(
             subcmd = [
                 "remove",
                 "-f",
-                "{channel}/{name}/{version}/{fn}".format(
-                    name=name, version=version, fn=fn, channel=our_channel
-                ),
+                f"{our_channel}/{name}/{version}/{fn}",
             ]
             if dryrun:
                 logger.info(" ".join([utils.bin_for("anaconda")] + subcmd))
@@ -333,7 +340,9 @@ def duplicates(
     for channel in channels:
         package_specs = set(repodata.get_package_data(check_fields, channel))
         logger.info(
-            "%s unique packages specs to consider in %s", len(package_specs), channel
+            "%s unique packages specs to consider in %s",
+            len(package_specs),
+            channel,
         )
         dups = our_package_specs & package_specs
         logger.info("  (of which %s are duplicate)", len(dups))
@@ -347,7 +356,7 @@ def duplicates(
         else:
             if url:
                 if not strict_version and not strict_build:
-                    print("https://anaconda.org/{}/{}".format(our_channel, spec[0]))
+                    print(f"https://anaconda.org/{our_channel}/{spec[0]}")
                 print(
                     "https://anaconda.org/{}/{}/files?version={}".format(
                         our_channel, *spec
@@ -767,7 +776,10 @@ def build(
     default="build",
     help="What to do if no artifacts are found in the PR.",
 )
-@arg("--quay-upload-target", help="Provide a quay.io target to push docker images to.")
+@arg(
+    "--quay-upload-target",
+    help="Provide a quay.io target to push docker images to.",
+)
 @arg(
     "--artifact-source",
     choices=["azure", "circleci", "github-actions"],
@@ -851,16 +863,16 @@ def dag(recipe_folder, config, packages="*", format="gml", hide_singletons=False
     elif format == "dot":
         write_dot(dag, sys.stdout)
     elif format == "txt":
-        subdags: List[List[str]] = sorted(
+        subdags: list[list[str]] = sorted(
             map(sorted, nx.connected_components(dag.to_undirected()))
         )
         subdags.sort(key=len, reverse=True)
-        singletons: List[str] = []
+        singletons: list[str] = []
         for i, s in enumerate(subdags):
             if len(s) == 1:
                 singletons.extend(s)
                 continue
-            print("# subdag {0}".format(i))
+            print(f"# subdag {i}")
             subdag = dag.subgraph(s)
             recipes = [
                 recipe
@@ -894,7 +906,11 @@ def dag(recipe_folder, config, packages="*", format="gml", hide_singletons=False
     nargs="*",
     help="Skip packages that use one of the given variant keys.",
 )
-@arg("--max-bumps", type=int, help="Maximum number of recipes that will be updated.")
+@arg(
+    "--max-bumps",
+    type=int,
+    help="Maximum number of recipes that will be updated.",
+)
 @arg("--no-leaves", help="Only update recipes with dependent packages.")
 @arg(
     "--cache",
@@ -996,15 +1012,13 @@ def update_pinning(
         )
     if hadErrors:
         print(
-            "{} packages produced an error in conda-build: {}".format(
-                len(hadErrors), list(hadErrors)
-            )
+            f"{len(hadErrors)} packages produced an error in conda-build: {list(hadErrors)}"
         )
 
     if bumpErrors:
         print(
             "The build numbers in the following recipes "
-            "could not be incremented: {}".format(list(bumpErrors))
+            f"could not be incremented: {list(bumpErrors)}"
         )
 
 
@@ -1030,7 +1044,11 @@ def update_pinning(
 )
 @enable_logging()
 def dependent(
-    recipe_folder, config, restrict=False, dependencies=None, reverse_dependencies=None
+    recipe_folder,
+    config,
+    restrict=False,
+    dependencies=None,
+    reverse_dependencies=None,
 ):
     """
     Print recipes dependent on a package
@@ -1260,7 +1278,11 @@ def clean_cran_skeleton(recipe, no_windows=False):
 @arg("--failed-urls", help="""Write urls with permanent failure to this file""")
 @arg("--recipe-status", help="""Write status for each recipe to this file""")
 @arg("--check-branch", help="""Check if recipe has active branch""")
-@arg("--only-active", action="store_true", help="Check only recipes with active update")
+@arg(
+    "--only-active",
+    action="store_true",
+    help="Check only recipes with active update",
+)
 @arg(
     "--create-branch",
     action="store_true",
@@ -1287,7 +1309,10 @@ def clean_cran_skeleton(recipe, no_windows=False):
     help="""Don't check for recipes having a dependency with a pending update.
      Update all recipes, including those having deps in need or rebuild.""",
 )
-@arg("--no-check-version-update", help="""Don't check for version updates to recipes""")
+@arg(
+    "--no-check-version-update",
+    help="""Don't check for version updates to recipes""",
+)
 @arg("--sign", nargs="?", help="""Enable signing. Optionally takes keyid.""")
 @arg(
     "--commit-as",
@@ -1350,7 +1375,9 @@ def autobump(
 
     # Setup scanning pipeline
     scanner = autobump.Scanner(
-        recipe_source, cache_fn=cache and cache + "_scan.pkl", status_fn=recipe_status
+        recipe_source,
+        cache_fn=cache and cache + "_scan.pkl",
+        status_fn=recipe_status,
     )
 
     # Always exclude recipes that were explicitly disabled
@@ -1453,7 +1480,12 @@ def autobump(
         git_handler.close()
 
 
-@arg("recipes", nargs="+", type=str, help="Paths to recipes that shall be skiplisted")
+@arg(
+    "recipes",
+    nargs="+",
+    type=str,
+    help="Paths to recipes that shall be skiplisted",
+)
 @arg("--skiplist", action="store_true", help="Skiplist recipes.")
 @arg(
     "--reason",
@@ -1488,7 +1520,7 @@ def annotate_build_failures(
     skiplist=False,
     reason=None,
     category=None,
-    platforms: Optional[List[str]] = None,
+    platforms: list[str] | None = None,
     existing_only=False,
 ):
     valid_platform_names = set(conda.base.constants.PLATFORM_DIRECTORIES)
@@ -1548,7 +1580,7 @@ def list_build_failures(
     channel: str = "bioconda",
     output_format: str = "txt",
     link_prefix: str = "",
-    git_range: Optional[List[str]] = None,
+    git_range: list[str] | None = None,
 ) -> None:
     """List recipes with build failure records"""
 

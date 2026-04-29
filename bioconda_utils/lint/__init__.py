@@ -91,6 +91,9 @@ Module Autodocs
 
 """
 
+from __future__ import annotations
+
+
 import abc
 import os
 import pkgutil
@@ -137,7 +140,7 @@ class LintMessage(NamedTuple):
     recipe: _recipe.Recipe
 
     #: The check issuing the message
-    check: type["LintCheck"]
+    check: type[LintCheck]
 
     #: The severity of the message
     severity: Severity = ERROR
@@ -175,7 +178,7 @@ class LintCheckMeta(abc.ABCMeta):
     Handles registry
     """
 
-    registry: list[type["LintCheck"]] = []
+    registry: list[type[LintCheck]] = []
 
     def __new__(
         cls,
@@ -186,7 +189,8 @@ class LintCheckMeta(abc.ABCMeta):
     ) -> type:
         """Creates LintCheck classes"""
         typ = cast(
-            type["LintCheck"], super().__new__(cls, name, bases, namespace, **kwargs)
+            type["LintCheck"],
+            super().__new__(cls, name, bases, namespace, **kwargs),
         )
         if name != "LintCheck":  # don't register base class
             cls.registry.append(typ)
@@ -199,7 +203,7 @@ class LintCheckMeta(abc.ABCMeta):
 _checks_loaded = False
 
 
-def get_checks() -> list[type["LintCheck"]]:
+def get_checks() -> list[type[LintCheck]]:
     """Loads and returns the available lint checks"""
     global _checks_loaded
     if not _checks_loaded:
@@ -217,9 +221,9 @@ class LintCheck(metaclass=LintCheckMeta):
     severity: Severity = ERROR
 
     #: Checks that must have passed for this check to be executed.
-    requires: list["LintCheck"] = []
+    requires: list[LintCheck] = []
 
-    def __init__(self, _linter: "Linter") -> None:
+    def __init__(self, _linter: Linter) -> None:
         #: Messages collected running tests
         self.messages: list[LintMessage] = []
         #: Recipe currently being checked

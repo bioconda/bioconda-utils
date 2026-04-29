@@ -7,14 +7,13 @@ from pathlib import Path
 import shutil
 import subprocess as sp
 import logging
-from typing import Optional
 from . import utils
 
 logger = logging.getLogger(__name__)
 
 
 def anaconda_upload(
-    package: str, token: Optional[str] = None, label: Optional[str] = None
+    package: str, token: str | None = None, label: str | None = None
 ) -> bool:
     """
     Upload a package to anaconda.

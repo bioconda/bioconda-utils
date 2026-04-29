@@ -83,7 +83,6 @@ class missing_tests(LintCheck):
             imports:
                - some_module
 
-
     and/or any file named ``run_test.py`, ``run_test.sh`` or
     ``run_test.pl`` executing tests.
 

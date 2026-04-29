@@ -11,19 +11,16 @@ from bioconda_utils.hosters import Hoster, HosterMeta
 with open(op.join(op.dirname(__file__), "hoster_cases.yaml")) as data:
     TEST_CASES = yaml.safe_load(data)
 
-
 TEST_CASE_LIST = [
     (hoster, num, case)
     for hoster in TEST_CASES
     for num, case in enumerate(TEST_CASES[hoster])
 ]
 
-
 TEST_CASE_IDS = [
     f"{x[0]}-{x[1] + 1}{'-' + x[2]['case'] if 'case' in x[2] else ''}"
     for x in TEST_CASE_LIST
 ]
-
 
 AVAIL_HOSTERS = {hoster.__name__: hoster for hoster in HosterMeta.hoster_types}
 

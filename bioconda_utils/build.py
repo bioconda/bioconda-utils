@@ -8,7 +8,7 @@ import itertools
 import logging
 import os
 
-from typing import Any, DefaultDict, Dict, List, NamedTuple, Optional, Set, Tuple
+from typing import Any, NamedTuple
 from bioconda_utils.skiplist import Skiplist
 from bioconda_utils.build_failure import BuildFailureRecord
 
@@ -31,7 +31,7 @@ class BuildResult(NamedTuple):
     """Result tuple for builds comprising success status and docker images."""
 
     success: bool
-    mulled_images: Optional[List[str]]
+    mulled_images: list[str] | None
 
 
 def conda_build_purge() -> None:
@@ -47,26 +47,27 @@ def conda_build_purge() -> None:
         logger.info("CLEANING UP PACKAGE CACHE (free space: %iMB).", free_mb)
         utils.run(["conda", "clean", "--all"], mask=False)
         logger.info(
-            "CLEANED UP PACKAGE CACHE (free space: %iMB).", utils.get_free_space()
+            "CLEANED UP PACKAGE CACHE (free space: %iMB).",
+            utils.get_free_space(),
         )
 
 
 def build(
     recipe: str,
-    pkg_paths: Optional[List[str]] = None,
+    pkg_paths: list[str] | None = None,
     testonly: bool = False,
     mulled_test: bool = True,
-    channels: Optional[List[str]] = None,
-    docker_builder: Optional[docker_utils.RecipeBuilder] = None,
+    channels: list[str] | None = None,
+    docker_builder: docker_utils.RecipeBuilder | None = None,
     raise_error: bool = False,
-    linter: Optional[lint.Linter] = None,
+    linter: lint.Linter | None = None,
     mulled_conda_image: str = pkg_test.MULLED_CONDA_IMAGE,
     record_build_failure: bool = False,
-    dag: Optional[nx.DiGraph] = None,
+    dag: nx.DiGraph | None = None,
     skiplist_leafs: bool = False,
     live_logs: bool = True,
     presolved_mulled_test: bool = True,
-    mulled_upload_target: Optional[str] = None,
+    mulled_upload_target: str | None = None,
 ) -> BuildResult:
     """
     Build a single recipe for a single env
@@ -168,7 +169,8 @@ def build(
             for pkg_path in pkg_paths:
                 if not os.path.exists(pkg_path):
                     logger.error(
-                        "BUILD FAILED: the built package %s cannot be found", pkg_path
+                        "BUILD FAILED: the built package %s cannot be found",
+                        pkg_path,
                     )
                     return BuildResult(False, None)
         else:
@@ -193,7 +195,10 @@ def build(
                 # record is already removed (see above), but change has to be committed
                 build_failure_record.commit_and_push_changes()
 
-    except (docker_utils.DockerCalledProcessError, sp.CalledProcessError) as exc:
+    except (
+        docker_utils.DockerCalledProcessError,
+        sp.CalledProcessError,
+    ) as exc:
         logger.error("BUILD FAILED %s", recipe)
         if record_build_failure:
             assert dag is not None
@@ -251,9 +256,9 @@ def store_build_failure_record(
 
 def remove_cycles(
     dag: nx.DiGraph,
-    name2recipes: Dict[str, Set[str]],
-    failed: List[str],
-    skip_dependent: DefaultDict[str, List[str]],
+    name2recipes: dict[str, set[str]],
+    failed: list[str],
+    skip_dependent: defaultdict[str, list[str]],
 ) -> nx.DiGraph:
     nodes_in_cycles = set()
     for cycle in list(nx.simple_cycles(dag)):
@@ -280,7 +285,7 @@ def get_subdags(
     dag: nx.DiGraph,
     n_workers: int,
     worker_offset: int,
-    subdag_depth: Optional[int],
+    subdag_depth: int | None,
 ) -> nx.DiGraph:
     if n_workers > 1 and worker_offset >= n_workers:
         raise ValueError(
@@ -303,7 +308,7 @@ def get_subdags(
             working_dag = nx.DiGraph(dag)
             # Only build the current "root" nodes after removing
             for i in range(0, subdag_depth + 1):
-                print("{} recipes at depth {}".format(len(root_nodes), i))
+                print(f"{len(root_nodes)} recipes at depth {i}")
                 if len(root_nodes) == 0:
                     break
                 if i < subdag_depth:
@@ -370,17 +375,17 @@ def do_not_consider_for_additional_platform(
 def build_recipes(
     recipe_folder: str,
     config_path: str,
-    recipes: List[str],
+    recipes: list[str],
     mulled_test: bool = True,
     testonly: bool = False,
     force: bool = False,
-    docker_builder: Optional[docker_utils.RecipeBuilder] = None,
-    label: Optional[str] = None,
+    docker_builder: docker_utils.RecipeBuilder | None = None,
+    label: str | None = None,
     anaconda_upload: bool = False,
-    mulled_upload_target: Optional[str] = None,
-    check_channels: Optional[List[str]] = None,
-    do_lint: Optional[bool] = None,
-    lint_exclude: Optional[List[str]] = None,
+    mulled_upload_target: str | None = None,
+    check_channels: list[str] | None = None,
+    do_lint: bool | None = None,
+    lint_exclude: list[str] | None = None,
     n_workers: int = 1,
     worker_offset: int = 0,
     keep_old_work: bool = False,
@@ -388,8 +393,8 @@ def build_recipes(
     record_build_failures: bool = False,
     skiplist_leafs: bool = False,
     live_logs: bool = True,
-    exclude: Optional[List[str]] = None,
-    subdag_depth: Optional[int] = None,
+    exclude: list[str] | None = None,
+    subdag_depth: int | None = None,
     presolved_mulled_test: bool = True,
     fast_resolve: bool = True,
 ) -> bool:
@@ -468,7 +473,9 @@ def build_recipes(
         logger.info("Nothing to be done.")
         return True
     logger.info(
-        "%i recipes to build and test: \n%s", len(subdag), "\n".join(subdag.nodes())
+        "%i recipes to build and test: \n%s",
+        len(subdag),
+        "\n".join(subdag.nodes()),
     )
 
     recipe2name = {}
@@ -476,7 +483,7 @@ def build_recipes(
         for recipe in recipe_list:
             recipe2name[recipe] = name
 
-    recipe_jobs: List[Tuple[str, str]] = [
+    recipe_jobs: list[tuple[str, str]] = [
         (recipe, recipe2name[recipe])
         for package in nx.topological_sort(subdag)
         for recipe in name2recipes[package]
@@ -492,14 +499,15 @@ def build_recipes(
             recipe_folder, recipe, platform
         ):
             logger.info(
-                "BUILD SKIP: skipping %s for additional platform %s", recipe, platform
+                "BUILD SKIP: skipping %s for additional platform %s",
+                recipe,
+                platform,
             )
             continue
 
         if name in skip_dependent:
             logger.info(
-                "BUILD SKIP: skipping %s because it depends on %s "
-                "which had a failed build.",
+                "BUILD SKIP: skipping %s because it depends on %s which had a failed build.",
                 recipe,
                 skip_dependent[name],
             )
@@ -639,9 +647,7 @@ def report_resources(message: str, show_docker: bool = True) -> None:
     free_mem_mb = utils.get_free_memory_mb()
     free_mem_percent = utils.get_free_memory_percent()
     logger.info(
-        "{0} Free disk space: {1:.2f} MB. Free memory: {2:.2f} MB ({3:.2f}%)".format(
-            message, free_space_mb, free_mem_mb, free_mem_percent
-        )
+        f"{message} Free disk space: {free_space_mb:.2f} MB. Free memory: {free_mem_mb:.2f} MB ({free_mem_percent:.2f}%)"
     )
     if show_docker:
         cmd = ["docker", "system", "df"]

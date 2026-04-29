@@ -3,7 +3,6 @@
 from setuptools import setup, find_namespace_packages
 import versioneer
 
-
 setup(
     name="bioconda-utils",
     author="Johannes Köster, Ryan Dale, The Bioconda Team",

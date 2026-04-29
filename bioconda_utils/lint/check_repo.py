@@ -28,7 +28,7 @@ class in_other_channels(LintCheck):
 
     def check_recipe(self, recipe: _recipe.Recipe) -> None:
         channels = utils.RepoData().get_package_data(key="channel", name=recipe.name)
-        if set(channels) - set(("bioconda",)):
+        if set(channels) - {"bioconda"}:
             self.message(section="package/name")
 
 
@@ -95,7 +95,7 @@ class recipe_is_blacklisted(LintCheck):
         if failure_record.exists() and failure_record.skiplist:
             failure_record.remove()
         for blacklist in self.blacklists:
-            with open(blacklist, "r") as fdes:
+            with open(blacklist) as fdes:
                 data = fdes.readlines()
             for num, line in enumerate(data):
                 if self.recipe.name in line:

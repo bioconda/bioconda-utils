@@ -19,7 +19,6 @@ the embedded version string" step from your release process. Making a new
 release should be as easy as recording a new tag in your version-control
 system, and maybe making new tarballs.
 
-
 ## Quick Install
 
 Versioneer provides two installation modes. The "classic" vendored mode installs
@@ -251,7 +250,6 @@ a different virtualenv), so this can be surprising.
 [Bug #83](https://github.com/python-versioneer/python-versioneer/issues/83) describes
 this one, but upgrading to a newer version of setuptools should probably
 resolve it.
-
 
 ## Updating Versioneer
 
@@ -535,7 +533,6 @@ import sys
 from typing import Any, Callable, Dict, List, Optional, Tuple
 import functools
 
-
 def get_keywords() -> Dict[str, str]:
     """Get the keywords needed to look up the version information."""
     # these strings will be replaced by git during git-archive.
@@ -548,7 +545,6 @@ def get_keywords() -> Dict[str, str]:
     keywords = {"refnames": git_refnames, "full": git_full, "date": git_date}
     return keywords
 
-
 class VersioneerConfig:
     """Container for Versioneer configuration parameters."""
 
@@ -558,7 +554,6 @@ class VersioneerConfig:
     parentdir_prefix: str
     versionfile_source: str
     verbose: bool
-
 
 def get_config() -> VersioneerConfig:
     """Create, populate and return the VersioneerConfig() object."""
@@ -573,14 +568,11 @@ def get_config() -> VersioneerConfig:
     cfg.verbose = False
     return cfg
 
-
 class NotThisMethod(Exception):
     """Exception raised if a method is not valid for the current scenario."""
 
-
 LONG_VERSION_PY: Dict[str, str] = {}
 HANDLERS: Dict[str, Dict[str, Callable]] = {}
-
 
 def register_vcs_handler(vcs: str, method: str) -> Callable:  # decorator
     """Create decorator to mark a method as the handler of a VCS."""
@@ -591,7 +583,6 @@ def register_vcs_handler(vcs: str, method: str) -> Callable:  # decorator
         HANDLERS[vcs][method] = f
         return f
     return decorate
-
 
 def run_command(
     commands: List[str],
@@ -640,7 +631,6 @@ def run_command(
         return None, process.returncode
     return stdout, process.returncode
 
-
 def versions_from_parentdir(
     parentdir_prefix: str,
     root: str,
@@ -668,7 +658,6 @@ def versions_from_parentdir(
               (str(rootdirs), parentdir_prefix))
     raise NotThisMethod("rootdir doesn't start with parentdir_prefix")
 
-
 @register_vcs_handler("git", "get_keywords")
 def git_get_keywords(versionfile_abs: str) -> Dict[str, str]:
     """Extract version information from the given file."""
@@ -695,7 +684,6 @@ def git_get_keywords(versionfile_abs: str) -> Dict[str, str]:
     except OSError:
         pass
     return keywords
-
 
 @register_vcs_handler("git", "keywords")
 def git_versions_from_keywords(
@@ -763,7 +751,6 @@ def git_versions_from_keywords(
     return {"version": "0+unknown",
             "full-revisionid": keywords["full"].strip(),
             "dirty": False, "error": "no suitable tags", "date": None}
-
 
 @register_vcs_handler("git", "pieces_from_vcs")
 def git_pieces_from_vcs(
@@ -902,13 +889,11 @@ def git_pieces_from_vcs(
 
     return pieces
 
-
 def plus_or_dot(pieces: Dict[str, Any]) -> str:
     """Return a + if we don't already have one, else return a ."""
     if "+" in pieces.get("closest-tag", ""):
         return "."
     return "+"
-
 
 def render_pep440(pieces: Dict[str, Any]) -> str:
     """Build up version string, with post-release "local version identifier".
@@ -933,7 +918,6 @@ def render_pep440(pieces: Dict[str, Any]) -> str:
         if pieces["dirty"]:
             rendered += ".dirty"
     return rendered
-
 
 def render_pep440_branch(pieces: Dict[str, Any]) -> str:
     """TAG[[.dev0]+DISTANCE.gHEX[.dirty]] .
@@ -964,7 +948,6 @@ def render_pep440_branch(pieces: Dict[str, Any]) -> str:
             rendered += ".dirty"
     return rendered
 
-
 def pep440_split_post(ver: str) -> Tuple[str, Optional[int]]:
     """Split pep440 version string at the post-release segment.
 
@@ -973,7 +956,6 @@ def pep440_split_post(ver: str) -> Tuple[str, Optional[int]]:
     """
     vc = str.split(ver, ".post")
     return vc[0], int(vc[1] or 0) if len(vc) == 2 else None
-
 
 def render_pep440_pre(pieces: Dict[str, Any]) -> str:
     """TAG[.postN.devDISTANCE] -- No -dirty.
@@ -997,7 +979,6 @@ def render_pep440_pre(pieces: Dict[str, Any]) -> str:
         # exception #1
         rendered = "0.post0.dev%%d" %% pieces["distance"]
     return rendered
-
 
 def render_pep440_post(pieces: Dict[str, Any]) -> str:
     """TAG[.postDISTANCE[.dev0]+gHEX] .
@@ -1024,7 +1005,6 @@ def render_pep440_post(pieces: Dict[str, Any]) -> str:
             rendered += ".dev0"
         rendered += "+g%%s" %% pieces["short"]
     return rendered
-
 
 def render_pep440_post_branch(pieces: Dict[str, Any]) -> str:
     """TAG[.postDISTANCE[.dev0]+gHEX[.dirty]] .
@@ -1054,7 +1034,6 @@ def render_pep440_post_branch(pieces: Dict[str, Any]) -> str:
             rendered += ".dirty"
     return rendered
 
-
 def render_pep440_old(pieces: Dict[str, Any]) -> str:
     """TAG[.postDISTANCE[.dev0]] .
 
@@ -1076,7 +1055,6 @@ def render_pep440_old(pieces: Dict[str, Any]) -> str:
             rendered += ".dev0"
     return rendered
 
-
 def render_git_describe(pieces: Dict[str, Any]) -> str:
     """TAG[-DISTANCE-gHEX][-dirty].
 
@@ -1096,7 +1074,6 @@ def render_git_describe(pieces: Dict[str, Any]) -> str:
         rendered += "-dirty"
     return rendered
 
-
 def render_git_describe_long(pieces: Dict[str, Any]) -> str:
     """TAG-DISTANCE-gHEX[-dirty].
 
@@ -1115,7 +1092,6 @@ def render_git_describe_long(pieces: Dict[str, Any]) -> str:
     if pieces["dirty"]:
         rendered += "-dirty"
     return rendered
-
 
 def render(pieces: Dict[str, Any], style: str) -> Dict[str, Any]:
     """Render the given version pieces into the requested style."""
@@ -1151,7 +1127,6 @@ def render(pieces: Dict[str, Any], style: str) -> Dict[str, Any]:
     return {"version": rendered, "full-revisionid": pieces["long"],
             "dirty": pieces["dirty"], "error": None,
             "date": pieces.get("date")}
-
 
 def get_versions() -> Dict[str, Any]:
     """Get version information or return default if unable to do so."""
@@ -1530,7 +1505,6 @@ version_json = '''
 %s
 '''  # END VERSION_JSON
 
-
 def get_versions():
     return json.loads(version_json)
 """
@@ -1544,11 +1518,15 @@ def versions_from_file(filename: str) -> Dict[str, Any]:
     except OSError:
         raise NotThisMethod("unable to read _version.py")
     mo = re.search(
-        r"version_json = '''\n(.*)'''  # END VERSION_JSON", contents, re.M | re.S
+        r"version_json = '''\n(.*)'''  # END VERSION_JSON",
+        contents,
+        re.M | re.S,
     )
     if not mo:
         mo = re.search(
-            r"version_json = '''\r\n(.*)'''  # END VERSION_JSON", contents, re.M | re.S
+            r"version_json = '''\r\n(.*)'''  # END VERSION_JSON",
+            contents,
+            re.M | re.S,
         )
     if not mo:
         raise NotThisMethod("no version_json in _version.py")
@@ -1646,7 +1624,10 @@ def render_pep440_pre(pieces: Dict[str, Any]) -> str:
             tag_version, post_version = pep440_split_post(pieces["closest-tag"])
             rendered = tag_version
             if post_version is not None:
-                rendered += ".post%d.dev%d" % (post_version + 1, pieces["distance"])
+                rendered += ".post%d.dev%d" % (
+                    post_version + 1,
+                    pieces["distance"],
+                )
             else:
                 rendered += ".post0.dev%d" % (pieces["distance"])
         else:
@@ -2228,7 +2209,11 @@ def do_setup() -> int:
     root = get_root()
     try:
         cfg = get_config_from_root(root)
-    except (OSError, configparser.NoSectionError, configparser.NoOptionError) as e:
+    except (
+        OSError,
+        configparser.NoSectionError,
+        configparser.NoOptionError,
+    ) as e:
         if isinstance(e, (OSError, configparser.NoSectionError)):
             print("Adding sample versioneer config to setup.cfg", file=sys.stderr)
             with open(os.path.join(root, "setup.cfg"), "a") as f:

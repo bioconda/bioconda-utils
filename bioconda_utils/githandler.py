@@ -7,7 +7,7 @@ import os
 import re
 import subprocess
 import tempfile
-from typing import BinaryIO, List, Optional, Protocol, Union
+from typing import BinaryIO, Protocol
 
 import git
 import yaml
@@ -71,7 +71,6 @@ class GitHandlerBase:
     the project primary repository and a working repository. The
     latter may be a fork or may be the same as the primary.
 
-
     Arguments:
       repo: GitPython Repo object (created by subclasses)
       dry_run: Don't push anything to remote
@@ -106,10 +105,10 @@ class GitHandlerBase:
         self.lock_working_dir = asyncio.Semaphore(1)
 
         #: GPG key ID or bool, indicating whether/how to sign commits
-        self._sign: Union[bool, str] = False
+        self._sign: bool | str = False
 
         #: Committer and Author
-        self.actor: Optional[git.Actor] = None
+        self.actor: git.Actor | None = None
 
     def close(self):
         """Release resources allocated"""
@@ -125,7 +124,7 @@ class GitHandlerBase:
             name = f"{name} <- {get_name(self.fork_remote)}"
         return f"{self.__class__.__name__}({name})"
 
-    def enable_signing(self, key: Union[bool, str] = True) -> None:
+    def enable_signing(self, key: bool | str = True) -> None:
         """Enable signing of commits
 
         Args:
@@ -263,9 +262,7 @@ class GitHandlerBase:
             f"File {rel_file_name} not found on branch {branch} commit {commit}"
         )
 
-    def create_local_branch(
-        self, branch_name: str, remote_branch: Optional[str] = None
-    ):
+    def create_local_branch(self, branch_name: str, remote_branch: str | None = None):
         """Creates local branch from remote **branch_name**"""
         remote_branch_name = remote_branch or branch_name
         if remote_branch is None:
@@ -321,7 +318,9 @@ class GitHandlerBase:
             raise GitHandlerFailure(f"No merge base found for {ref} and master")
         if len(merge_bases) > 1:
             logger.error(
-                "Multiple merge bases found for %s and master: %s", ref, merge_bases
+                "Multiple merge bases found for %s and master: %s",
+                ref,
+                merge_bases,
             )
         return merge_bases[0]
 
@@ -364,7 +363,7 @@ class GitHandlerBase:
         branch.checkout()
 
     def commit_and_push_changes(
-        self, files: List[str], branch_name: str, msg: str, sign=False
+        self, files: list[str], branch_name: str, msg: str, sign=False
     ) -> bool:
         """Create recipe commit and pushes to upstream remote
 
@@ -416,7 +415,7 @@ class GitHandlerBase:
             logger.info("Would push branch %s", branch_name)
         return True
 
-    def set_user(self, user: str, email: Optional[str] = None) -> None:
+    def set_user(self, user: str, email: str | None = None) -> None:
         """Set the user and email to use for committing"""
         self.actor = git.Actor(user, email)
 
@@ -585,7 +584,7 @@ class TempGitHandler(GitHandlerBase):
     repo, it will not break the entire process.
     """
 
-    _local_mirror_tmpdir: Optional[Union[str, tempfile.TemporaryDirectory]] = None
+    _local_mirror_tmpdir: str | tempfile.TemporaryDirectory | None = None
 
     @classmethod
     def set_mirror_dir(cls, dirname: str) -> None:
@@ -661,8 +660,8 @@ class TempGitHandler(GitHandlerBase):
 
     def __init__(
         self,
-        username: Optional[str] = None,
-        password: Optional[str] = None,
+        username: str | None = None,
+        password: str | None = None,
         url_format="https://{userpass}github.com/{user}/{repo}.git",
         home_user="bioconda",
         home_repo="bioconda-recipes",

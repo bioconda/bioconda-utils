@@ -5,7 +5,8 @@ import re
 import tempfile
 import zipfile
 import logging
-from typing import Any, Iterator, Optional
+from typing import Any
+from collections.abc import Iterator
 
 import requests
 import backoff
@@ -15,7 +16,6 @@ from bioconda_utils import utils
 from bioconda_utils.upload import anaconda_upload, skopeo_upload
 
 logger = logging.getLogger(__name__)
-
 
 IMAGE_RE = re.compile(r"(.+)(?::|%3A|---)(.+)\.tar\.gz$")
 
@@ -32,8 +32,8 @@ def upload_pr_artifacts(
     repo_name: str,
     git_sha: str,
     dryrun: bool = False,
-    mulled_upload_target: Optional[str] = None,
-    label: Optional[str] = None,
+    mulled_upload_target: str | None = None,
+    label: str | None = None,
     artifact_source: str = "azure",
 ) -> UploadResult:
     _config = utils.load_config(config)
@@ -202,7 +202,7 @@ def get_azure_artifacts(check_run: Any) -> Iterator[str]:
 
 
 def parse_azure_build_id(url: str) -> str:
-    match = re.search("buildId=(\d+)", url)
+    match = re.search(r"buildId=(\d+)", url)
     if match is None:
         raise ValueError(f"Could not parse Azure build ID from {url}")
     return match.group(1)
@@ -248,7 +248,7 @@ def get_circleci_artifacts(check_run: Any, platform: str) -> Iterator[str]:
 
 def parse_gha_build_id(url: str) -> str:
     # Get workflow run id from URL
-    match = re.search("runs/(\d+)/", url)
+    match = re.search(r"runs/(\d+)/", url)
     if match is None:
         raise ValueError(f"Could not parse GitHub Actions run ID from {url}")
     return match.group(1)

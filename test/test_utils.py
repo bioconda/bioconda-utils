@@ -15,14 +15,20 @@ import pytest
 from conda_build import exceptions, metadata
 from helpers import Recipes, ensure_missing
 
-from bioconda_utils import __version__, build, docker_utils, pkg_test, upload, utils
+from bioconda_utils import (
+    __version__,
+    build,
+    docker_utils,
+    pkg_test,
+    upload,
+    utils,
+)
 from bioconda_utils.utils import validate_config
 
 logger = logging.getLogger(__name__)
 
 # TODO: need channel order tests. Could probably do this by adding different
 # file:// channels with different variants of the same package
-
 
 # Label that will be used for uploading test packages to anaconda/binstar
 TEST_LABEL = "bioconda-utils-test"
@@ -120,7 +126,8 @@ def single_build(request, recipes_fixture):
         docker_builder = None
         mulled_test = False
     logger.error(
-        "Fixture: Building 'one' %s", "within docker" if docker_builder else "locally"
+        "Fixture: Building 'one' %s",
+        "within docker" if docker_builder else "locally",
     )
     build.build(
         recipe=recipes_fixture.recipe_dirs["one"],

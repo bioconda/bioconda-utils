@@ -13,7 +13,6 @@ from bioconda_utils import utils
 
 yaml = YAML(typ="rt")  # pylint: disable=invalid-name
 
-
 # common settings
 TEST_RECIPES_FOLDER = "recipes"
 TEST_CONFIG_YAML_FNAME = "config.yaml"

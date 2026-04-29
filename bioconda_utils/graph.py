@@ -9,15 +9,8 @@ from fnmatch import fnmatch
 from itertools import chain
 from typing import (
     Any,
-    DefaultDict,
-    Dict,
-    Iterable,
-    Iterator,
-    Optional,
-    Sequence,
-    Set,
-    Tuple,
 )
+from collections.abc import Iterable, Iterator, Sequence
 
 import networkx as nx
 
@@ -31,10 +24,10 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 def build(
     recipes: Iterable[str],
-    config: Dict[str, Any],
-    blacklist: Optional[Skiplist] = None,
+    config: dict[str, Any],
+    blacklist: Skiplist | None = None,
     restrict: bool = True,
-) -> Tuple[nx.DiGraph, DefaultDict[str, Set[str]]]:
+) -> tuple[nx.DiGraph, defaultdict[str, set[str]]]:
     """
     Returns the DAG of recipe paths and a dictionary that maps package names to
     lists of recipe paths to all defined versions of the package.  defined
@@ -80,7 +73,7 @@ def build(
         if blacklist is None or not blacklist.is_skiplisted(recipe):
             name2recipe[name].update([recipe])
 
-    def get_deps(meta: Dict[str, Any], sec: str) -> list[str]:
+    def get_deps(meta: dict[str, Any], sec: str) -> list[str]:
         reqs = meta.get("requirements")
         if not reqs:
             return []
@@ -133,7 +126,9 @@ def build_from_recipes(recipes: Iterable[Recipe]) -> nx.DiGraph:
     )
 
     logger.info(
-        "Building Recipe DAG: done (%i nodes, %i edges)", len(dag), len(dag.edges())
+        "Building Recipe DAG: done (%i nodes, %i edges)",
+        len(dag),
+        len(dag.edges()),
     )
     return dag
 

@@ -82,7 +82,6 @@ class Recipes(object):
 
         from_string : bool
 
-
         Useful attributes:
 
         * recipes: a dict mapping recipe names to parsed meta.yaml contents

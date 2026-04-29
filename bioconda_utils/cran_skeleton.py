@@ -8,7 +8,6 @@ import re
 from itertools import zip_longest
 import argparse
 import logging
-from typing import List
 
 from conda_build.api import skeletonize
 
@@ -145,7 +144,7 @@ def clean_yaml_file(package: str, no_windows: bool) -> None:
         builds.
     """
     path = os.path.join(package, "meta.yaml")
-    with open(path, "r") as yaml:
+    with open(path) as yaml:
         lines = list(yaml.readlines())
 
         # Remove lines consisting only of comments
@@ -197,7 +196,7 @@ def clean_build_file(package: str, no_windows: bool = False) -> None:
     """
 
     path = os.path.join(package, "build.sh")
-    with open(path, "r") as build:
+    with open(path) as build:
         lines = list(build.readlines())
 
         # Remove lines with mv commands
@@ -234,7 +233,7 @@ def clean_bld_file(package: str, no_windows: bool) -> None:
     if no_windows:
         os.unlink(path)
         return
-    with open(path, "r") as bld:
+    with open(path) as bld:
         lines = list(bld.readlines())
 
         # Removes the lines that start with @
@@ -245,7 +244,7 @@ def clean_bld_file(package: str, no_windows: bool) -> None:
         bld.write("".join(lines))
 
 
-def filter_lines_regex(lines: List[str], regex: str, substitute: str) -> List[str]:
+def filter_lines_regex(lines: list[str], regex: str, substitute: str) -> list[str]:
     """
     Substitutes **substitute** for every match to **regex** in each line of
     **lines**.
@@ -260,7 +259,7 @@ def filter_lines_regex(lines: List[str], regex: str, substitute: str) -> List[st
     return [re.sub(regex, substitute, line) for line in lines]
 
 
-def remove_empty_lines(lines: List[str]) -> List[str]:
+def remove_empty_lines(lines: list[str]) -> list[str]:
     """
     Removes consecutive empty lines in **lines**.
 
@@ -283,13 +282,13 @@ def remove_empty_lines(lines: List[str]) -> List[str]:
     return cleaned_lines
 
 
-def add_maintainers(lines: List[str]) -> None:
+def add_maintainers(lines: list[str]) -> None:
     """
     Append the contents of "maintainers.yaml" to the end of a YAML file.
     """
     HERE = os.path.abspath(os.path.dirname(__file__))
     maintainers_yaml = os.path.join(HERE, "maintainers.yaml")
-    with open(maintainers_yaml, "r") as yaml:
+    with open(maintainers_yaml) as yaml:
         extra_lines = list(yaml.readlines())
         lines.extend(extra_lines)
 

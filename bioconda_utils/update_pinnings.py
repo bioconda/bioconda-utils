@@ -13,16 +13,14 @@ from .utils import RepoData
 #        Re-implement it here or ask upstream to export that functionality.
 from conda_build.metadata import trim_build_only_deps
 
-# for type checking
-from typing import AbstractSet, List, Set, Tuple
+from collections.abc import Set as AbstractSet
 from .recipe import Recipe, RecipeError
 from conda_build.metadata import MetaData
-
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
-def _get_build_variants(meta: MetaData) -> Set[str]:
+def _get_build_variants(meta: MetaData) -> set[str]:
     # This is the same behavior as in
     # conda_build.metadata.Metadata.get_hash_contents but without leaving out
     # "build_string_excludes" (python, r_base, etc.).
@@ -215,7 +213,10 @@ def have_variant(meta: MetaData) -> bool:
     )
     if res:
         logger.debug(
-            "Package %s=%s=%s exists", meta.name(), meta.version(), meta.build_id()
+            "Package %s=%s=%s exists",
+            meta.name(),
+            meta.version(),
+            meta.build_id(),
         )
         return True
     return _have_partially_matching_build_id(meta)
@@ -248,7 +249,7 @@ def have_noarch_python_build_number(meta: MetaData) -> bool:
     return res
 
 
-def will_build_only_missing(metas: List[MetaData]) -> bool:
+def will_build_only_missing(metas: list[MetaData]) -> bool:
     """Checks if only new builds will be added (no divergent build ids exist)
 
     Args:
@@ -318,7 +319,7 @@ def check(
     build_config: object,
     keep_metas: bool = False,
     skip_variant_keys: AbstractSet[str] = frozenset(),
-) -> Tuple[State, Recipe]:
+) -> tuple[State, Recipe]:
     """Determine if a given recipe should have its build number increments
     (bumped) due to a recent change in pinnings.
 
@@ -340,7 +341,8 @@ def check(
         return State.FAIL, recipe
     except Exception:
         logger.exception(
-            "update_pinnings.check failed with exception in api.render(%s):", recipe
+            "update_pinnings.check failed with exception in api.render(%s):",
+            recipe,
         )
         return State.FAIL, recipe
 

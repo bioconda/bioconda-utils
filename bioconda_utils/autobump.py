@@ -40,6 +40,9 @@ Overview:
   have come past it, to avoid too many PRs opened at once.
 """
 
+from __future__ import annotations
+
+
 import abc
 import asyncio
 import logging
@@ -49,7 +52,8 @@ import random
 
 from collections import defaultdict, Counter
 from urllib.parse import urlparse
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple, Union
+from typing import Any
+from collections.abc import Mapping, Sequence
 
 import aiofiles
 from aiohttp import ClientResponseError
@@ -121,8 +125,8 @@ class RecipeSource:
     def __init__(
         self,
         recipe_base: str,
-        packages: Union[str, List[str]],
-        exclude: List[str],
+        packages: str | list[str],
+        exclude: list[str],
         shuffle: bool = True,
     ) -> None:
         self.recipe_base = recipe_base
@@ -156,11 +160,11 @@ class RecipeGraphSource(RecipeSource):
     def __init__(
         self,
         recipe_base: str,
-        packages: Union[str, List[str]],
-        exclude: List[str],
+        packages: str | list[str],
+        exclude: list[str],
         shuffle: bool,
-        config: Dict[str, str],
-        cache_fn: Optional[str] = None,
+        config: dict[str, str],
+        cache_fn: str | None = None,
     ) -> None:
         super().__init__(recipe_base, packages, exclude, shuffle)
         self.config = config
@@ -176,7 +180,7 @@ class RecipeGraphSource(RecipeSource):
         dag.add_nodes_from(self.dag)
         dag.add_edges_from(self.dag.edges())
         # Keep set of recipes "in flight"
-        sent: Set[Recipe] = set()
+        sent: set[Recipe] = set()
         while dag:
             remaining_recipes = list(dag.nodes())
             if self.shuffle:
@@ -222,8 +226,8 @@ class Scanner(AsyncPipeline[Recipe]):
     def __init__(
         self,
         recipe_source: RecipeSource,
-        cache_fn: Optional[str] = None,
-        status_fn: Optional[str] = None,
+        cache_fn: str | None = None,
+        status_fn: str | None = None,
     ) -> None:
         super().__init__()
         #: recipe source
@@ -231,7 +235,7 @@ class Scanner(AsyncPipeline[Recipe]):
         #: counter to gather stats on various states
         self.stats: Counter = Counter()
         #: collect end status for each recipe
-        self.status: List[Tuple[str, EndProcessingItem]] = []
+        self.status: list[tuple[str, EndProcessingItem]] = []
         #: filename to write statuses to
         self.status_fn = status_fn
         #: async requests helper
@@ -330,11 +334,11 @@ class AutoBumpConfigMixin:
     #: Name of key under `EXTRA_CONFIG` to enable/disable autobump
     ENABLE = "enable"
 
-    def get_config(self, recipe) -> Dict[Any, Any]:
+    def get_config(self, recipe) -> dict[Any, Any]:
         """Returns the configuration dict from the recipe"""
         return recipe.get("extra", {}).get(self.EXTRA_CONFIG, {})
 
-    def is_enabled(self, recipe) -> Optional[bool]:
+    def is_enabled(self, recipe) -> bool | None:
         """Checks if autobump is enabled for the recipe
 
         The result is:
@@ -395,7 +399,7 @@ class ExcludeBlacklisted(Filter):
         template = "is blacklisted"
         level = logging.DEBUG
 
-    def __init__(self, scanner: Scanner, recipe_base: str, config: Dict) -> None:
+    def __init__(self, scanner: Scanner, recipe_base: str, config: dict) -> None:
         super().__init__(scanner)
         self.blacklists = config.get("blacklists")
         self.skiplist = Skiplist(config, recipe_base)
@@ -458,7 +462,9 @@ class CheckPinning(Filter):
             recipe.data["pinning"] = reason
             new_buildno = recipe.build_number + 1
             logger.info(
-                "%s needs rebuild. Bumping buildnumber to %i", recipe, new_buildno
+                "%s needs rebuild. Bumping buildnumber to %i",
+                recipe,
+                new_buildno,
             )
             recipe.reset_buildnumber(new_buildno)
             recipe.render()
@@ -497,12 +503,12 @@ class CheckPinning(Filter):
             avail_vers = RepoData().get_package_data("version", name=var)
             if avail_vers:
                 resolved_vers[var] = list(
-                    set(
+                    {
                         avs
                         for avs in list(set(avail_vers))
                         for pvs in vers
                         if avs.startswith(pvs)
-                    )
+                    }
                 )
             else:
                 resolved_vers[var] = vers
@@ -536,9 +542,7 @@ class CheckPinning(Filter):
                 i for k, v in pinnings.items() for i in v if "compiler" in k
             ]
             if compiler_pins:
-                return {
-                    "compiler": set([f"Recompiling with {' / '.join(compiler_pins)}"])
-                }
+                return {"compiler": {f"Recompiling with {' / '.join(compiler_pins)}"}}
         return causes
         # must return not None!
 
@@ -611,11 +615,11 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
         template = "has no releases?!"
 
     def __init__(
-        self, scanner: Scanner, hoster_factory, unparsed_file: Optional[str] = None
+        self, scanner: Scanner, hoster_factory, unparsed_file: str | None = None
     ) -> None:
         super().__init__(scanner)
         #: output file name for unparsed urls
-        self.unparsed_urls: List[str] = []
+        self.unparsed_urls: list[str] = []
         #: output file name for failed urls
         self.unparsed_file = unparsed_file
         #: function selecting hoster
@@ -681,7 +685,8 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
 
         # Verify that every url was modified
         for src, osrc in zip(
-            ensure_list(recipe.meta["source"]), ensure_list(recipe.orig.meta["source"])
+            ensure_list(recipe.meta["source"]),
+            ensure_list(recipe.orig.meta["source"]),
         ):
             for url, ourl in zip(ensure_list(src["url"]), ensure_list(osrc["url"])):
                 if url == ourl:
@@ -723,7 +728,7 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
         if isinstance(urls, str):
             urls = [urls]
 
-        version_map: Dict[str, Dict[str, Any]] = defaultdict(dict)
+        version_map: dict[str, dict[str, Any]] = defaultdict(dict)
         for url in urls:
             config = self.get_config(recipe)
             hoster = self.hoster_factory(url, config.get("override", {}))
@@ -783,7 +788,7 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
         return latest
 
     def check_version_pin_conflict(
-        self, recipe: Recipe, versions: Dict[str, Any]
+        self, recipe: Recipe, versions: dict[str, Any]
     ) -> None:
         """Find items in **versions** conflicting with pins
 
@@ -820,7 +825,10 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
                             }
                         ):
                             logger.error(
-                                "Recipe %s: %s %s conflicts pins", recipe, pkg, spec
+                                "Recipe %s: %s %s conflicts pins",
+                                recipe,
+                                pkg,
+                                spec,
                             )
 
         for files in versions.values():
@@ -898,10 +906,10 @@ class UpdateChecksums(Filter):
 
         template = "had no change to checksum after update?!"
 
-    def __init__(self, scanner: Scanner, failed_file: Optional[str] = None) -> None:
+    def __init__(self, scanner: Scanner, failed_file: str | None = None) -> None:
         super().__init__(scanner)
         #: failed urls - for later inspection
-        self.failed_urls: List[str] = []
+        self.failed_urls: list[str] = []
         #: unparsed urls - for later inspection
         self.failed_file = failed_file
 
@@ -998,7 +1006,7 @@ class GitFilter(Filter):
 
     branch_prefix = "bump/"
 
-    def __init__(self, scanner: Scanner, git_handler: "GitHandler") -> None:
+    def __init__(self, scanner: Scanner, git_handler: GitHandler) -> None:
         super().__init__(scanner)
         #: The `GitHandler` class for accessing repo
         self.git = git_handler
@@ -1051,7 +1059,10 @@ class LoadRecipe(Filter):
         self.sem = asyncio.Semaphore(64)
 
     async def apply(self, recipe: Recipe) -> None:
-        async with self.sem, aiofiles.open(recipe.path, encoding="utf-8") as fdes:
+        async with (
+            self.sem,
+            aiofiles.open(recipe.path, encoding="utf-8") as fdes,
+        ):
             recipe_text = await fdes.read()
         recipe.load_from_string(recipe_text)
         recipe.set_original()
@@ -1104,7 +1115,9 @@ class GitLoadRecipe(GitFilter):
                 # Note: If a PR still exists for this, it is silently closed by deleting
                 #       the branch.
                 logger.info(
-                    "Recipe %s: deleting outdated remote %s", recipe, branch_name
+                    "Recipe %s: deleting outdated remote %s",
+                    recipe,
+                    branch_name,
                 )
                 await self.pipeline.run_io(self.git.delete_remote_branch, branch_name)
 
@@ -1126,7 +1139,10 @@ class WriteRecipe(Filter, WritingFilter):
     async def apply(self, recipe: Recipe) -> None:
         if not recipe.is_modified():
             raise self.NoChanges(recipe)
-        async with self.sem, aiofiles.open(recipe.path, "w", encoding="utf-8") as fdes:
+        async with (
+            self.sem,
+            aiofiles.open(recipe.path, "w", encoding="utf-8") as fdes,
+        ):
             await fdes.write(recipe.dump())
 
 
@@ -1185,8 +1201,8 @@ class CreatePullRequest(GitFilter):
     def __init__(
         self,
         scanner: Scanner,
-        git_handler: "GitHandler",
-        github_handler: "GitHubHandler",
+        git_handler: GitHandler,
+        github_handler: GitHubHandler,
     ) -> None:
         super().__init__(scanner, git_handler)
         self.ghub = github_handler
@@ -1208,10 +1224,11 @@ class CreatePullRequest(GitFilter):
         or filled in later by the `FetchUpstreamDependencies` filter
         (currently for PyPi).
         """
-        diffset: Dict[str, Set[str]] = {"host": set(), "run": set()}
+        diffset: dict[str, set[str]] = {"host": set(), "run": set()}
         if not recipe.version_data:
             logger.debug(
-                "Recipe %s: dependency diff not rendered (no version_data)", recipe
+                "Recipe %s: dependency diff not rendered (no version_data)",
+                recipe,
             )
         for fname in recipe.version_data:
             if fname not in recipe.orig.version_data:
@@ -1229,31 +1246,29 @@ class CreatePullRequest(GitFilter):
                 )
                 continue
             for kind in ("host", "run"):
-                deps: Set[str] = set()
+                deps: set[str] = set()
                 deps.update(new[kind].keys())
                 deps.update(orig[kind].keys())
                 for dep in deps:
                     if dep not in new[kind]:
-                        diffset[kind].add("-   - {} {}".format(dep, orig[kind][dep]))
+                        diffset[kind].add(f"-   - {dep} {orig[kind][dep]}")
                     elif dep not in orig[kind]:
-                        diffset[kind].add("+   - {} {}".format(dep, new[kind][dep]))
+                        diffset[kind].add(f"+   - {dep} {new[kind][dep]}")
                     elif orig[kind][dep] != new[kind][dep]:
                         diffset[kind].add(
-                            "-   - {dep} {}\n+   - {dep} {}".format(
-                                orig[kind][dep], new[kind][dep], dep=dep
-                            )
+                            f"-   - {dep} {orig[kind][dep]}\n+   - {dep} {new[kind][dep]}"
                         )
         text = ""
         for kind, lines in diffset.items():
             if lines:
-                text += "  {}:\n".format(kind)
+                text += f"  {kind}:\n"
                 text += "\n".join(sorted(lines, key=lambda x: x[1:])) + "\n"
         if not text:
             logger.debug("Recipe %s: dependency diff not rendered (all good)", recipe)
         return text
 
     @staticmethod
-    def get_github_author(recipe) -> Optional[str]:
+    def get_github_author(recipe) -> str | None:
         """Fetches upstream Github account name if applicable
 
         For recipes with upstream sources hosted on Github, we can extract
@@ -1311,7 +1326,10 @@ class CreatePullRequest(GitFilter):
                 )
             for pull in pullreqs:
                 logger.debug(
-                    "Found PR %i updating %s: %s", pull["number"], recipe, pull["title"]
+                    "Found PR %i updating %s: %s",
+                    pull["number"],
+                    recipe,
+                    pull["title"],
                 )
             # update the PR if title or body changed
             pull = pullreqs[0]

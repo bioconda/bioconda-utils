@@ -8,7 +8,7 @@ import tempfile
 import os
 import shlex
 import logging
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 from . import utils
 
@@ -44,13 +44,13 @@ def get_tests(path: str) -> str:
             tests.append(" && ".join(tests_commands))
         if tests_imports and "python" in requirements:
             tests.append(
-                " && ".join('python -c "import %s"' % imp for imp in tests_imports)
+                " && ".join(f'python -c "import {imp}"' for imp in tests_imports)
             )
         elif tests_imports and (
             "perl" in requirements or "perl-threaded" in requirements
         ):
             tests.append(
-                " && ".join('''perl -e "use %s;"''' % imp for imp in tests_imports)
+                " && ".join(f'''perl -e "use {imp};"''' for imp in tests_imports)
             )
 
     tests = " && ".join(tests)
@@ -86,13 +86,13 @@ def get_image_name(path: str) -> str:
     version = toks[-2]
     name = "-".join(toks[:-2])
 
-    spec = "%s=%s--%s" % (name, version, build_string)
+    spec = f"{name}={version}--{build_string}"
     return spec
 
 
 def _generate_explicit_spec(
     spec: str, channels: Sequence[str], conda_bld_dir: str, tmpdir: str
-) -> Optional[str]:
+) -> str | None:
     """Generate an @EXPLICIT spec file by dry-running conda create.
 
     Parameters
@@ -180,7 +180,7 @@ def _generate_explicit_spec(
 def _test_with_explicit_spec(
     spec_path: str,
     tests: str,
-    base_image: Optional[str],
+    base_image: str | None,
     conda_image: str,
     conda_bld_dir: str,
     live_logs: bool,
@@ -256,10 +256,10 @@ create-env --conda=: /usr/local
 
 def test_package(
     path: str,
-    name_override: Optional[str] = None,
+    name_override: str | None = None,
     channels: Sequence[str] = ("conda-forge", "local", "bioconda"),
     mulled_args: str = "",
-    base_image: Optional[str] = None,
+    base_image: str | None = None,
     conda_image: str = MULLED_CONDA_IMAGE,
     live_logs: bool = True,
     presolved: bool = True,
@@ -300,7 +300,7 @@ def test_package(
         solver run. Falls back to the original mulled-build path on failure.
     """
 
-    assert path.endswith((".tar.bz2", ".conda")), "Unrecognized path {0}".format(path)
+    assert path.endswith((".tar.bz2", ".conda")), f"Unrecognized path {path}"
     # assert os.path.exists(path), '{0} does not exist'.format(path)
 
     conda_bld_dir = os.path.abspath(os.path.dirname(os.path.dirname(path)))
@@ -313,7 +313,7 @@ def test_package(
         raise ValueError('"local" must be in channel list')
 
     resolved_channels = [
-        "file://{0}".format(conda_bld_dir) if channel == "local" else channel
+        f"file://{conda_bld_dir}" if channel == "local" else channel
         for channel in channels
     ]
 
@@ -372,7 +372,7 @@ def test_package(
         raise RuntimeError("internal involucro wrapper missing")
     cmd += ["--involucro-path", involucro_path]
 
-    logger.debug("mulled-build command: %s" % cmd)
+    logger.debug(f"mulled-build command: {cmd}")
 
     env = os.environ.copy()
     if base_image is not None:
