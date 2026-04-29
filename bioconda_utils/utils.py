@@ -1436,7 +1436,7 @@ class AsyncRequests:
         backoff.fibo,
         aiohttp.ClientResponseError,
         max_tries=20,
-        giveup=lambda ex: ex.code not in [429, 502, 503, 504],
+        giveup=lambda ex: isinstance(ex, aiohttp.ClientResponseError) and ex.status not in [429, 502, 503, 504],
     )
     async def _async_fetch_one(session, url, desc, cb=None, data=None, fd=None):
         result = []
