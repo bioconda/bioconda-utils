@@ -4,7 +4,7 @@ Verify that the recipe is not missing anything essential.
 """
 
 import os
-from typing import Any, Dict
+from typing import Any
 
 from . import LintCheck, _recipe
 
@@ -143,6 +143,6 @@ class missing_hash(LintCheck):
 
     checksum_names = ("md5", "sha1", "sha256")
 
-    def check_source(self, source: Dict[str, Any], section: str) -> None:
+    def check_source(self, source: dict[str, Any], section: str) -> None:
         if not any(source.get(chk) for chk in self.checksum_names):
             self.message(section=section)

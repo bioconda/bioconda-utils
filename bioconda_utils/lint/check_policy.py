@@ -7,7 +7,7 @@ can be mechanically checked).
 
 import glob
 import os
-from typing import Any, Dict, List
+from typing import Any
 
 from . import LintCheck, WARNING, _recipe
 from bioconda_utils import utils
@@ -21,7 +21,7 @@ class uses_vcs_url(LintCheck):
 
     """
 
-    def check_source(self, source: Dict[str, Any], section: str) -> None:
+    def check_source(self, source: dict[str, Any], section: str) -> None:
         for vcs in ("git", "svn", "hg"):
             if f"{vcs}_url" in source:
                 self.message(section=f"{section}/{vcs}_url")
@@ -69,7 +69,7 @@ class should_not_use_fn(LintCheck):
     and it will in most cases be unpacked automatically.
     """
 
-    def check_source(self, source: Dict[str, Any], section: str) -> None:
+    def check_source(self, source: dict[str, Any], section: str) -> None:
         if "fn" in source:
             self.message(section=section + "/fn")
 
@@ -126,7 +126,7 @@ class cran_packages_to_conda_forge(LintCheck):
 
     """
 
-    def check_deps(self, deps: Dict[str, List[str]]) -> None:
+    def check_deps(self, deps: dict[str, list[str]]) -> None:
         # must have R in run a run dep
         if "R" in deps and any("run" in dep for dep in deps["R"]):
             # and all deps satisfied in conda-forge
