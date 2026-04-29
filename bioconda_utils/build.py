@@ -124,7 +124,8 @@ def build(
     else:
         args += ["--no-anaconda-upload"]
 
-    for channel in channels or ["local"]:
+    channels_to_use = ["local"] + [c for c in (channels or []) if c != "local"]
+    for channel in channels_to_use:
         args += ["-c", channel]
 
     logger.debug("Build and Channel Args: %s", args)
@@ -200,6 +201,8 @@ def build(
         sp.CalledProcessError,
     ) as exc:
         logger.error("BUILD FAILED %s", recipe)
+        if hasattr(exc, "output") and exc.output:
+            logger.error("Build output:\n%s", exc.output)
         if record_build_failure:
             assert dag is not None
             store_build_failure_record(recipe, exc.output, meta, dag, skiplist_leafs)
