@@ -375,7 +375,7 @@ class GitHubHandler:
         backoff.fibo,
         gidgethub.BadRequest,
         max_tries=10,
-        giveup=lambda ex: ex.status_code not in [429, 502, 503, 504],
+        giveup=lambda ex: isinstance(ex, gidgethub.BadRequest) and ex.status_code not in [429, 502, 503, 504],
     )
     async def get_prs(
         self,
