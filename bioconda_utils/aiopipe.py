@@ -285,7 +285,10 @@ class AsyncRequests:
         backoff.fibo,
         aiohttp.ClientResponseError,
         max_tries=20,
-        giveup=lambda ex: isinstance(ex, aiohttp.ClientResponseError) and ex.status not in [429, 502, 503, 504],
+        giveup=lambda ex: (
+            isinstance(ex, aiohttp.ClientResponseError)
+            and ex.status not in [429, 502, 503, 504]
+        ),
     )
     async def get_text_from_url(self, url: str) -> str:
         """Fetch content at **url** and return as text
@@ -331,7 +334,10 @@ class AsyncRequests:
         backoff.fibo,
         aiohttp.ClientResponseError,
         max_tries=20,
-        giveup=lambda ex: isinstance(ex, aiohttp.ClientResponseError) and ex.status not in [429, 502, 503, 504],
+        giveup=lambda ex: (
+            isinstance(ex, aiohttp.ClientResponseError)
+            and ex.status not in [429, 502, 503, 504]
+        ),
     )
     async def get_checksum_from_http(self, url: str, desc: str) -> str:
         """Compute sha256 checksum of content at http **url**
@@ -365,7 +371,10 @@ class AsyncRequests:
         backoff.fibo,
         aiohttp.ClientResponseError,
         max_tries=20,
-        giveup=lambda ex: isinstance(ex, aiohttp.ClientResponseError) and ex.status not in [429, 502, 503, 504],
+        giveup=lambda ex: (
+            isinstance(ex, aiohttp.ClientResponseError)
+            and ex.status not in [429, 502, 503, 504]
+        ),
     )
     async def get_file_from_url(self, fname: str, url: str, desc: str) -> None:
         """Fetch file at **url** into **fname**
