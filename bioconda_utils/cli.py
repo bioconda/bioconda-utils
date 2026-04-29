@@ -940,7 +940,7 @@ def update_pinning(
     if no_leaves:
         dag = nx.subgraph(
             dag,
-            (node for node, degree in dag.out_degree_iter() if degree > 0),
+            (node for node, degree in dag.out_degree() if degree > 0),
         )
 
     logger.warning("Considering %i recipes", len(dag))
