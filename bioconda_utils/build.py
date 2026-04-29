@@ -3,12 +3,12 @@ Package Builder
 """
 
 import subprocess as sp
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 import itertools
 import logging
 import os
 
-from typing import List, Optional, Tuple
+from typing import Any, DefaultDict, Dict, List, NamedTuple, Optional, Set, Tuple
 from bioconda_utils.skiplist import Skiplist
 from bioconda_utils.build_failure import BuildFailureRecord
 
@@ -27,8 +27,11 @@ from . import recipe as _recipe
 logger = logging.getLogger(__name__)
 
 
-#: Result tuple for builds comprising success status and list of docker images
-BuildResult = namedtuple("BuildResult", ["success", "mulled_images"])
+class BuildResult(NamedTuple):
+    """Result tuple for builds comprising success status and docker images."""
+
+    success: bool
+    mulled_images: Optional[List[str]]
 
 
 def conda_build_purge() -> None:
@@ -56,14 +59,14 @@ def build(
     channels: Optional[List[str]] = None,
     docker_builder: Optional[docker_utils.RecipeBuilder] = None,
     raise_error: bool = False,
-    linter=None,
+    linter: Optional[lint.Linter] = None,
     mulled_conda_image: str = pkg_test.MULLED_CONDA_IMAGE,
     record_build_failure: bool = False,
     dag: Optional[nx.DiGraph] = None,
     skiplist_leafs: bool = False,
     live_logs: bool = True,
     presolved_mulled_test: bool = True,
-    mulled_upload_target=None,
+    mulled_upload_target: Optional[str] = None,
 ) -> BuildResult:
     """
     Build a single recipe for a single env
@@ -193,6 +196,7 @@ def build(
     except (docker_utils.DockerCalledProcessError, sp.CalledProcessError) as exc:
         logger.error("BUILD FAILED %s", recipe)
         if record_build_failure:
+            assert dag is not None
             store_build_failure_record(recipe, exc.output, meta, dag, skiplist_leafs)
         if raise_error:
             raise exc
@@ -227,7 +231,9 @@ def build(
     return BuildResult(True, None)
 
 
-def store_build_failure_record(recipe, output, meta, dag, skiplist_leafs):
+def store_build_failure_record(
+    recipe: str, output: Any, meta: Any, dag: nx.DiGraph, skiplist_leafs: bool
+) -> None:
     """
     Write the exception to a file next to the meta.yaml
     """
@@ -243,7 +249,12 @@ def store_build_failure_record(recipe, output, meta, dag, skiplist_leafs):
     build_failure_record.commit_and_push_changes()
 
 
-def remove_cycles(dag, name2recipes, failed, skip_dependent):
+def remove_cycles(
+    dag: nx.DiGraph,
+    name2recipes: Dict[str, Set[str]],
+    failed: List[str],
+    skip_dependent: DefaultDict[str, List[str]],
+) -> nx.DiGraph:
     nodes_in_cycles = set()
     for cycle in list(nx.simple_cycles(dag)):
         logger.error("BUILD ERROR: dependency cycle found: %s", cycle)
@@ -265,7 +276,12 @@ def remove_cycles(dag, name2recipes, failed, skip_dependent):
     return dag.subgraph(name for name in dag if name not in nodes_in_cycles)
 
 
-def get_subdags(dag, n_workers, worker_offset, subdag_depth):
+def get_subdags(
+    dag: nx.DiGraph,
+    n_workers: int,
+    worker_offset: int,
+    subdag_depth: Optional[int],
+) -> nx.DiGraph:
     if n_workers > 1 and worker_offset >= n_workers:
         raise ValueError(
             "n-workers is less than the worker-offset given! "
@@ -328,7 +344,7 @@ def get_subdags(dag, n_workers, worker_offset, subdag_depth):
 
 def do_not_consider_for_additional_platform(
     recipe_folder: str, recipe: str, platform: str
-):
+) -> bool:
     """
     Given a recipe, check this recipe should skip in current platform or not.
 
@@ -376,7 +392,7 @@ def build_recipes(
     subdag_depth: Optional[int] = None,
     presolved_mulled_test: bool = True,
     fast_resolve: bool = True,
-):
+) -> bool:
     """
     Build one or many bioconda packages.
 
@@ -569,7 +585,7 @@ def build_recipes(
                         if not upload.anaconda_upload(pkg, label=label):
                             failed_uploads.append(pkg)
                 if mulled_upload_target:
-                    for img in res.mulled_images:
+                    for img in res.mulled_images or []:
                         upload.mulled_upload(img, mulled_upload_target)
                         docker_utils.purgeImage(mulled_upload_target, img)
 
@@ -618,7 +634,7 @@ def build_recipes(
     return True
 
 
-def report_resources(message, show_docker=True):
+def report_resources(message: str, show_docker: bool = True) -> None:
     free_space_mb = utils.get_free_space()
     free_mem_mb = utils.get_free_memory_mb()
     free_mem_percent = utils.get_free_memory_percent()
