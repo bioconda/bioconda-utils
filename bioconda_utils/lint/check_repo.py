@@ -4,9 +4,11 @@ These checks verify consistency with the repository (blacklisting,
 other channels, existing versions).
 """
 
+from typing import Any
+
 from bioconda_utils.build_failure import BuildFailureRecord
 from .. import utils
-from . import LintCheck
+from . import LintCheck, _recipe
 
 
 class in_other_channels(LintCheck):
@@ -24,9 +26,9 @@ class in_other_channels(LintCheck):
 
     """
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         channels = utils.RepoData().get_package_data(key="channel", name=recipe.name)
-        if set(channels) - set(("bioconda",)):
+        if set(channels) - {"bioconda"}:
             self.message(section="package/name")
 
 
@@ -39,14 +41,14 @@ class build_number_needs_bump(LintCheck):
 
     """
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         bldnos = utils.RepoData().get_package_data(
             key="build_number", name=recipe.name, version=recipe.version
         )
         if bldnos and recipe.build_number <= max(bldnos):
             self.message("build/number", data=max(bldnos))
 
-    def fix(self, _message, data):
+    def fix(self, _message: Any, data: int) -> bool:
         self.recipe.reset_buildnumber(data + 1)
         return True
 
@@ -60,14 +62,14 @@ class build_number_needs_reset(LintCheck):
 
     requires = ["missing_build_number"]
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         bldnos = utils.RepoData().get_package_data(
             key="build_number", name=recipe.name, version=recipe.version
         )
         if not bldnos and recipe.build_number > 0:
             self.message("build/number", data=0)
 
-    def fix(self, _message, data):
+    def fix(self, _message: Any, data: int) -> bool:
         self.recipe.reset_buildnumber(data)
         return True
 
@@ -79,21 +81,21 @@ class recipe_is_blacklisted(LintCheck):
     the build fail blacklist.
     """
 
-    def __init__(self, linter):
+    def __init__(self, linter: Any) -> None:
         super().__init__(linter)
         self.skiplist = linter.get_skiplist()
         self.blacklists = linter.config.get("blacklists")
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         if self.skiplist.is_skiplisted(recipe):
             self.message(section="package/name", data=True)
 
-    def fix(self, _message, _data):
+    def fix(self, _message: Any, _data: Any) -> bool:
         failure_record = BuildFailureRecord(self.recipe)
         if failure_record.exists() and failure_record.skiplist:
             failure_record.remove()
         for blacklist in self.blacklists:
-            with open(blacklist, "r") as fdes:
+            with open(blacklist) as fdes:
                 data = fdes.readlines()
             for num, line in enumerate(data):
                 if self.recipe.name in line:

@@ -6,8 +6,9 @@ section that is otherwise free-form.
 """
 
 import re
+from typing import Any
 
-from . import LintCheck
+from . import LintCheck, _recipe
 
 
 class version_constraints_missing_whitespace(LintCheck):
@@ -20,7 +21,7 @@ class version_constraints_missing_whitespace(LintCheck):
 
     """
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         check_paths = []
         for section in ("build", "run", "host"):
             check_paths.append(f"requirements/{section}")
@@ -34,7 +35,7 @@ class version_constraints_missing_whitespace(LintCheck):
                     if not space_separated:
                         self.message(section=f"{path}/{n}", data=True)
 
-    def fix(self, _message, _data):
+    def fix(self, _message: Any, _data: Any) -> bool:
         check_paths = []
         for section in ("build", "run", "host"):
             check_paths.append(f"requirements/{section}")
@@ -62,7 +63,7 @@ class extra_identifiers_not_list(LintCheck):
 
     """
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         identifiers = recipe.get("extra/identifiers", None)
         if identifiers and not isinstance(identifiers, list):
             self.message(section="extra/identifiers")
@@ -83,7 +84,7 @@ class extra_identifiers_not_string(LintCheck):
 
     requires = [extra_identifiers_not_list]
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         identifiers = recipe.get("extra/identifiers", [])
         for n, identifier in enumerate(identifiers):
             if not isinstance(identifier, str):
@@ -103,7 +104,7 @@ class extra_identifiers_missing_colon(LintCheck):
 
     requires = [extra_identifiers_not_string]
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         identifiers = recipe.get("extra/identifiers", [])
         for n, identifier in enumerate(identifiers):
             if ":" not in identifier:
@@ -121,6 +122,6 @@ class extra_skip_lints_not_list(LintCheck):
 
     """
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         if not isinstance(recipe.get("extra/skip-lints", []), list):
             self.message(section="extra/skip-lints")

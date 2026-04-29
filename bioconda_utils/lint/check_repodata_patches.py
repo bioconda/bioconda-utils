@@ -1,5 +1,5 @@
 from bioconda_utils import utils
-from bioconda_utils.lint import INFO, LintCheck
+from bioconda_utils.lint import INFO, LintCheck, _recipe
 
 
 class repodata_patches_no_version_bump(LintCheck):
@@ -8,7 +8,7 @@ class repodata_patches_no_version_bump(LintCheck):
     Please set the version to the current date in the format ``YYYYMMDD``.
     """
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         if recipe.get("package/name") != "bioconda-repodata-patches":
             return
         repodata = utils.RepoData()
@@ -25,7 +25,7 @@ class repodata_patches_show_diff(LintCheck):
 
     severity = INFO
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         if recipe.get("package/name") != "bioconda-repodata-patches":
             return
         # TODO run diff script and display the diff as a lint message

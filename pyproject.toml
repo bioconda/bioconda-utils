@@ -1,0 +1,5 @@
+[tool.ty.src]
+exclude = [
+    "**/_version.py",
+    "versioneer.py"
+]

@@ -14,7 +14,6 @@ SKIP_DUE_TO_BIOARCHIVE_OUTAGE = partial(
     reason="temporarily skipped due to bioarchive.galaxyproject.org outage",
 )
 
-
 config = {"channels": ["conda-forge", "bioconda"]}
 
 
@@ -192,7 +191,11 @@ def test_annotation_data(tmpdir, bioc_fetch):
 @SKIP_DUE_TO_BIOARCHIVE_OUTAGE
 def test_experiment_data(tmpdir, bioc_fetch):
     bioconductor_skeleton.write_recipe(
-        "Affyhgu133A2Expr", str(tmpdir), config, recursive=False, packages=bioc_fetch
+        "Affyhgu133A2Expr",
+        str(tmpdir),
+        config,
+        recursive=False,
+        packages=bioc_fetch,
     )
     meta = utils.load_first_metadata(
         str(tmpdir.join("bioconductor-affyhgu133a2expr"))
@@ -208,7 +211,11 @@ def test_nonexistent_pkg(tmpdir, bioc_fetch):
     # no such package exists in the current bioconductor
     with pytest.raises(bioconductor_skeleton.PackageNotFoundError):
         bioconductor_skeleton.write_recipe(
-            "nonexistent", str(tmpdir), config, recursive=True, packages=bioc_fetch
+            "nonexistent",
+            str(tmpdir),
+            config,
+            recursive=True,
+            packages=bioc_fetch,
         )
 
     # package exists, but not this version

@@ -7,10 +7,14 @@ import logging
 from collections import defaultdict
 from fnmatch import fnmatch
 from itertools import chain
-from typing import Any, Dict, Optional
+from typing import (
+    Any,
+)
+from collections.abc import Iterable, Iterator, Sequence
 
 import networkx as nx
 
+from bioconda_utils.recipe import Recipe
 from bioconda_utils.skiplist import Skiplist
 
 from . import utils
@@ -19,11 +23,11 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
 def build(
-    recipes,
-    config: Dict[str, Any],
-    blacklist: Optional[Skiplist] = None,
+    recipes: Iterable[str],
+    config: dict[str, Any],
+    blacklist: Skiplist | None = None,
     restrict: bool = True,
-):
+) -> tuple[nx.DiGraph, defaultdict[str, set[str]]]:
     """
     Returns the DAG of recipe paths and a dictionary that maps package names to
     lists of recipe paths to all defined versions of the package.  defined
@@ -69,7 +73,7 @@ def build(
         if blacklist is None or not blacklist.is_skiplisted(recipe):
             name2recipe[name].update([recipe])
 
-    def get_deps(meta, sec):
+    def get_deps(meta: dict[str, Any], sec: str) -> list[str]:
         reqs = meta.get("requirements")
         if not reqs:
             return []
@@ -78,7 +82,7 @@ def build(
             return []
         return [dep.split()[0] for dep in deps if dep]
 
-    def get_inner_deps(dependencies):
+    def get_inner_deps(dependencies: Iterable[str]) -> Iterator[str]:
         dependencies = list(dependencies)
         for dep in dependencies:
             if dep in name2recipe or not restrict:
@@ -102,7 +106,7 @@ def build(
     return dag, name2recipe
 
 
-def build_from_recipes(recipes):
+def build_from_recipes(recipes: Iterable[Recipe]) -> nx.DiGraph:
     logger.info("Building Recipe DAG")
 
     package2recipes = {}
@@ -122,12 +126,16 @@ def build_from_recipes(recipes):
     )
 
     logger.info(
-        "Building Recipe DAG: done (%i nodes, %i edges)", len(dag), len(dag.edges())
+        "Building Recipe DAG: done (%i nodes, %i edges)",
+        len(dag),
+        len(dag.edges()),
     )
     return dag
 
 
-def filter_recipe_dag(dag, include, exclude):
+def filter_recipe_dag(
+    dag: nx.DiGraph, include: Sequence[str], exclude: Sequence[str]
+) -> nx.DiGraph:
     """Reduces **dag** to packages in **names** and their requirements"""
     nodes = set()
     for recipe in dag:
@@ -141,7 +149,7 @@ def filter_recipe_dag(dag, include, exclude):
     return nx.subgraph(dag, nodes)
 
 
-def filter(dag, packages):
+def filter(dag: nx.DiGraph, packages: Iterable[str]) -> nx.DiGraph:
     nodes = set()
     for package in packages:
         if package in nodes:
@@ -158,5 +166,5 @@ def filter(dag, packages):
     return nx.subgraph(dag, nodes)
 
 
-def is_leaf(dag, pkg_name: str):
+def is_leaf(dag: nx.DiGraph, pkg_name: str) -> bool:
     return dag.out_degree(pkg_name) == 0

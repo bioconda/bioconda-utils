@@ -24,7 +24,6 @@ for case_file in linting_case_files:
         # we need the case_name accessible in some cases
         TEST_DATA[case_name]["name"] = case_name
 
-
 TEST_CASES = list(TEST_DATA.values())
 TEST_CASE_IDS = list(TEST_DATA.keys())
 
@@ -46,8 +45,7 @@ def test_lint(linter, recipe_dirs, mock_repodata, case):
     found = set()
     for msg in messages:
         assert str(msg.check) in expected, (
-            f"In test '{case['name']}' on '{msg.recipe.basedir}':"
-            f"'{msg.check}' emitted unexpectedly"
+            f"In test '{case['name']}' on '{msg.recipe.basedir}':'{msg.check}' emitted unexpectedly"
         )
         found.add(str(msg.check))
     assert len(expected) == len(found), (
