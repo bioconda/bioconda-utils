@@ -786,6 +786,8 @@ def handle_merged_pr(
     artifact_source="azure",
 ):
     label = os.getenv("BIOCONDA_LABEL", None) or None
+    if repo is None:
+        raise ValueError("repo is required")
     if git_range is None:
         raise ValueError("git_range is required")
 

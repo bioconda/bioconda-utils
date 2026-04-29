@@ -8,6 +8,7 @@ import re
 from itertools import zip_longest
 import argparse
 import logging
+from typing import List
 
 from conda_build.api import skeletonize
 
@@ -41,8 +42,13 @@ win32_string = "number: 0\n  skip: true  # [win32]"
 
 
 def write_recipe(
-    package, recipe_dir=".", recursive=False, force=False, no_windows=False, **kwargs
-):
+    package: str,
+    recipe_dir: str = ".",
+    recursive: bool = False,
+    force: bool = False,
+    no_windows: bool = False,
+    **kwargs: object,
+) -> None:
     """
     Call out to to ``conda skeleton cran``.
 
@@ -104,7 +110,7 @@ def write_recipe(
         logger.error("%s had dependencies that specified versions: skipping.", package)
 
 
-def clean_skeleton_files(package, no_windows=True):
+def clean_skeleton_files(package: str, no_windows: bool = True) -> None:
     """
     Cleans output files created by ``conda skeleton cran`` to make them
     conda-forge compatible.
@@ -124,7 +130,7 @@ def clean_skeleton_files(package, no_windows=True):
     clean_bld_file(package, no_windows)
 
 
-def clean_yaml_file(package, no_windows):
+def clean_yaml_file(package: str, no_windows: bool) -> None:
     """
     Cleans the YAML file output by ``conda skeleton cran`` to make it conda-forge
     compatible.
@@ -175,7 +181,7 @@ def clean_yaml_file(package, no_windows):
         yaml.write(out)
 
 
-def clean_build_file(package, no_windows=False):
+def clean_build_file(package: str, no_windows: bool = False) -> None:
     """
     Cleans build.sh file created by ``conda skeleton cran`` to be compatible with
     conda-forge.
@@ -209,7 +215,7 @@ def clean_build_file(package, no_windows=False):
         build.write("".join(lines))
 
 
-def clean_bld_file(package, no_windows):
+def clean_bld_file(package: str, no_windows: bool) -> None:
     """
     Cleans bld.bat file created by ``conda skeleton cran`` to be compatible with
     conda-forge.
@@ -239,7 +245,7 @@ def clean_bld_file(package, no_windows):
         bld.write("".join(lines))
 
 
-def filter_lines_regex(lines, regex, substitute):
+def filter_lines_regex(lines: List[str], regex: str, substitute: str) -> List[str]:
     """
     Substitutes **substitute** for every match to **regex** in each line of
     **lines**.
@@ -254,7 +260,7 @@ def filter_lines_regex(lines, regex, substitute):
     return [re.sub(regex, substitute, line) for line in lines]
 
 
-def remove_empty_lines(lines):
+def remove_empty_lines(lines: List[str]) -> List[str]:
     """
     Removes consecutive empty lines in **lines**.
 
@@ -277,7 +283,7 @@ def remove_empty_lines(lines):
     return cleaned_lines
 
 
-def add_maintainers(lines):
+def add_maintainers(lines: List[str]) -> None:
     """
     Append the contents of "maintainers.yaml" to the end of a YAML file.
     """
@@ -288,7 +294,7 @@ def add_maintainers(lines):
         lines.extend(extra_lines)
 
 
-def main():
+def main() -> None:
     """Adding support for arguments here"""
     setup_logger()
     parser = argparse.ArgumentParser()

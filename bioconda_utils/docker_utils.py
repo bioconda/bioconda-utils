@@ -55,6 +55,7 @@ import grp
 from importlib.resources import files, as_file
 import re
 from packaging.version import Version
+from typing import Dict, Optional, Protocol
 
 
 from conda import exports as conda_exports
@@ -64,6 +65,11 @@ from . import utils
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+class CondaBuildConfigFile(Protocol):
+    arg: str
+    path: str
 
 
 # ----------------------------------------------------------------------------
@@ -155,19 +161,19 @@ class DockerBuildError(Exception):
 class RecipeBuilder(object):
     def __init__(
         self,
-        tag="tmp-bioconda-builder",
-        container_recipe="/opt/recipe",
-        container_staging="/opt/host-conda-bld",
-        requirements=None,
+        tag: str = "tmp-bioconda-builder",
+        container_recipe: str = "/opt/recipe",
+        container_staging: str = "/opt/host-conda-bld",
+        requirements: Optional[str] = None,
         build_script_template: str = BUILD_SCRIPT_TEMPLATE,
         dockerfile_template: str = DOCKERFILE_TEMPLATE,
-        use_host_conda_bld=False,
-        pkg_dir=None,
-        keep_image=False,
-        build_image=False,
-        image_build_dir=None,
-        docker_base_image=None,
-    ):
+        use_host_conda_bld: bool = False,
+        pkg_dir: Optional[str] = None,
+        keep_image: bool = False,
+        build_image: bool = False,
+        image_build_dir: Optional[str] = None,
+        docker_base_image: Optional[str] = None,
+    ) -> None:
         """
         Class to handle building a custom docker container that can be used for
         building conda recipes.
@@ -298,17 +304,19 @@ class RecipeBuilder(object):
         if self.build_image:
             self._build_image()
 
-    def _get_config_path(self, staging_prefix, i, config_file):
+    def _get_config_path(
+        self, staging_prefix: str, i: int, config_file: CondaBuildConfigFile
+    ) -> str:
         src_basename = os.path.basename(config_file.path)
         dst_basename = "conda_build_config_{}_{}_{}".format(
             i, config_file.arg, src_basename
         )
         return os.path.join(staging_prefix, dst_basename)
 
-    def __del__(self):
+    def __del__(self) -> None:
         self.cleanup()
 
-    def _find_proxy_settings(self):
+    def _find_proxy_settings(self) -> Dict[str, str]:
         res = {}
         for var in ("http_proxy", "https_proxy"):
             values = set(
@@ -320,7 +328,7 @@ class RecipeBuilder(object):
                 raise ValueError(f"{var} and {var.upper()} have different values")
         return res
 
-    def _build_image(self):
+    def _build_image(self) -> sp.CompletedProcess:
         """
         Builds a new image with requirements installed.
         """
@@ -412,7 +420,14 @@ class RecipeBuilder(object):
             shutil.rmtree(build_dir)
         return p
 
-    def build_recipe(self, recipe_dir, build_args, env, noarch=False, live_logs=True):
+    def build_recipe(
+        self,
+        recipe_dir: str,
+        build_args: str,
+        env: Dict[str, str],
+        noarch: bool = False,
+        live_logs: bool = True,
+    ) -> sp.CompletedProcess:
         """
         Build a single recipe.
 
@@ -494,13 +509,13 @@ class RecipeBuilder(object):
             p = utils.run(cmd, mask=False, live=live_logs)
         return p
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         if self.build_image and not self.keep_image:
             cmd = ["docker", "rmi", self.docker_temp_image]
             utils.run(cmd, mask=False)
 
 
-def purgeImage(mulled_upload_target, img):
+def purgeImage(mulled_upload_target: str, img: str) -> None:
     pkg_name_and_version, pkg_build_string = img.rsplit("--", 1)
     pkg_name, pkg_version = pkg_name_and_version.rsplit("=", 1)
     pkg_container_image = (
@@ -510,6 +525,6 @@ def purgeImage(mulled_upload_target, img):
     utils.run(cmd, mask=False)
 
 
-def pruneStoppedContainers():
+def pruneStoppedContainers() -> None:
     cmd = ["docker", "container", "prune", "-f"]
     utils.run(cmd, mask=False)

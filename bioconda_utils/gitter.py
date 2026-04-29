@@ -2,6 +2,8 @@
 `Gitter.im <https://gitter.im>`_ Web-API Bindings
 """
 
+from __future__ import annotations
+
 import abc
 import logging
 import json
@@ -19,7 +21,7 @@ class User(NamedTuple):
     """Gitter User"""
 
     @classmethod
-    def from_dict(cls, data):
+    def from_dict(cls, data: Dict[str, Any]) -> User:
         """Create `User` from `dict`"""
         return cls(**data)
 
@@ -49,7 +51,7 @@ class Mention(NamedTuple):
     """Gitter User Mention"""
 
     @classmethod
-    def from_dict(cls, data):
+    def from_dict(cls, data: Dict[str, Any]) -> Mention:
         """Create `User` from `dict`"""
         return cls(**data)
 
@@ -65,7 +67,7 @@ class Message(NamedTuple):
     """Gitter Chat Message"""
 
     @classmethod
-    def from_dict(cls, data):
+    def from_dict(cls, data: Dict[str, Any]) -> Message:
         """Create `Message` from `dict`"""
         if "mentions" in data:
             data["mentions"] = [Mention.from_dict(user) for user in data["mentions"]]
@@ -107,7 +109,7 @@ class Room(NamedTuple):
     """Gitter Chat Room"""
 
     @classmethod
-    def from_dict(cls, data):
+    def from_dict(cls, data: Dict[str, Any]) -> Room:
         """Create `Room` from `dict`"""
         if "user" in data:
             data["user"] = User.from_dict(data["user"])
@@ -420,7 +422,7 @@ class GitterAPI:
         )
         return Message.from_dict(data)
 
-    async def list_groups(self):
+    async def list_groups(self) -> Any:
         """Get list of current user's groups"""
         _, data = await self._make_request("GET", self._LIST_GROUPS, {})
         return data

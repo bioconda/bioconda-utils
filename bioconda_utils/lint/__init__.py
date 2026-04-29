@@ -178,7 +178,11 @@ class LintCheckMeta(abc.ABCMeta):
     registry: List[Type["LintCheck"]] = []
 
     def __new__(
-        cls, name: str, bases: Tuple[type, ...], namespace: Dict[str, Any], **kwargs
+        cls,
+        name: str,
+        bases: Tuple[type, ...],
+        namespace: Dict[str, Any],
+        **kwargs: Any,
     ) -> type:
         """Creates LintCheck classes"""
         typ = cast(

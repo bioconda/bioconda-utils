@@ -91,7 +91,7 @@ _legacy_build_string_prefixes = re.compile(
 
 
 # TODO: clean this mess up
-def _have_partially_matching_build_id(meta):
+def _have_partially_matching_build_id(meta: MetaData) -> bool:
     # Stupid legacy special handling:
     res = RepoData().get_package_data(
         "build",
@@ -157,7 +157,7 @@ def _have_partially_matching_build_id(meta):
     #     if trimmed_build_id == current_build_id:
     #         return True
     #     return False
-    def is_matching_trimmed_build_id(build_id, current_build_id):
+    def is_matching_trimmed_build_id(build_id: str, current_build_id: str) -> bool:
         matches = _legacy_build_string_prefixes.match(build_id)
         if matches is None:
             return False
@@ -315,8 +315,8 @@ def has_invalid_build_string(meta: MetaData) -> bool:
 
 def check(
     recipe: Recipe,
-    build_config,
-    keep_metas=False,
+    build_config: object,
+    keep_metas: bool = False,
     skip_variant_keys: AbstractSet[str] = frozenset(),
 ) -> Tuple[State, Recipe]:
     """Determine if a given recipe should have its build number increments

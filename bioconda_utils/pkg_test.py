@@ -8,6 +8,7 @@ import tempfile
 import os
 import shlex
 import logging
+from typing import Optional, Sequence
 
 from . import utils
 
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 MULLED_CONDA_IMAGE = "quay.io/bioconda/create-env:latest"
 
 
-def get_tests(path):
+def get_tests(path: str) -> str:
     "Extract tests from a built package"
     tmp = tempfile.mkdtemp()
     for tar, member in stream_conda_info(path):
@@ -61,7 +62,7 @@ def get_tests(path):
     return f"bash -c {shlex.quote(tests)}"
 
 
-def get_image_name(path):
+def get_image_name(path: str) -> str:
     """
     Returns name of generated docker image.
 
@@ -89,7 +90,9 @@ def get_image_name(path):
     return spec
 
 
-def _generate_explicit_spec(spec, channels, conda_bld_dir, tmpdir):
+def _generate_explicit_spec(
+    spec: str, channels: Sequence[str], conda_bld_dir: str, tmpdir: str
+) -> Optional[str]:
     """Generate an @EXPLICIT spec file by dry-running conda create.
 
     Parameters
@@ -175,8 +178,13 @@ def _generate_explicit_spec(spec, channels, conda_bld_dir, tmpdir):
 
 
 def _test_with_explicit_spec(
-    spec_path, tests, base_image, conda_image, conda_bld_dir, live_logs
-):
+    spec_path: str,
+    tests: str,
+    base_image: Optional[str],
+    conda_image: str,
+    conda_bld_dir: str,
+    live_logs: bool,
+) -> sp.CompletedProcess:
     """Run mulled test using a pre-solved explicit spec file.
 
     Parameters
@@ -247,15 +255,15 @@ create-env --conda=: /usr/local
 
 
 def test_package(
-    path,
-    name_override=None,
-    channels=("conda-forge", "local", "bioconda"),
-    mulled_args="",
-    base_image=None,
-    conda_image=MULLED_CONDA_IMAGE,
-    live_logs=True,
-    presolved=True,
-):
+    path: str,
+    name_override: Optional[str] = None,
+    channels: Sequence[str] = ("conda-forge", "local", "bioconda"),
+    mulled_args: str = "",
+    base_image: Optional[str] = None,
+    conda_image: str = MULLED_CONDA_IMAGE,
+    live_logs: bool = True,
+    presolved: bool = True,
+) -> sp.CompletedProcess:
     """
     Tests a built package in a minimal docker container.
 

@@ -386,23 +386,23 @@ ENV_VAR_DOCKER_BLACKLIST = [
 ]
 
 
-def get_free_space():
+def get_free_space() -> float:
     """Return free space in MB on disk"""
     s = os.statvfs(os.getcwd())
     return s.f_frsize * s.f_bavail / (1024**2)
 
 
-def get_free_memory_percent():
+def get_free_memory_percent() -> float:
     """Return free memory as a percentage of total memory"""
     return psutil.virtual_memory().available * 100 / psutil.virtual_memory().total
 
 
-def get_free_memory_mb():
+def get_free_memory_mb() -> float:
     """Return free memory as megabytes"""
     return psutil.virtual_memory().available / (1024**2)
 
 
-def allowed_env_var(s, docker=False):
+def allowed_env_var(s: str, docker: bool = False) -> bool:
     for pattern in ENV_VAR_WHITELIST:
         if fnmatch.fnmatch(s, pattern):
             for bpattern in ENV_VAR_BLACKLIST:
@@ -413,9 +413,10 @@ def allowed_env_var(s, docker=False):
                     if fnmatch.fnmatch(s, dpattern):
                         return False
             return True
+    return False
 
 
-def bin_for(name="conda"):
+def bin_for(name: str = "conda") -> str:
     if "CONDA_ROOT" in os.environ:
         return os.path.join(os.environ["CONDA_ROOT"], "bin", name)
     return name
@@ -997,7 +998,7 @@ class DivergentBuildsError(Exception):
     pass
 
 
-def _string_or_float_to_integer_python(s):
+def _string_or_float_to_integer_python(s: Union[str, float]) -> int:
     """
     conda-build 2.0.4 expects CONDA_PY values to be integers (e.g., 27, 35) but
     older versions were OK with strings or even floats.
@@ -1016,7 +1017,7 @@ def _string_or_float_to_integer_python(s):
     return s
 
 
-def built_package_paths(recipe):
+def built_package_paths(recipe: str) -> List[str]:
     """
     Returns the path to which a recipe would be built.
 
@@ -1030,7 +1031,7 @@ def built_package_paths(recipe):
     return paths
 
 
-def last_commit_to_master():
+def last_commit_to_master() -> datetime.datetime:
     """
     Identifies the day of the last commit to master branch.
     """
@@ -1046,7 +1047,7 @@ def last_commit_to_master():
     return date
 
 
-def file_from_commit(commit, filename):
+def file_from_commit(commit: str, filename: str) -> str:
     """
     Returns the contents of a file at a particular commit as a string.
 
@@ -1754,7 +1755,7 @@ class RepoData:
         return df[key].itertuples(index=False)
 
 
-def get_github_client():
+def get_github_client() -> Github:
     """Get a Github client with a robust retry policy."""
     if "GITHUB_TOKEN" in os.environ.keys():
         return Github(
@@ -1767,11 +1768,11 @@ def get_github_client():
     )
 
 
-def is_stable_version(version):
+def is_stable_version(version: str) -> bool:
     return re.match(r"^\d+\.\d+\.\d+$", version) is not None
 
 
-def extract_stable_version(version):
+def extract_stable_version(version: str) -> str:
     m = re.match(r"^(\d+\.\d+\.\d+)", version)
     if m is None:
         raise ValueError(f"Could not extract stable version from {version}")
@@ -1791,7 +1792,7 @@ def yaml_remove_invalid_chars(
 
 # Cache results to disk for one week.
 @disk_cache.memoize(expire=604800)
-def get_package_downloads(channel, package):
+def get_package_downloads(channel: str, package: str) -> int:
     """Use anaconda API to obtain download counts."""
     data = requests.get(f"https://api.anaconda.org/package/{channel}/{package}").json()
     if "files" in data:

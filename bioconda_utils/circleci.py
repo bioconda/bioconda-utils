@@ -158,7 +158,7 @@ class CircleAPI(abc.ABC):
             res = new_res
         return res
 
-    async def trigger_rebuild(self, branch: str, sha: str):
+    async def trigger_rebuild(self, branch: str, sha: str) -> Any:
         """Trigger rebuilding **sha** on **branch**.
 
         Arguments:
@@ -170,7 +170,13 @@ class CircleAPI(abc.ABC):
             "POST", self.TRIGGER_REBUILD, self.var_data, data=data
         )
 
-    async def trigger_job(self, branch="master", project=None, job=None, params=None):
+    async def trigger_job(
+        self,
+        branch: str = "master",
+        project: Optional[str] = None,
+        job: Optional[str] = None,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> Optional[str]:
         """Trigger specific job
 
         Arguments:
@@ -222,7 +228,7 @@ class CircleAPI(abc.ABC):
 class SlackMessage:
     """Parses a Slack message as sent by CircleCI"""
 
-    def __init__(self, _headers: Mapping[str, str], data: bytes):
+    def __init__(self, _headers: Mapping[str, str], data: bytes) -> None:
         response_text = data.decode("utf-8")
         try:
             data = json.loads(response_text)
@@ -247,7 +253,7 @@ class SlackMessage:
                 }
             )
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "|".join(
             f"success={x['success']} {':'.join(x['urls'].keys())}" for x in self.parsed
         )

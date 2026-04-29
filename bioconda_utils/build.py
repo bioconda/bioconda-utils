@@ -377,7 +377,7 @@ def build_recipes(
     docker_builder: Optional[docker_utils.RecipeBuilder] = None,
     label: Optional[str] = None,
     anaconda_upload: bool = False,
-    mulled_upload_target=None,
+    mulled_upload_target: Optional[str] = None,
     check_channels: Optional[List[str]] = None,
     do_lint: Optional[bool] = None,
     lint_exclude: Optional[List[str]] = None,
