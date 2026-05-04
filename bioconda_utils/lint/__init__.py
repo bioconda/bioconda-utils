@@ -186,10 +186,10 @@ class LintCheckMeta(abc.ABCMeta):
         bases: tuple[type, ...],
         namespace: dict[str, Any],
         **kwargs: Any,
-    ) -> type:
+    ) -> type[LintCheck]:
         """Creates LintCheck classes"""
         typ = cast(
-            type["LintCheck"],
+            type[LintCheck],
             super().__new__(cls, name, bases, namespace, **kwargs),
         )
         if name != "LintCheck":  # don't register base class

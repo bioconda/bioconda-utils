@@ -94,7 +94,7 @@ class HosterMeta(abc.ABCMeta):
         bases: tuple[type, ...],
         namespace: dict[str, Any],
         **kwargs,
-    ) -> type:
+    ) -> type[Hoster]:
         """Creates Hoster classes
 
         - expands references among ``{var}_pattern`` attributes
@@ -102,7 +102,7 @@ class HosterMeta(abc.ABCMeta):
         - registers complete classes
         """
         typ = cast(
-            type["Hoster"],
+            type[Hoster],
             super().__new__(cls, name, bases, namespace, **kwargs),
         )
 
