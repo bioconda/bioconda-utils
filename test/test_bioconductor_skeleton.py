@@ -2,14 +2,12 @@ import pytest
 
 # TODO: Remove this once bioarchive is up again.
 from datetime import datetime
-from functools import partial
 
 from bioconda_utils import bioconductor_skeleton
 from bioconda_utils import cran_skeleton
 from bioconda_utils import utils
 
-SKIP_DUE_TO_BIOARCHIVE_OUTAGE = partial(
-    pytest.mark.skipif,
+SKIP_DUE_TO_BIOARCHIVE_OUTAGE = pytest.mark.skipif(
     datetime.now() < datetime(2020, 6, 22),
     reason="temporarily skipped due to bioarchive.galaxyproject.org outage",
 )
@@ -137,7 +135,7 @@ def test_pkg_version():
     assert b.bioarchive_url is None
     assert b.cargoport_url == (
         "https://depot.galaxyproject.org/software/bioconductor-deseq2/bioconductor-deseq2_1.14.1_src_all.tar.gz"
-    )  # noqa: E501: line too long
+    )  # noqa: E501
 
     # bioc version specified, but not package version
     b = bioconductor_skeleton.BioCProjectPage("edgeR", bioc_version="3.5")
@@ -149,7 +147,7 @@ def test_pkg_version():
     assert b.bioarchive_url is None
     assert b.cargoport_url == (
         "https://depot.galaxyproject.org/software/bioconductor-edger/bioconductor-edger_3.18.1_src_all.tar.gz"
-    )  # noqa: E501: line too long
+    )  # noqa: E501
 
 
 def test_bioarchive_exists_but_not_bioconductor():

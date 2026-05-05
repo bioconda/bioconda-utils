@@ -52,8 +52,8 @@ import random
 
 from collections import defaultdict, Counter
 from urllib.parse import urlparse
-from typing import Any
-from collections.abc import Mapping, Sequence
+from typing import Any, cast
+from collections.abc import Callable, Iterable, Mapping, Sequence
 
 import aiofiles
 from aiohttp import ClientResponseError
@@ -66,7 +66,7 @@ import conda_build.config
 from conda.exports import MatchSpec, VersionOrder
 import conda.exceptions
 
-from packaging.version import parse as _pep440_parse, InvalidVersion
+from packaging.version import parse as _pep440_parse, InvalidVersion, Version
 
 from . import __version__
 from . import utils
@@ -86,8 +86,10 @@ from .aiopipe import (
 from .githandler import GitHandler
 from .githubhandler import GitHubHandler
 
+HosterFactory = Callable[[str, dict[str, str]], Any]
 
-def _parse_or_legacy(s: str):
+
+def _parse_or_legacy(s: str) -> tuple[Version | str, bool]:
     """
     Attempt to parse a version string as a PEP 440-compliant Version.
 
@@ -136,7 +138,9 @@ class RecipeSource:
             random.shuffle(self.recipe_dirs)
         logger.warning("Selected %i packages", len(self.recipe_dirs))
 
-    async def queue_items(self, send_q, return_q):
+    async def queue_items(
+        self, send_q: asyncio.Queue[Recipe], return_q: asyncio.Queue[Recipe]
+    ) -> None:
         n_items = 0
         for recipe_dir in self.recipe_dirs:
             await send_q.put(Recipe(recipe_dir, self.recipe_base))
@@ -152,7 +156,7 @@ class RecipeSource:
             await return_q.get()
             return_q.task_done()
 
-    def get_item_count(self):
+    def get_item_count(self) -> int:
         return len(self.recipe_dirs)
 
 
@@ -174,7 +178,9 @@ class RecipeGraphSource(RecipeSource):
         self.dag = graph.filter_recipe_dag(self.dag, self.packages, exclude)
         logger.warning("Graph contains %i packages (blacklist excluded)", len(self.dag))
 
-    async def queue_items(self, send_q, return_q):
+    async def queue_items(
+        self, send_q: asyncio.Queue[Recipe], return_q: asyncio.Queue[Recipe]
+    ) -> None:
         # Build a copy of the graph we can meddle with
         dag = self.dag.__class__()
         dag.add_nodes_from(self.dag)
@@ -194,10 +200,10 @@ class RecipeGraphSource(RecipeSource):
             sent.remove(item)
             return_q.task_done()
 
-    def get_item_count(self):
+    def get_item_count(self) -> int:
         return len(self.dag)
 
-    def load_graph(self):
+    def load_graph(self) -> nx.DiGraph:
         if self.cache_fn and os.path.exists(self.cache_fn):
             with open(self.cache_fn, "rb") as stream:
                 dag = pickle.load(stream)
@@ -258,10 +264,12 @@ class Scanner(AsyncPipeline[Recipe]):
                     out.write(f"{rname}\t{result.name}\n")
         return res
 
-    async def queue_items(self, send_q, return_q):
+    async def queue_items(
+        self, send_q: asyncio.Queue[Recipe], return_q: asyncio.Queue[Recipe]
+    ) -> None:
         await self.recipe_source.queue_items(send_q, return_q)
 
-    def get_item_count(self):
+    def get_item_count(self) -> int:
         return self.recipe_source.get_item_count()
 
     async def _async_run(self) -> None:
@@ -334,11 +342,11 @@ class AutoBumpConfigMixin:
     #: Name of key under `EXTRA_CONFIG` to enable/disable autobump
     ENABLE = "enable"
 
-    def get_config(self, recipe) -> dict[Any, Any]:
+    def get_config(self, recipe: Recipe) -> dict[Any, Any]:
         """Returns the configuration dict from the recipe"""
         return recipe.get("extra", {}).get(self.EXTRA_CONFIG, {})
 
-    def is_enabled(self, recipe) -> bool | None:
+    def is_enabled(self, recipe: Recipe) -> bool | None:
         """Checks if autobump is enabled for the recipe
 
         The result is:
@@ -365,7 +373,7 @@ class ExcludeSubrecipe(Filter, AutoBumpConfigMixin):
         template = "is a subrecipe"
         level = logging.DEBUG
 
-    def __init__(self, scanner: Scanner, always=False) -> None:
+    def __init__(self, scanner: Scanner, always: bool = False) -> None:
         super().__init__(scanner)
         self.always_exclude = always
 
@@ -399,7 +407,9 @@ class ExcludeBlacklisted(Filter):
         template = "is blacklisted"
         level = logging.DEBUG
 
-    def __init__(self, scanner: Scanner, recipe_base: str, config: dict) -> None:
+    def __init__(
+        self, scanner: Scanner, recipe_base: str, config: dict[str, Any]
+    ) -> None:
         super().__init__(scanner)
         self.blacklists = config.get("blacklists")
         self.skiplist = Skiplist(config, recipe_base)
@@ -439,7 +449,7 @@ class CheckPinning(Filter):
         self.build_config = utils.load_conda_build_config()
 
     @staticmethod
-    def match_version(spec, version):
+    def match_version(spec: str, version: str) -> bool:
         """Check if **version** satisfies **spec**
 
         >>> match_version('>1.2,<1.3.0a0', '1.2.1')
@@ -615,7 +625,10 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
         template = "has no releases?!"
 
     def __init__(
-        self, scanner: Scanner, hoster_factory, unparsed_file: str | None = None
+        self,
+        scanner: Scanner,
+        hoster_factory: HosterFactory,
+        unparsed_file: str | None = None,
     ) -> None:
         super().__init__(scanner)
         #: output file name for unparsed urls
@@ -692,7 +705,7 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
                 if url == ourl:
                     raise self.UrlNotVersioned(recipe)
 
-    async def get_version_map(self, recipe: Recipe):
+    async def get_version_map(self, recipe: Recipe) -> dict[str, dict[str, Any]]:
         """Scan all source urls"""
 
         sources = recipe.meta.get("source")
@@ -720,7 +733,7 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
 
     async def get_versions(
         self, recipe: Recipe, source: Mapping[Any, Any], source_idx: int
-    ):
+    ) -> dict[str, dict[str, Any]]:
         """Select hosters and retrieve versions for this source"""
         urls = source.get("url")
         if not urls:
@@ -731,7 +744,8 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
         version_map: dict[str, dict[str, Any]] = defaultdict(dict)
         for url in urls:
             config = self.get_config(recipe)
-            hoster = self.hoster_factory(url, config.get("override", {}))
+            override_config = cast(dict[str, str], config.get("override", {}))
+            hoster = self.hoster_factory(url, override_config)
             if not hoster:
                 self.unparsed_urls += [url]
                 continue
@@ -752,7 +766,7 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
         return version_map
 
     @staticmethod
-    def select_version(current: str, versions: Sequence[str]) -> str:
+    def select_version(current: str, versions: Iterable[str]) -> str:
         """Chooses the most recent, acceptable version out of **versions**
 
         - must be newer than current (as defined by conda VersionOrder)
@@ -913,7 +927,7 @@ class UpdateChecksums(Filter):
         #: unparsed urls - for later inspection
         self.failed_file = failed_file
 
-    def finalize(self):
+    def finalize(self) -> None:
         """Store list of URLs that could not be downloaded"""
         if self.failed_urls:
             logger.warning(
@@ -937,7 +951,7 @@ class UpdateChecksums(Filter):
             recipe.render()
 
     async def update_source(
-        self, recipe: Recipe, source: Mapping, source_idx: int
+        self, recipe: Recipe, source: Mapping[Any, Any], source_idx: int
     ) -> None:
         """Updates one source
 
@@ -1207,13 +1221,13 @@ class CreatePullRequest(GitFilter):
         super().__init__(scanner, git_handler)
         self.ghub = github_handler
 
-    async def async_init(self):
+    async def async_init(self) -> None:
         """Create gidget GithubAPI object from session"""
         await self.ghub.login(self.pipeline.req.session, self.pipeline.req.USER_AGENT)
         await asyncio.sleep(1)  # let API settle
 
     @staticmethod
-    def render_deps_diff(recipe):
+    def render_deps_diff(recipe: Recipe) -> str:
         """Renders a "diff" of the recipes upstream dependencies.
 
         This relies on the 'depends' data structure in the recipe's
