@@ -28,7 +28,7 @@ from contextlib import redirect_stdout, redirect_stderr
 from html.parser import HTMLParser
 from itertools import chain
 from packaging.version import InvalidVersion, parse as parse_version
-from typing import Any, cast
+from typing import Any
 from re import Match, Pattern
 from urllib.parse import urljoin
 
@@ -86,35 +86,23 @@ class HosterMeta(abc.ABCMeta):
     we leave the option to add functions to a Hoster.
     """
 
+
+class Hoster(metaclass=HosterMeta):
+    """Hoster Baseclass"""
+
     hoster_types: list[type[Hoster]] = []
 
-    def __new__(
-        cls,
-        name: str,
-        bases: tuple[type, ...],
-        namespace: dict[str, Any],
-        **kwargs,
-    ) -> type[Hoster]:
-        """Creates Hoster classes
-
-        - expands references among ``{var}_pattern`` attributes
-        - compiles ``{var}_pattern`` attributes to ``{var}_re``
-        - registers complete classes
-        """
-        typ = cast(
-            type[Hoster],
-            super().__new__(cls, name, bases, namespace, **kwargs),
-        )
-
-        if inspect.isabstract(typ):
-            return typ
-        if not typ.__name__.startswith("Custom"):
-            cls.hoster_types.append(typ)
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        if inspect.isabstract(cls):
+            return
+        if not cls.__name__.startswith("Custom"):
+            Hoster.hoster_types.append(cls)
 
         patterns = {
-            attr.replace("_pattern", ""): getattr(typ, attr)
-            for attr in dir(typ)
-            if attr.endswith("_pattern")
+            attr.replace("_pattern", ""): getattr(cls, attr)
+            for attr in dir(cls)
+            if attr.endswith("_pattern") and isinstance(getattr(cls, attr), str)
         }
 
         for pat in patterns:
@@ -131,11 +119,9 @@ class HosterMeta(abc.ABCMeta):
             # repair duplicate capture groups:
             pattern = dedup_named_capture_group(pattern)
             # save parsed and compiled pattern
-            setattr(typ, pat + "_pattern_compiled", pattern)
-            logger.debug("%s Pattern %s = %s", typ.__name__, pat, pattern)
-            setattr(typ, pat + "_re", re.compile(pattern))
-
-        return typ
+            setattr(cls, pat + "_pattern_compiled", pattern)
+            logger.debug("%s Pattern %s = %s", cls.__name__, pat, pattern)
+            setattr(cls, pat + "_re", re.compile(pattern))
 
     @classmethod
     def select_hoster(cls, url: str, config: dict[str, str]) -> Hoster | None:
@@ -149,10 +135,6 @@ class HosterMeta(abc.ABCMeta):
             if hoster:
                 return hoster
         return None
-
-
-class Hoster(metaclass=HosterMeta):
-    """Hoster Baseclass"""
 
     #: matches upstream version
     #: - begins with a number
@@ -933,4 +915,4 @@ class GitlabTag(OrderedHTMLHoster):
     releases_formats = ["https://gitlab.com/{account}{subgroup}/{project}/tags"]
 
 
-logger.info("Hosters loaded: %s", [h.__name__ for h in HosterMeta.hoster_types])
+logger.info("Hosters loaded: %s", [h.__name__ for h in Hoster.hoster_types])

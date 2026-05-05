@@ -6,7 +6,7 @@ import json
 import asyncio
 from typing import Any, Type, cast
 
-from bioconda_utils.hosters import Hoster, HosterMeta
+from bioconda_utils.hosters import Hoster
 
 with open(op.join(op.dirname(__file__), "hoster_cases.yaml")) as data:
     TEST_CASES = yaml.safe_load(data)
@@ -22,10 +22,10 @@ TEST_CASE_IDS = [
     for x in TEST_CASE_LIST
 ]
 
-AVAIL_HOSTERS = {hoster.__name__: hoster for hoster in HosterMeta.hoster_types}
+AVAIL_HOSTERS = {hoster.__name__: hoster for hoster in Hoster.hoster_types}
 
 
-@pytest.mark.parametrize("hoster", HosterMeta.hoster_types)
+@pytest.mark.parametrize("hoster", Hoster.hoster_types)
 def test_hoster_has_test_case(hoster):
     assert hoster.__name__ in TEST_CASES, f"Missing test cases for {hoster.__name__}"
 

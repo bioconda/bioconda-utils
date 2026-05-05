@@ -178,24 +178,6 @@ class LintCheckMeta(abc.ABCMeta):
     Handles registry
     """
 
-    registry: list[type[LintCheck]] = []
-
-    def __new__(
-        cls,
-        name: str,
-        bases: tuple[type, ...],
-        namespace: dict[str, Any],
-        **kwargs: Any,
-    ) -> type[LintCheck]:
-        """Creates LintCheck classes"""
-        typ = cast(
-            type[LintCheck],
-            super().__new__(cls, name, bases, namespace, **kwargs),
-        )
-        if name != "LintCheck":  # don't register base class
-            cls.registry.append(typ)
-        return typ
-
     def __str__(cls) -> str:
         return cls.__name__
 
@@ -211,11 +193,18 @@ def get_checks() -> list[type[LintCheck]]:
             if name.startswith("check_"):
                 importlib.import_module(__name__ + "." + name)
         _checks_loaded = True
-    return LintCheckMeta.registry
+    return LintCheck.registry
 
 
 class LintCheck(metaclass=LintCheckMeta):
     """Base class for lint checks"""
+
+    registry: list[type[LintCheck]] = []
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        if not inspect.isabstract(cls):
+            LintCheck.registry.append(cls)
 
     #: Severity of this check. Only ERROR causes a lint failure.
     severity: Severity = ERROR
