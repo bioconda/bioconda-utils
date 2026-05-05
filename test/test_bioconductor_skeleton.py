@@ -178,9 +178,11 @@ def test_annotation_data(tmpdir, bioc_fetch):
     bioconductor_skeleton.write_recipe(
         "AHCytoBands", str(tmpdir), config, recursive=False, packages=bioc_fetch
     )
-    meta = utils.load_first_metadata(str(tmpdir.join("bioconductor-ahcytobands"))).meta
-    assert any(dep.startswith("curl ") for dep in meta["requirements"]["run"])
-    assert len(meta["source"]["url"]) == 3
+    meta = utils.load_first_metadata(
+        str(tmpdir.join("bioconductor-ahcytobands")), finalize=False
+    ).meta
+    assert "curl" in {dep.split()[0] for dep in meta["requirements"]["run"]}
+    assert len(meta["source"]["url"]) == 4
     assert not tmpdir.join("bioconductor-ahcytobands", "build.sh").exists()
     assert tmpdir.join("bioconductor-ahcytobands", "post-link.sh").exists()
     assert tmpdir.join("bioconductor-ahcytobands", "pre-unlink.sh").exists()
@@ -196,10 +198,10 @@ def test_experiment_data(tmpdir, bioc_fetch):
         packages=bioc_fetch,
     )
     meta = utils.load_first_metadata(
-        str(tmpdir.join("bioconductor-affyhgu133a2expr"))
+        str(tmpdir.join("bioconductor-affyhgu133a2expr")), finalize=False
     ).meta
-    assert any(dep.startswith("curl ") for dep in meta["requirements"]["run"])
-    assert len(meta["source"]["url"]) == 3
+    assert "curl" in {dep.split()[0] for dep in meta["requirements"]["run"]}
+    assert len(meta["source"]["url"]) == 4
     assert not tmpdir.join("bioconductor-affyhgu133a2expr", "build.sh").exists()
     assert tmpdir.join("bioconductor-affyhgu133a2expr", "post-link.sh").exists()
     assert tmpdir.join("bioconductor-affyhgu133a2expr", "pre-unlink.sh").exists()

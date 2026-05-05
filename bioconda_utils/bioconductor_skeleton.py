@@ -368,7 +368,7 @@ def find_best_bioc_version(package, version):
             ),
         ):
             url = func(package, version, bioc_version)
-            if requests.head(url).status_code == 200:
+            if requests.head(url, allow_redirects=True).status_code == 200:
                 logger.debug("success: %s", url)
                 logger.info(
                     "A working URL for %s==%s was identified for Bioconductor version %s: %s",
@@ -589,7 +589,7 @@ class BioCProjectPage:
             str(self.packages[self.package]["URLprefix"]),
             str(self.packages[self.package]["source.ver"]),
         )
-        response = requests.head(url)
+        response = requests.head(url, allow_redirects=True)
         if response.status_code == 200:
             return url
 
@@ -603,7 +603,7 @@ class BioCProjectPage:
             ]
             for url in urls:
                 if url is not None:
-                    response = requests.head(url)
+                    response = requests.head(url, allow_redirects=True)
                     if response.status_code == 200:
                         self._tarball_url = url
                         return url
@@ -1335,9 +1335,12 @@ def updateDataPackages(bioc_data_packages, pkg, urls, md5, tarball):
     jsPath = os.path.join(bioc_data_packages, "dataURLs.json")
     jsContent = dict()
     if os.path.exists(jsPath):
-        jsContent = json.load(open(jsPath))
+        with open(jsPath) as fin:
+            jsContent = json.load(fin)
     jsContent[pkg] = {"urls": urls, "md5": md5, "fn": tarball}
-    json.dump(jsContent, open(jsPath, "w"))
+    os.makedirs(bioc_data_packages, exist_ok=True)
+    with open(jsPath, "w") as fout:
+        json.dump(jsContent, fout)
 
 
 def write_recipe(
