@@ -1,16 +1,8 @@
 import pytest
 
-# TODO: Remove this once bioarchive is up again.
-from datetime import datetime
-
 from bioconda_utils import bioconductor_skeleton
 from bioconda_utils import cran_skeleton
 from bioconda_utils import utils
-
-SKIP_DUE_TO_BIOARCHIVE_OUTAGE = pytest.mark.skipif(
-    datetime.now() < datetime(2020, 6, 22),
-    reason="temporarily skipped due to bioarchive.galaxyproject.org outage",
-)
 
 config = {"channels": ["conda-forge", "bioconda"]}
 
@@ -123,7 +115,6 @@ def test_find_best_bioc_version():
         bioconductor_skeleton.BioCProjectPage("BioBase", pkg_version="2.37.2")
 
 
-@SKIP_DUE_TO_BIOARCHIVE_OUTAGE
 def test_pkg_version():
     # version specified, but not bioc version
     b = bioconductor_skeleton.BioCProjectPage("DESeq2", pkg_version="1.14.1")
@@ -164,7 +155,6 @@ def test_bioarchive_exists_but_not_bioconductor():
         bioconductor_skeleton.BioCProjectPage("BioBase", pkg_version="2.37.2")
 
 
-@SKIP_DUE_TO_BIOARCHIVE_OUTAGE
 def test_bioarchive_exists():
     # package found on both bioconductor and bioarchive.
     b = bioconductor_skeleton.BioCProjectPage("DESeq", pkg_version="1.26.0")
@@ -173,7 +163,6 @@ def test_bioarchive_exists():
     )
 
 
-@SKIP_DUE_TO_BIOARCHIVE_OUTAGE
 def test_annotation_data(tmpdir, bioc_fetch):
     bioconductor_skeleton.write_recipe(
         "AHCytoBands", str(tmpdir), config, recursive=False, packages=bioc_fetch
@@ -188,7 +177,6 @@ def test_annotation_data(tmpdir, bioc_fetch):
     assert tmpdir.join("bioconductor-ahcytobands", "pre-unlink.sh").exists()
 
 
-@SKIP_DUE_TO_BIOARCHIVE_OUTAGE
 def test_experiment_data(tmpdir, bioc_fetch):
     bioconductor_skeleton.write_recipe(
         "Affyhgu133A2Expr",
