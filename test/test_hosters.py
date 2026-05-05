@@ -4,7 +4,7 @@ import pytest
 import yaml
 import json
 import asyncio
-from typing import Any, Type, cast
+from typing import Type
 
 from bioconda_utils.hosters import Hoster
 
@@ -115,13 +115,16 @@ class TestHoster:
     async def get_ftp_listing(self, url):
         return self.case["release_links"]
 
+    async def get_file_from_url(self, fname: str, url: str, desc: str) -> None:
+        pass
+
     @pytest.mark.asyncio
     def test_get_version(self, event_loop):
         if "release_links" not in self.case and "release_json" not in self.case:
             pytest.xfail("No release_links or release_json in test case")
 
         versions_data = event_loop.run_until_complete(
-            self.instance.get_versions(cast(Any, self), self.case["version"])
+            self.instance.get_versions(self, self.case["version"])
         )
         versions = [item["version"] for item in versions_data]
         assert sorted(versions) == sorted(self.case["parsed_versions"]), self.msg(

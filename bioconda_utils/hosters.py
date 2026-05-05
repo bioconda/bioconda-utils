@@ -28,15 +28,21 @@ from contextlib import redirect_stdout, redirect_stderr
 from html.parser import HTMLParser
 from itertools import chain
 from packaging.version import InvalidVersion, parse as parse_version
-from typing import Any
+from typing import Any, Protocol
 from re import Match, Pattern
 from urllib.parse import urljoin
 
 import regex as re
 
-from .aiopipe import AsyncRequests
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+
+
+class Requester(Protocol):
+    """Protocol for making requests"""
+    async def get_text_from_url(self, url: str) -> str: ...
+    async def get_ftp_listing(self, url: str) -> list[str]: ...
+    async def get_file_from_url(self, fname: str, url: str, desc: str) -> None: ...
 
 
 #: Matches named capture groups
@@ -204,7 +210,7 @@ class Hoster(metaclass=HosterMeta):
 
     @abc.abstractmethod
     async def get_versions(
-        self, req: AsyncRequests, orig_version: str
+        self, req: Requester, orig_version: str
     ) -> list[dict[str, Any]]:
         "Gets list of versions from upstream hosting site"
 
@@ -552,7 +558,7 @@ class SourceForge(HTMLHoster):
 class JSONHoster(Hoster):
     """Base for Hosters handling release listings in JSON format"""
 
-    async def get_versions(self, req, orig_version: str):
+    async def get_versions(self, req: Requester, orig_version: str):
         result = []
         for url in self.releases_urls:
             text = await req.get_text_from_url(url)
@@ -567,7 +573,7 @@ class JSONHoster(Hoster):
 
     @abc.abstractmethod
     async def get_versions_from_json(
-        self, data, req, orig_version
+        self, data, req: Requester, orig_version: str
     ) -> list[dict[str, Any]]:
         """Extract matches from json data in **data**"""
 
