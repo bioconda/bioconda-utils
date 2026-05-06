@@ -33,6 +33,10 @@ Bioconda Utilities Package
    utils
 """
 
-from . import _version
+from importlib.metadata import version, PackageNotFoundError
 
-__version__ = _version.get_versions()["version"]
+try:
+    __version__ = version("bioconda-utils")
+except PackageNotFoundError:
+    # package is not installed
+    __version__ = "0+unknown"

@@ -4,6 +4,7 @@ conda-forge-pinning=2026.01.07.13.16.30
 # basics
 python=3.13.*
 setuptools=81.*
+setuptools-scm>=8
 conda=26.3.*
 conda-libmamba-solver=26.3.*
 conda-build=26.3.*
