@@ -9,7 +9,13 @@ description = "Utilities for building and managing conda packages"
 readme = "README.md"
 license = "MIT"
 authors = [
+    {name = "Björn Grüning"},
+    {name = "Andreas Sjödin"},
+    {name = "Brad A. Chapman"},
+    {name = "Christopher H. Tomkins-Tinch"},
+    {name = "Jillian Rowe"},
     {name = "Johannes Köster"},
+    {name = "Renan Valieris"},
     {name = "Ryan Dale"},
     {name = "The Bioconda Team"},
 ]
