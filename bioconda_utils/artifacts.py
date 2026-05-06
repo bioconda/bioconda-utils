@@ -5,6 +5,8 @@ import re
 import tempfile
 import zipfile
 import logging
+from typing import Any
+from collections.abc import Iterator
 
 import requests
 import backoff
@@ -14,7 +16,6 @@ from bioconda_utils import utils
 from bioconda_utils.upload import anaconda_upload, skopeo_upload
 
 logger = logging.getLogger(__name__)
-
 
 IMAGE_RE = re.compile(r"(.+)(?::|%3A|---)(.+)\.tar\.gz$")
 
@@ -27,20 +28,20 @@ class UploadResult(Enum):
 
 
 def upload_pr_artifacts(
-    config,
-    repo,
-    git_sha,
-    dryrun=False,
-    mulled_upload_target=None,
-    label=None,
-    artifact_source="azure",
+    config: str,
+    repo_name: str,
+    git_sha: str,
+    dryrun: bool = False,
+    mulled_upload_target: str | None = None,
+    label: str | None = None,
+    artifact_source: str = "azure",
 ) -> UploadResult:
     _config = utils.load_config(config)
     repodata = utils.RepoData()
 
     gh = utils.get_github_client()
 
-    repo = gh.get_repo(repo)
+    repo = gh.get_repo(repo_name)
 
     commit = repo.get_commit(git_sha)
     prs = commit.get_pulls()
@@ -128,7 +129,7 @@ def upload_pr_artifacts(
 
 
 @backoff.on_exception(backoff.expo, requests.exceptions.RequestException)
-def download_artifact(url, to_path, artifact_source):
+def download_artifact(url: str, to_path: str, artifact_source: str) -> None:
     logger.info(f"Downloading artifact {url}.")
     headers = {}
     if artifact_source == "github-actions":
@@ -147,7 +148,7 @@ def download_artifact(url, to_path, artifact_source):
                 f.write(chunk)
 
 
-def fetch_artifacts(pr, artifact_source, repo):
+def fetch_artifacts(pr: Any, artifact_source: str, repo: Any) -> Iterator[str]:
     """
     Fetch artifacts from a PR.
 
@@ -188,7 +189,7 @@ def fetch_artifacts(pr, artifact_source, repo):
             yield from artifact_url
 
 
-def get_azure_artifacts(check_run):
+def get_azure_artifacts(check_run: Any) -> Iterator[str]:
     azure_build_id = parse_azure_build_id(check_run.details_url)
     url = f"https://dev.azure.com/bioconda/bioconda-recipes/_apis/build/builds/{azure_build_id}/artifacts?api-version=4.1"
     res = requests.get(url, json=True).json()
@@ -201,10 +202,13 @@ def get_azure_artifacts(check_run):
 
 
 def parse_azure_build_id(url: str) -> str:
-    return re.search("buildId=(\d+)", url).group(1)
+    match = re.search(r"buildId=(\d+)", url)
+    if match is None:
+        raise ValueError(f"Could not parse Azure build ID from {url}")
+    return match.group(1)
 
 
-def get_circleci_artifacts(check_run, platform):
+def get_circleci_artifacts(check_run: Any, platform: str) -> Iterator[str]:
     circleci_workflow_id = json.loads(check_run.external_id)["workflow-id"]
     # Must use a Personal token for API v2
     token = os.environ.get("CIRCLECI_TOKEN")
@@ -244,10 +248,13 @@ def get_circleci_artifacts(check_run, platform):
 
 def parse_gha_build_id(url: str) -> str:
     # Get workflow run id from URL
-    return re.search("runs/(\d+)/", url).group(1)
+    match = re.search(r"runs/(\d+)/", url)
+    if match is None:
+        raise ValueError(f"Could not parse GitHub Actions run ID from {url}")
+    return match.group(1)
 
 
-def get_gha_artifacts(check_run, platform, repo):
+def get_gha_artifacts(check_run: Any, platform: str, repo: Any) -> Iterator[str]:
     gha_workflow_id = parse_gha_build_id(check_run.details_url)
     if gha_workflow_id:
         # The workflow run is different from the check run

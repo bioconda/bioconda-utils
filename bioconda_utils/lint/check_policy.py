@@ -7,8 +7,9 @@ can be mechanically checked).
 
 import glob
 import os
+from typing import Any
 
-from . import LintCheck, WARNING
+from . import LintCheck, WARNING, _recipe
 from bioconda_utils import utils
 
 
@@ -20,7 +21,7 @@ class uses_vcs_url(LintCheck):
 
     """
 
-    def check_source(self, source, section):
+    def check_source(self, source: dict[str, Any], section: str) -> None:
         for vcs in ("git", "svn", "hg"):
             if f"{vcs}_url" in source:
                 self.message(section=f"{section}/{vcs}_url")
@@ -33,7 +34,7 @@ class folder_and_package_name_must_match(LintCheck):
     in and the name of the toplevel package should match.
     """
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         recipe_base_folder, _, _ = recipe.reldir.partition("/")
         if recipe.name != recipe_base_folder:
             self.message(section="package/name")
@@ -55,7 +56,7 @@ class gpl_requires_license_distributed(LintCheck):
     severity = WARNING
     requires = ["missing_license"]
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         if "gpl" in recipe.get("about/license").lower():
             if not recipe.get("about/license_file", ""):
                 self.message("about/license")
@@ -68,7 +69,7 @@ class should_not_use_fn(LintCheck):
     and it will in most cases be unpacked automatically.
     """
 
-    def check_source(self, source, section):
+    def check_source(self, source: dict[str, Any], section: str) -> None:
         if "fn" in source:
             self.message(section=section + "/fn")
 
@@ -85,7 +86,7 @@ class has_windows_bat_file(LintCheck):
 
     """
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         for fname in glob.glob(os.path.join(recipe.dir, "*.bat")):
             self.message(fname=fname)
 
@@ -112,7 +113,7 @@ class long_summary(LintCheck):
     severity = WARNING
     max_length = 120
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         if len(recipe.get("about/summary", "")) > self.max_length:
             self.message("about/summary")
 
@@ -125,7 +126,7 @@ class cran_packages_to_conda_forge(LintCheck):
 
     """
 
-    def check_deps(self, deps):
+    def check_deps(self, deps: dict[str, list[str]]) -> None:
         # must have R in run a run dep
         if "R" in deps and any("run" in dep for dep in deps["R"]):
             # and all deps satisfied in conda-forge
@@ -147,7 +148,7 @@ class outputs_name_same_as_package_name(LintCheck):
 
     """
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         name = recipe.get("package", {}).get("name", "")
         outputs = recipe.get("outputs", "")
         if outputs:
@@ -163,6 +164,6 @@ class version_starts_with_v(LintCheck):
 
     """
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         if recipe.get("package/version", "").startswith("v"):
             self.message()

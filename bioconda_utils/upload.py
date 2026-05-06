@@ -12,7 +12,9 @@ from . import utils
 logger = logging.getLogger(__name__)
 
 
-def anaconda_upload(package: str, token: str = None, label: str = None) -> bool:
+def anaconda_upload(
+    package: str, token: str | None = None, label: str | None = None
+) -> bool:
     """
     Upload a package to anaconda.
 
@@ -127,7 +129,10 @@ def skopeo_upload(
         creds,
     ]
     env = os.environ.copy()
-    env["SSL_CERT_DIR"] = str(Path(shutil.which("skopeo")).parents[1] / "ssl")
+    skopeo_bin = shutil.which("skopeo")
+    if skopeo_bin is None:
+        raise FileNotFoundError("Unable to find skopeo on PATH")
+    env["SSL_CERT_DIR"] = str(Path(skopeo_bin).parents[1] / "ssl")
     try:
         utils.run(cmd, mask=creds.split(":"), env=env)
         return True

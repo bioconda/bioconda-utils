@@ -4,13 +4,13 @@ CircleCI Web-API Bindings
 
 import abc
 import logging
-from typing import Any, Mapping, Optional, Tuple, List
+from typing import Any
+from collections.abc import Mapping
 import uritemplate
 import json
 import re
 
 import aiohttp
-
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -26,7 +26,7 @@ class CircleAPI(abc.ABC):
 
     def __init__(
         self,
-        token: Optional[str] = None,
+        token: str | None = None,
         vcs_type: str = "github",
         username: str = "bioconda",
         project: str = "bioconda-recipes",
@@ -38,7 +38,7 @@ class CircleAPI(abc.ABC):
         self.debug_once = False
 
     @property
-    def var_data(self):
+    def var_data(self) -> dict[str, Any]:
         """Defaults for this API instance"""
         return {
             "vcs_type": self.vcs_type,
@@ -49,15 +49,19 @@ class CircleAPI(abc.ABC):
 
     @abc.abstractmethod
     async def _request(
-        self, method: str, url: str, headers: Mapping[str, str], body: bytes = b""
-    ) -> Tuple[int, Mapping[str, str], bytes]:
+        self,
+        method: str,
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes = b"",
+    ) -> tuple[int, Mapping[str, str], bytes]:
         """Execute HTTP request (overriden by IO providing subclass)"""
 
     async def _make_request(
         self,
         method: str,
         url: str,
-        var_dict: Mapping[str, str],
+        var_dict: dict[str, Any],
         data: Any = None,
         accept: str = "application/json",
     ) -> Any:
@@ -93,14 +97,19 @@ class CircleAPI(abc.ABC):
         try:
             return json.loads(response_text)
         except json.decoder.JSONDecodeError:
+            masked_url = url
+            masked_response = response_text
+            if self.token:
+                masked_url = masked_url.replace(self.token, "******")
+                masked_response = masked_response.replace(self.token, "******")
             logger.error(
                 "Call to '%s' yielded text '%s' - not JSON",
-                url.replace(self.token, "******"),
-                response_text.replace(self.token, "******"),
+                masked_url,
+                masked_response,
             )
         return response_text
 
-    async def list_artifacts(self, build_number: int) -> List[Mapping[str, Any]]:
+    async def list_artifacts(self, build_number: int) -> list[Mapping[str, Any]]:
         """Lists artifacts for build number
 
         Returns:
@@ -111,8 +120,8 @@ class CircleAPI(abc.ABC):
         return await self._make_request("GET", self.LIST_ARTIFACTS, var_data)
 
     async def list_recent_builds(
-        self, path: str, sha: str = None, skip_rebuilt: bool = True
-    ) -> List[Mapping[str, Any]]:
+        self, path: str, sha: str | None = None, skip_rebuilt: bool = True
+    ) -> list[Mapping[str, Any]]:
         """List recent builds for **path** (branch or pr)
 
         Note: skip rebuild seems to only apply to jobs, not workflow reruns.
@@ -133,7 +142,7 @@ class CircleAPI(abc.ABC):
             res = [build for build in res if build["vcs_revision"] == sha]
         if skip_rebuilt:
             # try using 'retry_of` to remove builds
-            rebuilt = set(build["retry_of"] for build in res if "retry_of" in build)
+            rebuilt = {build["retry_of"] for build in res if "retry_of" in build}
             res = [build for build in res if build["build_num"] not in rebuilt]
 
             # now just pick the newest of each workflow_name/job_name
@@ -153,7 +162,7 @@ class CircleAPI(abc.ABC):
             res = new_res
         return res
 
-    async def trigger_rebuild(self, branch: str, sha: str):
+    async def trigger_rebuild(self, branch: str, sha: str) -> Any:
         """Trigger rebuilding **sha** on **branch**.
 
         Arguments:
@@ -165,7 +174,13 @@ class CircleAPI(abc.ABC):
             "POST", self.TRIGGER_REBUILD, self.var_data, data=data
         )
 
-    async def trigger_job(self, branch="master", project=None, job=None, params=None):
+    async def trigger_job(
+        self,
+        branch: str = "master",
+        project: str | None = None,
+        job: str | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> str | None:
         """Trigger specific job
 
         Arguments:
@@ -189,7 +204,7 @@ class CircleAPI(abc.ABC):
 
     async def get_artifacts(
         self, path: str, head_sha: str
-    ) -> List[Tuple[str, str, int]]:
+    ) -> list[tuple[str, str, int]]:
         """Get artifacts for specific branch and head_sha
 
         For each artifact built for this sha, get the latest URL. Multiple builds
@@ -217,7 +232,7 @@ class CircleAPI(abc.ABC):
 class SlackMessage:
     """Parses a Slack message as sent by CircleCI"""
 
-    def __init__(self, _headers: Mapping[str, str], data: bytes):
+    def __init__(self, _headers: Mapping[str, str], data: bytes) -> None:
         response_text = data.decode("utf-8")
         try:
             data = json.loads(response_text)
@@ -242,7 +257,7 @@ class SlackMessage:
                 }
             )
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "|".join(
             f"success={x['success']} {':'.join(x['urls'].keys())}" for x in self.parsed
         )
@@ -258,8 +273,12 @@ class AsyncCircleAPI(CircleAPI):
         super().__init__(*args, **kwargs)
 
     async def _request(
-        self, method: str, url: str, headers: Mapping[str, str], body: bytes = b""
-    ) -> Tuple[int, Mapping[str, str], bytes]:
+        self,
+        method: str,
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes = b"",
+    ) -> tuple[int, Mapping[str, str], bytes]:
         async with self._session.request(
             method, url, headers=headers, data=body
         ) as response:

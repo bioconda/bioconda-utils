@@ -9,30 +9,32 @@ import time
 
 from copy import copy
 from enum import Enum
-from typing import Any, AsyncIterator, Dict, List, Optional, Tuple, Union
+from typing import Any
+from collections.abc import AsyncIterator
 
 import aiohttp
+import aiohttp.web
 import backoff
 import cachetools
 import gidgethub
+import gidgethub.abc
 import gidgethub.aiohttp
 import gidgethub.sansio
 import jwt
 import uritemplate
 
-
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
-
 
 #: State for Github Issues
 IssueState = Enum("IssueState", "open closed all")  # pylint: disable=invalid-name
 
 #: State of Github Check Run
-CheckRunStatus = Enum("CheckRunState", "queued in_progress completed")
+CheckRunStatus = Enum("CheckRunStatus", "queued in_progress completed")
 
 #: Conclusion of Github Check Run
 CheckRunConclusion = Enum(
-    "CheckRunConclusion", "success failure neutral cancelled timed_out action_required"
+    "CheckRunConclusion",
+    "success failure neutral cancelled timed_out action_required",
 )
 
 #: Merge method
@@ -51,7 +53,11 @@ def iso_now() -> str:
     """Creates ISO 8601 timestamp in format
     ``YYYY-MM-DDTHH:MM:SSZ`` as required by Github
     """
-    return datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    return (
+        datetime.datetime.now(datetime.timezone.utc)
+        .replace(microsecond=0)
+        .strftime("%Y-%m-%dT%H:%M:%SZ")
+    )
 
 
 class GitHubHandler:
@@ -100,11 +106,11 @@ class GitHubHandler:
 
     def __init__(
         self,
-        token: str = None,
+        token: str | None = None,
         dry_run: bool = False,
         to_user: str = "bioconda",
         to_repo: str = "bioconda-recipes",
-        installation: int = None,
+        installation: int | None = None,
     ) -> None:
         #: API Bearer Token
         self.token = token
@@ -117,15 +123,15 @@ class GitHubHandler:
         #: Name of the Repo
         self.repo = to_repo
         #: Default variables for API calls
-        self.var_default = {"user": to_user, "repo": to_repo}
+        self.var_default: dict[str, Any] = {"user": to_user, "repo": to_repo}
 
         # filled in by login():
         #: Gidgethub API object
-        self.api: gidgethub.abc.GitHubAPI = None
+        self.api: Any = None
         #: Login username
-        self.username: str = None
+        self.username: str | None = None
         #: User avatar URL
-        self.avatar_url: str = None
+        self.avatar_url: str | None = None
 
     def __str__(self):
         return f"{self.user}/{self.repo}"
@@ -171,7 +177,7 @@ class GitHubHandler:
 
         return False
 
-    async def get_user(self) -> Dict[str, Any]:
+    async def get_user(self) -> dict[str, Any]:
         """Fetches the user's info
 
         Returns:
@@ -182,7 +188,7 @@ class GitHubHandler:
         except gidgethub.GitHubException:
             return {}
 
-    async def get_user_orgs(self) -> List[str]:
+    async def get_user_orgs(self) -> list[str]:
         """Fetches the user's orgs
 
         Returns:
@@ -193,7 +199,7 @@ class GitHubHandler:
         except gidgethub.GitHubException:
             return []
 
-    async def iter_teams(self) -> AsyncIterator[Dict[str, Any]]:
+    async def iter_teams(self) -> AsyncIterator[dict[str, Any]]:
         """List organization teams
 
         Returns:
@@ -204,8 +210,8 @@ class GitHubHandler:
             yield team
 
     async def get_team_id(
-        self, team_slug: str = None, team_name: str = None
-    ) -> Optional[int]:
+        self, team_slug: str | None = None, team_name: str | None = None
+    ) -> int | None:
         """Get the Team ID from the Team slug
 
         If both are set, **team_slug** is tried first.
@@ -233,7 +239,7 @@ class GitHubHandler:
                 if team.get("name") == team_name:
                     return team.get("id")
 
-    async def is_team_member(self, username: str, team: Union[str, int]) -> bool:
+    async def is_team_member(self, username: str, team: str | int) -> bool:
         """Check if user is a member of given team
 
         Args:
@@ -266,9 +272,7 @@ class GitHubHandler:
                 raise
         return False
 
-    async def is_member(
-        self, username: str, team: Optional[Union[str, int]] = None
-    ) -> bool:
+    async def is_member(self, username: str, team: str | int | None = None) -> bool:
         """Check user membership
 
         Args:
@@ -345,7 +349,7 @@ class GitHubHandler:
             return False
         return True
 
-    async def get_prs_from_sha(self, head_sha: str, only_open=False) -> List[int]:
+    async def get_prs_from_sha(self, head_sha: str, only_open=False) -> list[int]:
         """Searches for PRs matching **head_sha**
 
         Args:
@@ -371,16 +375,19 @@ class GitHubHandler:
         backoff.fibo,
         gidgethub.BadRequest,
         max_tries=10,
-        giveup=lambda ex: ex.status_code not in [429, 502, 503, 504],
+        giveup=lambda ex: (
+            isinstance(ex, gidgethub.BadRequest)
+            and ex.status_code not in [429, 502, 503, 504]
+        ),
     )
     async def get_prs(
         self,
-        from_branch: Optional[str] = None,
-        from_user: Optional[str] = None,
-        to_branch: Optional[str] = None,
-        number: Optional[int] = None,
-        state: Optional[IssueState] = None,
-    ) -> List[Dict[Any, Any]]:
+        from_branch: str | None = None,
+        from_user: str | None = None,
+        to_branch: str | None = None,
+        number: int | None = None,
+        state: IssueState | None = None,
+    ) -> Any:
         """Retrieve list of PRs matching parameters
 
         Arguments:
@@ -415,7 +422,7 @@ class GitHubHandler:
                 return []
             raise
 
-    async def get_issue(self, number: int) -> Dict[str, Any]:
+    async def get_issue(self, number: int) -> dict[str, Any]:
         """Retrieve a single PR or Issue by its number
 
         Arguments:
@@ -443,12 +450,12 @@ class GitHubHandler:
         self,
         title: str,
         from_branch: str,
-        from_user: Optional[str] = None,
-        to_branch: Optional[str] = "master",
-        body: Optional[str] = None,
+        from_user: str | None = None,
+        to_branch: str | None = "master",
+        body: str | None = None,
         maintainer_can_modify: bool = True,
         draft: bool = False,
-    ) -> Dict[Any, Any]:
+    ) -> dict[Any, Any]:
         """Create new PR
 
         Arguments:
@@ -463,7 +470,7 @@ class GitHubHandler:
         var_data = copy(self.var_default)
         if not from_user:
             from_user = self.username
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "title": title,
             "base": to_branch,
             "body": body or "",
@@ -493,11 +500,11 @@ class GitHubHandler:
     async def merge_pr(
         self,
         number: int,
-        title: str = None,
-        message: str = None,
-        sha: str = None,
+        title: str | None = None,
+        message: str | None = None,
+        sha: str | None = None,
         method: MergeMethod = MergeMethod.squash,
-    ) -> Tuple[bool, str]:
+    ) -> tuple[bool, str]:
         """Merge a PR
 
         Arguments:
@@ -578,10 +585,10 @@ class GitHubHandler:
     async def modify_issue(
         self,
         number: int,
-        labels: Optional[List[str]] = None,
-        title: Optional[str] = None,
-        body: Optional[str] = None,
-    ) -> Dict[Any, Any]:
+        labels: list[str] | None = None,
+        title: str | None = None,
+        body: str | None = None,
+    ) -> dict[Any, Any]:
         """Modify existing issue (PRs are issues)
 
         Arguments:
@@ -591,7 +598,7 @@ class GitHubHandler:
         """
         var_data = copy(self.var_default)
         var_data["number"] = str(number)
-        data: Dict[str, Any] = {}
+        data: dict[str, Any] = {}
         if labels:
             data["labels"] = labels
         if title:
@@ -629,7 +636,7 @@ class GitHubHandler:
         res = await self.api.post(self.ISSUE_COMMENTS, var_data, data=data)
         return res["id"]
 
-    async def iter_comments(self, number: int) -> List[Dict[str, Any]]:
+    async def iter_comments(self, number: int) -> list[dict[str, Any]]:
         """List comments for issue"""
         var_data = copy(self.var_default)
         var_data["number"] = str(number)
@@ -652,7 +659,7 @@ class GitHubHandler:
         res = await self.api.patch(self.COMMENTS, var_data, data=data)
         return res["id"]
 
-    async def get_pr_modified_files(self, number: int) -> List[Dict[str, Any]]:
+    async def get_pr_modified_files(self, number: int) -> list[dict[str, Any]]:
         """Retrieve the list of files modified by the PR
 
         Arguments:
@@ -663,7 +670,11 @@ class GitHubHandler:
         return await self.api.getitem(self.PULL_FILES, var_data)
 
     async def create_check_run(
-        self, name: str, head_sha: str, details_url: str = None, external_id: str = None
+        self,
+        name: str,
+        head_sha: str,
+        details_url: str | None = None,
+        external_id: str | None = None,
     ) -> int:
         """Create a check run
 
@@ -693,14 +704,14 @@ class GitHubHandler:
     async def modify_check_run(
         self,
         number: int,
-        status: CheckRunStatus = None,
-        conclusion: CheckRunConclusion = None,
-        output_title: str = None,
-        output_summary: str = None,
-        output_text: str = None,
-        output_annotations: List[Dict] = None,
-        actions: List[Dict] = None,
-    ) -> Dict["str", Any]:
+        status: CheckRunStatus | None = None,
+        conclusion: CheckRunConclusion | None = None,
+        output_title: str | None = None,
+        output_summary: str | None = None,
+        output_text: str | None = None,
+        output_annotations: list[dict] | None = None,
+        actions: list[dict] | None = None,
+    ) -> dict[str, Any]:
         """Modify a check runs
 
         Arguments:
@@ -723,13 +734,13 @@ class GitHubHandler:
         logger.info(
             "Modifying check run %i: status=%s conclusion=%s title=%s",
             number,
-            status.name,
+            status.name if status else "N/A",
             conclusion.name if conclusion else "N/A",
             output_title,
         )
         var_data = copy(self.var_default)
         var_data["id"] = str(number)
-        data = {}
+        data: dict[str, Any] = {}
         if status is not None:
             data["status"] = status.name.lower()
             if status == CheckRunStatus.in_progress:
@@ -738,19 +749,20 @@ class GitHubHandler:
             data["conclusion"] = conclusion.name.lower()
             data["completed_at"] = iso_now()
         if output_title:
-            data["output"] = {
+            output: dict[str, Any] = {
                 "title": output_title,
                 "summary": output_summary or "",
                 "text": output_text or "",
             }
             if output_annotations:
-                data["output"]["annotations"] = output_annotations
+                output["annotations"] = output_annotations
+            data["output"] = output
         if actions:
             data["actions"] = actions
         accept = "application/vnd.github.antiope-preview+json"
         return await self.api.patch(self.CHECK_RUN, var_data, data=data, accept=accept)
 
-    async def get_check_runs(self, sha: str) -> List[Dict[str, Any]]:
+    async def get_check_runs(self, sha: str) -> list[dict[str, Any]]:
         """List check runs for **sha**
 
         Arguments:
@@ -764,7 +776,7 @@ class GitHubHandler:
         res = await self.api.getitem(self.GET_CHECK_RUNS, var_data, accept=accept)
         return res["check_runs"]
 
-    async def get_statuses(self, sha: str) -> List[Dict[str, Any]]:
+    async def get_statuses(self, sha: str) -> list[dict[str, Any]]:
         """List status checks for **sha**
 
         Arguments:
@@ -776,7 +788,7 @@ class GitHubHandler:
         var_data["commit"] = sha
         return await self.api.getitem(self.GET_STATUSES, var_data)
 
-    async def get_pr_reviews(self, pr_number: int) -> List[Dict[str, Any]]:
+    async def get_pr_reviews(self, pr_number: int) -> list[dict[str, Any]]:
         """Get reviews filed for a PR
 
         Arguments:
@@ -789,7 +801,7 @@ class GitHubHandler:
         var_data["number"] = str(pr_number)
         return await self.api.getitem(self.PULL_REVIEWS, var_data)
 
-    async def get_branch_protection(self, branch: str = "master") -> Dict[str, Any]:
+    async def get_branch_protection(self, branch: str = "master") -> dict[str, Any]:
         """Retrieve protection settings for branch
 
         Arguments:
@@ -833,8 +845,8 @@ class GitHubHandler:
         return res
 
     async def check_protections(
-        self, pr_number: int, head_sha: str = None
-    ) -> Tuple[Optional[bool], str]:
+        self, pr_number: int, head_sha: str | None = None
+    ) -> tuple[bool | None, str]:
         """Check whether PR meets protection requirements
 
         Arguments:
@@ -895,13 +907,12 @@ class GitHubHandler:
                     approving_count += 1
             if approving_count < required_count:
                 return False, (
-                    f"Insufficient number of approving reviews"
-                    f"({approving_count}/{required_count})"
+                    f"Insufficient number of approving reviews({approving_count}/{required_count})"
                 )
         logger.info("PR #%s is passing configured checks", pr_number)
         return True, "LGTM"
 
-    async def get_contents(self, path: str, ref: str = None) -> str:
+    async def get_contents(self, path: str, ref: str | None = None) -> str:
         """Get contents of a file in repo
 
         Arguments:
@@ -938,7 +949,7 @@ class GitHubHandler:
         var_data["ref"] = ref
         await self.api.delete(self.GIT_REFERENCE, var_data)
 
-    def _deparse_card_pr_number(self, card: Dict[str, Any]) -> Dict[str, Any]:
+    def _deparse_card_pr_number(self, card: dict[str, Any]) -> dict[str, Any]:
         """Extracts the card's issue's number from the content_url
 
         This is a hack. The card data returned from github does not contain
@@ -964,14 +975,13 @@ class GitHubHandler:
                 pass
         if "issue_number" not in card:
             logger.error(
-                "Failed to deparse content url to issue number.\n"
-                "content_url=%s\nissue_url=%s\n",
+                "Failed to deparse content url to issue number.\ncontent_url=%s\nissue_url=%s\n",
                 content_url,
                 issue_url,
             )
         return card
 
-    async def list_project_cards(self, column_id: int) -> List[Dict[str, Any]]:
+    async def list_project_cards(self, column_id: int) -> list[dict[str, Any]]:
         """List cards in a project column
 
         Arguments:
@@ -982,7 +992,7 @@ class GitHubHandler:
         res = await self.api.getitem(self.PROJECT_COL_CARDS, var_data, accept=accept)
         return [self._deparse_card_pr_number(card) for card in res]
 
-    async def get_project_card(self, card_id: int) -> Dict[str, Any]:
+    async def get_project_card(self, card_id: int) -> dict[str, Any]:
         """Get a project card
 
         Arguments:
@@ -1002,11 +1012,11 @@ class GitHubHandler:
     async def create_project_card(
         self,
         column_id: int,
-        note: str = None,
-        content_id: int = None,
-        content_type: CardContentType = None,
-        number: int = None,
-    ) -> Dict[str, Any]:
+        note: str | None = None,
+        content_id: int | None = None,
+        content_type: CardContentType | None = None,
+        number: int | None = None,
+    ) -> dict[str, Any]:
         """Create a new project card
 
         In addition to **column_id**, you must provide *either*:
@@ -1199,13 +1209,13 @@ class GitHubAppHandler:
         #: Our client session
         self._session = session
         #: JWT and its expiry
-        self._jwt: Tuple[int, str] = (0, "")
+        self._jwt: tuple[int, str] = (0, "")
         #: OAUTH tokens for installations
-        self._tokens: Dict[str, Tuple[int, str]] = {}
+        self._tokens: dict[str, tuple[int, str]] = {}
         #: GitHubHandlers for each installation
-        self._handlers: Dict[Tuple[str, str], GitHubHandler] = {}
+        self._handlers: dict[tuple[str, str], GitHubHandler] = {}
         #: GitHubHandlers for each user token->time,handler
-        self._user_handlers: Dict[str, Tuple[int, GitHubHandler]] = {}
+        self._user_handlers: dict[str, tuple[int, GitHubHandler]] = {}
 
     def get_app_jwt(self) -> str:
         """Returns JWT authenticating as this app"""
@@ -1219,7 +1229,11 @@ class GitHubAppHandler:
                 "iss": self.app_id,
             }
             token_utf8 = jwt.encode(payload, self.app_key, algorithm="RS256")
-            token = token_utf8.decode("utf-8")
+            token = (
+                token_utf8.decode("utf-8")
+                if isinstance(token_utf8, bytes)
+                else token_utf8
+            )
             self._jwt = (expires, token)
             msg = "Created new"
         else:
@@ -1235,7 +1249,9 @@ class GitHubAppHandler:
             raise ValueError("Time String '%s' not in UTC")
         return int(time.mktime(time.strptime(timestr[:-1], "%Y-%m-%dT%H:%M:%S")))
 
-    async def get_installation_token(self, installation: str, name: str = None) -> str:
+    async def get_installation_token(
+        self, installation: str, name: str | None = None
+    ) -> str:
         """Returns OAUTH token for installation referenced in **event**"""
         if name is None:
             name = installation
@@ -1307,7 +1323,7 @@ class GitHubAppHandler:
             self._handlers[handler_key] = api
         return api
 
-    async def get_github_user_api(self, token: str) -> GitHubHandler:
+    async def get_github_user_api(self, token: str) -> GitHubHandler | None:
         """Returns the GitHubHandler for a user given a token"""
         now = int(time.time())
         if token not in self._user_handlers:

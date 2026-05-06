@@ -1,32 +1,34 @@
+import contextlib
+import importlib
+import logging
 import os
 import re
-import sys
+import shutil
 import subprocess as sp
-import pytest
+import sys
 import tempfile
 import uuid
-import contextlib
-import logging
-import shutil
 from pathlib import Path
 from textwrap import dedent
 
-from conda_build import metadata, exceptions
+import pytest
+from conda_build import exceptions, metadata
+from helpers import Recipes, ensure_missing
 
-from bioconda_utils import __version__
-from bioconda_utils import utils
-from bioconda_utils import pkg_test
-from bioconda_utils import docker_utils
-from bioconda_utils import build
-from bioconda_utils import upload
+from bioconda_utils import (
+    __version__,
+    build,
+    docker_utils,
+    pkg_test,
+    upload,
+    utils,
+)
 from bioconda_utils.utils import validate_config
-from helpers import ensure_missing, Recipes
 
 logger = logging.getLogger(__name__)
 
 # TODO: need channel order tests. Could probably do this by adding different
 # file:// channels with different variants of the same package
-
 
 # Label that will be used for uploading test packages to anaconda/binstar
 TEST_LABEL = "bioconda-utils-test"
@@ -108,7 +110,7 @@ def config_fixture():
     yield config
 
 
-@pytest.fixture(scope="module", params=PARAMS, ids=IDS)
+@pytest.fixture(scope="function", params=PARAMS, ids=IDS)
 def single_build(request, recipes_fixture):
     """
     Builds the "one" recipe.
@@ -124,7 +126,8 @@ def single_build(request, recipes_fixture):
         docker_builder = None
         mulled_test = False
     logger.error(
-        "Fixture: Building 'one' %s", "within docker" if docker_builder else "locally"
+        "Fixture: Building 'one' %s",
+        "within docker" if docker_builder else "locally",
     )
     build.build(
         recipe=recipes_fixture.recipe_dirs["one"],
@@ -251,7 +254,7 @@ def single_upload():
         [
             "anaconda",
             "-t",
-            os.environ.get("ANACONDA_TOKEN"),
+            os.environ["ANACONDA_TOKEN"],
             "remove",
             "bioconda/{0}".format(name),
             "--force",
@@ -1076,23 +1079,23 @@ def test_load_meta_skipping():
 
 
 def test_native_platform_skipping():
-    expections = [
+    expections = (
         # Don't skip linux-x86 for any recipes
-        ["one", "linux", False],
-        ["two", "linux", False],
-        ["three", "linux", False],
-        ["four", "linux", False],
+        ("one", "linux", False),
+        ("two", "linux", False),
+        ("three", "linux", False),
+        ("four", "linux", False),
         # Skip recipes without linux aarch64 enable on linux-aarch64 platform
-        ["one", "linux-aarch64", True],
-        ["three", "linux-aarch64", True],
+        ("one", "linux-aarch64", True),
+        ("three", "linux-aarch64", True),
         # Don't skip recipes with linux aarch64 enable on linux-aarch64 platform
-        ["two", "linux-aarch64", False],
-        ["four", "linux-aarch64", False],
-        ["one", "osx-arm64", True],
-        ["two", "osx-arm64", True],
-        ["three", "osx-arm64", False],
-        ["four", "osx-arm64", False],
-    ]
+        ("two", "linux-aarch64", False),
+        ("four", "linux-aarch64", False),
+        ("one", "osx-arm64", True),
+        ("two", "osx-arm64", True),
+        ("three", "osx-arm64", False),
+        ("four", "osx-arm64", False),
+    )
     r = Recipes(
         """
         one:
@@ -1432,7 +1435,9 @@ def test_pkg_test_conda_package_format(
     """
     # ("1" is .tar.bz2 and "2" is .conda)
     try:
-        from conda_build.conda_interface import cc_conda_build
+        cc_conda_build = importlib.import_module(
+            "conda_build.conda_interface"
+        ).cc_conda_build
     except ImportError:
         pass
     else:

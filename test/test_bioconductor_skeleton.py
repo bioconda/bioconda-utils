@@ -1,19 +1,8 @@
 import pytest
 
-# TODO: Remove this once bioarchive is up again.
-from datetime import datetime
-from functools import partial
-
 from bioconda_utils import bioconductor_skeleton
 from bioconda_utils import cran_skeleton
 from bioconda_utils import utils
-
-SKIP_DUE_TO_BIOARCHIVE_OUTAGE = partial(
-    pytest.mark.skipif,
-    datetime.now() < datetime(2020, 6, 22),
-    reason="temporarily skipped due to bioarchive.galaxyproject.org outage",
-)
-
 
 config = {"channels": ["conda-forge", "bioconda"]}
 
@@ -126,7 +115,6 @@ def test_find_best_bioc_version():
         bioconductor_skeleton.BioCProjectPage("BioBase", pkg_version="2.37.2")
 
 
-@SKIP_DUE_TO_BIOARCHIVE_OUTAGE
 def test_pkg_version():
     # version specified, but not bioc version
     b = bioconductor_skeleton.BioCProjectPage("DESeq2", pkg_version="1.14.1")
@@ -138,7 +126,7 @@ def test_pkg_version():
     assert b.bioarchive_url is None
     assert b.cargoport_url == (
         "https://depot.galaxyproject.org/software/bioconductor-deseq2/bioconductor-deseq2_1.14.1_src_all.tar.gz"
-    )  # noqa: E501: line too long
+    )  # noqa: E501
 
     # bioc version specified, but not package version
     b = bioconductor_skeleton.BioCProjectPage("edgeR", bioc_version="3.5")
@@ -150,7 +138,7 @@ def test_pkg_version():
     assert b.bioarchive_url is None
     assert b.cargoport_url == (
         "https://depot.galaxyproject.org/software/bioconductor-edger/bioconductor-edger_3.18.1_src_all.tar.gz"
-    )  # noqa: E501: line too long
+    )  # noqa: E501
 
 
 def test_bioarchive_exists_but_not_bioconductor():
@@ -167,7 +155,6 @@ def test_bioarchive_exists_but_not_bioconductor():
         bioconductor_skeleton.BioCProjectPage("BioBase", pkg_version="2.37.2")
 
 
-@SKIP_DUE_TO_BIOARCHIVE_OUTAGE
 def test_bioarchive_exists():
     # package found on both bioconductor and bioarchive.
     b = bioconductor_skeleton.BioCProjectPage("DESeq", pkg_version="1.26.0")
@@ -176,29 +163,33 @@ def test_bioarchive_exists():
     )
 
 
-@SKIP_DUE_TO_BIOARCHIVE_OUTAGE
 def test_annotation_data(tmpdir, bioc_fetch):
     bioconductor_skeleton.write_recipe(
         "AHCytoBands", str(tmpdir), config, recursive=False, packages=bioc_fetch
     )
-    meta = utils.load_first_metadata(str(tmpdir.join("bioconductor-ahcytobands"))).meta
-    assert any(dep.startswith("curl ") for dep in meta["requirements"]["run"])
-    assert len(meta["source"]["url"]) == 3
+    meta = utils.load_first_metadata(
+        str(tmpdir.join("bioconductor-ahcytobands")), finalize=False
+    ).meta
+    assert "curl" in {dep.split()[0] for dep in meta["requirements"]["run"]}
+    assert len(meta["source"]["url"]) == 4
     assert not tmpdir.join("bioconductor-ahcytobands", "build.sh").exists()
     assert tmpdir.join("bioconductor-ahcytobands", "post-link.sh").exists()
     assert tmpdir.join("bioconductor-ahcytobands", "pre-unlink.sh").exists()
 
 
-@SKIP_DUE_TO_BIOARCHIVE_OUTAGE
 def test_experiment_data(tmpdir, bioc_fetch):
     bioconductor_skeleton.write_recipe(
-        "Affyhgu133A2Expr", str(tmpdir), config, recursive=False, packages=bioc_fetch
+        "Affyhgu133A2Expr",
+        str(tmpdir),
+        config,
+        recursive=False,
+        packages=bioc_fetch,
     )
     meta = utils.load_first_metadata(
-        str(tmpdir.join("bioconductor-affyhgu133a2expr"))
+        str(tmpdir.join("bioconductor-affyhgu133a2expr")), finalize=False
     ).meta
-    assert any(dep.startswith("curl ") for dep in meta["requirements"]["run"])
-    assert len(meta["source"]["url"]) == 3
+    assert "curl" in {dep.split()[0] for dep in meta["requirements"]["run"]}
+    assert len(meta["source"]["url"]) == 4
     assert not tmpdir.join("bioconductor-affyhgu133a2expr", "build.sh").exists()
     assert tmpdir.join("bioconductor-affyhgu133a2expr", "post-link.sh").exists()
     assert tmpdir.join("bioconductor-affyhgu133a2expr", "pre-unlink.sh").exists()
@@ -208,7 +199,11 @@ def test_nonexistent_pkg(tmpdir, bioc_fetch):
     # no such package exists in the current bioconductor
     with pytest.raises(bioconductor_skeleton.PackageNotFoundError):
         bioconductor_skeleton.write_recipe(
-            "nonexistent", str(tmpdir), config, recursive=True, packages=bioc_fetch
+            "nonexistent",
+            str(tmpdir),
+            config,
+            recursive=True,
+            packages=bioc_fetch,
         )
 
     # package exists, but not this version

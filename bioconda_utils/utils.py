@@ -28,7 +28,8 @@ from collections import Counter, defaultdict, namedtuple, deque
 from collections.abc import Iterable
 from itertools import product, chain, groupby, zip_longest
 from functools import partial
-from typing import Sequence, Collection, List, Dict, Any, Union
+from typing import Any, cast
+from collections.abc import Sequence, Collection
 from multiprocessing import Pool
 from multiprocessing.pool import ThreadPool
 
@@ -63,7 +64,7 @@ from jsonschema import validate
 from colorlog import ColoredFormatter
 from boltons.funcutils import FunctionBuilder
 
-conda.gateways.logging.initialize_logging = lambda: None
+cast(Any, conda.gateways.logging).initialize_logging = lambda: None
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +152,7 @@ def wraps(func, hide_wrapped=False):
         fb_wrapper = FunctionBuilder.from_func(wrapper_func)
         fb.kwonlyargs += fb_wrapper.kwonlyargs
         fb.kwonlydefaults.update(fb_wrapper.kwonlydefaults)
-        fb.body = "return _call(%s)" % fb.get_invocation_str()
+        fb.body = f"return _call({fb.get_invocation_str()})"
         execdict = dict(_call=wrapper_func, _func=func)
         fully_wrapped = fb.get_func(execdict)
         if not hide_wrapped:
@@ -180,7 +181,11 @@ class LogFuncFilter:
     """
 
     def __init__(
-        self, func, trunc_msg: str = None, max_lines: int = 0, consecutive: bool = True
+        self,
+        func,
+        trunc_msg: str | None = None,
+        max_lines: int = 0,
+        consecutive: bool = True,
     ) -> None:
         self.func = func
         self.max_lines = max_lines + 1
@@ -223,9 +228,9 @@ class LoggingSourceRenameFilter:
 
 def setup_logger(
     name: str = "bioconda_utils",
-    loglevel: Union[str, int] = logging.INFO,
-    logfile: str = None,
-    logfile_level: Union[str, int] = logging.DEBUG,
+    loglevel: str | int = logging.INFO,
+    logfile: str | None = None,
+    logfile_level: str | int = logging.DEBUG,
     log_command_max_lines=None,
     prefix: str = "BIOCONDA ",
     msgfmt: str = (
@@ -326,9 +331,7 @@ def ellipsize_recipes(
     if not recipes or len(recipes) > m:
         return ""
     if len(recipes) > n:
-        if not isinstance(recipes, Sequence):
-            recipes = list(recipes)
-        recipes = recipes[:n]
+        recipes = list(recipes)[:n]
         append = ", ..."
     else:
         append = ""
@@ -359,9 +362,7 @@ jinja = Environment(
     lstrip_blocks=True,
 )
 
-
 jinja_silent_undef = Environment(undefined=JinjaSilentUndefined)
-
 
 # Patterns of allowed environment variables that are allowed to be passed to
 # conda-build.
@@ -385,23 +386,23 @@ ENV_VAR_DOCKER_BLACKLIST = [
 ]
 
 
-def get_free_space():
+def get_free_space() -> float:
     """Return free space in MB on disk"""
     s = os.statvfs(os.getcwd())
     return s.f_frsize * s.f_bavail / (1024**2)
 
 
-def get_free_memory_percent():
+def get_free_memory_percent() -> float:
     """Return free memory as a percentage of total memory"""
     return psutil.virtual_memory().available * 100 / psutil.virtual_memory().total
 
 
-def get_free_memory_mb():
+def get_free_memory_mb() -> float:
     """Return free memory as megabytes"""
     return psutil.virtual_memory().available / (1024**2)
 
 
-def allowed_env_var(s, docker=False):
+def allowed_env_var(s: str, docker: bool = False) -> bool:
     for pattern in ENV_VAR_WHITELIST:
         if fnmatch.fnmatch(s, pattern):
             for bpattern in ENV_VAR_BLACKLIST:
@@ -412,9 +413,10 @@ def allowed_env_var(s, docker=False):
                     if fnmatch.fnmatch(s, dpattern):
                         return False
             return True
+    return False
 
 
-def bin_for(name="conda"):
+def bin_for(name: str = "conda") -> str:
     if "CONDA_ROOT" in os.environ:
         return os.path.join(os.environ["CONDA_ROOT"], "bin", name)
     return name
@@ -527,13 +529,11 @@ def load_meta_fast(recipe: str, env=None):
 
     try:
         pth = os.path.join(recipe, "meta.yaml")
-        template = jinja_silent_undef.from_string(
-            open(pth, "r", encoding="utf-8").read()
-        )
+        template = jinja_silent_undef.from_string(open(pth, encoding="utf-8").read())
         meta = yaml.safe_load(template.render(env))
         return (meta, recipe)
     except Exception:
-        raise ValueError("Problem inspecting {0}".format(recipe))
+        raise ValueError(f"Problem inspecting {recipe}")
 
 
 def load_conda_build_config(platform=None, trim_skip=True):
@@ -543,7 +543,10 @@ def load_conda_build_config(platform=None, trim_skip=True):
     config = api.Config(no_download_source=True, set_build_id=False)
 
     # get environment root
-    env_root = PurePath(shutil.which("bioconda-utils")).parents[1]
+    bioconda_utils_bin = shutil.which("bioconda-utils")
+    if bioconda_utils_bin is None:
+        raise FileNotFoundError("Unable to find bioconda-utils on PATH")
+    env_root = PurePath(bioconda_utils_bin).parents[1]
     # set path to pinnings from conda forge package
     config.exclusive_config_files = [
         os.path.join(env_root, "conda_build_config.yaml"),
@@ -551,11 +554,12 @@ def load_conda_build_config(platform=None, trim_skip=True):
             os.path.dirname(__file__), "bioconda_utils-conda_build_config.yaml"
         ),
     ]
-    for cfg in chain(config.exclusive_config_files, config.variant_config_files or []):
-        assert os.path.exists(cfg), "error: {0} does not exist".format(cfg)
+    variant_config_files = getattr(config, "variant_config_files", None) or []
+    for cfg in chain(config.exclusive_config_files, variant_config_files):
+        assert os.path.exists(cfg), f"error: {cfg} does not exist"
     if platform:
         config.platform = platform
-    config.trim_skip = trim_skip
+    setattr(config, "trim_skip", trim_skip)
     return config
 
 
@@ -613,16 +617,16 @@ def temp_os(platform):
 
 
 def run(
-    cmds: List[str],
-    env: Dict[str, str] = None,
-    mask: List[str] = None,
+    cmds: list[str],
+    env: dict[str, str] | None = None,
+    mask: list[str] | bool | None = None,
     mask_envvars: bool = False,
     live: bool = False,
     mylogger: logging.Logger = logger,
     loglevel: int = logging.INFO,
     check=True,
     quiet_failure=False,
-    **kwargs: Dict[Any, Any],
+    **kwargs: Any,
 ) -> sp.CompletedProcess:
     """
     Run a command (with logging, masking, etc)
@@ -669,8 +673,9 @@ def run(
         if mask is False:
             # masking has been deactivated
             return arg
-        for mitem in mask:
-            arg = arg.replace(mitem, "<hidden>")
+        if isinstance(mask, list):
+            for mitem in mask:
+                arg = arg.replace(mitem, "<hidden>")
         return arg
 
     mylogger.log(loglevel, "(COMMAND) %s", " ".join(do_mask(arg) for arg in cmds))
@@ -750,6 +755,7 @@ def run(
                 proc.kill()
                 proc.wait()
         returncode = proc.poll()
+        assert returncode is not None
 
         if returncode:
             if not quiet_failure:
@@ -832,8 +838,7 @@ class EnvMatrix:
         A copy of the entire os.environ dict is updated and yielded for each of
         these sets.
         """
-        for env in product(*flatten_dict(self.env)):
-            yield env
+        yield from product(*flatten_dict(self.env))
 
 
 def get_deps(recipe, build=True):
@@ -937,7 +942,7 @@ def get_recipes(recipe_folder, package="*", exclude=None):
                     meta_yaml_found_or_excluded = True
                     yield dir_path
             if not meta_yaml_found_or_excluded and os.path.isdir(new_dir):
-                logger.warn(
+                logger.warning(
                     "No meta.yaml found in %s."
                     " If you want to ignore this directory, add it to the blacklist.",
                     new_dir,
@@ -990,7 +995,7 @@ class DivergentBuildsError(Exception):
     pass
 
 
-def _string_or_float_to_integer_python(s):
+def _string_or_float_to_integer_python(s: str | float) -> int:
     """
     conda-build 2.0.4 expects CONDA_PY values to be integers (e.g., 27, 35) but
     older versions were OK with strings or even floats.
@@ -1005,11 +1010,11 @@ def _string_or_float_to_integer_python(s):
         else:
             s = int(s)
     except ValueError:
-        raise ValueError("{} is an unrecognized Python version".format(s))
+        raise ValueError(f"{s} is an unrecognized Python version")
     return s
 
 
-def built_package_paths(recipe):
+def built_package_paths(recipe: str) -> list[str]:
     """
     Returns the path to which a recipe would be built.
 
@@ -1023,7 +1028,7 @@ def built_package_paths(recipe):
     return paths
 
 
-def last_commit_to_master():
+def last_commit_to_master() -> datetime.datetime:
     """
     Identifies the day of the last commit to master branch.
     """
@@ -1039,7 +1044,7 @@ def last_commit_to_master():
     return date
 
 
-def file_from_commit(commit, filename):
+def file_from_commit(commit: str, filename: str) -> str:
     """
     Returns the contents of a file at a particular commit as a string.
 
@@ -1052,7 +1057,7 @@ def file_from_commit(commit, filename):
     if commit == "HEAD":
         return open(filename).read()
 
-    p = run(["git", "show", "{0}:{1}".format(commit, filename)], mask=False, loglevel=0)
+    p = run(["git", "show", f"{commit}:{filename}"], mask=False, loglevel=0)
     return str(p.stdout)
 
 
@@ -1090,7 +1095,7 @@ def recipe_requires_finalized_render(recipe):
     """
     meta_path = os.path.join(recipe, "meta.yaml")
     try:
-        with open(meta_path, "r", encoding="utf-8") as f:
+        with open(meta_path, encoding="utf-8") as f:
             text = re.sub(r"#.*", "", f.read())
     except OSError:
         return False
@@ -1135,9 +1140,9 @@ def check_recipe_skippable(recipe, check_channels):
                 )
                 return True
 
-    packages = set(
+    packages = {
         (meta.name(), meta.version(), int(meta.build_number() or 0)) for meta in metas
-    )
+    }
     r = RepoData()
     num_existing_pkg_builds = Counter(
         (name, version, build_number, subdir)
@@ -1155,7 +1160,12 @@ def check_recipe_skippable(recipe, check_channels):
         # No packages with same version + build num in channels: no need to skip
         return False
     num_new_pkg_builds = Counter(
-        (meta.name(), meta.version(), int(meta.build_number() or 0), _meta_subdir(meta))
+        (
+            meta.name(),
+            meta.version(),
+            int(meta.build_number() or 0),
+            _meta_subdir(meta),
+        )
         for meta in metas
     )
     if num_new_pkg_builds == num_existing_pkg_builds:
@@ -1261,7 +1271,7 @@ def validate_config(config):
     # Load packaged schema without pkg_resources (deprecated)
     # files('bioconda_utils') returns a Traversable to the package contents
     with as_file(files("bioconda_utils") / "config.schema.yaml") as schema_path:
-        with open(schema_path, "r", encoding="utf-8") as fh:
+        with open(schema_path, encoding="utf-8") as fh:
             schema = yaml.safe_load(fh)
 
     validate(config, schema)
@@ -1426,7 +1436,10 @@ class AsyncRequests:
         backoff.fibo,
         aiohttp.ClientResponseError,
         max_tries=20,
-        giveup=lambda ex: ex.code not in [429, 502, 503, 504],
+        giveup=lambda ex: (
+            isinstance(ex, aiohttp.ClientResponseError)
+            and ex.status not in [429, 502, 503, 504]
+        ),
     )
     async def _async_fetch_one(session, url, desc, cb=None, data=None, fd=None):
         result = []
@@ -1510,7 +1523,6 @@ class RepoData:
       upstream, not used by conda. We generate this from the subdir
       information to have it available.
 
-
     Repodata versions:
 
     The version is indicated by the key **repodata_version**, with
@@ -1577,6 +1589,7 @@ class RepoData:
     @property
     def channels(self):
         """Return channels to load."""
+        assert self.config is not None
         return self.config["channels"]
 
     @property
@@ -1633,7 +1646,7 @@ class RepoData:
     def _load_channel_dataframe(self):
         repos = list(product(self.channels, self.platforms))
         urls = [self._make_repodata_url(c, p) for c, p in repos]
-        descs = ["{}/{}".format(c, p) for c, p in repos]
+        descs = [f"{c}/{p}" for c, p in repos]
 
         def to_dataframe(json_data, meta_data):
             channel, platform = meta_data
@@ -1656,7 +1669,14 @@ class RepoData:
         else:
             res = pd.DataFrame(columns=self.columns)
 
-        for col in ("channel", "platform", "subdir", "name", "version", "build"):
+        for col in (
+            "channel",
+            "platform",
+            "subdir",
+            "name",
+            "version",
+            "build",
+        ):
             res[col] = res[col].astype("category")
         res = res.reset_index(drop=True)
 
@@ -1768,24 +1788,24 @@ class RepoData:
         return df[key].itertuples(index=False)
 
 
-def get_github_client():
+def get_github_client() -> Github:
     """Get a Github client with a robust retry policy."""
     if "GITHUB_TOKEN" in os.environ.keys():
         return Github(
             os.environ["GITHUB_TOKEN"],
             retry=Retry(total=10, status_forcelist=(500, 502, 504), backoff_factor=0.3),
         )
-    logger.warn("GITHUB_TOKEN not found, restrictions may be enforced by GitHub API")
+    logger.warning("GITHUB_TOKEN not found, restrictions may be enforced by GitHub API")
     return Github(
         retry=Retry(total=10, status_forcelist=(500, 502, 504), backoff_factor=0.3),
     )
 
 
-def is_stable_version(version):
+def is_stable_version(version: str) -> bool:
     return re.match(r"^\d+\.\d+\.\d+$", version) is not None
 
 
-def extract_stable_version(version):
+def extract_stable_version(version: str) -> str:
     m = re.match(r"^(\d+\.\d+\.\d+)", version)
     if m is None:
         raise ValueError(f"Could not extract stable version from {version}")
@@ -1805,7 +1825,7 @@ def yaml_remove_invalid_chars(
 
 # Cache results to disk for one week.
 @disk_cache.memoize(expire=604800)
-def get_package_downloads(channel, package):
+def get_package_downloads(channel: str, package: str) -> int:
     """Use anaconda API to obtain download counts."""
     data = requests.get(f"https://api.anaconda.org/package/{channel}/{package}").json()
     if "files" in data:

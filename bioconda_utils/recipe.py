@@ -8,6 +8,9 @@ object resulting from parsing by **conda_build** offers functions to
 edit the meta.yaml.
 """
 
+from __future__ import annotations
+
+
 import logging
 import os
 import re
@@ -19,15 +22,22 @@ from collections import defaultdict
 from contextlib import redirect_stdout, redirect_stderr
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, List, Sequence, Tuple, Optional, Pattern
+from typing import (
+    Any,
+    cast,
+    overload,
+    Literal,
+)
+from collections.abc import Sequence
+from re import Pattern
 
 
 import conda_build.api
-from conda_build.metadata import MetaData
 
 import jinja2
 
 from ruamel.yaml import YAML
+from ruamel.yaml.comments import CommentedMap
 from ruamel.yaml.constructor import DuplicateKeyError
 
 from . import utils
@@ -163,25 +173,25 @@ class Recipe:
 
         # Filled in by render()
         #: Parsed recipe YAML
-        self.meta: Dict[str, Any] = {}
+        self.meta: CommentedMap = CommentedMap()
 
         self.conda_build_config: str = ""
-        self.build_scripts: Dict[str, str] = {}
+        self.build_scripts: dict[str, str] = {}
 
         # These will be filled in by load_from_string()
         #: Lines of the raw recipe file
-        self.meta_yaml: List[str] = []
+        self.meta_yaml: list[str] = []
         # Filled in by update filter
-        self.version_data: Dict[str, Any] = {}
+        self.version_data: dict[str, Any] = {}
         #: Original recipe before modifications (updated by load_from_string)
         self.orig: Recipe = deepcopy(self)
         #: Whether the recipe was loaded from a branch (update in progress)
         self.on_branch: bool = False
         #: For passing data around
-        self.data: Dict[str, Any] = {}
+        self.data: dict[str, Any] = {}
 
         # for conda_render() and conda_release()
-        self._conda_meta = None
+        self._conda_meta: Any = None
         self._conda_tempdir = None
 
     @property
@@ -205,7 +215,7 @@ class Recipe:
     def __repr__(self) -> str:
         return f'{self.__class__.__name__} "{self.reldir}"'
 
-    def load_from_string(self, data) -> "Recipe":
+    def load_from_string(self, data) -> Recipe:
         """Load and `render` recipe contents from disk"""
         self.meta_yaml = data.splitlines()
         if not self.meta_yaml:
@@ -240,7 +250,21 @@ class Recipe:
             self.build_scripts[script] = content
 
     @classmethod
-    def from_file(cls, recipe_dir, recipe_fname, return_exceptions=False) -> "Recipe":
+    @overload
+    def from_file(
+        cls, recipe_dir, recipe_fname, return_exceptions: Literal[False] = False
+    ) -> Recipe: ...
+
+    @classmethod
+    @overload
+    def from_file(
+        cls, recipe_dir, recipe_fname, return_exceptions: Literal[True]
+    ) -> Recipe | Exception: ...
+
+    @classmethod
+    def from_file(
+        cls, recipe_dir, recipe_fname, return_exceptions=False
+    ) -> Recipe | Exception:
         """Create new `Recipe` object from file
 
         Args:
@@ -298,7 +322,7 @@ class Recipe:
             return None  # never the whole yaml
         lines = text.splitlines()
         block_height = 0
-        variants: Dict[str, List[str]] = defaultdict(list)
+        variants: dict[str, list[str]] = defaultdict(list)
 
         for block_height, line in enumerate(lines[block_top:]):
             if line.strip() and not line.startswith(" " * block_left):
@@ -382,7 +406,7 @@ class Recipe:
         """
         yaml_text = self.get_template().render(self.JINJA_VARS)
         try:
-            self.meta = yaml.load(yaml_text)
+            meta = yaml.load(yaml_text)
         except DuplicateKeyError as err:
             line = err.problem_mark.line + 1
             column = err.problem_mark.column + 1
@@ -393,11 +417,15 @@ class Recipe:
             )
             if yaml_text:
                 try:
-                    self.meta = yaml.load(yaml_text)
+                    meta = yaml.load(yaml_text)
                 except DuplicateKeyError:
                     raise DuplicateKey(self, line=line, column=column)
             else:
                 raise DuplicateKey(self, line=line, column=column)
+
+        if not isinstance(meta, CommentedMap):
+            raise MissingKey(self)
+        self.meta = meta
 
         if (
             "package" not in self.meta
@@ -599,7 +627,7 @@ class Recipe:
         self.render()
 
     @property
-    def package_names(self) -> List[str]:
+    def package_names(self) -> list[str]:
         """List of the packages built by this recipe (including outputs)"""
         packages = [self.name]
         if "outputs" in self.meta:
@@ -633,7 +661,7 @@ class Recipe:
                 lines.add(lineno)
 
         # get lines covered by keys listed in ``within``
-        start: Optional[int] = None
+        start: int | None = None
         for key in self.meta.keys():
             lineno = self.meta.lc.key(key)[0]
             if key in within:
@@ -722,7 +750,7 @@ class Recipe:
         finalize=True,
         permit_unsatisfiable_variants=False,
         **kwargs,
-    ) -> List[Tuple[MetaData, bool, bool]]:
+    ) -> Any:
         """Handles calling conda_build.api.render
 
         ``conda_build.api.render`` is fragile, loud and slow. Avoid using this
@@ -791,7 +819,7 @@ class Recipe:
             def new_exit(args=None):
                 raise SystemExit(args)
 
-            sys.exit = new_exit
+            cast(Any, sys).exit = new_exit
 
         try:
             with open("/dev/null", "w") as devnull:
@@ -817,10 +845,11 @@ class Recipe:
                 msg = "; ".join(msg.splitlines()[1:]) if "\n" in msg else msg
                 raise CondaRenderFailure(self, f"Jinja2 Template Error: '{msg}'")
             raise CondaRenderFailure(
-                self, f"Unknown SystemExit raised in Conda-Build Render API: '{msg}'"
+                self,
+                f"Unknown SystemExit raised in Conda-Build Render API: '{msg}'",
             )
         finally:
-            sys.exit = old_exit
+            cast(Any, sys).exit = old_exit
         return self._conda_meta
 
     def conda_release(self):

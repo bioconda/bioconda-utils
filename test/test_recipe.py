@@ -224,7 +224,12 @@ def test_recipe_get_raw_range(recipes):
         assert recipe.get_raw_range("package/name") == (2, 8, 3, 2)
         end = len(recipe.meta_yaml)
         assert recipe.get_raw_range("about") == (end - 3, 2, end - 1, 22)
-        assert recipe.get_raw_range("about/summary") == (end - 1, 11, end - 1, 22)
+        assert recipe.get_raw_range("about/summary") == (
+            end - 1,
+            11,
+            end - 1,
+            22,
+        )
 
 
 @with_recipes
@@ -285,14 +290,21 @@ def test_recipe_extra_additional_platforms(recipes):
             "    - osx-arm64",
         ]
         recipe.render()
-        assert recipe.extra_additional_platforms == ["linux-aarch64", "osx-arm64"]
+        assert recipe.extra_additional_platforms == [
+            "linux-aarch64",
+            "osx-arm64",
+        ]
 
 
 @with_recipes
 def test_recipe_extra_additional_platform_osx(recipes):
     for recipe in recipes:
         assert recipe.extra_additional_platforms == []
-        recipe.meta_yaml += ["extra:", "  additional-platforms:", "    - osx-arm64"]
+        recipe.meta_yaml += [
+            "extra:",
+            "  additional-platforms:",
+            "    - osx-arm64",
+        ]
         recipe.render()
         assert recipe.extra_additional_platforms == ["osx-arm64"]
 
@@ -301,7 +313,11 @@ def test_recipe_extra_additional_platform_osx(recipes):
 def test_recipe_extra_additional_platform_linux(recipes):
     for recipe in recipes:
         assert recipe.extra_additional_platforms == []
-        recipe.meta_yaml += ["extra:", "  additional-platforms:", "    - linux-aarch64"]
+        recipe.meta_yaml += [
+            "extra:",
+            "  additional-platforms:",
+            "    - linux-aarch64",
+        ]
         recipe.render()
         assert recipe.extra_additional_platforms == ["linux-aarch64"]
 
