@@ -707,6 +707,7 @@ def build(
             image_tag = VERSION
         docker_base_image = (
             docker_base_image
+            or os.getenv("BUILD_ENV_IMAGE", None)
             or f"quay.io/bioconda/bioconda-utils-build-env-cos7:{image_tag}"
         )
         logger.info(f"Using docker image {docker_base_image} for building.")
