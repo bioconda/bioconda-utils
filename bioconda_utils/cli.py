@@ -669,7 +669,7 @@ def build(
     n_workers=1,
     worker_offset=0,
     keep_old_work=False,
-    mulled_conda_image=pkg_test.MULLED_CONDA_IMAGE,
+    mulled_conda_image=pkg_test.CREATE_ENV_IMAGE,
     docker_base_image=None,
     record_build_failures=False,
     skiplist_leafs=False,

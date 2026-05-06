@@ -38,7 +38,9 @@ TEST_LABEL = "bioconda-utils-test"
 # docker, once without). On OSX, only the non-docker runs.
 
 # Docker ref for build container
-DOCKER_BASE_IMAGE = "quay.io/bioconda/bioconda-utils-test-env-cos7:latest"
+BUILD_ENV_IMAGE = os.getenv(
+    "BUILD_ENV_IMAGE", "quay.io/bioconda/bioconda-utils-test-env-cos7:latest"
+)
 
 SKIP_DOCKER_TESTS = sys.platform.startswith("darwin")
 SKIP_NOT_OSX = not sys.platform.startswith("darwin")
@@ -118,7 +120,7 @@ def single_build(request, recipes_fixture):
     if request.param:
         logger.error("Making recipe builder")
         docker_builder = docker_utils.RecipeBuilder(
-            use_host_conda_bld=True, docker_base_image=DOCKER_BASE_IMAGE
+            use_host_conda_bld=True, docker_base_image=BUILD_ENV_IMAGE
         )
         mulled_test = True
         logger.error("DONE")
@@ -151,7 +153,7 @@ def multi_build(request, recipes_fixture, config_fixture):
     """
     if request.param:
         docker_builder = docker_utils.RecipeBuilder(
-            use_host_conda_bld=True, docker_base_image=DOCKER_BASE_IMAGE
+            use_host_conda_bld=True, docker_base_image=BUILD_ENV_IMAGE
         )
         mulled_test = True
     else:
@@ -187,7 +189,7 @@ def multi_build_exclude(request, recipes_fixture, config_fixture):
     """
     if request.param:
         docker_builder = docker_utils.RecipeBuilder(
-            use_host_conda_bld=True, docker_base_image=DOCKER_BASE_IMAGE
+            use_host_conda_bld=True, docker_base_image=BUILD_ENV_IMAGE
         )
         mulled_test = True
     else:
@@ -310,7 +312,7 @@ def test_single_build_pkg_dir(recipes_fixture):
     docker_builder = docker_utils.RecipeBuilder(
         use_host_conda_bld=True,
         pkg_dir=os.getcwd() + "/output",
-        docker_base_image=DOCKER_BASE_IMAGE,
+        docker_base_image=BUILD_ENV_IMAGE,
     )
     mulled_test = False
     logger.error("DONE")
@@ -366,7 +368,7 @@ with open("{self.container_staging}/version", "w") as version_file:
 '
 """
         ),
-        docker_base_image=DOCKER_BASE_IMAGE,
+        docker_base_image=BUILD_ENV_IMAGE,
     )
     temp_dir = docker_builder.pkg_dir
     # Set recipe_dir to any temporary directory, e.g., docker_builder.pkg_dir.
@@ -381,7 +383,7 @@ def test_docker_builder_build(recipes_fixture):
     Tests just the build_recipe method of a RecipeBuilder object.
     """
     docker_builder = docker_utils.RecipeBuilder(
-        use_host_conda_bld=True, docker_base_image=DOCKER_BASE_IMAGE
+        use_host_conda_bld=True, docker_base_image=BUILD_ENV_IMAGE
     )
     pkgs = recipes_fixture.pkgs["one"]
     docker_builder.build_recipe(
@@ -398,7 +400,7 @@ def test_docker_build_fails(recipes_fixture, config_fixture):
     Test for expected failure when a recipe fails to build
     """
     docker_builder = docker_utils.RecipeBuilder(
-        docker_base_image=DOCKER_BASE_IMAGE, build_script_template="exit 1"
+        docker_base_image=BUILD_ENV_IMAGE, build_script_template="exit 1"
     )
     assert docker_builder.build_script_template == "exit 1"
     result = build.build_recipes(
@@ -414,7 +416,7 @@ def test_docker_build_fails(recipes_fixture, config_fixture):
 @pytest.mark.skipif(SKIP_DOCKER_TESTS, reason="skipping on osx")
 def test_docker_build_image_fails():
     template = f"""
-        FROM {DOCKER_BASE_IMAGE}
+        FROM {BUILD_ENV_IMAGE}
         RUN nonexistent command
         """
     with pytest.raises(sp.CalledProcessError):
@@ -463,7 +465,7 @@ def test_conda_as_dep(config_fixture, mulled_test):
     if mulled_test:
         docker_builder = docker_utils.RecipeBuilder(
             use_host_conda_bld=True,
-            docker_base_image=DOCKER_BASE_IMAGE,
+            docker_base_image=BUILD_ENV_IMAGE,
         )
     r = Recipes(
         """
@@ -1481,7 +1483,7 @@ def test_pkg_test_conda_package_format(
         )
         docker_builder = docker_utils.RecipeBuilder(
             use_host_conda_bld=True,
-            docker_base_image=DOCKER_BASE_IMAGE,
+            docker_base_image=BUILD_ENV_IMAGE,
             build_script_template=build_script_template,
         )
     build_result = build.build_recipes(
