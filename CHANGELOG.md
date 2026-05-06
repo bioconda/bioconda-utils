@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.4.1](https://github.com/bioconda/bioconda-utils/compare/v4.4.0...v4.4.1) (2026-05-06)
+
+
+### Bug Fixes
+
+* remove reference to non-existent file ([#1106](https://github.com/bioconda/bioconda-utils/issues/1106)) ([7a6adce](https://github.com/bioconda/bioconda-utils/commit/7a6adceec9e2f922c71d506f95ec3a4385c7f961))
+
 ## [4.4.0](https://github.com/bioconda/bioconda-utils/compare/v4.3.2...v4.4.0) (2026-04-28)
 
 
