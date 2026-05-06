@@ -7,7 +7,7 @@ name = "bioconda-utils"
 dynamic = ["version"]
 description = "Utilities for building and managing conda packages"
 readme = "README.md"
-license = "MIT"
+license = {text = "MIT"}
 authors = [
     {name = "Johannes Köster"},
     {name = "Ryan Dale"},
