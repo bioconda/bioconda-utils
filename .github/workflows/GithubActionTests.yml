@@ -58,7 +58,7 @@ jobs:
           conda create -n bioconda --quiet --yes --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
           conda activate bioconda
           conda list
-          python setup.py install
+          python -m pip install --no-deps --no-build-isolation .
 
       - name: Build docker container
         run: |
@@ -96,7 +96,7 @@ jobs:
           conda create -n bioconda --quiet --yes --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
           conda list
           conda activate bioconda
-          python setup.py install
+          python -m pip install --no-deps --no-build-isolation .
 
       - name: Run tests
         run: |
@@ -125,7 +125,7 @@ jobs:
           conda create -n bioconda --quiet --yes --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
           conda activate bioconda
           conda list
-          python setup.py install
+          python -m pip install --no-deps --no-build-isolation .
 
       - name: Test autobump
         run: |

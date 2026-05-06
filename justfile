@@ -16,7 +16,7 @@ check:
 
 # install a local build of the CLI for testing
 install:
-    python setup.py install
+    python -m pip install --no-deps --no-build-isolation .
 
 # this takes a very long time to execute, use check if not finished with your work yet
 test: install

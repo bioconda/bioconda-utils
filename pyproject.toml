@@ -1,5 +1,60 @@
-[tool.ty.src]
-exclude = [
-    "**/_version.py",
-    "versioneer.py"
+[build-system]
+requires = ["setuptools>=77", "setuptools-scm[toml]>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bioconda-utils"
+dynamic = ["version"]
+description = "Utilities for building and managing conda packages"
+readme = "README.md"
+license = "MIT"
+authors = [
+    {name = "Johannes Köster"},
+    {name = "Ryan Dale"},
+    {name = "The Bioconda Team"},
 ]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3",
+]
+
+[project.scripts]
+bioconda-utils = "bioconda_utils.cli:main"
+
+[tool.setuptools]
+packages = {find = {namespaces = true, exclude = ["test"]}}
+include-package-data = true
+
+[tool.setuptools.dynamic]
+version = {attr = "bioconda_utils.__version__"}
+
+[tool.setuptools.package-data]
+bioconda_utils = [
+    "bioconda_utils-requirements.txt",
+    "bioconda_utils-requirements-docs.txt",
+    "bioconda_utils-conda_build_config.yaml",
+    "config.schema.yaml",
+    "templates/*",
+    "templates/css/*",
+    "maintainers.yaml",
+    "involucro",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "long_running_1: mark as long-running test (may be executed separately)",
+    "long_running_2: mark as long-running test (may be executed separately)",
+    "successive:",
+    "asyncio:",
+]
+python_files = ["test/test_*py"]
+
+[tool.flake8]
+max_line_length = 99
+exclude = [".git", "__pycache__", "docs/source/conf.py"]
+
+[tool.ty.src]
+exclude = []
