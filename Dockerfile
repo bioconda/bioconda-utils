@@ -37,7 +37,10 @@ WORKDIR /tmp/repo
 COPY . ./
 RUN . /opt/conda/etc/profile.d/conda.sh  && conda list
 RUN . /opt/conda/etc/profile.d/conda.sh  && conda activate base && \
-    conda install --yes 'setuptools=81.*' 'setuptools-scm>=8' && \
+    sed -nE \
+    '/^(setuptools|setuptools-scm)([><!=~ ].+)?$/p' \
+    bioconda_utils/bioconda_utils-requirements.txt \
+    | xargs -r conda install --yes && \
     pip wheel --no-deps --no-build-isolation . && \
     mkdir -p /opt/bioconda-utils && \
     cp ./bioconda_utils-*.whl \
