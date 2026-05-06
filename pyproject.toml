@@ -28,8 +28,7 @@ bioconda-utils = "bioconda_utils.cli:main"
 packages = {find = {namespaces = true, exclude = ["test"]}}
 include-package-data = true
 
-[tool.setuptools.dynamic]
-version = {attr = "bioconda_utils.__version__"}
+[tool.setuptools_scm]
 
 [tool.setuptools.package-data]
 bioconda_utils = [
