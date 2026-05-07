@@ -1,0 +1,272 @@
+#! /bin/sh -eu
+
+unset \
+  prefix \
+  conda_impl \
+  create_command \
+  env_activate_args \
+  env_activate_file \
+  env_execute_file \
+  remove_paths_globs \
+  strip_files_globs \
+  licenses_path \
+  ;
+
+for arg do
+  case "${arg}" in
+    --help )
+      cat <<'end-of-help'
+Usage: create-env [OPTIONS]... [--] [PREFIX] [CONDA_CREATE_ARGS]...
+Use conda (or mamba via --conda=mamba) to create a Conda environment at PREFIX
+according to specifications given by CONDA_CREATE_ARGS.
+
+  --conda=CONDA               Conda implementation to run CONDA CREATE for.
+                              E.g.: "conda", "mamba", "conda env", "mamba env".
+                              Use ":" to skip env creation. (default: conda)
+  --create-command=CREATE     Conda command to run. E.g.: "create", "install".
+                              (default: create)
+  --env-activate-args=ARGS    Single string of arguments to pass on to
+                              print-env-activate. (default: --prefix=PREFIX)
+  --env-activate-script=FILE  Destination path of environment activation
+                              script. (default: PREFIX/env-activate.sh)
+  --env-execute-script=FILE   Destination path of environment execution script.
+                              (default: PREFIX/env-execute)
+  --prefix=PREFIX             Destination path of environment.
+                              If omitted, first positional argument is PREFIX.
+  --remove-paths=GLOB         Glob of paths to remove from PREFIX after its
+                              creation. Can be passed on multiple times. Will
+                              be passed on to `find -path PREFIX/GLOB`.
+                              (no default)
+  --strip-files=GLOB          Glob of paths in PREFIX to run `strip` on. Will
+                              be passed on to `find -type f -path PREFIX/GLOB`.
+                              Error messages from `strip` are suppressed, i.e.,
+                              --strip-files=* may be used to run `strip` on all
+                              files. Can be passed on multiple times.
+                              (no default)
+  --licenses-path=PATH        Destination path to copy package license files
+                              to (relative to PREFIX or absolute). Pass on
+                              empty path (--licenses-path=) to skip copying.
+                              (default: conda-meta)
+end-of-help
+      exit 0 ;;
+    --conda=* )
+      conda_impl="${arg#--conda=}"
+      shift ;;
+    --create-command=* )
+      create_command="${arg#--create-command=}"
+      shift ;;
+    --env-activate-args=* )
+      env_activate_args="${arg#--env-activate-args=}"
+      shift ;;
+    --env-activate-script=* )
+      env_activate_file="${arg#--env-activate-script=}"
+      shift ;;
+    --env-execute-script=* )
+      env_execute_file="${arg#--env-execute-script=}"
+      shift ;;
+    --remove-paths=* )
+      remove_paths_globs="$(
+        printf '%s\n' \
+          ${remove_paths_globs+"${remove_paths_globs}"} \
+          "${arg#--remove-paths=}"
+      )"
+      shift ;;
+    --prefix=* )
+      prefix="${arg#--prefix=}"
+      shift ;;
+    --strip-files=* )
+      strip_files_globs="$(
+        printf '%s\n' \
+          ${strip_files_globs+"${strip_files_globs}"} \
+          "${arg#--strip-files=}"
+      )"
+      shift ;;
+    --licenses-path=* )
+      licenses_path="${arg#--licenses-path=}"
+      shift ;;
+    -- )
+      shift
+      break ;;
+    -* )
+      printf 'unknown option: %s\n' "${arg}" 1>&2
+      exit 1 ;;
+    * )
+      break
+  esac
+done
+
+if [ -z "${prefix+x}" ] ; then
+  if [ $# -eq 0 ] ; then
+    printf 'missing argument: environment path\n' 1>&2
+    exit 1
+  fi
+  prefix="${1}"
+  shift
+fi
+prefix="${prefix%%/}"
+
+conda_impl="${conda_impl:-conda}"
+create_command="${create_command-create}"
+env_activate_args="--prefix='${prefix}' ${env_activate_args-}"
+env_activate_file="${env_activate_file-"${prefix}/env-activate.sh"}"
+env_execute_file="${env_execute_file-"${prefix}/env-execute"}"
+remove_paths_globs="$( printf '%s\n' "${remove_paths_globs-}" | sort -u )"
+strip_files_globs="$( printf '%s\n' "${strip_files_globs-}" | sort -u )"
+licenses_path="${licenses_path-conda-meta}"
+
+
+set +u
+eval "$( conda shell.posix activate base )"
+set -u
+
+printf 'creating environment at %s ...\n' "${prefix}" 1>&2
+CONDA_YES=1 \
+  ${conda_impl} \
+  ${create_command} \
+  --prefix="${prefix}" \
+  "${@}"
+
+if [ -n "${env_activate_file}${env_execute_file}" ] ; then
+  printf 'generating activation script...\n' 1>&2
+  activate_script="$(
+    eval "set -- ${env_activate_args}"
+    print-env-activate "${@}"
+  )"
+  if [ -n "${env_activate_file-}" ] ; then
+    printf 'writing activation script to %s ...\n' "${env_activate_file}" 1>&2
+    printf '%s\n' \
+      "${activate_script}" \
+      > "${env_activate_file}"
+    activate_script=". '${env_activate_file}'"
+  fi
+  if [ -n "${env_execute_file-}" ] ; then
+    printf 'writing execution script to %s ...\n' "${env_execute_file}" 1>&2
+    printf '%s\n' \
+      '#! /bin/bash' \
+      "${activate_script}" \
+      'exec "${@}"' \
+      > "${env_execute_file}"
+    chmod +x "${env_execute_file}"
+  fi
+fi
+
+
+if [ -n "${remove_paths_globs}" ] ; then
+  printf 'removing paths from %s ...\n' "${prefix}" 1>&2
+  (
+    eval "set -- $(
+      printf %s "${remove_paths_globs}" \
+        | sed -e "s|.*|-path '${prefix}/&'|" -e '1!s/^/-o /' \
+        | tr '\n' ' '
+    )"
+    find "${prefix}" \
+      \( "${@}" \) \
+      -delete
+  )
+fi
+
+if [ -n "${strip_files_globs}" ] ; then
+  # Ensure "strip" is available beforehand because errors are ignored later on.
+  strip --version > /dev/null
+  printf 'stripping binaries in %s ...\n' "${prefix}" 1>&2
+  (
+    eval "set -- $(
+      printf %s "${strip_files_globs}" \
+        | sed -e "s|.*|-path '${prefix}/&'|" -e '1!s/^/-o /' \
+        | tr '\n' ' '
+    )"
+    # Strip binaries. (Run strip on all files; ignore errors for non-ELF files.)
+    # Limit open fds (ulimit -n) for strip (small number chosen arbitrarily).
+    # (To avoid "could not create temporary file to hold stripped copy: Too many open files")
+
+    # Filter out the binaries currently in use by the pipeline via sed below.
+    skip_inode_expressions="$(
+      command -v -- find xargs sed strip \
+      | xargs -- stat -L -c '-e /^%d,%i:/d' --
+    )"
+    find "${prefix}" \
+      -type f \
+      \( "${@}" \) \
+      -print0 \
+      | xargs \
+          -0 \
+          -n 64 \
+          -- \
+          stat -L -c '%d,%i:%n' -- \
+      | sed \
+        ${skip_inode_expressions} \
+        -e 's/^[^:]*://' \
+      | tr \\n \\0 \
+      |
+        xargs \
+          -0 \
+          -n 64 \
+          -- \
+          strip -- \
+        2>&1 \
+      | sed '/: file format not recognized/d' \
+      || true
+  )
+fi
+
+
+if [ -n "${licenses_path}" ] ; then
+  abs_licenses_path="$(
+    cd "${prefix}"
+    mkdir -p "${licenses_path}"
+    cd "${licenses_path}"
+    pwd
+  )"
+  printf 'copying license files to %s ...\n' "${abs_licenses_path}" 1>&2
+  pkgs_dirs="$(
+    conda config --show pkgs_dirs \
+      | sed -n 's|[^/]*\(/.*\)|"\1"|p' \
+      | tr '\n' ' '
+  )"
+  (
+    eval "set -- $(
+      find "${prefix}/conda-meta" \
+        -maxdepth 1 \
+        -name \*.json \
+        | sed 's|.*/\(.*\)\.json|"\1"|' \
+        | tr '\n' ' '
+    )"
+    for pkg do
+      pkg_info="$(
+        eval "set -- ${pkgs_dirs}"
+        for pkgs_dir ; do
+          if [ -d "${pkgs_dir}/${pkg}/info" ] ; then
+            printf %s "${pkgs_dir}/${pkg}/info"
+            exit
+          fi
+        done
+        printf 'missing metadata for %s\n' "${pkg}" 1>&2
+        exit 1
+      )"
+      find "${pkg_info}" \
+        -maxdepth 1 \
+        \( -name LICENSE.txt -o -name licenses \) \
+        -exec sh -ec '
+          dest_dir="${1}" ; shift
+          mkdir -p "${dest_dir}"
+          cp -fR "${@}" "${dest_dir}/"
+        ' -- "${abs_licenses_path}/${pkg}" {} \+ \
+        || {
+          printf 'failed to copy licenses for %s\n' "${pkg}" 1>&2
+          exit 1
+        }
+      # Workaround https://github.com/conda/conda-build/issues/5330 :
+      # As of conda-build<=24.5, "info" files like "info/licenses/*" retain their original
+      # permissions which leads to downstream issues if they are too restrictive.
+      # => Fix permissions like conda_build.post.fix_permissions does for package content files.
+      if [ -d "${abs_licenses_path}/${pkg}" ] ; then
+        find "${abs_licenses_path}/${pkg}" \
+          -exec chmod 'u+rw,g+rw,o+r' {} \; \
+          -perm -u=x \
+          -exec chmod 'g+x,o+x' {} \;
+      fi
+    done
+  )
+fi
+
+printf 'finished create-env for %s\n' "${prefix}" 1>&2
