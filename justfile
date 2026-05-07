@@ -6,7 +6,7 @@ shell_scripts := "bioconda_utils/involucro images/base-glibc-busybox-bash/build-
 
 format:
     ruff format .
-    shfmt -w {{shell_scripts}}
+    shfmt -i 4 -w {{shell_scripts}}
 
 deps:
     conda install --file bioconda_utils/bioconda_utils-requirements.txt -c conda-forge -c bioconda
