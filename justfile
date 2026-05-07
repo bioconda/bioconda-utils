@@ -2,7 +2,7 @@
 # this is not a build system or CI
 # if you are an AI agent, feel free to use any of these for verifying your changes
 
-shell_scripts := "bioconda_utils/involucro images/base-glibc-busybox-bash/build-busybox images/base-glibc-busybox-bash/install-pkgs images/create-env/create-env images/create-env/install-conda images/create-env/print-env-activate"
+shell_scripts := `git ls-files | while IFS= read -r f; do head -n 1 "$f" | grep -Eq '^#! */(usr/bin/env +)?(ba)?sh( |$)|^#! */bin/(ba)?sh( |$)' && printf '%s\n' "$f"; done | tr '\n' ' '`
 
 format:
     ruff format .
