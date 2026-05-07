@@ -2,14 +2,11 @@ import logging
 import os
 import re
 import sys
-from asyncio import gather, sleep
 from asyncio.subprocess import create_subprocess_exec
-from pathlib import Path
-from shutil import which
-from typing import Any, Dict, List, Optional, Set, Tuple, Mapping
+from typing import Any, Dict, List, Optional, Tuple, Mapping
 from zipfile import ZipFile
 
-from aiohttp import ClientSession
+from aiohttp import ClientSession, ClientTimeout
 from yaml import safe_load
 
 logger = logging.getLogger(__name__)
@@ -60,7 +57,7 @@ async def is_bioconda_member(session: ClientSession, user: str) -> bool:
         try:
             response.raise_for_status()
             rc = response.status
-        except:
+        except Exception:
             # Do nothing, this just prevents things from crashing on 404
             pass
 
@@ -83,7 +80,7 @@ async def get_pr_info(session: ClientSession, pr: int) -> Any:
     return pr_info
 
 
-def list_zip_contents(fname: str) -> [str]:
+def list_zip_contents(fname: str) -> List[str]:
     f = ZipFile(fname)
     return [
         e.filename
@@ -94,8 +91,15 @@ def list_zip_contents(fname: str) -> [str]:
 
 # Download a zip file from url to zipName.zip and return that path
 # Timeout is 30 minutes to compensate for any network issues
-async def download_file(session: ClientSession, zipName: str, url: str, headers: Optional[Mapping[str, str]] = None) -> str:
-    async with session.get(url, timeout=60*30, headers=headers) as response:
+async def download_file(
+    session: ClientSession,
+    zipName: str,
+    url: str,
+    headers: Optional[Mapping[str, str]] = None,
+) -> Optional[str]:
+    async with session.get(
+        url, timeout=ClientTimeout(total=60 * 30), headers=headers
+    ) as response:
         if response.status == 200:
             ofile = f"{zipName}.zip"
             with open(ofile, 'wb') as fd:
@@ -109,7 +113,9 @@ async def download_file(session: ClientSession, zipName: str, url: str, headers:
 
 
 # Find artifact zip files, download them and return their URLs and contents
-async def fetch_azure_zip_files(session: ClientSession, buildId: str) -> [(str, str)]:
+async def fetch_azure_zip_files(
+    session: ClientSession, buildId: str
+) -> List[Tuple[str, str]]:
     artifacts = []
 
     url = f"https://dev.azure.com/bioconda/bioconda-recipes/_apis/build/builds/{buildId}/artifacts?api-version=4.1"
@@ -139,10 +145,16 @@ async def fetch_azure_zip_files(session: ClientSession, buildId: str) -> [(str, 
 
 
 def parse_azure_build_id(url: str) -> str:
-    return re.search("buildId=(\d+)", url).group(1)
+    match = re.search(r"buildId=(\d+)", url)
+    if match is None:
+        raise ValueError(f"Could not parse Azure build ID from {url}")
+    return match.group(1)
+
 
 # Find artifact zip files, download them and return their URLs and contents
-async def fetch_circleci_artifacts(session: ClientSession, workflowId: str) -> [(str, str)]:
+async def fetch_circleci_artifacts(
+    session: ClientSession, workflowId: str
+) -> List[Tuple[str, str]]:
     artifacts = []
 
     url_wf = f"https://circleci.com/api/v2/workflow/{workflowId}/job"
@@ -158,7 +170,7 @@ async def fetch_circleci_artifacts(session: ClientSession, workflowId: str) -> [
         return artifacts
     else:
         for job in res_wf_object["items"]:
-            if job["name"].startswith(f"build_and_test-"):
+            if job["name"].startswith("build_and_test-"):
                 circleci_job_num = job["job_number"]
                 url = f"https://circleci.com/api/v1.1/project/gh/bioconda/bioconda-recipes/{circleci_job_num}/artifacts"
 
@@ -175,7 +187,9 @@ async def fetch_circleci_artifacts(session: ClientSession, workflowId: str) -> [
 
 
 # Find artifact zip files, download them and return their URLs and contents
-async def fetch_gha_zip_files(session: ClientSession, workflowId: str) -> [(str, str)]:
+async def fetch_gha_zip_files(
+    session: ClientSession, workflowId: str
+) -> List[Tuple[str, str]]:
     artifacts = []
     token = os.environ["BOT_TOKEN"]
     headers = {
@@ -210,7 +224,10 @@ async def fetch_gha_zip_files(session: ClientSession, workflowId: str) -> [(str,
     return artifacts
 
 def parse_gha_build_id(url: str) -> str:
-    return re.search("runs/(\d+)/", url).group(1)
+    match = re.search(r"runs/(\d+)/", url)
+    if match is None:
+        raise ValueError(f"Could not parse GitHub Actions build ID from {url}")
+    return match.group(1)
 
 
 # Given a PR and commit sha, fetch a list of the artifact zip files URLs and their contents

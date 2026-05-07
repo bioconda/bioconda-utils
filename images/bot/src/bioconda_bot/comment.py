@@ -7,11 +7,9 @@ from typing import List, Tuple
 from yaml import safe_load
 
 from .common import (
-    async_exec,
     fetch_pr_sha_artifacts,
     get_job_context,
     get_pr_comment,
-    get_pr_info,
     get_prs_for_sha,
     get_sha_for_status_check,
     is_bioconda_member,
@@ -91,7 +89,7 @@ def compose_azure_comment(artifacts: List[Tuple[str, str]]) -> str:
         url, archdir, basedir, subdir, packageName = package_match.groups()
 
         comment += f"{subdir} | {packageName} | [{archdir}.zip]({URL}) | Azure | "
-        comment += f'<details><summary>show</summary>'
+        comment += '<details><summary>show</summary>'
         # Conda install examples
         comment += f"You may also use `conda` to install after downloading and extracting the zip file. From the {archdir} directory: "
         comment += "`conda install -c ./packages <package name>`"
@@ -115,7 +113,7 @@ def compose_circlci_comment(artifacts: List[Tuple[str, str]]) -> str:
         conda_install_url = basedir
 
         comment += f"{subdir} | [{packageName}]({URL}) | [repodata.json]({repo_url}) | CircleCI | "
-        comment += f'<details><summary>show</summary>'
+        comment += '<details><summary>show</summary>'
         # Conda install examples
         comment += "You may also use `conda` to install:"
         comment += f"`conda install -c {conda_install_url} <package name>`"
@@ -136,7 +134,7 @@ def compose_gha_comment(artifacts: List[Tuple[str, str]]) -> str:
             continue
         url, basedir, subdir, packageName = package_match.groups()
         comment += f"{subdir} | {packageName} | [{subdir}.zip]({URL}) | GitHub Actions | "
-        comment += f'<details><summary>show</summary>'
+        comment += '<details><summary>show</summary>'
         # Conda install examples
         comment += "You may also use `conda` to install after downloading and extracting the zip file. "
         comment += "`conda install -c ./packages <package name>`"

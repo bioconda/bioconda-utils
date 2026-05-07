@@ -1,25 +1,11 @@
 import logging
 import os
-import re
-import sys
-from asyncio import gather, sleep
-from asyncio.subprocess import create_subprocess_exec
-from enum import Enum, auto
-from pathlib import Path
-from shutil import which
-from typing import Any, Dict, List, Optional, Set, Tuple
-from zipfile import ZipFile, ZipInfo
 
 from aiohttp import ClientSession
-from yaml import safe_load
 
 from .common import (
-    async_exec,
-    fetch_pr_sha_artifacts,
     get_job_context,
     get_pr_comment,
-    get_pr_info,
-    is_bioconda_member,
     send_comment,
 )
 
@@ -41,7 +27,7 @@ async def toggle_visibility(session: ClientSession, container_repo: str) -> None
     try:
         async with session.post(url, headers=headers, json=body) as response:
             rc = response.status
-    except:
+    except Exception:
         # Do nothing
         pass
     log("Trying to toggle visibility (%s) returned %d", url, rc)

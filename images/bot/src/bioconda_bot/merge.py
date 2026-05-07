@@ -1,13 +1,9 @@
 import logging
 import os
-import re
-import sys
 from asyncio import gather, sleep
-from asyncio.subprocess import create_subprocess_exec
 from enum import Enum, auto
 from pathlib import Path
 from shutil import which
-from typing import Any, Dict, List, Optional, Set, Tuple
 from zipfile import ZipFile, ZipInfo
 
 from aiohttp import ClientSession
@@ -118,7 +114,7 @@ async def toggle_visibility(session: ClientSession, container_repo: str) -> None
     try:
         async with session.post(url, headers=headers, json=body) as response:
             rc = response.status
-    except:
+    except Exception:
         # Do nothing
         pass
     log("Trying to toggle visibility (%s) returned %d", url, rc)
@@ -238,7 +234,7 @@ async def upload_image(session: ClientSession, zf: ZipFile, e: ZipInfo):
             )
             success = True
             break
-        except:
+        except Exception:
             count += 1
             if count == maxTries:
                 raise
@@ -339,7 +335,7 @@ async def merge_pr(session: ClientSession, pr: int, init_message: str) -> MergeS
             rc = response.status
         log("body %s", payload)
         log("merge_pr the response code was %s", rc)
-    except:
+    except Exception:
         await send_comment(
             session,
             pr,

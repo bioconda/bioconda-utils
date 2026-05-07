@@ -55,7 +55,7 @@ async def update_from_master_runner(session: ClientSession, pr: int) -> None:
 async def update_from_master(session: ClientSession, pr: int) -> None:
     try:
         await update_from_master_runner(session, pr)
-    except Exception as e:
+    except Exception:
         await send_comment(
             session,
             pr,

@@ -1,7 +1,7 @@
 import logging
 import os
 
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, Optional, Set
 
 from aiohttp import ClientSession
 from yaml import safe_load
