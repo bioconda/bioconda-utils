@@ -103,20 +103,20 @@ prepare() {
     libtinfo*)
         # Move libtinfo libraries to a custom path to ensure it is not
         # unintentionally used in downstream images.
-        find ./usr/lib/${arch}-linux-gnu -type f |
+        find ./usr/lib/"${arch}"-linux-gnu -type f |
             {
-                while read binary; do
+                while read -r binary; do
                     add_rpath "${binary}" "/lib/${arch}-linux-gnu/terminfo"
                 done
             }
 
-        mv ./lib/${arch}-linux-gnu ./temp
-        mkdir ./lib/${arch}-linux-gnu
-        mv ./temp ./lib/${arch}-linux-gnu/terminfo
+        mv ./lib/"${arch}"-linux-gnu ./temp
+        mkdir ./lib/"${arch}"-linux-gnu
+        mv ./temp ./lib/"${arch}"-linux-gnu/terminfo
 
-        mv ./usr/lib/${arch}-linux-gnu ./temp
-        mkdir ./usr/lib/${arch}-linux-gnu
-        mv ./temp ./usr/lib/${arch}-linux-gnu/terminfo
+        mv ./usr/lib/"${arch}"-linux-gnu ./temp
+        mkdir ./usr/lib/"${arch}"-linux-gnu
+        mv ./temp ./usr/lib/"${arch}"-linux-gnu/terminfo
         ;;
     base-passwd)
         # The dependencies libdebconfclient0 (and libselinux1 for Debian>=12)

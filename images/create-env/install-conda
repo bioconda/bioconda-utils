@@ -10,7 +10,7 @@ miniconda_boostrap_prefix="$(pwd)/miniconda"
 
     # Use the base image-provided tools if they work for us:
     tools=''
-    find -print0 -maxdepth 0 && xargs -0 true </dev/null ||
+    find . -maxdepth 0 -print0 && xargs -0 true </dev/null ||
         tools="${tools} findutils"
     sed -e '' </dev/null ||
         tools="${tools} sed"
