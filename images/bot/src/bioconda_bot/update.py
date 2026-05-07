@@ -42,7 +42,9 @@ async def update_from_master_runner(session: ClientSession, pr: int) -> None:
         return await git("-C", "bioconda-recipes", *args)
 
     # Add/pull upstream
-    await git_c("remote", "add", "upstream", "https://github.com/bioconda/bioconda-recipes")
+    await git_c(
+        "remote", "add", "upstream", "https://github.com/bioconda/bioconda-recipes"
+    )
     await git_c("fetch", f"--depth={max_depth}", "upstream", "master")
 
     # Merge

@@ -121,7 +121,7 @@ async def toggle_visibility(session: ClientSession, container_repo: str) -> None
 
 
 ## Download an artifact from CircleCI, rename and upload it
-#async def download_and_upload(session: ClientSession, x: str) -> None:
+# async def download_and_upload(session: ClientSession, x: str) -> None:
 #    basename = x.split("/").pop()
 #    # the tarball needs a regular name without :, the container needs pkg:tag
 #    image_name = basename.replace("%3A", ":").replace("\n", "").replace(".tar.gz", "")
@@ -240,7 +240,10 @@ async def upload_image(session: ClientSession, zf: ZipFile, e: ZipInfo):
                 raise
         await sleep(5)
     if success:
-        await toggle_visibility(session, basename.split(":")[0] if ":" in basename else basename.split("%3A")[0])
+        await toggle_visibility(
+            session,
+            basename.split(":")[0] if ":" in basename else basename.split("%3A")[0],
+        )
 
     log("cleaning up")
     os.remove(newFName)
@@ -253,7 +256,7 @@ async def extract_and_upload(session: ClientSession, fName: str) -> int:
         for e in zf.infolist():
             if e.filename.endswith((".conda", ".tar.bz2")):
                 await upload_package(session, zf, e)
-            elif e.filename.endswith('.tar.gz'):
+            elif e.filename.endswith(".tar.gz"):
                 await upload_image(session, zf, e)
         return 0
     return 1
@@ -296,7 +299,9 @@ async def get_pr_commit_message(session: ClientSession, issue_number: int) -> st
         response.raise_for_status()
         res = await response.text()
     commits = safe_load(res)
-    message = "".join(f" * {commit['commit']['message']}\n" for commit in reversed(commits))
+    message = "".join(
+        f" * {commit['commit']['message']}\n" for commit in reversed(commits)
+    )
     return message
 
 
