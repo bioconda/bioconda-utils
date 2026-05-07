@@ -258,7 +258,7 @@ def single_upload():
             "-t",
             os.environ["ANACONDA_TOKEN"],
             "remove",
-            "bioconda/{0}".format(name),
+            f"bioconda/{name}",
             "--force",
         ],
         stdout=sp.PIPE,
@@ -285,7 +285,7 @@ def test_upload(single_upload):
                 "-n",
                 env_name,
                 "-c",
-                "bioconda/label/{0}".format(TEST_LABEL),
+                f"bioconda/label/{TEST_LABEL}",
                 name,
             ],
             stdout=sp.PIPE,
@@ -715,13 +715,14 @@ def test_built_package_paths():
     platform = "linux" if sys.platform == "linux" else "osx"
     d = {
         "channel_targets": "bioconda main",
-        "target_platform": "{}-64".format(platform),
+        "target_platform": f"{platform}-64",
     }
     h = metadata._hash_dependencies(d, 7)
 
-    assert os.path.basename(
-        utils.built_package_paths(r.recipe_dirs["one"])[0]
-    ) == "one-0.1-py36{}_0.conda".format(h)
+    assert (
+        os.path.basename(utils.built_package_paths(r.recipe_dirs["one"])[0])
+        == f"one-0.1-py36{h}_0.conda"
+    )
 
 
 def test_string_or_float_to_integer_python():
@@ -891,7 +892,7 @@ def test_skip_dependencies(config_fixture):
             ensure_missing(pkg)
 
 
-class TestSubdags(object):
+class TestSubdags:
     def _build(self, recipes_fixture, config_fixture, n_workers, worker_offset):
         build.build_recipes(
             recipes_fixture.basedir,

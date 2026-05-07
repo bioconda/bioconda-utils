@@ -1,7 +1,7 @@
 import logging
 import os
 
-from typing import Any, Dict, Optional, Set
+from typing import Any
 
 from aiohttp import ClientSession
 from yaml import safe_load
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 log = logger.info
 
 
-async def get_pr_labels(session: ClientSession, pr: int) -> Set[str]:
+async def get_pr_labels(session: ClientSession, pr: int) -> set[str]:
     token = os.environ["BOT_TOKEN"]
     url = f"https://api.github.com/repos/bioconda/bioconda-recipes/issues/{pr}/labels"
     headers = {
@@ -65,7 +65,9 @@ async def get_check_runs(session: ClientSession, sha: str) -> Any:
 async def all_checks_completed(session: ClientSession, sha: str) -> bool:
     check_runs = await get_check_runs(session, sha)
 
-    is_all_completed = all(check_run["status"] == "completed" for check_run in check_runs)
+    is_all_completed = all(
+        check_run["status"] == "completed" for check_run in check_runs
+    )
     if not is_all_completed:
         log("Some check_runs are not completed yet.")
         for i, check_run in enumerate(check_runs, 1):
@@ -78,7 +80,9 @@ async def all_checks_passed(session: ClientSession, sha: str) -> bool:
 
     # TODO: "neutral" might be a valid conclusion to consider in the future.
     valid_conclusions = {"success", "skipped"}
-    if any(check_run["conclusion"] not in valid_conclusions for check_run in check_runs):
+    if any(
+        check_run["conclusion"] not in valid_conclusions for check_run in check_runs
+    ):
         log(f"Some check_runs are not marked as {'/'.join(valid_conclusions)} yet.")
         for i, check_run in enumerate(check_runs, 1):
             log("check_run %d / %d: %s", i, len(check_runs), check_run)
@@ -100,26 +104,26 @@ async def merge_automerge_passed(sha: str) -> None:
                 break
 
 
-async def get_sha_for_review(job_context: Dict[str, Any]) -> Optional[str]:
+async def get_sha_for_review(job_context: dict[str, Any]) -> str | None:
     if job_context["event_name"] != "pull_request_review":
         return None
     log("Got %s event", "pull_request_review")
     event = job_context["event"]
     if event["review"]["state"] != "approved":
         return None
-    sha: Optional[str] = event["pull_request"]["head"]["sha"]
+    sha: str | None = event["pull_request"]["head"]["sha"]
     log("Use %s event SHA %s", "pull_request_review", sha)
     return sha
 
 
-async def get_sha_for_labeled_pr(job_context: Dict[str, Any]) -> Optional[str]:
+async def get_sha_for_labeled_pr(job_context: dict[str, Any]) -> str | None:
     if job_context["event_name"] != "pull_request":
         return None
     log("Got %s event", "pull_request")
     event = job_context["event"]
     if event["action"] != "labeled" or event["label"]["name"] != "automerge":
         return None
-    sha: Optional[str] = event["pull_request"]["head"]["sha"]
+    sha: str | None = event["pull_request"]["head"]["sha"]
     log("Use %s event SHA %s", "pull_request", sha)
     return sha
 

@@ -4,7 +4,6 @@ import pytest
 import yaml
 import json
 import asyncio
-from typing import Type
 
 from bioconda_utils.hosters import Hoster
 
@@ -47,7 +46,7 @@ def setup_params(request):
 )
 @pytest.mark.successive  # custom, see conftest.py
 class TestHoster:
-    hoster_cls: Type[Hoster]
+    hoster_cls: type[Hoster]
     instance: Hoster
 
     @classmethod
@@ -106,9 +105,7 @@ class TestHoster:
             assert "release_json" not in self.case, (
                 "Test case may not contain both release_links and release_json"
             )
-            return "\n".join(
-                "<a href={}/>".format(url) for url in self.case["release_links"]
-            )
+            return "\n".join(f"<a href={url}/>" for url in self.case["release_links"])
         if "release_json" in self.case:
             return json.dumps(self.case["release_json"])
 

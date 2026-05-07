@@ -2,7 +2,6 @@ from logging import INFO, basicConfig
 
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 from asyncio import run
-from typing import List, Optional
 
 
 def build_parser_comment(parser: ArgumentParser) -> None:
@@ -74,7 +73,7 @@ def get_argument_parser() -> ArgumentParser:
     return parser
 
 
-def main(args: Optional[List[str]] = None) -> None:
+def main(args: list[str] | None = None) -> None:
     basicConfig(level=INFO)
     parser = get_argument_parser()
     parsed_args = parser.parse_args(args)
