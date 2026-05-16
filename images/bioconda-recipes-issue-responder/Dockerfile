@@ -3,7 +3,6 @@ ARG base=quay.io/bioconda/base-glibc-busybox-bash:2.0.0
 FROM quay.io/bioconda/create-env:2.0.0 as build
 RUN /opt/create-env/env-execute \
       create-env \
-        --conda=mamba \
         --strip-files=\* \
         --remove-paths=\*.a \
         --remove-paths=\*.pyc \
@@ -13,7 +12,7 @@ RUN /opt/create-env/env-execute \
         ca-certificates \
         git \
         openssh \
-        python=3.8 \
+        python=3.13 \
         pyyaml \
         skopeo \
     && \
