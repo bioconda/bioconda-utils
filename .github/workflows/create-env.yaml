@@ -55,11 +55,13 @@ jobs:
     - name: Prepare
       id: prepare
       run: |
-        curl -sSL \
-          'https://raw.githubusercontent.com/bioconda/bioconda-common/master/common.sh' \
-          | sed -n \
-            's/BIOCONDA_UTILS_TAG=v/bioconda_utils_version=/p' \
-            >> $GITHUB_OUTPUT
+        version="$(
+          curl -sSL \
+            'https://raw.githubusercontent.com/bioconda/bioconda-common/master/common.sh' \
+            | grep BIOCONDA_UTILS_TAG \
+            | grep -oE '[0-9]+\.[0-9]+\.[0-9]+'
+        )"
+        printf 'bioconda_utils_version=%s\n' "${version}" >> $GITHUB_OUTPUT
 
     - name: Build
       id: build
