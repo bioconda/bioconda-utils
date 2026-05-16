@@ -43,7 +43,7 @@ jobs:
         id: buildah-build
         uses: redhat-actions/buildah-build@v2
         with:
-          image: bioconda-utils-build-env-cos7
+          image: bioconda-utils-build-env-cos7-x86_64
           arch: amd64
           build-args: |
             BASE_IMAGE=quay.io/condaforge/linux-anvil-cos7-x86_64
@@ -84,3 +84,36 @@ jobs:
           registry: ${{ secrets.QUAY_BIOCONDA_REPO }}
           username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
           password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
+
+      - name: Push multi-arch manifest to Quay
+        env:
+          QUAY_BIOCONDA_REPO: ${{ secrets.QUAY_BIOCONDA_REPO }}
+          QUAY_BIOCONDA_USERNAME: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
+          QUAY_BIOCONDA_TOKEN: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          registry="${QUAY_BIOCONDA_REPO%%/*}"
+          printf %s "${QUAY_BIOCONDA_TOKEN}" \
+            | docker login "${registry}" \
+              --username "${QUAY_BIOCONDA_USERNAME}" \
+              --password-stdin
+
+          for tag in latest '${{ steps.get-tag.outputs.tag }}' ; do
+            docker manifest create \
+              "${QUAY_BIOCONDA_REPO}/bioconda-utils-build-env-cos7:${tag}" \
+              "${QUAY_BIOCONDA_REPO}/bioconda-utils-build-env-cos7-x86_64:${tag}" \
+              "${QUAY_BIOCONDA_REPO}/bioconda-utils-build-env-cos7-aarch64:${tag}"
+            docker manifest annotate \
+              "${QUAY_BIOCONDA_REPO}/bioconda-utils-build-env-cos7:${tag}" \
+              "${QUAY_BIOCONDA_REPO}/bioconda-utils-build-env-cos7-x86_64:${tag}" \
+              --arch amd64
+            docker manifest annotate \
+              "${QUAY_BIOCONDA_REPO}/bioconda-utils-build-env-cos7:${tag}" \
+              "${QUAY_BIOCONDA_REPO}/bioconda-utils-build-env-cos7-aarch64:${tag}" \
+              --arch arm64
+            docker manifest push --purge \
+              "${QUAY_BIOCONDA_REPO}/bioconda-utils-build-env-cos7:${tag}"
+            docker manifest inspect \
+              "${QUAY_BIOCONDA_REPO}/bioconda-utils-build-env-cos7:${tag}"
+          done
