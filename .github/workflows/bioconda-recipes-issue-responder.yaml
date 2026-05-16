@@ -54,25 +54,16 @@ jobs:
 
     - name: Check Tags
       run: |
-        # FIX upstream: Quay.io does not support immutable images currently.
-        #               => Try to use the REST API to check for duplicate tags.
-        respone="$(
-          curl -sL \
-            'https://quay.io/api/v1/repository/bioconda/${{ steps.buildah-build.outputs.image }}/image'
-          )"
-
+        # Quay.io does not support immutable images.
+        # => Check for duplicate tags to avoid overwriting existing images.
         existing_tags="$(
-          printf %s "${respone}" \
-            | jq -r '.images[].tags[]'
-          )" \
-          || {
-            printf %s\\n \
-              'Could not get list of image tags.' \
-              'Does the repository exist on Quay.io?' \
-              'Quay.io REST API response was:' \
-              "${respone}"
-            exit 1
-          }
+          skopeo list-tags docker://quay.io/bioconda/${{ steps.buildah-build.outputs.image }} \
+            | jq -r '.Tags[]'
+        )" \
+        || {
+          echo 'Could not list tags via skopeo.'
+          exit 1
+        }
         for tag in ${{ steps.buildah-build.outputs.tags }} ; do
           if [ \! "${tag}" = latest ] ; then
             if printf %s "${existing_tags}" | grep -qxF "${tag}" ; then
