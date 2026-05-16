@@ -103,7 +103,8 @@ jobs:
             done
         buildah rmi --prune || true
 
-    - name: Check Tags
+    - if: ${{ github.ref == 'refs/heads/master' }}
+      name: Check Tags
       run: |
         # Quay.io does not support immutable images.
         # => Check for duplicate tags to avoid overwriting existing images.
