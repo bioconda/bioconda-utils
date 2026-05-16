@@ -2,7 +2,7 @@ name: 'Build & Push: base-glibc-debian-bash'
 on:
   push:
     branches:
-    - main
+    - master
     paths:
     - images/base-glibc-debian-bash/*
     - .github/workflows/base-glibc-debian-bash.yaml
@@ -170,7 +170,7 @@ jobs:
           esac
         done
 
-    - if: ${{ github.ref == 'refs/heads/main' }}
+    - if: ${{ github.ref == 'refs/heads/master' }}
       name: Push
       uses: redhat-actions/push-to-registry@v2
       with:
@@ -180,7 +180,7 @@ jobs:
         username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
         password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
 
-    - if: ${{ github.ref == 'refs/heads/main' }}
+    - if: ${{ github.ref == 'refs/heads/master' }}
       name: Test Pushed
       run: |
         image='${{ env.IMAGE_NAME }}'

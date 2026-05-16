@@ -10,7 +10,7 @@ on:
     - '.github/workflows/build-env-image.yml'
   push:
     branches:
-      - 'main'
+      - 'master'
 
 jobs:
   build:
@@ -70,7 +70,7 @@ jobs:
         done
 
     - name: Push To Quay
-      if: github.ref == 'refs/heads/main' && github.repository == 'bioconda/bioconda-containers'
+      if: github.ref == 'refs/heads/master' && github.repository == 'bioconda/bioconda-containers'
       uses: redhat-actions/push-to-registry@v2
       with:
         image: ${{ steps.buildah-build.outputs.image }}
@@ -81,7 +81,7 @@ jobs:
 
   build-manifest:
     needs: [build]
-    if: github.ref == 'refs/heads/main' && github.repository == 'bioconda/bioconda-containers'
+    if: github.ref == 'refs/heads/master' && github.repository == 'bioconda/bioconda-containers'
     name: quay.io/bioconda/${{ matrix.cfg.DOCKER_MANIFEST }}:${{ matrix.cfg.DOCKER_TAG }}
     runs-on: ubuntu-latest
     strategy:

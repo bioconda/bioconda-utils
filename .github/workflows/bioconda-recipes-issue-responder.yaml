@@ -2,7 +2,7 @@ name: 'Build & Push: bioconda-recipes-issue-responder'
 on:
   push:
     branches:
-    - main
+    - master
     paths:
     - images/bioconda-recipes-issue-responder/*
     - .github/workflows/bioconda-recipes-issue-responder.yaml
@@ -82,7 +82,7 @@ jobs:
           fi
         done
 
-    - if: ${{ github.ref == 'refs/heads/main' }}
+    - if: ${{ github.ref == 'refs/heads/master' }}
       name: Push
       uses: redhat-actions/push-to-registry@v2
       with:
@@ -92,7 +92,7 @@ jobs:
         username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
         password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
 
-    - if: ${{ github.ref == 'refs/heads/main' }}
+    - if: ${{ github.ref == 'refs/heads/master' }}
       name: Test Pushed
       run: |
         image='${{ steps.buildah-build.outputs.image }}'
