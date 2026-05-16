@@ -11,8 +11,8 @@ patch() {
     case "${version}" in 1.36.*)
         # Small fix to let it build with older glibc versions.
         curl --location --silent \
-            'https://git.busybox.net/busybox/patch/miscutils/seedrng.c?id=200a9669fbf6f06894e4243cccc9fc11a1a6073a' \
-            'https://git.busybox.net/busybox/patch/miscutils/seedrng.c?id=cb57abb46f06f4ede8d9ccbdaac67377fdf416cf' |
+            'https://github.com/vda-linux/busybox_mirror/raw/200a9669fbf6f06894e4243cccc9fc11a1a6073a/miscutils/seedrng.c' \
+            'https://github.com/vda-linux/busybox_mirror/raw/cb57abb46f06f4ede8d9ccbdaac67377fdf416cf/miscutils/seedrng.c' |
             command patch --strip=1
         ;;
     esac
