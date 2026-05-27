@@ -14,12 +14,16 @@ class missing_build_number(LintCheck):
 
         build:
             number: 0
+
+    Currently, bioconda-utils does not support specifying build numbers
+    under outputs, so only a single global build number in the top-level
+    build section is supported.
+   
     """
 
     def check_recipe(self, recipe):
-        missing_section = recipe.check_for_missing_inherited_section("build/number")
-        if missing_section:
-            self.message(section=missing_section)
+        if not recipe.get("build/number", ""):
+            self.message(section="build")
 
 
 class missing_home(LintCheck):

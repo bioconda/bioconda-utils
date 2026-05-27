@@ -39,8 +39,6 @@ class should_be_noarch_python(LintCheck):
 
     def check_deps(self, deps, package_location):
         build_section = f"{package_location}build"
-        print(build_section)
-        print(deps)
         if "python" not in deps:
             return  # not a python package
         if all("build" not in loc for loc in deps["python"]):
