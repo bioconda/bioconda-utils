@@ -1,0 +1,197 @@
+name: 'Build & Push: base-glibc-debian-bash'
+on:
+  push:
+    branches:
+    - master
+    paths:
+    - images/base-glibc-debian-bash/*
+    - .github/workflows/base-glibc-debian-bash.yaml
+  pull_request:
+    paths:
+    - images/base-glibc-debian-bash/*
+    - .github/workflows/base-glibc-debian-bash.yaml
+
+jobs:
+  build:
+    name: Build & Push
+    runs-on: ubuntu-24.04
+    container:
+      # travier/podman-action contains newer podman/buildah versions.
+      image: quay.io/travier/podman-action
+      options: --privileged
+    env:
+      # The base image is not intended to change often and should be used with
+      # version tags or checksum IDs, but not via "latest".
+      MAJOR_VERSION: 3
+      MINOR_VERSION: 1
+      IMAGE_NAME: base-glibc-debian-bash
+      DEBIAN_VERSION: '12.5'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up QEMU
+      run: |
+        podman run --rm --privileged \
+          docker.io/tonistiigi/binfmt --install arm64
+
+    - name: Install Tools
+      run: |
+        set -eu
+        # jq is not installed in travier/podman-action
+        dnf install -qy \
+          jq
+        rpm -q \
+          buildah podman \
+          coreutils findutils sed \
+          curl jq \
+          | (
+            while read -r line ; do
+              printf %s\\n "${line}"
+              case "${line}" in (*' not installed'*)
+                err=1 ;;
+              esac
+              done
+              exit "${err-0}"
+          )
+
+    - name: Build
+      id: build
+      run: |
+        set -xeu
+        cd 'images/${{ env.IMAGE_NAME }}'
+
+        image_name='${{ env.IMAGE_NAME }}'
+        tags='
+          ${{ env.MAJOR_VERSION }}
+          ${{ env.MAJOR_VERSION }}.${{ env.MINOR_VERSION }}
+          latest
+        '
+        printf %s\\n \
+          "image=${image_name}" \
+          "tags=$( echo ${tags} )" \
+          >> $GITHUB_OUTPUT
+
+        for tag in ${tags} ; do
+          buildah manifest create "${image_name}:${tag}"
+        done
+
+        for arch in amd64 arm64 ; do
+          iidfile="$( mktemp )"
+          buildah bud \
+            --arch="${arch}" \
+            --iidfile="${iidfile}" \
+            --build-arg=debian_version='${{ env.DEBIAN_VERSION }}'
+          image_id="$( cat "${iidfile}" )"
+          rm "${iidfile}"
+
+          container="$( buildah from "${image_id}" )"
+          run() { buildah run "${container}" "${@}" ; }
+          deb_list="$( run cat /.deb.lst | tr '\n' '|' | sed 's/|$//' )"
+          pkg_list="$( run cat /.pkg.lst | tr '\n' '|' | sed 's/|$//' )"
+          glibc="$( run sh -c 'exec "$( find -xdev -name libc.so.6 -print -quit )"' | sed '1!d' )"
+          debian="$( run cat /etc/debian_version | sed '1!d' )"
+          bash="$( run bash --version | sed '1!d' )"
+          buildah rm "${container}"
+
+          container="$( buildah from "${image_id}" )"
+          buildah config \
+            --label=glibc="${glibc}" \
+            --label=debian="${debian}" \
+            --label=bash="${bash}" \
+            --label=deb-list="${deb_list}" \
+            --label=pkg-list="${pkg_list}" \
+            "${container}"
+
+          image_id="$( buildah commit "${container}" )"
+          buildah rm "${container}"
+          for tag in ${tags} ; do
+            buildah tag \
+              "${image_id}" \
+              "${image_name}:${tag}-${arch}"
+            buildah manifest add \
+              "${image_name}:${tag}" \
+              "${image_id}"
+          done
+        done
+
+    - name: Test
+      run: |
+        image='${{ steps.build.outputs.image }}'
+        ids="$(
+          for tag in ${{ steps.build.outputs.tags }} ; do
+            buildah manifest inspect "${image}:${tag}" \
+              | jq -r '.manifests[]|.digest' \
+              | while read id ; do
+                  buildah images --format '{{.ID}}{{.Digest}}' \
+                  | sed -n "s/${id}//p"
+                done
+          done
+          )"
+        ids="$( printf %s "${ids}" | sort -u )"
+        for id in ${ids} ; do
+          podman history "${id}"
+          buildah bud \
+            --build-arg=base="${id}" \
+            --file=Dockerfile.test \
+            "images/${image}"
+        done
+        buildah rmi --prune || true
+
+    - if: ${{ github.ref == 'refs/heads/master' }}
+      name: Check Tags
+      run: |
+        # Quay.io does not support immutable images.
+        # => Check for duplicate tags to avoid overwriting existing images.
+        existing_tags="$(
+          skopeo list-tags docker://quay.io/bioconda/${{ steps.build.outputs.image }} \
+            | jq -r '.Tags[]'
+        )" \
+        || {
+          echo 'Could not list tags via skopeo.'
+          exit 1
+        }
+        for tag in ${{ steps.build.outputs.tags }} ; do
+          case "${tag}" in
+            latest | '${{ env.MAJOR_VERSION }}' ) ;;
+            * )
+              if printf %s "${existing_tags}" | grep -qxF "${tag}" ; then
+                printf 'Tag %s already exists!\n' "${tag}"
+                exit 1
+              fi
+          esac
+        done
+
+    - if: ${{ github.ref == 'refs/heads/master' }}
+      name: Push
+      uses: redhat-actions/push-to-registry@v2
+      with:
+        image: ${{ steps.build.outputs.image }}
+        tags: ${{ steps.build.outputs.tags }}
+        registry: ${{ secrets.QUAY_BIOCONDA_REPO }}
+        username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
+        password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
+
+    - if: ${{ github.ref == 'refs/heads/master' }}
+      name: Test Pushed
+      run: |
+        image='${{ env.IMAGE_NAME }}'
+        ids="$(
+          for tag in ${{ steps.build.outputs.tags }} ; do
+            buildah manifest inspect "${image}:${tag}" \
+              | jq -r '.manifests[]|.digest' \
+              | while read id ; do
+                  buildah images --format '{{.ID}}{{.Digest}}' \
+                  | sed -n "s/${id}//p"
+                done
+          done
+          )"
+        ids="$( printf %s "${ids}" | sort -u )"
+        for id in ${ids} ; do
+          podman history "${id}"
+          buildah bud \
+            --build-arg=base="${id}" \
+            --file=Dockerfile.test \
+            "images/${image}"
+        done
+        buildah rmi --prune || true

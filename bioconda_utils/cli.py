@@ -669,7 +669,7 @@ def build(
     n_workers=1,
     worker_offset=0,
     keep_old_work=False,
-    mulled_conda_image=pkg_test.MULLED_CONDA_IMAGE,
+    mulled_conda_image=pkg_test.CREATE_ENV_IMAGE,
     docker_base_image=None,
     record_build_failures=False,
     skiplist_leafs=False,
@@ -707,6 +707,7 @@ def build(
             image_tag = VERSION
         docker_base_image = (
             docker_base_image
+            or os.getenv("BUILD_ENV_IMAGE", None)
             or f"quay.io/bioconda/bioconda-utils-build-env-cos7:{image_tag}"
         )
         logger.info(f"Using docker image {docker_base_image} for building.")

@@ -105,11 +105,11 @@ def test_file_not_found():
 @with_recipes
 def test_save(recipes):
     for recipe in recipes:
-        with open(recipe.path, "r") as fdes:
+        with open(recipe.path) as fdes:
             data = fdes.read()
         os.remove(recipe.path)
         recipe.save()
-        with open(recipe.path, "r") as fdes:
+        with open(recipe.path) as fdes:
             assert data == fdes.read()
 
 

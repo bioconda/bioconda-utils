@@ -1,0 +1,23 @@
+# Build busybox ourselves to have more fine-grained control over what we want
+# (or not want) to include.
+# Use old Debian version to ensure compatible (low glibc requirement) binaries.
+FROM debian:9-slim AS busybox_builder
+RUN [ ! -f /etc/apt/sources.list ] || sed --in-place= --regexp-extended \
+      '/ stretch/ { s,-updates,-backports, ; s,/(deb|security)\.,/archive., }' \
+      /etc/apt/sources.list \
+    && \
+    apt-get update && \
+    DEBIAN_FRONTEND=noninteractive \
+      apt-get install --yes --no-install-recommends \
+      bzip2 curl ca-certificates tar \
+      gcc libc6-dev \
+      gcc-aarch64-linux-gnu libc6-dev-arm64-cross \
+      make patch
+
+WORKDIR /build
+COPY build-busybox ./
+ARG busybox_version
+RUN ./build-busybox \
+    "${busybox_version}" \
+    x86_64 aarch64
+

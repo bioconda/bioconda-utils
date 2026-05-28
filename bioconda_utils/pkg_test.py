@@ -18,7 +18,8 @@ from conda_package_streaming.package_streaming import stream_conda_info
 
 logger = logging.getLogger(__name__)
 
-MULLED_CONDA_IMAGE = "quay.io/bioconda/create-env:latest"
+# Will be provided to mulled-build via "CONDA_IMAGE" env var.
+CREATE_ENV_IMAGE = os.getenv("CREATE_ENV_IMAGE", "quay.io/bioconda/create-env:latest")
 
 
 def get_tests(path: str) -> str:
@@ -260,7 +261,7 @@ def test_package(
     channels: Sequence[str] = ("conda-forge", "local", "bioconda"),
     mulled_args: str = "",
     base_image: str | None = None,
-    conda_image: str = MULLED_CONDA_IMAGE,
+    conda_image: str = CREATE_ENV_IMAGE,
     live_logs: bool = True,
     presolved: bool = True,
 ) -> sp.CompletedProcess:
@@ -377,7 +378,10 @@ def test_package(
     env = os.environ.copy()
     if base_image is not None:
         env["DEST_BASE_IMAGE"] = base_image
-    env["CONDA_IMAGE"] = conda_image
+    if os.getenv("CONDA_IMAGE", None):
+        raise ValueError("CONDA_IMAGE env var already exists!")
+    else:
+        env["CONDA_IMAGE"] = conda_image
     with tempfile.TemporaryDirectory() as d:
         with utils.Progress():
             p = utils.run(cmd, env=env, cwd=d, mask=False, live=live_logs)

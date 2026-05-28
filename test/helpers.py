@@ -2,7 +2,6 @@ from textwrap import dedent
 import tempfile
 import yaml
 import os
-from typing import Dict, List
 
 from conda_index.index import update_index
 
@@ -28,7 +27,7 @@ def ensure_missing(package):
     update_index(os.path.dirname(os.path.dirname(package)))
 
 
-class Recipes(object):
+class Recipes:
     def __init__(self, data, from_string=False):
         """
         Handles the creation of a directory of recipes.
@@ -97,7 +96,7 @@ class Recipes(object):
         else:
             self.data = os.path.join(os.path.dirname(__file__), data)
             self.recipes = yaml.safe_load(open(self.data))
-        self.pkgs: Dict[str, List[str]] = {}
+        self.pkgs: dict[str, list[str]] = {}
 
     def write_recipes(self):
         basedir = tempfile.mkdtemp()
