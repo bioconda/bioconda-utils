@@ -18,6 +18,9 @@ class uses_vcs_url(LintCheck):
     Please build from source archives and don't use the ``git_url``,
     ``svn_url`` or ``hg_url`` feature of conda.
 
+    This check currently only considers the top-level source section
+    and will not trigger for offending entries under ``outputs:``.
+
     """
 
     def check_source(self, source, section):
