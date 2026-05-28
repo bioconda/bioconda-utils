@@ -612,11 +612,23 @@ class Recipe:
         ) -> dict[dict]:
         """Get all occurrences of a section, including from outputs: definitions
 
-        If just a single package is created from the main recipe section, a dict
-        with a single dict is returned. If an outputs: section defines multiple
+        Gets all occurrences of a recipe section in a dictionary of dictionaries.
+        The main dictionary keys are the paths of the respective sections, with
+        each entry then containing the section contents as a dict. If just a
+        single package is created from the main recipe section, a dict containing
+        a single dict is returned. If an outputs: section defines multiple
         packages that are to be built, all of the section dicts from all outputs
-        and the main section are returned, unless the outputs_exclusive variable
-        is set to True. The key of each output dict is dpath of its section.
+        and the main section are returned, unless the outputs_exclusive argument
+        is set to True. Non-existant sections are not returned, unless the
+        missing_as_empty argument is set to True.
+
+        Args:
+            section: path to section within package, for example "build" or
+                "extra/identifiers"
+            outputs_exclusive: boolean whether to exclusively return outputs:
+                sections if multiple outputs: are specified
+            missing_as_empty: boolean whether to include missing sections as
+                empty dictionaries
         """
         sections = dict()
         top_level_section = self.get(section, dict())
