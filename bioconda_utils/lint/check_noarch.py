@@ -37,7 +37,7 @@ class should_be_noarch_python(LintCheck):
 
     """
 
-    def check_deps(self, deps: dict[str, list[str]], _package_location: str) -> None:
+    def check_deps(self, deps: dict[str, list[str]], package_location: str) -> None:
         build_section = f"{package_location}build"
         if "python" not in deps:
             return  # not a python package
@@ -73,7 +73,7 @@ class should_be_noarch_generic(LintCheck):
 
     requires = ["should_be_noarch_python"]
 
-    def check_deps(self, deps: dict[str, list[str]], _package_location: str) -> None:
+    def check_deps(self, deps: dict[str, list[str]], package_location: str) -> None:
         build_section = f"{package_location}build"
         if self.recipe.get(f"{build_section}/noarch", None):
             return  # already marked noarch
