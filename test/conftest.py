@@ -2,6 +2,7 @@ import datetime
 import os
 import shutil
 from copy import deepcopy
+from pathlib import Path
 
 from ruamel.yaml import YAML
 import pandas as pd
@@ -11,7 +12,6 @@ import py
 from bioconda_utils import utils
 
 yaml = YAML(typ="rt")  # pylint: disable=invalid-name
-
 
 # common settings
 TEST_RECIPES_FOLDER = "recipes"
@@ -113,7 +113,7 @@ def config_file(tmpdir: py.path.local, case):
     data = deepcopy(TEST_CONFIG_YAML)
     if "config" in case:
         dict_merge(data, case["config"])
-    config_fname = tmpdir.join(TEST_CONFIG_YAML_FNAME)
+    config_fname = tmpdir.join(Path(TEST_CONFIG_YAML_FNAME))
     with config_fname.open("w") as fdes:
         yaml.dump(data, fdes)
 

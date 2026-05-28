@@ -14,9 +14,7 @@ from bioconda_utils import build
 # https://github.com/bioconda/bioconda-utils/issues/31)
 #
 
-
 SKIP_OSX = sys.platform.startswith("darwin")
-
 
 RECIPE_ONE = dedent("""
 one:
@@ -28,7 +26,6 @@ one:
       commands:
         - "ls -la"
 """)
-
 
 RECIPE_CUSTOM_BASE = dedent("""
 one:

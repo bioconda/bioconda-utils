@@ -6,8 +6,9 @@ section that is otherwise free-form.
 """
 
 import re
+from typing import Any
 
-from . import LintCheck
+from . import LintCheck, _recipe
 
 
 class version_constraints_missing_whitespace(LintCheck):
@@ -20,7 +21,7 @@ class version_constraints_missing_whitespace(LintCheck):
 
     """
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         check_paths = []
         for section in ("build", "run", "host"):
             check_paths.append(f"requirements/{section}")
@@ -34,7 +35,7 @@ class version_constraints_missing_whitespace(LintCheck):
                     if not space_separated:
                         self.message(section=f"{path}/{n}", data=True)
 
-    def fix(self, _message, _data):
+    def fix(self, _message: Any, _data: Any) -> bool:
         check_paths = []
         for section in ("build", "run", "host"):
             check_paths.append(f"requirements/{section}")
@@ -62,7 +63,7 @@ class extra_identifiers_not_list(LintCheck):
 
     """
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         identifiers_sections = recipe.get_all_section_occurrences("extra/identifiers")
         for identifiers in identifiers_sections:
             if not isinstance(identifiers_sections[identifiers], list):
@@ -84,7 +85,7 @@ class extra_identifiers_not_string(LintCheck):
 
     requires = [extra_identifiers_not_list]
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         identifiers_sections = recipe.get_all_section_occurrences("extra/identifiers")
         for identifiers in identifiers_sections:
             for n, identifier in enumerate(identifiers_sections[identifiers]):
@@ -105,7 +106,7 @@ class extra_identifiers_missing_colon(LintCheck):
 
     requires = [extra_identifiers_not_string]
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         identifiers_sections = recipe.get_all_section_occurrences("extra/identifiers")
         for identifiers in identifiers_sections:
             for n, identifier in enumerate(identifiers_sections[identifiers]):
@@ -124,7 +125,7 @@ class extra_skip_lints_not_list(LintCheck):
 
     """
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         identifiers_sections = recipe.get_all_section_occurrences("extra/skip-lints")
         for identifiers in identifiers_sections:
             if not isinstance(identifiers_sections[identifiers], list):

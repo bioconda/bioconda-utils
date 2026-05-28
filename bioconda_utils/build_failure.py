@@ -1,12 +1,14 @@
 import os
 import sys
 import time
-from typing import Optional, Union
+from typing import Any
+from collections.abc import Iterator
 import subprocess as sp
 import logging
 from hashlib import sha256
 
 import ruamel.yaml
+import ruamel.yaml.reader
 from ruamel.yaml import YAML, CommentedMap
 from ruamel.yaml.scalarstring import LiteralScalarString
 import conda.exports
@@ -19,14 +21,13 @@ from .githandler import BiocondaRepo
 from bioconda_utils.recipe import Recipe
 from bioconda_utils import graph, utils
 
-
 logger = logging.getLogger(__name__)
 
 
 class BuildFailureRecord:
     git_handler = None
 
-    def __init__(self, recipe: Union[str, Recipe], platform: Optional[str] = None):
+    def __init__(self, recipe: str | Recipe, platform: str | None = None) -> None:
         if isinstance(recipe, Recipe):
             self.recipe_path = recipe.path
         else:
@@ -36,34 +37,34 @@ class BuildFailureRecord:
         self.path = os.path.join(self.recipe_path, f"build_failure.{platform}.yaml")
         self.platform = platform
 
-        def load(path):
+        def load(path: str) -> None:
             if os.path.getsize(path) == 0:
-                raise IOError("Unable to read build failure record {path}: empty file")
-            with open(path, "r") as f:
+                raise OSError("Unable to read build failure record {path}: empty file")
+            with open(path) as f:
                 yaml = YAML()
                 try:
                     self.inner = dict(yaml.load(f))
                 except ruamel.yaml.reader.ReaderError as e:
-                    raise IOError(f"Unable to read build failure record {path}: {e}")
+                    raise OSError(f"Unable to read build failure record {path}: {e}")
 
         if self.exists():
             load(self.path)
         else:
             self.inner = dict()
 
-    def exists(self):
+    def exists(self) -> bool:
         return os.path.exists(self.path)
 
-    def set_recipe_sha_to_current_recipe(self):
+    def set_recipe_sha_to_current_recipe(self) -> None:
         self.recipe_sha = self.get_recipe_sha()
 
     def fill(
         self,
-        log: Optional[str] = None,
-        reason: Optional[str] = None,
-        category: Optional[str] = None,
+        log: str | None = None,
+        reason: str | None = None,
+        category: str | None = None,
         skiplist: bool = False,
-    ):
+    ) -> None:
         self.set_recipe_sha_to_current_recipe()
         # if recipe is a leaf (i.e. not used by others as dependency)
         # we can automatically blacklist it if desired
@@ -75,13 +76,13 @@ class BuildFailureRecord:
         if category:
             self.category = category
 
-    def get_recipe_sha(self):
+    def get_recipe_sha(self) -> str:
         h = sha256()
         with open(os.path.join(self.recipe_path, "meta.yaml"), "rb") as f:
             h.update(f.read())
             return h.hexdigest()
 
-    def skiplists_current_recipe(self):
+    def skiplists_current_recipe(self) -> bool:
         if self.skiplist:
             recipe_sha = self.get_recipe_sha()
             if recipe_sha == self.recipe_sha:
@@ -95,7 +96,7 @@ class BuildFailureRecord:
                 )
         return False
 
-    def write(self):
+    def write(self) -> None:
         logger.info(f"Storing build failure record for recipe {self.recipe_path}")
         with open(self.path, "w") as f:
             yaml = YAML()
@@ -136,11 +137,11 @@ class BuildFailureRecord:
                 i += 1
             yaml.dump(commented_map, f)
 
-    def remove(self):
+    def remove(self) -> None:
         logger.info(f"Removing build failure record for recipe {self.recipe_path}")
         os.remove(self.path)
 
-    def commit_and_push_changes(self):
+    def commit_and_push_changes(self) -> None:
         """Commit and push any changes, including removal of the record."""
         utils.run(["git", "add", self.path], mask=False)
         if utils.run(
@@ -183,15 +184,15 @@ class BuildFailureRecord:
             )
 
     @property
-    def reason(self):
+    def reason(self) -> str:
         return self.inner.get("reason", "")
 
     @property
-    def category(self):
+    def category(self) -> str:
         return self.inner.get("category", "")
 
     @property
-    def log(self):
+    def log(self) -> str:
         # Remove category and reason in case a new log is recorded.
         # This is necessary to avoid inconsistency with those manual annotations.
         if "category" in self.inner:
@@ -201,38 +202,43 @@ class BuildFailureRecord:
         return self.inner.get("log", "")
 
     @property
-    def skiplist(self):
+    def skiplist(self) -> bool:
         return self.inner.get("skiplist", False)
 
     @property
-    def recipe_sha(self):
+    def recipe_sha(self) -> str | None:
         return self.inner.get("recipe_sha", None)
 
     @skiplist.setter
-    def skiplist(self, value):
+    def skiplist(self, value: bool) -> None:
         self.inner["skiplist"] = value
 
     @log.setter
-    def log(self, value):
+    def log(self, value: str) -> None:
         self.inner["log"] = value
 
     @recipe_sha.setter
-    def recipe_sha(self, value):
+    def recipe_sha(self, value: str) -> None:
         self.inner["recipe_sha"] = value
 
     @reason.setter
-    def reason(self, value):
+    def reason(self, value: str) -> None:
         self.inner["reason"] = value
 
     @category.setter
-    def category(self, value):
+    def category(self, value: str) -> None:
         self.inner["category"] = value
 
 
 def collect_build_failure_dataframe(
-    recipe_folder, config, channel, link_fmt="txt", link_prefix="", git_range=None
-):
-    def get_build_failure_records(recipe):
+    recipe_folder: str,
+    config: dict[str, Any],
+    channel: str,
+    link_fmt: str = "txt",
+    link_prefix: str = "",
+    git_range: list[str] | None = None,
+) -> pd.DataFrame:
+    def get_build_failure_records(recipe: str) -> Iterator[BuildFailureRecord]:
         return filter(
             BuildFailureRecord.exists,
             [
@@ -241,7 +247,7 @@ def collect_build_failure_dataframe(
             ],
         )
 
-    def has_build_failure(recipe):
+    def has_build_failure(recipe: str) -> bool:
         return any(get_build_failure_records(recipe))
 
     recipes = list(utils.get_recipes(recipe_folder))
@@ -268,7 +274,7 @@ def collect_build_failure_dataframe(
 
     dag, _ = graph.build(recipes, config)
 
-    def get_data():
+    def get_data() -> Iterator[tuple[str, Any, int, bool, str, str, str, str]]:
         for recipe in utils.tqdm(recipes, desc="Checking recipes"):
             if not has_build_failure(recipe):
                 continue

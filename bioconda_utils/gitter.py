@@ -2,11 +2,14 @@
 `Gitter.im <https://gitter.im>`_ Web-API Bindings
 """
 
+from __future__ import annotations
+
 import abc
 import logging
 import json
 
-from typing import Any, List, Mapping, Tuple, NamedTuple, AsyncIterator
+from typing import Any, NamedTuple
+from collections.abc import AsyncIterator, Mapping
 
 import aiohttp
 import uritemplate
@@ -19,7 +22,7 @@ class User(NamedTuple):
     """Gitter User"""
 
     @classmethod
-    def from_dict(cls, data):
+    def from_dict(cls, data: dict[str, Any]) -> User:
         """Create `User` from `dict`"""
         return cls(**data)
 
@@ -42,30 +45,30 @@ class User(NamedTuple):
     #: Gravatar Version (used to force cache flushing)
     gv: str
     #: List of OAUTH providers for user
-    providers: List[str] = None
+    providers: list[str] | None = None
 
 
 class Mention(NamedTuple):
     """Gitter User Mention"""
 
     @classmethod
-    def from_dict(cls, data):
+    def from_dict(cls, data: dict[str, Any]) -> Mention:
         """Create `User` from `dict`"""
         return cls(**data)
 
     #: User Name
     screenName: str
     #: User ID
-    userId: str = None
+    userId: str | None = None
     #: User IDs
-    userIds: List[str] = None
+    userIds: list[str] | None = None
 
 
 class Message(NamedTuple):
     """Gitter Chat Message"""
 
     @classmethod
-    def from_dict(cls, data):
+    def from_dict(cls, data: dict[str, Any]) -> Message:
         """Create `Message` from `dict`"""
         if "mentions" in data:
             data["mentions"] = [Mention.from_dict(user) for user in data["mentions"]]
@@ -88,26 +91,26 @@ class Message(NamedTuple):
     #: Number of users who read message
     readBy: int
     #: URLs present in message
-    urls: List[str]
+    urls: list[str]
     #: @mentions in message
-    mentions: List[Mention]
+    mentions: list[Mention]
     #: Github #ISSUE references in message
-    issues: List[str]
+    issues: list[str]
     #: (Unused)
     meta: str
     #: Version
     v: str
     #: Gravatar Version (used to force cache flushing)
-    gv: str = None
+    gv: str | None = None
     #: Edit timestamp (ISO)
-    editedAt: str = None
+    editedAt: str | None = None
 
 
 class Room(NamedTuple):
     """Gitter Chat Room"""
 
     @classmethod
-    def from_dict(cls, data):
+    def from_dict(cls, data: dict[str, Any]) -> Room:
         """Create `Room` from `dict`"""
         if "user" in data:
             data["user"] = User.from_dict(data["user"])
@@ -122,7 +125,7 @@ class Room(NamedTuple):
     #: List of users joined in room
     userCount: int
     #: Number of unread mentions of current user
-    mentions: List[str]
+    mentions: list[str]
     #: Flag marking this room as silenced (no notifications)
     lurk: bool
     #: URL to this room for browser
@@ -131,7 +134,7 @@ class Room(NamedTuple):
     #: ``ORG_CHANNEL``, ``REPO_CHANNEL``, ``USER_CHANNEL``)
     githubType: str
     #: List of tags attached to room
-    tags: List[str]
+    tags: list[str]
     #: Number of unread messages for current user
     unreadItems: int
     #: Gravatar URL
@@ -143,23 +146,23 @@ class Room(NamedTuple):
     #: unknown
     public: str
     #: Last time (ISO) room was accessed
-    lastAccessTime: str = None
+    lastAccessTime: str | None = None
     #: Flag marking this room as favorite
     favourite: bool = False
     #: Flag marking personal chats
-    oneToOne: bool = None
+    oneToOne: bool | None = None
     #: User if one-to-one
-    user: User = None
+    user: User | None = None
     #: Room URI
-    uri: str = None
+    uri: str | None = None
     #: Unknown
-    security: str = None
+    security: str | None = None
     #: unknown
-    noindex: str = None
+    noindex: str | None = None
     #: Unknown
-    group: str = None
+    group: str | None = None
     #: Version
-    v: str = None
+    v: str | None = None
 
 
 class GitterAPI:
@@ -213,8 +216,12 @@ class GitterAPI:
 
     @abc.abstractmethod
     async def _request(
-        self, method: str, url: str, headers: Mapping[str, str], body: bytes = b""
-    ) -> Tuple[int, Mapping[str, str], bytes]:
+        self,
+        method: str,
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes = b"",
+    ) -> tuple[int, Mapping[str, str], bytes]:
         """Execute HTTP request (implemented by IO providing subclass)
 
         Args:
@@ -228,8 +235,12 @@ class GitterAPI:
         """
 
     @abc.abstractmethod
-    async def _stream_request(
-        self, method: str, url: str, headers: Mapping[str, str], body: bytes = b""
+    def _stream_request(
+        self,
+        method: str,
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes = b"",
     ) -> AsyncIterator[bytes]:
         """Execute streaming HTTP request (implement by IO providing subclass)
 
@@ -246,11 +257,11 @@ class GitterAPI:
     def _prepare_request(
         self,
         url: str,
-        var_dict: Mapping[str, str],
+        var_dict: dict[str, Any],
         data: Any = None,
         charset: str = "utf-8",
         accept: str = "application/json",
-    ) -> Tuple[str, Mapping[str, str], bytes]:
+    ) -> tuple[str, Mapping[str, str], bytes]:
         """Prepare url, headers and json body for request"""
         url = uritemplate.expand(url, var_dict=var_dict)
         headers = {}
@@ -270,10 +281,10 @@ class GitterAPI:
         self,
         method: str,
         url: str,
-        var_dict: Mapping[str, str],
+        var_dict: dict[str, Any],
         data: Any = None,
         accept: str = "application/json",
-    ) -> Tuple[str, Any]:
+    ) -> tuple[str, Any]:
         """Make HTTP request"""
         charset = "utf-8"
         url = "".join((self._GITTER_API, url))
@@ -304,7 +315,7 @@ class GitterAPI:
         self,
         method: str,
         url: str,
-        var_dict: Mapping[str, str],
+        var_dict: dict[str, Any],
         data: Any = None,
         accept: str = "application/json",
     ) -> AsyncIterator[Any]:
@@ -321,7 +332,7 @@ class GitterAPI:
             except json.decoder.JSONDecodeError:
                 logger.error("Failed to decode json in line %s", line_str)
 
-    async def list_rooms(self, name: str = None) -> List[Room]:
+    async def list_rooms(self, name: str | None = None) -> list[Room]:
         """Get list of current user's rooms
 
         The list is filtered to match provided arguments.
@@ -352,7 +363,9 @@ class GitterAPI:
         """Remove **user** from **room**"""
         try:
             await self._make_request(
-                "DELETE", self._ROOM_USERS, {"roomId": room.id, "userId": user.id}
+                "DELETE",
+                self._ROOM_USERS,
+                {"roomId": room.id, "userId": user.id},
             )
         except aiohttp.ClientResponseError as exc:
             if exc.code in (404,):
@@ -360,7 +373,11 @@ class GitterAPI:
         return True
 
     async def edit_room(
-        self, room: Room, topic: str = None, tags: str = None, noindex: bool = None
+        self,
+        room: Room,
+        topic: str | None = None,
+        tags: str | None = None,
+        noindex: bool | None = None,
     ) -> None:
         """Set **topic**, **tags** or **noindex** for **room**"""
         data = {}
@@ -374,7 +391,7 @@ class GitterAPI:
 
     async def list_unread_items(
         self, user: User, room: Room
-    ) -> Tuple[List[str], List[str]]:
+    ) -> tuple[list[str], list[str]]:
         """Get Ids for unread items of **user** in **room**
 
         Returns:
@@ -386,10 +403,13 @@ class GitterAPI:
         )
         return data.get("chat", []), data.get("mention", [])
 
-    async def mark_as_read(self, user: User, room: Room, ids: List[str]) -> None:
+    async def mark_as_read(self, user: User, room: Room, ids: list[str]) -> None:
         """Mark chat messages listed in **ids** as read"""
         await self._make_request(
-            "POST", self._UNREAD, {"userId": user.id, "roomId": room.id}, {"chat": ids}
+            "POST",
+            self._UNREAD,
+            {"userId": user.id, "roomId": room.id},
+            {"chat": ids},
         )
 
     async def get_message(self, room: Room, msgid: str) -> Message:
@@ -416,7 +436,7 @@ class GitterAPI:
         )
         return Message.from_dict(data)
 
-    async def list_groups(self):
+    async def list_groups(self) -> Any:
         """Get list of current user's groups"""
         _, data = await self._make_request("GET", self._LIST_GROUPS, {})
         return data
@@ -450,8 +470,12 @@ class AioGitterAPI(GitterAPI):
         super().__init__(*args, **kwargs)
 
     async def _request(
-        self, method: str, url: str, headers: Mapping[str, str], body: bytes = b""
-    ) -> Tuple[int, Mapping[str, str], bytes]:
+        self,
+        method: str,
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes = b"",
+    ) -> tuple[int, Mapping[str, str], bytes]:
         async with self._session.request(
             method, url, headers=headers, data=body
         ) as response:
@@ -459,7 +483,11 @@ class AioGitterAPI(GitterAPI):
             return response.status, response.headers, await response.read()
 
     async def _stream_request(
-        self, method: str, url: str, headers: Mapping[str, str], body: bytes = b""
+        self,
+        method: str,
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes = b"",
     ) -> AsyncIterator[bytes]:
         timeout = aiohttp.ClientTimeout(total=3600, sock_read=3600)
         async with self._session.request(

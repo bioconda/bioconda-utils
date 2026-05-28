@@ -24,7 +24,6 @@ for case_file in linting_case_files:
         # we need the case_name accessible in some cases
         TEST_DATA[case_name]["name"] = case_name
 
-
 TEST_CASES = list(TEST_DATA.values())
 TEST_CASE_IDS = list(TEST_DATA.keys())
 
@@ -46,26 +45,25 @@ def test_lint(linter, recipe_dirs, mock_repodata, case):
     found = set()
     for msg in messages:
         assert str(msg.check) in expected, (
-            f"In test '{case['name']}' on '{msg.recipe.basedir}':"
-            f"'{msg.check}' emitted unexpectedly"
+            f"In test '{case['name']}' on '{msg.recipe.basedir}':'{msg.check}' emitted unexpectedly"
         )
         found.add(str(msg.check))
     assert len(expected) == len(found), (
         f"In test '{case['name']}': missed expected lint failures. Expected: {expected}"
     )
 
-    canfix = set(msg for msg in messages if msg.canfix and str(msg.check) in expected)
+    canfix = {msg for msg in messages if msg.canfix and str(msg.check) in expected}
     if canfix:
         linter.clear_messages()
         linter.order_and_load_checks()
         linter.lint(recipes, fix=True)
-        found_fix = set(str(msg.check) for msg in linter.get_messages())
+        found_fix = {str(msg.check) for msg in linter.get_messages()}
         for msg in canfix:
             assert str(msg.check) not in found_fix
         linter.clear_messages()
         linter.order_and_load_checks()
         linter.lint(recipes)
-        found_postfix = set(str(msg.check) for msg in linter.get_messages())
+        found_postfix = {str(msg.check) for msg in linter.get_messages()}
         for msg in canfix:
             assert str(msg.check) not in found_postfix
         for msgstr in found_postfix:

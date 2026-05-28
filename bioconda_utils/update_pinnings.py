@@ -13,16 +13,14 @@ from .utils import RepoData
 #        Re-implement it here or ask upstream to export that functionality.
 from conda_build.metadata import trim_build_only_deps
 
-# for type checking
-from typing import AbstractSet, List, Set
+from collections.abc import Set as AbstractSet
 from .recipe import Recipe, RecipeError
 from conda_build.metadata import MetaData
-
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
-def _get_build_variants(meta: MetaData) -> Set[str]:
+def _get_build_variants(meta: MetaData) -> set[str]:
     # This is the same behavior as in
     # conda_build.metadata.Metadata.get_hash_contents but without leaving out
     # "build_string_excludes" (python, r_base, etc.).
@@ -91,7 +89,7 @@ _legacy_build_string_prefixes = re.compile(
 
 
 # TODO: clean this mess up
-def _have_partially_matching_build_id(meta):
+def _have_partially_matching_build_id(meta: MetaData) -> bool:
     # Stupid legacy special handling:
     res = RepoData().get_package_data(
         "build",
@@ -103,6 +101,8 @@ def _have_partially_matching_build_id(meta):
     is_noarch = bool(meta.noarch)
     current_build_id = meta.build_id()
     current_matches = _legacy_build_string_prefixes.match(current_build_id)
+    if current_matches is None:
+        return False
     current_prefixes = current_matches.groupdict()
 
     # conda-build add "special" substrings for some packages to the build
@@ -155,8 +155,10 @@ def _have_partially_matching_build_id(meta):
     #     if trimmed_build_id == current_build_id:
     #         return True
     #     return False
-    def is_matching_trimmed_build_id(build_id, current_build_id):
+    def is_matching_trimmed_build_id(build_id: str, current_build_id: str) -> bool:
         matches = _legacy_build_string_prefixes.match(build_id)
+        if matches is None:
+            return False
         trimmed_build_id = build_id
         trimmed_current_build_id = current_build_id
         for prefix_key, prefix in matches.groupdict().items():
@@ -211,7 +213,10 @@ def have_variant(meta: MetaData) -> bool:
     )
     if res:
         logger.debug(
-            "Package %s=%s=%s exists", meta.name(), meta.version(), meta.build_id()
+            "Package %s=%s=%s exists",
+            meta.name(),
+            meta.version(),
+            meta.build_id(),
         )
         return True
     return _have_partially_matching_build_id(meta)
@@ -244,7 +249,7 @@ def have_noarch_python_build_number(meta: MetaData) -> bool:
     return res
 
 
-def will_build_only_missing(metas: List[MetaData]) -> bool:
+def will_build_only_missing(metas: list[MetaData]) -> bool:
     """Checks if only new builds will be added (no divergent build ids exist)
 
     Args:
@@ -290,11 +295,11 @@ class State(enum.Flag):
 
     def needs_bump(self) -> bool:
         """Checks if the state indicates that the recipe needs to be bumped"""
-        return self & self.BUMP
+        return bool(self & State.BUMP)
 
     def failed(self) -> bool:
         """True if the update pinning check failed"""
-        return self & self.FAIL
+        return bool(self & State.FAIL)
 
 
 allowed_build_string_characters = frozenset(
@@ -311,10 +316,10 @@ def has_invalid_build_string(meta: MetaData) -> bool:
 
 def check(
     recipe: Recipe,
-    build_config,
-    keep_metas=False,
+    build_config: object,
+    keep_metas: bool = False,
     skip_variant_keys: AbstractSet[str] = frozenset(),
-) -> State:
+) -> tuple[State, Recipe]:
     """Determine if a given recipe should have its build number increments
     (bumped) due to a recent change in pinnings.
 
@@ -336,7 +341,8 @@ def check(
         return State.FAIL, recipe
     except Exception:
         logger.exception(
-            "update_pinnings.check failed with exception in api.render(%s):", recipe
+            "update_pinnings.check failed with exception in api.render(%s):",
+            recipe,
         )
         return State.FAIL, recipe
 

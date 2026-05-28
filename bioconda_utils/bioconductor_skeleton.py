@@ -2,23 +2,24 @@
 Conda Skeleton for Bioconductor Recipes
 """
 
-import shutil
-import tempfile
-from textwrap import dedent
-import tarfile
-import os
-import sys
-import re
-from collections import OrderedDict
-import logging
+import itertools
 import json
+import logging
+import os
+import re
+import shutil
+import sys
+import tarfile
+import tempfile
+from collections import OrderedDict
 from datetime import date
+from textwrap import dedent
+from typing import Any
 
+import networkx as nx
 import pyaml
 import requests
 import yaml
-import networkx as nx
-import itertools
 
 from . import utils
 
@@ -55,29 +56,27 @@ BASE_R_PACKAGES = [
 # build and test-time requirements as well as the extended container.
 # These can be found here: https://github.com/search?p=2&q=cdt%28%27mesa-libgl-devel%27%29+user%3Aconda-forge+r-base&type=Code
 # and here: https://github.com/search?l=YAML&q=r-rgl+user%3Aconda-forge&type=Code
-CRAN_X_PACKAGES = set(
-    [
-        "rgl",
-        "tsdist",
-        "tsclust",
-        "plot3drgl",
-        "pals",
-        "longitudinaldata",
-        "bpca",
-        "bcrocsurface",
-        "feature",
-        "pca3d",
-        "forestfloor",
-        "oceanview",
-        "clustersim",
-        "hiver",
-        "lidr",
-        "mixomics",
-        "snpls",
-        "matlib",
-        "qpcr",
-    ]
-)
+CRAN_X_PACKAGES = {
+    "rgl",
+    "tsdist",
+    "tsclust",
+    "plot3drgl",
+    "pals",
+    "longitudinaldata",
+    "bpca",
+    "bcrocsurface",
+    "feature",
+    "pca3d",
+    "forestfloor",
+    "oceanview",
+    "clustersim",
+    "hiver",
+    "lidr",
+    "mixomics",
+    "snpls",
+    "matlib",
+    "qpcr",
+}
 
 # This maps items in a package's SystemRequirement to conda packages
 # There can be multiple resulting packages, all of which should then
@@ -171,7 +170,6 @@ SysReqs = {
     "xml2": ["libxml2"],
 }
 
-
 HERE = os.path.abspath(os.path.dirname(__file__))
 
 
@@ -229,8 +227,8 @@ def bioconductor_tarball_url(package, pkg_version, bioc_version):
         Bioconductor release version
     """
     return (
-        "https://bioconductor.org/packages/{bioc_version}"
-        "/bioc/src/contrib/{package}_{pkg_version}.tar.gz".format(**locals())
+        f"https://bioconductor.org/packages/{bioc_version}"
+        f"/bioc/src/contrib/{package}_{pkg_version}.tar.gz"
     )
 
 
@@ -253,10 +251,8 @@ def bioconductor_archive_tarball_url(package, pkg_version, bioc_version):
         Bioconductor release version
     """
     return (
-        "https://bioconductor.org/packages/{bioc_version}"
-        "/bioc/src/contrib/Archive/{package}/{package}_{pkg_version}.tar.gz".format(
-            **locals()
-        )
+        f"https://bioconductor.org/packages/{bioc_version}"
+        f"/bioc/src/contrib/Archive/{package}/{package}_{pkg_version}.tar.gz"
     )
 
 
@@ -276,8 +272,8 @@ def bioconductor_annotation_data_url(package, pkg_version, bioc_version):
         Bioconductor release version
     """
     return (
-        "https://bioconductor.org/packages/{bioc_version}"
-        "/data/annotation/src/contrib/{package}_{pkg_version}.tar.gz".format(**locals())
+        f"https://bioconductor.org/packages/{bioc_version}"
+        f"/data/annotation/src/contrib/{package}_{pkg_version}.tar.gz"
     )
 
 
@@ -297,8 +293,8 @@ def bioconductor_experiment_data_url(package, pkg_version, bioc_version):
         Bioconductor release version
     """
     return (
-        "https://bioconductor.org/packages/{bioc_version}"
-        "/data/experiment/src/contrib/{package}_{pkg_version}.tar.gz".format(**locals())
+        f"https://bioconductor.org/packages/{bioc_version}"
+        f"/data/experiment/src/contrib/{package}_{pkg_version}.tar.gz"
     )
 
 
@@ -318,9 +314,7 @@ def bioarchive_url(package, pkg_version, bioc_version=None):
         Bioconductor release version. Not used;, only included for API
         compatibility with other url funcs
     """
-    return "https://bioarchive.galaxyproject.org/{0}_{1}.tar.gz".format(
-        package, pkg_version
-    )
+    return f"https://bioarchive.galaxyproject.org/{package}_{pkg_version}.tar.gz"
 
 
 def cargoport_url(package, pkg_version, bioc_version=None):
@@ -341,8 +335,8 @@ def cargoport_url(package, pkg_version, bioc_version=None):
     """
     package = package.lower()
     return (
-        "https://depot.galaxyproject.org/software/bioconductor-{0}/bioconductor-{0}_"
-        "{1}_src_all.tar.gz".format(package, pkg_version)
+        f"https://depot.galaxyproject.org/software/bioconductor-{package}/bioconductor-{package}_"
+        f"{pkg_version}_src_all.tar.gz"
     )
 
 
@@ -374,7 +368,7 @@ def find_best_bioc_version(package, version):
             ),
         ):
             url = func(package, version, bioc_version)
-            if requests.head(url).status_code == 200:
+            if requests.head(url, allow_redirects=True).status_code == 200:
                 logger.debug("success: %s", url)
                 logger.info(
                     "A working URL for %s==%s was identified for Bioconductor version %s: %s",
@@ -388,7 +382,7 @@ def find_best_bioc_version(package, version):
             else:
                 logger.debug("missing: %s", url)
     raise PackageNotFoundError(
-        "Cannot find any Bioconductor versions for {0}=={1}".format(package, version)
+        f"Cannot find any Bioconductor versions for {package}=={version}"
     )
 
 
@@ -421,13 +415,13 @@ def fetchPackages(bioc_version):
     for url, prefix in packages_urls:
         req = requests.get(url)
         if not req.ok:
-            sys.exit("ERROR: Could not fetch {}!\n".format(url))
+            sys.exit(f"ERROR: Could not fetch {url}!\n")
         for pkg in req.text.strip().split("\n\n"):
             pkgDict = dict()
             lastKey = None
             for line in pkg.split("\n"):
                 if line.startswith(" "):
-                    pkgDict[lastKey] += " {}".format(line.strip())
+                    pkgDict[lastKey] += f" {line.strip()}"
                     pkgDict[lastKey] = pkgDict[
                         lastKey
                     ].strip()  # Prevent prepending a space when content begins on the next line
@@ -465,8 +459,14 @@ def packagesNeedingX(packages):
     return Xset
 
 
-class BioCProjectPage(object):
-    def __init__(self, package, bioc_version=None, pkg_version=None, packages=None):
+class BioCProjectPage:
+    def __init__(
+        self,
+        package: str,
+        bioc_version: str | None = None,
+        pkg_version: str | None = None,
+        packages=None,
+    ):
         """
         Represents a single Bioconductor package page and provides access to
         scraped data.
@@ -481,16 +481,17 @@ class BioCProjectPage(object):
         self._cached_tarball = None
         self._dependencies = None
         self.build_number = 0
-        self.bioc_version = bioc_version
+        self.bioc_version = bioc_version or ""
         self._pkg_version = pkg_version
+        self._auto = bioc_version is None
         self._cargoport_url = None
         self._bioarchive_url = None
         self._tarball_url = None
         self._bioconductor_tarball_url = None
         self.is_data_package = False
         self.package_lower = package.lower()
-        self.version = pkg_version
-        self.extra = None
+        self.version = pkg_version or ""
+        self.extra: OrderedDict[Any, Any] | None = None
         self.patches = None
         self.needsX = False
 
@@ -511,7 +512,7 @@ class BioCProjectPage(object):
 
         if package not in self.packages:
             raise PackageNotFoundError(
-                "{} does not exist in this bioconductor release!".format(package)
+                f"{package} does not exist in this bioconductor release!"
             )
 
         if not pkg_version:
@@ -530,7 +531,7 @@ class BioCProjectPage(object):
 
         if not request:
             raise PageNotFoundError(
-                "Could not find HTML page for {0.package}. Tried: {1}".format(self, url)
+                f"Could not find HTML page for {self.package}. Tried: {url}"
             )
 
         # Since we provide the "short link" we will get redirected. Using
@@ -572,7 +573,7 @@ class BioCProjectPage(object):
                 return url
             else:
                 raise PageNotFoundError(
-                    "Unexpected error: {0.status_code} ({0.reason})".format(response)
+                    f"Unexpected error: {response.status_code} ({response.reason})"
                 )
         except requests.exceptions.SSLError:
             pass
@@ -585,10 +586,10 @@ class BioCProjectPage(object):
         url = os.path.join(
             base_url,
             self.bioc_version,
-            self.packages[self.package]["URLprefix"],
-            self.packages[self.package]["source.ver"],
+            str(self.packages[self.package]["URLprefix"]),
+            str(self.packages[self.package]["source.ver"]),
         )
-        response = requests.head(url)
+        response = requests.head(url, allow_redirects=True)
         if response.status_code == 200:
             return url
 
@@ -602,7 +603,7 @@ class BioCProjectPage(object):
             ]
             for url in urls:
                 if url is not None:
-                    response = requests.head(url)
+                    response = requests.head(url, allow_redirects=True)
                     if response.status_code == 200:
                         self._tarball_url = url
                         return url
@@ -648,13 +649,13 @@ class BioCProjectPage(object):
             return fn
         tmp = tempfile.NamedTemporaryFile(delete=False).name
         with open(tmp, "wb") as fout:
-            logger.info("Downloading {0} to {1}".format(self.tarball_url, fn))
+            logger.info(f"Downloading {self.tarball_url} to {fn}")
             response = requests.get(self.tarball_url)
             if response.status_code == 200:
                 fout.write(response.content)
             else:
                 raise PageNotFoundError(
-                    "Unexpected error {0.status_code} ({0.reason})".format(response)
+                    f"Unexpected error {response.status_code} ({response.reason})"
                 )
         shutil.move(tmp, fn)
         self._cached_tarball = fn
@@ -663,7 +664,7 @@ class BioCProjectPage(object):
     @property
     def title(self):
         """
-        The Title section fromt he VIEW file
+        The Title section fromt the VIEW file
         """
         return self.packages[self.package]["Title"]
 
@@ -795,7 +796,7 @@ class BioCProjectPage(object):
                 toks[1] = toks[1].replace(")", "").replace(" ", "")
                 results.append(tuple(toks))
             else:
-                raise ValueError("Found {0} toks: {1}".format(len(toks), toks))
+                raise ValueError(f"Found {len(toks)} toks: {toks}")
         return results
 
     def pin_version(self, name):
@@ -815,9 +816,9 @@ class BioCProjectPage(object):
         # There are a few packages with only major.minor versions!
         s = v.split(".")
         if len(s) == 3:
-            return ">={}.{}.0,<{}.{}.0".format(s[0], s[1], s[0], int(s[1]) + 1)
+            return f">={s[0]}.{s[1]}.0,<{s[0]}.{int(s[1]) + 1}.0"
         else:
-            return "{}.{}".format(s[0], s[1])
+            return f"{s[0]}.{s[1]}"
 
     @property
     def dependencies(self):
@@ -860,8 +861,10 @@ class BioCProjectPage(object):
                 prefix = "r-"
 
             logger.info(
-                '{0:>12} dependency: name="{1}" version="{2}"'.format(
-                    {"r-": "R", "bioconductor-": "BioConductor"}[prefix], name, version
+                '{:>12} dependency: name="{}" version="{}"'.format(
+                    {"r-": "R", "bioconductor-": "BioConductor"}[prefix],
+                    name,
+                    version,
                 )
             )
 
@@ -975,7 +978,7 @@ class BioCProjectPage(object):
         """
         description = self.packages[self.package][section]
         for vcs in ["HG", "SVN", "GIT"]:
-            description = description.replace("{}_".format(vcs), "{} ".format(vcs))
+            description = description.replace(f"{vcs}_", f"{vcs} ")
         return description
 
     def parseSystemRequirements(self, reqs):
@@ -1056,9 +1059,12 @@ class BioCProjectPage(object):
         if (
             self.linkingto != []
             or len(
-                set(
-                    ["compiler_c", "compiler_cxx", "compiler_fortran", "stdlib_c"]
-                ).intersection(self._cb3_build_reqs.keys())
+                {
+                    "compiler_c",
+                    "compiler_cxx",
+                    "compiler_fortran",
+                    "stdlib_c",
+                }.intersection(self._cb3_build_reqs.keys())
             )
             > 0
         ):
@@ -1080,7 +1086,7 @@ class BioCProjectPage(object):
                 )
             )
 
-        d = OrderedDict(
+        d: OrderedDict[str, Any] = OrderedDict(
             (
                 (
                     "package",
@@ -1137,7 +1143,10 @@ class BioCProjectPage(object):
                             ("home", sub_placeholders(self.url)),
                             ("license", self.license),
                             ("summary", self.pacified_text(section="Title")),
-                            ("description", self.pacified_text(section="Description")),
+                            (
+                                "description",
+                                self.pacified_text(section="Description"),
+                            ),
                         )
                     ),
                 ),
@@ -1207,7 +1216,8 @@ class BioCProjectPage(object):
             )
         if self.packages[self.package].get("Suggests", None):
             renderedsplit.insert(
-                idx, "# Suggests: {}".format(self.packages[self.package]["Suggests"])
+                idx,
+                "# Suggests: {}".format(self.packages[self.package]["Suggests"]),
             )
         # Fix the core dependencies if this needsX
         if self.needsX:
@@ -1288,9 +1298,7 @@ def write_recipe_recursive(
 
         if conda_name_without_version in seen_dependencies:
             logger.debug(
-                "{} already created or in existing channels, skipping".format(
-                    conda_name_without_version
-                )
+                f"{conda_name_without_version} already created or in existing channels, skipping"
             )
             continue
 
@@ -1327,9 +1335,12 @@ def updateDataPackages(bioc_data_packages, pkg, urls, md5, tarball):
     jsPath = os.path.join(bioc_data_packages, "dataURLs.json")
     jsContent = dict()
     if os.path.exists(jsPath):
-        jsContent = json.load(open(jsPath))
+        with open(jsPath) as fin:
+            jsContent = json.load(fin)
     jsContent[pkg] = {"urls": urls, "md5": md5, "fn": tarball}
-    json.dump(jsContent, open(jsPath, "w"))
+    os.makedirs(bioc_data_packages, exist_ok=True)
+    with open(jsPath, "w") as fout:
+        json.dump(jsContent, fout)
 
 
 def write_recipe(
@@ -1402,7 +1413,7 @@ def write_recipe(
     """
     config = utils.load_config(config)
     proj = BioCProjectPage(package, bioc_version, pkg_version, packages=packages)
-    logger.info("Making recipe for: {}".format(package))
+    logger.info(f"Making recipe for: {package}")
 
     if bioc_data_packages is None:
         bioc_data_packages = os.path.join(recipe_dir, "bioconductor-data-packages")
@@ -1446,10 +1457,10 @@ def write_recipe(
     else:
         recipe_dir = os.path.join(recipe_dir, "bioconductor-" + proj.package.lower())
     if os.path.exists(recipe_dir) and not force:
-        raise ValueError("{0} already exists, aborting".format(recipe_dir))
+        raise ValueError(f"{recipe_dir} already exists, aborting")
     else:
         if not os.path.exists(recipe_dir):
-            logger.info("creating %s" % recipe_dir)
+            logger.info(f"creating {recipe_dir}")
             os.makedirs(recipe_dir)
 
     # If the version number has not changed but something else in the recipe
@@ -1485,10 +1496,10 @@ def write_recipe(
             proj.patches = current_meta["source"]["patches"]
 
         if "extra" in current_meta:
-            exclude = set(["final", "copy_test_source_files"])
-            proj.extra = {
-                x: y for x, y in current_meta["extra"].items() if x not in exclude
-            }
+            exclude = {"final", "copy_test_source_files"}
+            proj.extra = OrderedDict(
+                (x, y) for x, y in current_meta["extra"].items() if x not in exclude
+            )
 
     with open(os.path.join(recipe_dir, "meta.yaml"), "w") as fout:
         fout.write(open(proj.meta_yaml).read())
@@ -1522,7 +1533,7 @@ def write_recipe(
 
     else:
         urls = [
-            "{0}".format(u)
+            f"{u}"
             for u in [
                 proj.bioconductor_tarball_url,
                 bioarchive_url(proj.package, proj.version, proj.bioc_version),
@@ -1531,23 +1542,27 @@ def write_recipe(
             ]
             if u is not None
         ]
-        recipeName = "{}-{}".format(proj.package.lower(), proj.version)
+        recipeName = f"{proj.package.lower()}-{proj.version}"
         post_link_template = dedent(
-            """\
+            f"""\
             #!/bin/bash
             installBiocDataPackage.sh "{recipeName}"
-            """.format(recipeName=recipeName)
+            """
         )
 
         with open(os.path.join(recipe_dir, "post-link.sh"), "w") as fout:
             fout.write(dedent(post_link_template))
         pre_unlink_template = (
-            "R CMD REMOVE --library=$PREFIX/lib/R/library/ {0}\n".format(package)
+            f"R CMD REMOVE --library=$PREFIX/lib/R/library/ {package}\n"
         )
         with open(os.path.join(recipe_dir, "pre-unlink.sh"), "w") as fout:
             fout.write(pre_unlink_template)
         updateDataPackages(
-            bioc_data_packages, recipeName, urls, proj.md5, proj.tarball_basename
+            bioc_data_packages,
+            recipeName,
+            urls,
+            proj.md5,
+            proj.tarball_basename,
         )
 
     logger.info("Wrote recipe in %s", recipe_dir)

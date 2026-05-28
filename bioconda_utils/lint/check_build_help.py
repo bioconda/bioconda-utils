@@ -7,7 +7,7 @@ These checks catch errors relating to the use of ``-
 
 import os
 
-from . import INFO, WARNING, LintCheck
+from . import INFO, WARNING, LintCheck, _recipe
 
 
 class should_use_compilers(LintCheck):
@@ -41,7 +41,7 @@ class should_use_compilers(LintCheck):
         "rust",
     )
 
-    def check_deps(self, deps, _package_location):
+    def check_deps(self, deps: dict[str, list[str]], _package_location: str) -> None:
         for compiler in self.compilers:
             for location in deps.get(compiler, []):
                 self.message(section=location)
@@ -55,7 +55,7 @@ class compilers_must_be_in_build(LintCheck):
 
     """
 
-    def check_deps(self, deps, _package_location):
+    def check_deps(self, deps: dict[str, list[str]], _package_location: str) -> None:
         for dep in deps:
             if dep.startswith("compiler_"):
                 for location in deps[dep]:
@@ -70,7 +70,7 @@ class compiler_needs_stdlib_c(LintCheck):
     ``requirements: build:`` section.
     """
 
-    def check_deps(self, deps, _package_location):
+    def check_deps(self, deps: dict[str, list[str]], _package_location: str) -> None:
         compiler = False
         stdlib = False
         for dep, locations in deps.items():
@@ -97,7 +97,7 @@ class uses_setuptools(LintCheck):
 
     severity = INFO
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         if "setuptools" in recipe.get_deps("run"):
             self.message()
 
@@ -124,7 +124,7 @@ class setup_py_install_args(LintCheck):
             return True
         return False
 
-    def check_deps(self, deps, _package_location):
+    def check_deps(self, deps: dict[str, list[str]], _package_location: str) -> None:
         if "setuptools" not in deps:
             return  # no setuptools, no problem
 
@@ -150,7 +150,7 @@ class cython_must_be_in_host(LintCheck):
           - cython
     """
 
-    def check_deps(self, deps, _package_location):
+    def check_deps(self, deps: dict[str, list[str]], _package_location: str) -> None:
         if "cython" in deps:
             if any("host" not in location for location in deps["cython"]):
                 self.message()
@@ -169,7 +169,7 @@ class cython_needs_compiler(LintCheck):
 
     severity = WARNING
 
-    def check_deps(self, deps, _package_location):
+    def check_deps(self, deps: dict[str, list[str]], _package_location: str) -> None:
         if "cython" in deps and "compiler_c" not in deps and "compiler_cxx" not in deps:
             self.message()
 
@@ -241,7 +241,7 @@ class missing_run_exports(LintCheck):
     run_exports in upstream packages as well if needed.
     """
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         build_sections = recipe.get_all_section_occurrences(
             section="build",
             outputs_exclusive=True,

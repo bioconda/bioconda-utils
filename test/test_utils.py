@@ -1,32 +1,34 @@
+import contextlib
+import importlib
+import logging
 import os
 import re
-import sys
+import shutil
 import subprocess as sp
-import pytest
+import sys
 import tempfile
 import uuid
-import contextlib
-import logging
-import shutil
 from pathlib import Path
 from textwrap import dedent
 
-from conda_build import metadata, exceptions
+import pytest
+from conda_build import exceptions, metadata
+from helpers import Recipes, ensure_missing
 
-from bioconda_utils import __version__
-from bioconda_utils import utils
-from bioconda_utils import pkg_test
-from bioconda_utils import docker_utils
-from bioconda_utils import build
-from bioconda_utils import upload
+from bioconda_utils import (
+    __version__,
+    build,
+    docker_utils,
+    pkg_test,
+    upload,
+    utils,
+)
 from bioconda_utils.utils import validate_config
-from helpers import ensure_missing, Recipes
 
 logger = logging.getLogger(__name__)
 
 # TODO: need channel order tests. Could probably do this by adding different
 # file:// channels with different variants of the same package
-
 
 # Label that will be used for uploading test packages to anaconda/binstar
 TEST_LABEL = "bioconda-utils-test"
@@ -36,7 +38,9 @@ TEST_LABEL = "bioconda-utils-test"
 # docker, once without). On OSX, only the non-docker runs.
 
 # Docker ref for build container
-DOCKER_BASE_IMAGE = "quay.io/bioconda/bioconda-utils-test-env-cos7:latest"
+BUILD_ENV_IMAGE = os.getenv(
+    "BUILD_ENV_IMAGE", "quay.io/bioconda/bioconda-utils-test-env-cos7:latest"
+)
 
 SKIP_DOCKER_TESTS = sys.platform.startswith("darwin")
 SKIP_NOT_OSX = not sys.platform.startswith("darwin")
@@ -108,7 +112,7 @@ def config_fixture():
     yield config
 
 
-@pytest.fixture(scope="module", params=PARAMS, ids=IDS)
+@pytest.fixture(scope="function", params=PARAMS, ids=IDS)
 def single_build(request, recipes_fixture):
     """
     Builds the "one" recipe.
@@ -116,7 +120,7 @@ def single_build(request, recipes_fixture):
     if request.param:
         logger.error("Making recipe builder")
         docker_builder = docker_utils.RecipeBuilder(
-            use_host_conda_bld=True, docker_base_image=DOCKER_BASE_IMAGE
+            use_host_conda_bld=True, docker_base_image=BUILD_ENV_IMAGE
         )
         mulled_test = True
         logger.error("DONE")
@@ -124,7 +128,8 @@ def single_build(request, recipes_fixture):
         docker_builder = None
         mulled_test = False
     logger.error(
-        "Fixture: Building 'one' %s", "within docker" if docker_builder else "locally"
+        "Fixture: Building 'one' %s",
+        "within docker" if docker_builder else "locally",
     )
     build.build(
         recipe=recipes_fixture.recipe_dirs["one"],
@@ -148,7 +153,7 @@ def multi_build(request, recipes_fixture, config_fixture):
     """
     if request.param:
         docker_builder = docker_utils.RecipeBuilder(
-            use_host_conda_bld=True, docker_base_image=DOCKER_BASE_IMAGE
+            use_host_conda_bld=True, docker_base_image=BUILD_ENV_IMAGE
         )
         mulled_test = True
     else:
@@ -184,7 +189,7 @@ def multi_build_exclude(request, recipes_fixture, config_fixture):
     """
     if request.param:
         docker_builder = docker_utils.RecipeBuilder(
-            use_host_conda_bld=True, docker_base_image=DOCKER_BASE_IMAGE
+            use_host_conda_bld=True, docker_base_image=BUILD_ENV_IMAGE
         )
         mulled_test = True
     else:
@@ -251,9 +256,9 @@ def single_upload():
         [
             "anaconda",
             "-t",
-            os.environ.get("ANACONDA_TOKEN"),
+            os.environ["ANACONDA_TOKEN"],
             "remove",
-            "bioconda/{0}".format(name),
+            f"bioconda/{name}",
             "--force",
         ],
         stdout=sp.PIPE,
@@ -280,7 +285,7 @@ def test_upload(single_upload):
                 "-n",
                 env_name,
                 "-c",
-                "bioconda/label/{0}".format(TEST_LABEL),
+                f"bioconda/label/{TEST_LABEL}",
                 name,
             ],
             stdout=sp.PIPE,
@@ -307,7 +312,7 @@ def test_single_build_pkg_dir(recipes_fixture):
     docker_builder = docker_utils.RecipeBuilder(
         use_host_conda_bld=True,
         pkg_dir=os.getcwd() + "/output",
-        docker_base_image=DOCKER_BASE_IMAGE,
+        docker_base_image=BUILD_ENV_IMAGE,
     )
     mulled_test = False
     logger.error("DONE")
@@ -363,7 +368,7 @@ with open("{self.container_staging}/version", "w") as version_file:
 '
 """
         ),
-        docker_base_image=DOCKER_BASE_IMAGE,
+        docker_base_image=BUILD_ENV_IMAGE,
     )
     temp_dir = docker_builder.pkg_dir
     # Set recipe_dir to any temporary directory, e.g., docker_builder.pkg_dir.
@@ -378,7 +383,7 @@ def test_docker_builder_build(recipes_fixture):
     Tests just the build_recipe method of a RecipeBuilder object.
     """
     docker_builder = docker_utils.RecipeBuilder(
-        use_host_conda_bld=True, docker_base_image=DOCKER_BASE_IMAGE
+        use_host_conda_bld=True, docker_base_image=BUILD_ENV_IMAGE
     )
     pkgs = recipes_fixture.pkgs["one"]
     docker_builder.build_recipe(
@@ -395,7 +400,7 @@ def test_docker_build_fails(recipes_fixture, config_fixture):
     Test for expected failure when a recipe fails to build
     """
     docker_builder = docker_utils.RecipeBuilder(
-        docker_base_image=DOCKER_BASE_IMAGE, build_script_template="exit 1"
+        docker_base_image=BUILD_ENV_IMAGE, build_script_template="exit 1"
     )
     assert docker_builder.build_script_template == "exit 1"
     result = build.build_recipes(
@@ -411,7 +416,7 @@ def test_docker_build_fails(recipes_fixture, config_fixture):
 @pytest.mark.skipif(SKIP_DOCKER_TESTS, reason="skipping on osx")
 def test_docker_build_image_fails():
     template = f"""
-        FROM {DOCKER_BASE_IMAGE}
+        FROM {BUILD_ENV_IMAGE}
         RUN nonexistent command
         """
     with pytest.raises(sp.CalledProcessError):
@@ -460,7 +465,7 @@ def test_conda_as_dep(config_fixture, mulled_test):
     if mulled_test:
         docker_builder = docker_utils.RecipeBuilder(
             use_host_conda_bld=True,
-            docker_base_image=DOCKER_BASE_IMAGE,
+            docker_base_image=BUILD_ENV_IMAGE,
         )
     r = Recipes(
         """
@@ -496,6 +501,35 @@ def test_conda_as_dep(config_fixture, mulled_test):
         for i in utils.built_package_paths(v):
             assert os.path.exists(i)
             ensure_missing(i)
+
+
+def test_recipe_requires_finalized_render(tmp_path):
+    def _write(meta):
+        recipe = tmp_path / uuid.uuid4().hex
+        recipe.mkdir()
+        (recipe / "meta.yaml").write_text(meta)
+        return str(recipe)
+
+    assert not utils.recipe_requires_finalized_render(
+        _write("package:\n  name: pure-python\n  version: '1.0'\n")
+    )
+    assert utils.recipe_requires_finalized_render(
+        _write("requirements:\n  build:\n    - {{ stdlib('c') }}\n")
+    )
+    assert utils.recipe_requires_finalized_render(
+        _write("requirements:\n  build:\n    - {{ compiler('c') }}\n")
+    )
+    assert utils.recipe_requires_finalized_render(
+        _write("requirements:\n  run:\n    - {{ pin_compatible('foo') }}\n")
+    )
+    # ignore if within comments
+    assert not utils.recipe_requires_finalized_render(
+        _write("requirements:\n  run:\n    - foo  # {{ pin_compatible('foo') }}\n")
+    )
+    # Missing meta.yaml -> False (don't crash)
+    missing = tmp_path / "missing"
+    missing.mkdir()
+    assert not utils.recipe_requires_finalized_render(str(missing))
 
 
 # TODO replace the filter tests with tests for utils.get_package_paths()
@@ -681,13 +715,14 @@ def test_built_package_paths():
     platform = "linux" if sys.platform == "linux" else "osx"
     d = {
         "channel_targets": "bioconda main",
-        "target_platform": "{}-64".format(platform),
+        "target_platform": f"{platform}-64",
     }
     h = metadata._hash_dependencies(d, 7)
 
-    assert os.path.basename(
-        utils.built_package_paths(r.recipe_dirs["one"])[0]
-    ) == "one-0.1-py36{}_0.conda".format(h)
+    assert (
+        os.path.basename(utils.built_package_paths(r.recipe_dirs["one"])[0])
+        == f"one-0.1-py36{h}_0.conda"
+    )
 
 
 def test_string_or_float_to_integer_python():
@@ -857,7 +892,7 @@ def test_skip_dependencies(config_fixture):
             ensure_missing(pkg)
 
 
-class TestSubdags(object):
+class TestSubdags:
     def _build(self, recipes_fixture, config_fixture, n_workers, worker_offset):
         build.build_recipes(
             recipes_fixture.basedir,
@@ -1047,23 +1082,23 @@ def test_load_meta_skipping():
 
 
 def test_native_platform_skipping():
-    expections = [
+    expections = (
         # Don't skip linux-x86 for any recipes
-        ["one", "linux", False],
-        ["two", "linux", False],
-        ["three", "linux", False],
-        ["four", "linux", False],
+        ("one", "linux", False),
+        ("two", "linux", False),
+        ("three", "linux", False),
+        ("four", "linux", False),
         # Skip recipes without linux aarch64 enable on linux-aarch64 platform
-        ["one", "linux-aarch64", True],
-        ["three", "linux-aarch64", True],
+        ("one", "linux-aarch64", True),
+        ("three", "linux-aarch64", True),
         # Don't skip recipes with linux aarch64 enable on linux-aarch64 platform
-        ["two", "linux-aarch64", False],
-        ["four", "linux-aarch64", False],
-        ["one", "osx-arm64", True],
-        ["two", "osx-arm64", True],
-        ["three", "osx-arm64", False],
-        ["four", "osx-arm64", False],
-    ]
+        ("two", "linux-aarch64", False),
+        ("four", "linux-aarch64", False),
+        ("one", "osx-arm64", True),
+        ("two", "osx-arm64", True),
+        ("three", "osx-arm64", False),
+        ("four", "osx-arm64", False),
+    )
     r = Recipes(
         """
         one:
@@ -1403,7 +1438,9 @@ def test_pkg_test_conda_package_format(
     """
     # ("1" is .tar.bz2 and "2" is .conda)
     try:
-        from conda_build.conda_interface import cc_conda_build
+        cc_conda_build = importlib.import_module(
+            "conda_build.conda_interface"
+        ).cc_conda_build
     except ImportError:
         pass
     else:
@@ -1447,7 +1484,7 @@ def test_pkg_test_conda_package_format(
         )
         docker_builder = docker_utils.RecipeBuilder(
             use_host_conda_bld=True,
-            docker_base_image=DOCKER_BASE_IMAGE,
+            docker_base_image=BUILD_ENV_IMAGE,
             build_script_template=build_script_template,
         )
     build_result = build.build_recipes(

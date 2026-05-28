@@ -1,13 +1,10 @@
-# Some of Bioconda's supported versions are described
-# in ../docs/source/user/versions.rst
-# so please keep that documentation up to date as they change
-
 # pinnings
 conda-forge-pinning=2026.01.07.13.16.30
 
 # basics
 python=3.13.*
 setuptools=81.*
+setuptools-scm>=8
 conda=26.3.*
 conda-libmamba-solver=26.3.*
 conda-build=26.3.*

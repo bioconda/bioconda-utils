@@ -1,0 +1,139 @@
+name: 'Build & Push: bot'
+on:
+  push:
+    branches:
+    - master
+    paths:
+    - images/bot/**
+    - .github/workflows/bot.yaml
+  pull_request:
+    paths:
+    - images/bot/**
+    - .github/workflows/bot.yaml
+
+jobs:
+  build:
+    name: Build & Push
+    strategy:
+      matrix:
+        include:
+        - tag: comment
+          packages: ""
+        - tag: merge
+          packages: "anaconda-client skopeo"
+        - tag: update
+          packages: "git openssh"
+    runs-on: ubuntu-24.04
+    container:
+      # travier/podman-action contains newer podman/buildah versions.
+      image: quay.io/travier/podman-action
+      options: --privileged
+    env:
+      IMAGE_NAME: bot
+      IMAGE_VERSION: '1.4.1'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Tools
+      run: |
+        set -eu
+        # jq is not installed in travier/podman-action
+        dnf install -qy \
+          jq
+        rpm -q \
+          buildah podman \
+          coreutils findutils sed \
+          curl jq \
+          | (
+            while read -r line ; do
+              printf %s\\n "${line}"
+              case "${line}" in (*' not installed'*)
+                err=1 ;;
+              esac
+              done
+              exit "${err-0}"
+          )
+
+    - name: Build
+      id: buildah-build
+      uses: redhat-actions/buildah-build@v2
+      with:
+        image: ${{ env.IMAGE_NAME }}
+        tags: >-
+          ${{ matrix.tag }}
+          ${{ matrix.tag }}-${{ env.IMAGE_VERSION }}
+        context: ./images/${{ env.IMAGE_NAME }}
+        dockerfiles: |
+          ./images/${{ env.IMAGE_NAME }}/Dockerfile
+        build-args: |
+          packages=${{ matrix.packages }}
+
+    - name: Test
+      run: |
+        image='${{ steps.buildah-build.outputs.image }}'
+        ids="$(
+          for tag in ${{ steps.buildah-build.outputs.tags }} ; do
+            buildah images --quiet --no-trunc "${image}:${tag}"
+          done
+          )"
+        ids="$( printf %s "${ids}" | sort -u )"
+        for id in ${ids} ; do
+          podman history "${id}"
+          buildah bud \
+            --build-arg=base="${id}" \
+            --file=Dockerfile.test \
+            'images/${{ env.IMAGE_NAME }}'
+        done
+        buildah rmi --prune || true
+
+    - if: ${{ github.ref == 'refs/heads/master' }}
+      name: Check Tags
+      run: |
+        # Quay.io does not support immutable images.
+        # => Check for duplicate tags to avoid overwriting existing images.
+        existing_tags="$(
+          skopeo list-tags docker://quay.io/bioconda/${{ steps.buildah-build.outputs.image }} \
+            | jq -r '.Tags[]'
+        )" \
+        || {
+          echo 'Could not list tags via skopeo.'
+          exit 1
+        }
+        for tag in ${{ steps.buildah-build.outputs.tags }} ; do
+          if [ \! "${tag}" = '${{ matrix.tag }}' ] ; then
+            if printf %s "${existing_tags}" | grep -qxF "${tag}" ; then
+              printf 'Tag %s already exists!\n' "${tag}"
+              exit 1
+            fi
+          fi
+        done
+
+    - if: ${{ github.ref == 'refs/heads/master' }}
+      name: Push
+      uses: redhat-actions/push-to-registry@v2
+      with:
+        image: ${{ steps.buildah-build.outputs.image }}
+        tags: ${{ steps.buildah-build.outputs.tags }}
+        registry: ${{ secrets.QUAY_BIOCONDA_REPO }}
+        username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
+        password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
+
+    - if: ${{ github.ref == 'refs/heads/master' }}
+      name: Test Pushed
+      run: |
+        image='${{ steps.buildah-build.outputs.image }}'
+        ids="$(
+          for tag in ${{ steps.buildah-build.outputs.tags }} ; do
+            buildah images --quiet --no-trunc "${image}:${tag}"
+          done
+          )"
+        ids="$( printf %s "${ids}" | sort -u )"
+        for id in ${ids} ; do
+          podman history "${id}"
+          buildah bud \
+            --build-arg=base="${id}" \
+            --file=Dockerfile.test \
+            'images/${{ env.IMAGE_NAME }}'
+        done
+        buildah rmi --prune || true

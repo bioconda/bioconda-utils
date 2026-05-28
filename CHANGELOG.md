@@ -1,5 +1,40 @@
 # Changelog
 
+## [4.5.0](https://github.com/bioconda/bioconda-utils/compare/v4.4.1...v4.5.0) (2026-05-28)
+
+
+### Features
+
+* migrate images from bioconda-containers ([#1109](https://github.com/bioconda/bioconda-utils/issues/1109)) ([2b99792](https://github.com/bioconda/bioconda-utils/commit/2b997926464528ba965f8cdf75a4b1d74e84d8d0))
+
+## [4.4.1](https://github.com/bioconda/bioconda-utils/compare/v4.4.0...v4.4.1) (2026-05-06)
+
+
+### Bug Fixes
+
+* remove reference to non-existent file ([#1106](https://github.com/bioconda/bioconda-utils/issues/1106)) ([7a6adce](https://github.com/bioconda/bioconda-utils/commit/7a6adceec9e2f922c71d506f95ec3a4385c7f961))
+
+## [4.4.0](https://github.com/bioconda/bioconda-utils/compare/v4.3.2...v4.4.0) (2026-04-28)
+
+
+### Features
+
+* add support for local (file://) channels ([#1103](https://github.com/bioconda/bioconda-utils/issues/1103)) ([0777f5e](https://github.com/bioconda/bioconda-utils/commit/0777f5ecea969bf52e09eb381437667fa1cfd067))
+
+## [4.3.2](https://github.com/bioconda/bioconda-utils/compare/v4.3.1...v4.3.2) (2026-04-19)
+
+
+### Bug Fixes
+
+* force finalized render on linux-64 / compiled recipes; drop no-op __glibc monkeypatch ([#1095](https://github.com/bioconda/bioconda-utils/issues/1095)) ([#1100](https://github.com/bioconda/bioconda-utils/issues/1100)) ([be77f11](https://github.com/bioconda/bioconda-utils/commit/be77f11587e35d4fcb38af740dbee9ccb85ea017))
+
+## [4.3.1](https://github.com/bioconda/bioconda-utils/compare/v4.3.0...v4.3.1) (2026-04-09)
+
+
+### Bug Fixes
+
+* **utils:** patch conda-build to include __glibc in hashes when using stdlib('c') ([#1096](https://github.com/bioconda/bioconda-utils/issues/1096)) ([027cbc8](https://github.com/bioconda/bioconda-utils/commit/027cbc85d1f9aa15f932901e58ab18f4cfb75ae3))
+
 ## [4.3.0](https://github.com/bioconda/bioconda-utils/compare/v4.2.0...v4.3.0) (2026-04-08)
 
 

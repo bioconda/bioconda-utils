@@ -5,11 +5,10 @@ import yaml
 import json
 import asyncio
 
-from bioconda_utils.hosters import Hoster, HosterMeta
+from bioconda_utils.hosters import Hoster
 
 with open(op.join(op.dirname(__file__), "hoster_cases.yaml")) as data:
     TEST_CASES = yaml.safe_load(data)
-
 
 TEST_CASE_LIST = [
     (hoster, num, case)
@@ -17,17 +16,15 @@ TEST_CASE_LIST = [
     for num, case in enumerate(TEST_CASES[hoster])
 ]
 
-
 TEST_CASE_IDS = [
     f"{x[0]}-{x[1] + 1}{'-' + x[2]['case'] if 'case' in x[2] else ''}"
     for x in TEST_CASE_LIST
 ]
 
+AVAIL_HOSTERS = {hoster.__name__: hoster for hoster in Hoster.hoster_types}
 
-AVAIL_HOSTERS = {hoster.__name__: hoster for hoster in HosterMeta.hoster_types}
 
-
-@pytest.mark.parametrize("hoster", HosterMeta.hoster_types)
+@pytest.mark.parametrize("hoster", Hoster.hoster_types)
 def test_hoster_has_test_case(hoster):
     assert hoster.__name__ in TEST_CASES, f"Missing test cases for {hoster.__name__}"
 
@@ -49,6 +46,9 @@ def setup_params(request):
 )
 @pytest.mark.successive  # custom, see conftest.py
 class TestHoster:
+    hoster_cls: type[Hoster]
+    instance: Hoster
+
     @classmethod
     def msg(cls, title):
         res = (
@@ -69,14 +69,16 @@ class TestHoster:
     @classmethod
     def setup_params(cls, hoster, caseno, case):
         cls.hoster = hoster
-        cls.hoster_cls = AVAIL_HOSTERS.get(hoster)
-        assert cls.hoster_cls, (
+        assert hoster in AVAIL_HOSTERS, (
             f"No (complete) hoster class '{hoster}' found. {AVAIL_HOSTERS}"
         )
+        cls.hoster_cls = AVAIL_HOSTERS[hoster]
         cls.case = case
         cls.caseno = caseno
         try:
-            cls.instance = Hoster.select_hoster(case["url"], case.get("override", {}))
+            instance = Hoster.select_hoster(case["url"], case.get("override", {}))
+            assert instance is not None
+            cls.instance = instance
         except Exception:
             print(cls.msg(""))
             raise
@@ -103,14 +105,15 @@ class TestHoster:
             assert "release_json" not in self.case, (
                 "Test case may not contain both release_links and release_json"
             )
-            return "\n".join(
-                "<a href={}/>".format(url) for url in self.case["release_links"]
-            )
+            return "\n".join(f"<a href={url}/>" for url in self.case["release_links"])
         if "release_json" in self.case:
             return json.dumps(self.case["release_json"])
 
     async def get_ftp_listing(self, url):
         return self.case["release_links"]
+
+    async def get_file_from_url(self, fname: str, url: str, desc: str) -> None:
+        pass
 
     @pytest.mark.asyncio
     def test_get_version(self, event_loop):

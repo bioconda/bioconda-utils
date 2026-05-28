@@ -5,13 +5,12 @@ import atexit
 import logging
 import os
 import re
-import tempfile
 import subprocess
-from typing import List, Union
+import tempfile
+from typing import BinaryIO, Protocol
 
 import git
 import yaml
-
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -53,13 +52,24 @@ class GitHandlerFailure(Exception):
     """Something went wrong interacting with git"""
 
 
+class GitBlob(Protocol):
+    """Subset of GitPython Blob used when reading file contents."""
+
+    @property
+    def data_stream(self) -> BinaryIO: ...
+
+
+def read_git_blob_text(blob: GitBlob) -> str:
+    """Read a GitPython blob as UTF-8 text."""
+    return blob.data_stream.read().decode("utf-8")
+
+
 class GitHandlerBase:
     """GitPython abstraction
 
     We have to work with three git repositories, the local checkout,
     the project primary repository and a working repository. The
     latter may be a fork or may be the same as the primary.
-
 
     Arguments:
       repo: GitPython Repo object (created by subclasses)
@@ -95,10 +105,10 @@ class GitHandlerBase:
         self.lock_working_dir = asyncio.Semaphore(1)
 
         #: GPG key ID or bool, indicating whether/how to sign commits
-        self._sign: Union[bool, str] = False
+        self._sign: bool | str = False
 
         #: Committer and Author
-        self.actor: git.Actor = None
+        self.actor: git.Actor | None = None
 
     def close(self):
         """Release resources allocated"""
@@ -114,7 +124,7 @@ class GitHandlerBase:
             name = f"{name} <- {get_name(self.fork_remote)}"
         return f"{self.__class__.__name__}({name})"
 
-    def enable_signing(self, key: Union[bool, str] = True) -> None:
+    def enable_signing(self, key: bool | str = True) -> None:
         """Enable signing of commits
 
         Args:
@@ -246,21 +256,23 @@ class GitHandlerBase:
         commit = getattr(branch, "commit", branch)
         blob = commit.tree / rel_file_name
         if blob:
-            return blob.data_stream.read().decode("utf-8")
+            return read_git_blob_text(blob)
 
-        logger.error(
-            "File %s not found on branch %s commit %s", rel_file_name, branch, commit
+        raise GitHandlerFailure(
+            f"File {rel_file_name} not found on branch {branch} commit {commit}"
         )
-        return None
 
-    def create_local_branch(self, branch_name: str, remote_branch: str = None):
+    def create_local_branch(self, branch_name: str, remote_branch: str | None = None):
         """Creates local branch from remote **branch_name**"""
+        remote_branch_name = remote_branch or branch_name
         if remote_branch is None:
             remote_branch = self.get_remote_branch(branch_name, try_fetch=False)
         else:
             remote_branch = self.get_remote_branch(remote_branch, try_fetch=False)
         if remote_branch is None:
-            return None
+            raise GitHandlerFailure(
+                f"Unable to find remote branch {remote_branch_name}"
+            )
         self.repo.create_head(branch_name, remote_branch)
         return self.get_local_branch(branch_name)
 
@@ -280,10 +292,12 @@ class GitHandlerBase:
                the first argument to ``git merge-base``.
 
         Returns:
-          The first merge base for the two references provided if found.
-          May return `None` if no merge base was found. This may for
-          example be the case if branches were deleted or if the
-          repository is shallow and the merge base commit not available.
+          The first merge base for the two references provided.
+
+        Raises:
+          GitHandlerFailure: If no merge base was found. This may for
+          example happen if branches were deleted or if the repository is
+          shallow and the merge base commit is not available.
         """
         if not ref:
             ref = self.repo.active_branch.commit
@@ -301,11 +315,12 @@ class GitHandlerBase:
                 "No merge base found for %s and master at depth %i", ref, depth
             )
         else:
-            logger.error("No merge base found for %s and master", ref)
-            return None  # FIXME: This should raise
+            raise GitHandlerFailure(f"No merge base found for {ref} and master")
         if len(merge_bases) > 1:
             logger.error(
-                "Multiple merge bases found for %s and master: %s", ref, merge_bases
+                "Multiple merge bases found for %s and master: %s",
+                ref,
+                merge_bases,
             )
         return merge_bases[0]
 
@@ -348,7 +363,7 @@ class GitHandlerBase:
         branch.checkout()
 
     def commit_and_push_changes(
-        self, files: List[str], branch_name: str, msg: str, sign=False
+        self, files: list[str], branch_name: str, msg: str, sign=False
     ) -> bool:
         """Create recipe commit and pushes to upstream remote
 
@@ -400,7 +415,7 @@ class GitHandlerBase:
             logger.info("Would push branch %s", branch_name)
         return True
 
-    def set_user(self, user: str, email: str = None) -> None:
+    def set_user(self, user: str, email: str | None = None) -> None:
         """Set the user and email to use for committing"""
         self.actor = git.Actor(user, email)
 
@@ -453,6 +468,8 @@ class BiocondaRepoMixin(GitHandlerBase):
             branch = self.get_local_branch(ref)
         else:
             branch = ref
+        if branch is None:
+            raise GitHandlerFailure(f"Unable to resolve branch {ref}")
         config_data = self.read_from_branch(branch, self.config_file)
         config = yaml.safe_load(config_data)
         blacklists = config["blacklists"]
@@ -567,7 +584,7 @@ class TempGitHandler(GitHandlerBase):
     repo, it will not break the entire process.
     """
 
-    _local_mirror_tmpdir: Union[str, tempfile.TemporaryDirectory] = None
+    _local_mirror_tmpdir: str | tempfile.TemporaryDirectory | None = None
 
     @classmethod
     def set_mirror_dir(cls, dirname: str) -> None:
@@ -603,7 +620,12 @@ class TempGitHandler(GitHandlerBase):
 
         # Make location of repo in tmpdir from url
         _, _, fname = url.rpartition("@")
-        tmpname = getattr(cls._local_mirror_tmpdir, "name", cls._local_mirror_tmpdir)
+        if isinstance(cls._local_mirror_tmpdir, tempfile.TemporaryDirectory):
+            tmpname = cls._local_mirror_tmpdir.name
+        else:
+            tmpname = cls._local_mirror_tmpdir
+        assert tmpname is not None
+        assert isinstance(tmpname, str)
         mirror_name = os.path.join(tmpname, fname)
 
         # Re-use or create mirror of remote repo
@@ -638,8 +660,8 @@ class TempGitHandler(GitHandlerBase):
 
     def __init__(
         self,
-        username: str = None,
-        password: str = None,
+        username: str | None = None,
+        password: str | None = None,
         url_format="https://{userpass}github.com/{user}/{repo}.git",
         home_user="bioconda",
         home_repo="bioconda-recipes",

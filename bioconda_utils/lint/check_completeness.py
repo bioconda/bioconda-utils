@@ -4,6 +4,8 @@ Verify that the recipe is not missing anything essential.
 """
 
 import os
+from typing import Any
+
 from . import LintCheck, _recipe
 
 
@@ -21,7 +23,7 @@ class missing_build_number(LintCheck):
    
     """
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         if not recipe.get("build/number", ""):
             self.message(section="build")
 
@@ -59,11 +61,10 @@ class missing_home(LintCheck):
 
     """
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         missing_section = recipe.check_for_missing_inherited_section("about/home")
         if missing_section:
             self.message(section=missing_section)
-
 
 class missing_summary(LintCheck):
     """The recipe is missing an ``about/summary`` section.
@@ -89,7 +90,7 @@ class missing_summary(LintCheck):
 
     """
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         missing_section = recipe.check_for_missing_inherited_section("about/summary")
         if missing_section:
             self.message(section=missing_section)
@@ -119,7 +120,7 @@ class missing_license(LintCheck):
 
     """
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         missing_section = recipe.check_for_missing_inherited_section("about/license")
         if missing_section:
             self.message(section=missing_section)
@@ -140,7 +141,6 @@ class missing_tests(LintCheck):
             imports:
                - some_module
 
-
     and/or any file named ``run_test.py`, ``run_test.sh`` or
     ``run_test.pl`` executing tests.
 
@@ -152,7 +152,7 @@ class missing_tests(LintCheck):
 
     test_files = ["run_test.py", "run_test.sh", "run_test.pl"]
 
-    def check_recipe(self, recipe):
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
         if any(os.path.exists(os.path.join(recipe.dir, f)) for f in self.test_files):
             return
         # if multiple `outputs:` are specified, we check that
@@ -200,6 +200,6 @@ class missing_hash(LintCheck):
 
     checksum_names = ("md5", "sha1", "sha256")
 
-    def check_source(self, source, section):
+    def check_source(self, source: dict[str, Any], section: str) -> None:
         if not any(source.get(chk) for chk in self.checksum_names):
             self.message(section=section)
