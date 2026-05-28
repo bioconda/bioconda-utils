@@ -49,7 +49,7 @@ class should_be_noarch_python(LintCheck):
             return  # already marked noarch: python
         self.message(section=build_section, data=build_section)
 
-     def fix(self, _message: Any, data: Any) -> bool:
+    def fix(self, _message: Any, data: Any) -> bool:
         self.recipe.set(f"{data}/noarch", "python")
         return True
 
@@ -81,7 +81,7 @@ class should_be_noarch_generic(LintCheck):
             return  # not compiled
         self.message(section=build_section, data=build_section)
 
-     def fix(self, _message: Any, data: Any) -> bool:
+    def fix(self, _message: Any, data: Any) -> bool:
         self.recipe.set(f"{data}/noarch", "generic")
         return True
 

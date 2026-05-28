@@ -20,7 +20,7 @@ class missing_build_number(LintCheck):
     Currently, bioconda-utils does not support specifying build numbers
     under outputs, so only a single global build number in the top-level
     build section is supported.
-   
+    
     """
 
     def check_recipe(self, recipe: _recipe.Recipe) -> None:
