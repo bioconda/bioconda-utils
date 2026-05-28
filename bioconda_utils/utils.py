@@ -1724,7 +1724,9 @@ class RepoData:
         """
         # called from doc generator
         packages = self.df[self.df.name == name][["version", "platform"]]
-        versions = packages.groupby("version", observed=True).agg(lambda x: list(set(x)))
+        versions = packages.groupby("version", observed=True).agg(
+            lambda x: list(set(x))
+        )
         return versions["platform"].to_dict()
 
     def get_latest_versions(self, channel):

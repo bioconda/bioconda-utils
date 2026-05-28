@@ -599,7 +599,9 @@ class Recipe:
             return default
         return res
 
-    def get_inherited_value(self, output: int, path: str, default: Any = KeyError) -> Any:
+    def get_inherited_value(
+        self, output: int, path: str, default: Any = KeyError
+    ) -> Any:
         """Get an inherited value from the recipe.
 
         >>> recipe.get_inherited_value(0, 'build/number')
@@ -609,7 +611,7 @@ class Recipe:
 
         The **path** is a ``/`` separated list of dictionary keys to
         be walked in the recipe meta data, either from the top level or
-        from the numbered output. 
+        from the numbered output.
 
         Args:
             output: index into the list of outputs
@@ -637,7 +639,7 @@ class Recipe:
         section: str = None,
         outputs_exclusive: bool = False,
         missing_as_empty: bool = False,
-        ) -> dict[dict]:
+    ) -> dict[dict]:
         """Get all occurrences of a section, including from outputs: definitions
 
         Gets all occurrences of a recipe section in a dictionary of dictionaries.
@@ -672,8 +674,11 @@ class Recipe:
                 if outputs_section or missing_as_empty:
                     sections[current_output_path] = outputs_section
         return sections
-    
-    def check_for_missing_inherited_section(self, section: str = None,) -> str:
+
+    def check_for_missing_inherited_section(
+        self,
+        section: str = None,
+    ) -> str:
         """Return any required sections that are missing
 
         For a required section like `about/summary`, check whether this is
@@ -699,7 +704,6 @@ class Recipe:
             else:
                 return section
         return ""
-
 
     def set(self, path, value):
         """Set a value or section in the recipe
