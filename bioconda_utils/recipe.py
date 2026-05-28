@@ -608,22 +608,29 @@ class Recipe:
         self,
         section: str = None,
         outputs_exclusive: bool = False,
-        ) -> List[dict]:
+        missing_as_empty: bool = False,
+        ) -> dict[dict]:
         """Get all occurrences of a section, including from outputs: definitions
 
-        If just a single package is created from the main recipe section, just
-        one dict is returned. If an outputs: section defines multiple packages
-        that are to be built, all of the section dicts from all outputs and the
-        main section are returned, unless the outputs_exclusive variable is set
-        to True.
+        If just a single package is created from the main recipe section, a dict
+        with a single dict is returned. If an outputs: section defines multiple
+        packages that are to be built, all of the section dicts from all outputs
+        and the main section are returned, unless the outputs_exclusive variable
+        is set to True. The key of each output dict is dpath of its section.
         """
-        sections = [self.meta.get(section, dict())]
+        sections = dict()
+        top_level_section = self.get(section, dict())
+        if top_level_section or missing_as_empty:
+            sections[section] = top_level_section
         outputs = self.get("outputs", dict())
         if outputs:
             if outputs_exclusive:
-                sections = [o.get(section, dict()) for o in outputs]
-            else:
-                sections.extend([o.get(section, dict()) for o in outputs])
+                sections = dict()
+            for n, o in enumerate(outputs):
+                current_output_path = f"outputs/{n}/{section}"
+                outputs_section = self.get(current_output_path, dict())
+                if outputs_section or missing_as_empty:
+                    sections[current_output_path] = outputs_section
         return sections
     
     def check_for_missing_inherited_section(self, section: str = None,) -> str:

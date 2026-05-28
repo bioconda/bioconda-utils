@@ -245,9 +245,10 @@ class missing_run_exports(LintCheck):
         build_sections = recipe.get_all_section_occurrences(
             section="build",
             outputs_exclusive=True,
+            missing_as_empty=True,
         )
         for build in build_sections:
-            if "run_exports" not in build:
+            if "run_exports" not in build_sections[build]:
                 self.message()
 
 
