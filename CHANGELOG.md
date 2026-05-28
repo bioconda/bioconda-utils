@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.5.0](https://github.com/bioconda/bioconda-utils/compare/v4.4.1...v4.5.0) (2026-05-28)
+
+
+### Features
+
+* migrate images from bioconda-containers ([#1109](https://github.com/bioconda/bioconda-utils/issues/1109)) ([2b99792](https://github.com/bioconda/bioconda-utils/commit/2b997926464528ba965f8cdf75a4b1d74e84d8d0))
+
 ## [4.4.1](https://github.com/bioconda/bioconda-utils/compare/v4.4.0...v4.4.1) (2026-05-06)
 
 
