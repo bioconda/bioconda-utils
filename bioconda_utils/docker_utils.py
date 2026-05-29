@@ -312,7 +312,7 @@ class RecipeBuilder:
     def __del__(self) -> None:
         self.cleanup()
 
-    def _find_proxy_settings(self) -> dict[str | None, str | None]:
+    def _find_proxy_settings(self) -> dict[str, str]:
         res = {}
         for var in ("http_proxy", "https_proxy"):
             values = {
@@ -320,7 +320,9 @@ class RecipeBuilder:
                 os.environ.get(var.upper(), None),
             }.difference([None])
             if len(values) == 1:
-                res[var] = next(iter(values))
+                val = next(iter(values))
+                if val not None:
+                    res[var] = val
             elif len(values) > 1:
                 raise ValueError(f"{var} and {var.upper()} have different values")
         return res
