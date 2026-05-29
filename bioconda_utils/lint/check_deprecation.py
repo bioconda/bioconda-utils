@@ -12,7 +12,7 @@ class uses_perl_threaded(LintCheck):
 
     """
 
-    def check_deps(self, deps: dict[str, list[str]], _package_location: str) -> None:
+    def check_deps(self, deps: dict[str, list[str]], package_location: str) -> None:
         if "perl-threaded" in deps:
             self.message(data=True)
 
@@ -29,7 +29,7 @@ class uses_javajdk(LintCheck):
 
     """
 
-    def check_deps(self, deps: dict[str, list[str]], _package_location: str) -> None:
+    def check_deps(self, deps: dict[str, list[str]], package_location: str) -> None:
         if "java-jdk" in deps:
             self.message(data=True)
 
@@ -45,7 +45,7 @@ class deprecated_numpy_spec(LintCheck):
 
     """
 
-    def check_deps(self, deps: dict[str, list[str]], _package_location: str) -> None:
+    def check_deps(self, deps: dict[str, list[str]], package_location: str) -> None:
         if "numpy" not in deps:
             return
         for path in deps["numpy"]:
@@ -66,7 +66,7 @@ class uses_matplotlib(LintCheck):
 
     """
 
-    def check_deps(self, deps: dict[str, list[str]], _package_location: str) -> None:
+    def check_deps(self, deps: dict[str, list[str]], package_location: str) -> None:
         if "matplotlib" in deps:
             self.message(data=True)
 

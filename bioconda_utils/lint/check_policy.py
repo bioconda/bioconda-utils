@@ -129,7 +129,7 @@ class cran_packages_to_conda_forge(LintCheck):
 
     """
 
-    def check_deps(self, deps: dict[str, list[str]], _package_location: str) -> None:
+    def check_deps(self, deps: dict[str, list[str]], package_location: str) -> None:
         # must have R in run a run dep
         if "R" in deps and any("run" in dep for dep in deps["R"]):
             # and all deps satisfied in conda-forge

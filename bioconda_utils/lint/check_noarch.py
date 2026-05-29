@@ -95,7 +95,7 @@ class should_not_be_noarch_compiler(LintCheck):
 
     """
 
-    def check_deps(self, deps: dict[str, list[str]], _package_location: str) -> None:
+    def check_deps(self, deps: dict[str, list[str]], package_location: str) -> None:
         outputs = self.recipe.get("outputs", dict())
         if outputs:
             # we have to do the lint per outputs: package
@@ -155,7 +155,7 @@ class should_not_use_skip_python(LintCheck):
 
     bad_skip_terms = ("py2k", "py3k", "python")
 
-    def check_deps(self, deps: dict[str, list[str]], _package_location: str) -> None:
+    def check_deps(self, deps: dict[str, list[str]], package_location: str) -> None:
         if "python" not in deps:
             return  # not a python package
         if any(dep.startswith("compiler_") for dep in deps):
