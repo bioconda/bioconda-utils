@@ -312,7 +312,7 @@ class RecipeBuilder:
     def __del__(self) -> None:
         self.cleanup()
 
-    def _find_proxy_settings(self) -> dict[str, str]:
+    def _find_proxy_settings(self) -> dict[str | None, str | None]:
         res = {}
         for var in ("http_proxy", "https_proxy"):
             values = {
