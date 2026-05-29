@@ -321,7 +321,7 @@ class RecipeBuilder:
             }.difference([None])
             if len(values) == 1:
                 val = next(iter(values))
-                if val not None:
+                if val:
                     res[var] = val
             elif len(values) > 1:
                 raise ValueError(f"{var} and {var.upper()} have different values")
