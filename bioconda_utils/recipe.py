@@ -636,10 +636,10 @@ class Recipe:
 
     def get_all_section_occurrences(
         self,
-        section: str = None,
+        section: str = "",
         outputs_exclusive: bool = False,
         missing_as_empty: bool = False,
-    ) -> dict[dict]:
+    ) -> dict:
         """Get all occurrences of a section, including from outputs: definitions
 
         Gets all occurrences of a recipe section in a dictionary of dictionaries.
@@ -677,7 +677,7 @@ class Recipe:
 
     def check_for_missing_inherited_section(
         self,
-        section: str = None,
+        section: str = "",
     ) -> str:
         """Return any required sections that are missing
 
