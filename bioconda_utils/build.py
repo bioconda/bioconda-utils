@@ -137,9 +137,9 @@ def build(
     is_noarch = bool(meta.get_value("build/noarch", default=False))
     use_base_image = meta.get_value("extra/container", {}).get("extended-base", False)
     if use_base_image:
-        base_image = "quay.io/bioconda/base-glibc-debian-bash:3.1"
+        base_image = "quay.io/bioconda/base-glibc-debian-bash:3.2"
     else:
-        base_image = "quay.io/bioconda/base-glibc-busybox-bash:3.1"
+        base_image = "quay.io/bioconda/base-glibc-busybox-bash:3.2"
 
     build_failure_record = BuildFailureRecord(recipe)
     build_failure_record_existed_before_build = build_failure_record.exists()

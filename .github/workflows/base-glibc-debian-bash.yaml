@@ -23,7 +23,7 @@ jobs:
       # The base image is not intended to change often and should be used with
       # version tags or checksum IDs, but not via "latest".
       MAJOR_VERSION: 3
-      MINOR_VERSION: 1
+      MINOR_VERSION: 2
       IMAGE_NAME: base-glibc-debian-bash
       DEBIAN_VERSION: '12.5'
 
