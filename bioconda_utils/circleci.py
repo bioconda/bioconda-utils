@@ -4,7 +4,7 @@ CircleCI Web-API Bindings
 
 import abc
 import logging
-from typing import Any
+from typing import Any, TypedDict
 from collections.abc import Mapping
 import uritemplate
 import json
@@ -229,15 +229,22 @@ class CircleAPI(abc.ABC):
         return artifacts
 
 
+class _SlackMessageItem(TypedDict):
+    urls: dict[str, str]
+    success: bool
+
+
 class SlackMessage:
     """Parses a Slack message as sent by CircleCI"""
+
+    parsed: list[_SlackMessageItem]
 
     def __init__(self, _headers: Mapping[str, str], data: bytes) -> None:
         response_text = data.decode("utf-8")
         try:
             data = json.loads(response_text)
         except json.decoder.JSONDecodeError:
-            raise RuntimeError("Unable to decore CircleCI Slack message")
+            raise RuntimeError("Unable to decode CircleCI Slack message")
         self.parsed = []
         for attachment in data["attachments"]:
             text = attachment["text"]
