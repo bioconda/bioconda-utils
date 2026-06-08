@@ -259,10 +259,12 @@ class SlackMessage:
             urls = {
                 key: url for url, key in re.findall(r"<(http[^|>]+)\|([^>]+)>", text)
             }
-            self.parsed.append(_SlackMessageItem(
-                urls=urls,
-                success=success,
-            ))
+            self.parsed.append(
+                _SlackMessageItem(
+                    urls=urls,
+                    success=success,
+                )
+            )
 
     def __str__(self) -> str:
         return "|".join(
