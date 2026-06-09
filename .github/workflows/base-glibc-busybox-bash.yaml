@@ -23,13 +23,13 @@ jobs:
       # The base image is not intended to change often and should be used with
       # version tags or checksum IDs, but not via "latest".
       MAJOR_VERSION: 3
-      MINOR_VERSION: 1
+      MINOR_VERSION: 2
       IMAGE_NAME: base-glibc-busybox-bash
       BUSYBOX_VERSION: '1.36.1'
       DEBIAN_VERSION: '12.5'
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Set up QEMU
       run: |

@@ -21,11 +21,11 @@ jobs:
       options: --privileged
     env:
       MAJOR_VERSION: 3
-      MINOR_VERSION: 1
+      MINOR_VERSION: 2
       IMAGE_NAME: create-env
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Set up QEMU
       run: |

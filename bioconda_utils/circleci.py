@@ -2,6 +2,7 @@
 CircleCI Web-API Bindings
 """
 
+from dataclasses import dataclass
 import abc
 import logging
 from typing import Any
@@ -229,15 +230,23 @@ class CircleAPI(abc.ABC):
         return artifacts
 
 
+@dataclass
+class _SlackMessageItem:
+    urls: dict[str, str]
+    success: bool
+
+
 class SlackMessage:
     """Parses a Slack message as sent by CircleCI"""
+
+    parsed: list[_SlackMessageItem]
 
     def __init__(self, _headers: Mapping[str, str], data: bytes) -> None:
         response_text = data.decode("utf-8")
         try:
             data = json.loads(response_text)
         except json.decoder.JSONDecodeError:
-            raise RuntimeError("Unable to decore CircleCI Slack message")
+            raise RuntimeError("Unable to decode CircleCI Slack message")
         self.parsed = []
         for attachment in data["attachments"]:
             text = attachment["text"]
@@ -251,15 +260,15 @@ class SlackMessage:
                 key: url for url, key in re.findall(r"<(http[^|>]+)\|([^>]+)>", text)
             }
             self.parsed.append(
-                {
-                    "urls": urls,
-                    "success": success,
-                }
+                _SlackMessageItem(
+                    urls=urls,
+                    success=success,
+                )
             )
 
     def __str__(self) -> str:
         return "|".join(
-            f"success={x['success']} {':'.join(x['urls'].keys())}" for x in self.parsed
+            f"success={x.success} {':'.join(x.urls.keys())}" for x in self.parsed
         )
 
 
