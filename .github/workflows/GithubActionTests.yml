@@ -8,10 +8,10 @@ jobs:
   qc:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/ruff-action@v3
+      - uses: actions/checkout@v6
+      - uses: astral-sh/ruff-action@v4.0.0
         name: ruff check
-      - uses: astral-sh/ruff-action@v3
+      - uses: astral-sh/ruff-action@v4.0.0
         name: ruff format
         with:
           args: "format --check --diff"
@@ -42,7 +42,7 @@ jobs:
           - long_running_2
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -80,7 +80,7 @@ jobs:
     name: OSX tests
     runs-on: macos-15-intel
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -112,7 +112,7 @@ jobs:
     name: autobump test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: set path
         run: echo "/opt/mambaforge/bin" >> $GITHUB_PATH
 
