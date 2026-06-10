@@ -33,6 +33,7 @@ from networkx.drawing.nx_pydot import write_dot
 import pandas
 
 from . import __version__ as VERSION
+from ._types import ContainerPlatform
 from . import utils
 from .build import build_recipes
 from . import docker_utils
@@ -641,6 +642,12 @@ from environment, even after successful build and test.""",
     help="Disable fast resolve: always run the full finalized conda solver on the host, "
     "even when building with Docker. Useful for debugging build string mismatches.",
 )
+@arg(
+    "--container-platform",
+    action="append",
+    choices=["linux/amd64", "linux/arm64"],
+    help="Docker platform to build/test/push for mulled containers. May be repeated.",
+)
 @arg("--exclude", nargs="+", help="Packages to exclude during this run")
 @arg(
     "--subdag-depth",
@@ -676,6 +683,7 @@ def build(
     disable_live_logs=False,
     no_presolved_mulled_test=False,
     no_fast_resolve=False,
+    container_platform: list[ContainerPlatform] | None = None,
     exclude=None,
     subdag_depth=None,
 ):
@@ -753,6 +761,7 @@ def build(
         subdag_depth=subdag_depth,
         presolved_mulled_test=not no_presolved_mulled_test,
         fast_resolve=not no_fast_resolve,
+        container_platforms=container_platform,
     )
     exit(0 if success else 1)
 
@@ -787,6 +796,12 @@ def build(
     default="azure",
     help="Application hosting build artifacts (e.g., Azure, Circle CI, or GitHub Actions).",
 )
+@arg(
+    "--container-platform",
+    action="append",
+    choices=["linux/amd64", "linux/arm64"],
+    help="Docker platform to build/test/push for mulled containers. May be repeated.",
+)
 @enable_logging()
 def handle_merged_pr(
     recipe_folder,
@@ -797,6 +812,7 @@ def handle_merged_pr(
     fallback="build",
     quay_upload_target=None,
     artifact_source="azure",
+    container_platform: list[ContainerPlatform] | None = None,
 ):
     label = os.getenv("BIOCONDA_LABEL", None) or None
     if repo is None:
@@ -821,6 +837,7 @@ def handle_merged_pr(
             anaconda_upload=not dryrun,
             mulled_upload_target=quay_upload_target if not dryrun else None,
             mulled_test=True,
+            container_platform=container_platform,
         )
     else:
         success = res != UploadResult.FAILURE

@@ -2,7 +2,10 @@
 Package Builder
 """
 
+from __future__ import annotations
+
 import subprocess as sp
+from collections.abc import Sequence
 from collections import defaultdict
 import itertools
 import logging
@@ -23,6 +26,7 @@ from . import upload
 from . import lint
 from . import graph
 from . import recipe as _recipe
+from ._types import ContainerPlatform, RecipeMetaLike
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +35,60 @@ class BuildResult(NamedTuple):
     """Result tuple for builds comprising success status and docker images."""
 
     success: bool
-    mulled_images: list[str] | None
+    mulled_images: list[MulledImage] | None
+
+
+class MulledImage(NamedTuple):
+    """Mulled image metadata for one built package and target platform."""
+
+    spec: str
+    target_platform: ContainerPlatform | None
+    repository: str
+    image_name: str
+    remote_tag: str
+
+
+def _docker_platform_tag_suffix(
+    target_platform: ContainerPlatform | None,
+) -> str | None:
+    if target_platform in (None, "linux/amd64"):
+        return None
+    return target_platform.removeprefix("linux/").replace("/", "-")
+
+
+def mulled_image_metadata(
+    spec: str,
+    quay_target: str,
+    target_platform: ContainerPlatform | None = None,
+) -> MulledImage:
+    """Return predictable remote image metadata for a mulled package spec."""
+    pkg_name_and_version, pkg_build_string = spec.rsplit("--", 1)
+    pkg_name, pkg_version = pkg_name_and_version.rsplit("=", 1)
+    tag = f"{pkg_version}--{pkg_build_string}"
+    suffix = _docker_platform_tag_suffix(target_platform)
+    if suffix:
+        tag = f"{tag}-{suffix}"
+    return MulledImage(
+        spec=spec,
+        target_platform=target_platform,
+        repository=quay_target,
+        image_name=pkg_name,
+        remote_tag=f"quay.io/{quay_target}/{pkg_name}:{tag}",
+    )
+
+
+def _container_platform_is_eligible(
+    meta: RecipeMetaLike,
+    target_platform: ContainerPlatform | None,
+) -> bool:
+    if target_platform in (None, "linux/amd64"):
+        return True
+    if target_platform != "linux/arm64":
+        return False
+    if meta.get_value("build/noarch", default=False):
+        return True
+    additional_platforms = meta.get_value("extra/additional-platforms", default=[])
+    return "linux-aarch64" in additional_platforms
 
 
 def conda_build_purge() -> None:
@@ -68,6 +125,7 @@ def build(
     live_logs: bool = True,
     presolved_mulled_test: bool = True,
     mulled_upload_target: str | None = None,
+    container_platforms: Sequence[ContainerPlatform] | None = None,
 ) -> BuildResult:
     """
     Build a single recipe for a single env
@@ -214,26 +272,53 @@ def build(
 
     if mulled_test:
         logger.info("TEST START via mulled-build %s", recipe)
-        mulled_images = []
+        mulled_images: list[MulledImage] = []
         # Use pre-solved test env unless we need the mulled-build image for upload
-        use_presolved = presolved_mulled_test and not mulled_upload_target
+        requested_platforms: list[ContainerPlatform | None] = (
+            list(container_platforms) if container_platforms else [None]
+        )
         for pkg_path in pkg_paths:
-            try:
-                report_resources(f"Starting mulled build for {pkg_path}")
-                pkg_test.test_package(
-                    pkg_path,
-                    base_image=base_image,
-                    conda_image=mulled_conda_image,
-                    live_logs=live_logs,
-                    presolved=use_presolved,
+            for target_platform in requested_platforms:
+                if not _container_platform_is_eligible(meta, target_platform):
+                    logger.info(
+                        "TEST SKIP: skipping mulled-build for %s on %s",
+                        recipe,
+                        target_platform,
+                    )
+                    continue
+                use_presolved = (
+                    presolved_mulled_test
+                    and not mulled_upload_target
+                    and target_platform in (None, "linux/amd64")
                 )
-            except sp.CalledProcessError:
-                logger.error("TEST FAILED: %s", recipe)
-                return BuildResult(False, None)
-            finally:
-                report_resources(f"Finished mulled build for {pkg_path}")
-            logger.info("TEST SUCCESS %s", recipe)
-            mulled_images.append(pkg_test.get_image_name(pkg_path))
+                try:
+                    report_resources(
+                        f"Starting mulled build for {pkg_path} on {target_platform or 'native'}"
+                    )
+                    pkg_test.test_package(
+                        pkg_path,
+                        base_image=base_image,
+                        conda_image=mulled_conda_image,
+                        live_logs=live_logs,
+                        presolved=use_presolved,
+                        target_platform=target_platform,
+                    )
+                except sp.CalledProcessError:
+                    logger.error("TEST FAILED: %s", recipe)
+                    return BuildResult(False, None)
+                finally:
+                    report_resources(
+                        f"Finished mulled build for {pkg_path} on {target_platform or 'native'}"
+                    )
+                logger.info("TEST SUCCESS %s", recipe)
+                image_spec = pkg_test.get_image_name(pkg_path)
+                mulled_images.append(
+                    mulled_image_metadata(
+                        image_spec,
+                        mulled_upload_target or "biocontainers",
+                        target_platform,
+                    )
+                )
         return BuildResult(True, mulled_images)
 
     return BuildResult(True, None)
@@ -400,6 +485,7 @@ def build_recipes(
     subdag_depth: int | None = None,
     presolved_mulled_test: bool = True,
     fast_resolve: bool = True,
+    container_platforms: Sequence[ContainerPlatform] | None = None,
 ) -> bool:
     """
     Build one or many bioconda packages.
@@ -582,6 +668,7 @@ def build_recipes(
             live_logs=live_logs,
             presolved_mulled_test=presolved_mulled_test,
             mulled_upload_target=mulled_upload_target,
+            container_platforms=container_platforms,
         )
 
         if not res.success:
@@ -597,8 +684,12 @@ def build_recipes(
                             failed_uploads.append(pkg)
                 if mulled_upload_target:
                     for img in res.mulled_images or []:
-                        upload.mulled_upload(img, mulled_upload_target)
-                        docker_utils.purgeImage(mulled_upload_target, img)
+                        upload.mulled_upload(
+                            img.spec, mulled_upload_target, img.target_platform
+                        )
+                        docker_utils.purgeImage(
+                            mulled_upload_target, img.spec, img.target_platform
+                        )
 
         # remove traces of the build
         if not keep_old_work:
