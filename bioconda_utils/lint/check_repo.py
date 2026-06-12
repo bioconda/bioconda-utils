@@ -39,29 +39,20 @@ class build_number_needs_bump(LintCheck):
     least as high as specified in the recipe already exists in the
     channel. Please increase the build number.
 
+    Currently, bioconda-utils does not support specifying build numbers
+    under outputs, so only a single global build number in the top-level
+    build section is supported.
+
     """
 
     requires = ["missing_build_number"]
 
     def check_recipe(self, recipe: _recipe.Recipe) -> None:
-        outputs = recipe.get("outputs", "")
-        if not outputs:
-            bldnos = utils.RepoData().get_package_data(
-                key="build_number", name=recipe.name, version=recipe.version
-            )
-            if bldnos and recipe.build_number <= max(bldnos):
-                self.message("build/number", data=max(bldnos))
-        else:
-            for i in range(len(outputs)):
-                version = recipe.get_inherited_value(i, "package/version")
-                build_number = int(recipe.get_inherited_value(i, "build/number"))
-                bldnos = utils.RepoData().get_package_data(
-                    key="build_number",
-                    name=recipe.get(f"outputs/{i}/name"),
-                    version=version,
-                )
-                if bldnos and build_number <= max(bldnos):
-                    self.message(f"outputs/{i}/build/number", data=max(bldnos))
+        bldnos = utils.RepoData().get_package_data(
+            key="build_number", name=recipe.name, version=recipe.version
+        )
+        if bldnos and recipe.build_number <= max(bldnos):
+            self.message("build/number", data=max(bldnos))
 
     def fix(self, _message: Any, data: int) -> bool:
         self.recipe.reset_buildnumber(data + 1)
@@ -73,30 +64,22 @@ class build_number_needs_reset(LintCheck):
 
     No previous build of a package of this name and this version exists,
     the build number should therefore be 0.
+
+    Currently, bioconda-utils does not support specifying build numbers
+    under outputs, so only a single global build number in the top-level
+    build section is supported.
+
     """
 
     requires = ["missing_build_number"]
 
     def check_recipe(self, recipe: _recipe.Recipe) -> None:
-        outputs = recipe.get("outputs", "")
-        if not outputs:
-            bldnos = utils.RepoData().get_package_data(
-                key="build_number", name=recipe.name, version=recipe.version
-            )
-            if not bldnos and recipe.build_number > 0:
-                self.message("build/number", data=0)
-        else:
-            for i in range(len(outputs)):
-                version = recipe.get_inherited_value(i, "package/version")
-                build_number = int(recipe.get_inherited_value(i, "build/number"))
-                bldnos = utils.RepoData().get_package_data(
-                    key="build_number",
-                    name=recipe.get(f"outputs/{i}/name"),
-                    version=version,
-                )
-                if not bldnos and build_number > 0:
-                    self.message(f"outputs/{i}/build/number", data=0)
-
+        bldnos = utils.RepoData().get_package_data(
+            key="build_number", name=recipe.name, version=recipe.version
+        )
+        if not bldnos and recipe.build_number > 0:
+            self.message("build/number", data=0)
+            
     def fix(self, _message: Any, data: int) -> bool:
         self.recipe.reset_buildnumber(data)
         return True
