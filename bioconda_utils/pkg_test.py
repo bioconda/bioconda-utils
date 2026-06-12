@@ -11,6 +11,7 @@ import logging
 from collections.abc import Sequence
 
 from . import utils
+from ._types import ContainerPlatform
 
 from conda_build.metadata import MetaData
 from conda_index.index import update_index
@@ -264,6 +265,7 @@ def test_package(
     conda_image: str = CREATE_ENV_IMAGE,
     live_logs: bool = True,
     presolved: bool = True,
+    target_platform: ContainerPlatform | None = None,
 ) -> sp.CompletedProcess:
     """
     Tests a built package in a minimal docker container.
@@ -299,6 +301,9 @@ def test_package(
         If True, attempt to pre-solve the test environment on the host and
         pass an @EXPLICIT spec file to the container, avoiding a redundant
         solver run. Falls back to the original mulled-build path on failure.
+
+    target_platform : ContainerPlatform | None
+        Docker target platform to pass to mulled-build, e.g. linux/arm64.
     """
 
     assert path.endswith((".tar.bz2", ".conda")), f"Unrecognized path {path}"
@@ -362,6 +367,8 @@ def test_package(
     ]
     if name_override:
         cmd += ["--name-override", name_override]
+    if target_platform:
+        cmd += ["--target-platform", target_platform]
     cmd += channel_args
     cmd += shlex.split(mulled_args)
 

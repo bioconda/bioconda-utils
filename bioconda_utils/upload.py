@@ -8,6 +8,7 @@ import shutil
 import subprocess as sp
 import logging
 from . import utils
+from ._types import ContainerPlatform
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +68,11 @@ def anaconda_upload(
             return False
 
 
-def mulled_upload(image: str, quay_target: str) -> sp.CompletedProcess:
+def mulled_upload(
+    image: str,
+    quay_target: str,
+    target_platform: ContainerPlatform | None = None,
+) -> sp.CompletedProcess:
     """
     Upload the build Docker images to quay.io with ``mulled-build push``.
 
@@ -76,8 +81,11 @@ def mulled_upload(image: str, quay_target: str) -> sp.CompletedProcess:
     Args:
       image: name of image to push
       quary_target: name of image on quay
+      target_platform: Docker target platform to pass to mulled-build
     """
     cmd = ["mulled-build", "push", image, "-n", quay_target]
+    if target_platform:
+        cmd += ["--target-platform", target_platform]
 
     # galaxy-lib always downloads involucro, unless it's in cwd or its path is
     # explicitly given.
