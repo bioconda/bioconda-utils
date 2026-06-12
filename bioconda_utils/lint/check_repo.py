@@ -79,7 +79,7 @@ class build_number_needs_reset(LintCheck):
         )
         if not bldnos and recipe.build_number > 0:
             self.message("build/number", data=0)
-            
+
     def fix(self, _message: Any, data: int) -> bool:
         self.recipe.reset_buildnumber(data)
         return True
