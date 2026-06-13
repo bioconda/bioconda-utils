@@ -3,7 +3,8 @@ from __future__ import annotations
 from typing import Any, Literal, Protocol, TypeAlias
 
 
-ContainerPlatform: TypeAlias = Literal["linux/amd64", "linux/arm64"]
+ContainerPlatform: TypeAlias = Literal["linux/amd64", "linux/arm64", "linux/riscv64"]
+CONTAINER_PLATFORMS: list[str] = list(typing.get_args(ContainerPlatform))
 
 
 class RecipeMetaLike(Protocol):

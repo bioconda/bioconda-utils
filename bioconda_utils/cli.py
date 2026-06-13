@@ -33,7 +33,7 @@ from networkx.drawing.nx_pydot import write_dot
 import pandas
 
 from . import __version__ as VERSION
-from ._types import ContainerPlatform
+from ._types import CONTAINER_PLATFORMS, ContainerPlatform
 from . import utils
 from .build import build_recipes
 from . import docker_utils
@@ -512,6 +512,11 @@ def do_lint(
 )
 @arg("--docker", action="store_true", help="Build packages in docker container.")
 @arg(
+    "--platform",
+    choices=CONTAINER_PLATFORMS,
+    help="Docker platform to build for (e.g. linux/arm64). Requires --docker.",
+)
+@arg(
     "--mulled-test",
     action="store_true",
     help="Run a mulled-build test on the built package",
@@ -645,7 +650,7 @@ from environment, even after successful build and test.""",
 @arg(
     "--container-platform",
     action="append",
-    choices=["linux/amd64", "linux/arm64"],
+    choices=CONTAINER_PLATFORMS,
     help="Docker platform to build/test/push for mulled containers. May be repeated.",
 )
 @arg("--exclude", nargs="+", help="Packages to exclude during this run")
@@ -663,6 +668,7 @@ def build(
     testonly=False,
     force=False,
     docker=None,
+    platform=None,
     mulled_test=False,
     build_script_template=None,
     pkg_dir=None,
@@ -799,7 +805,7 @@ def build(
 @arg(
     "--container-platform",
     action="append",
-    choices=["linux/amd64", "linux/arm64"],
+    choices=CONTAINER_PLATFORMS,
     help="Docker platform to build/test/push for mulled containers. May be repeated.",
 )
 @enable_logging()

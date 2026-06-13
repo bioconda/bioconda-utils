@@ -172,6 +172,7 @@ class RecipeBuilder:
         build_image: bool = False,
         image_build_dir: str | None = None,
         docker_base_image: str | None = None,
+        target_platform: ContainerPlatform | None = None,
     ) -> None:
         """
         Class to handle building a custom docker container that can be used for
@@ -256,6 +257,7 @@ class RecipeBuilder:
         """
         self.requirements = requirements
         self.conda_build_args = ""
+        self.target_platform: ContainerPlatform | None = target_platform
         self.build_script_template: str = build_script_template
         self.dockerfile_template = dockerfile_template
         self.keep_image = keep_image
@@ -489,6 +491,10 @@ class RecipeBuilder:
             "--net",
             "host",
             "--rm",
+        ]
+        if self.target_platform:
+            cmd += ["--platform", self.target_platform]
+        cmd += [
             "-v",
             f"{build_script}:/opt/build_script.bash",
             "-v",
