@@ -702,6 +702,8 @@ def build(
 
     recipes = get_recipes(cfg, recipe_folder, packages, git_range)
 
+    if platform and not docker:
+        raise ValueError("--platform requires --docker")
     if docker:
         if build_script_template is not None:
             build_script_template = open(build_script_template).read()
@@ -733,9 +735,13 @@ def build(
             keep_image=keep_image,
             build_image=build_image,
             docker_base_image=docker_base_image,
+            target_platform=platform,
         )
     else:
         docker_builder = None
+
+    if docker and platform and container_platform is None:
+        container_platform = [platform]
 
     if lint_exclude and not lint:
         logger.warning("--lint-exclude has no effect unless --lint is specified.")

@@ -83,12 +83,14 @@ def _container_platform_is_eligible(
 ) -> bool:
     if target_platform in (None, "linux/amd64"):
         return True
-    if target_platform != "linux/arm64":
-        return False
     if meta.get_value("build/noarch", default=False):
         return True
     additional_platforms = meta.get_value("extra/additional-platforms", default=[])
-    return "linux-aarch64" in additional_platforms
+    if target_platform == "linux/arm64":
+        return "linux-aarch64" in additional_platforms
+    if target_platform == "linux/riscv64":
+        return "linux-riscv64" in additional_platforms
+    return False
 
 
 def conda_build_purge() -> None:
@@ -279,7 +281,7 @@ def build(
         )
         for pkg_path in pkg_paths:
             for target_platform in requested_platforms:
-                if not _container_platform_is_eligible(meta, target_platform):
+                if container_platforms is None and not _container_platform_is_eligible(meta, target_platform):
                     logger.info(
                         "TEST SKIP: skipping mulled-build for %s on %s",
                         recipe,
