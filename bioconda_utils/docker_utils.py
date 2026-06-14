@@ -60,7 +60,7 @@ from typing import Protocol
 from conda import exports as conda_exports
 
 from . import utils
-from ._types import ContainerPlatform
+from ._types import ContainerPlatform, docker_platform_tag_suffix
 
 import logging
 
@@ -527,9 +527,8 @@ def purgeImage(
 ) -> None:
     pkg_name_and_version, pkg_build_string = img.rsplit("--", 1)
     pkg_name, pkg_version = pkg_name_and_version.rsplit("=", 1)
-    suffix = ""
-    if target_platform and target_platform != "linux/amd64":
-        suffix = "-" + target_platform.removeprefix("linux/").replace("/", "-")
+    suffix = docker_platform_tag_suffix(target_platform)
+    suffix = f"-{suffix}" if suffix else ""
     pkg_container_image = (
         f"quay.io/{mulled_upload_target}/{pkg_name}:{pkg_version}--{pkg_build_string}{suffix}"
     )

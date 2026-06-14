@@ -13,11 +13,63 @@ import backoff
 import json
 from pathlib import Path
 from bioconda_utils import utils
+from bioconda_utils._types import CONTAINER_PLATFORMS, ContainerPlatform, docker_platform_tag_suffix
 from bioconda_utils.upload import anaconda_upload, skopeo_upload
 
 logger = logging.getLogger(__name__)
 
 IMAGE_RE = re.compile(r"(.+)(?::|%3A|---)(.+)\.tar\.gz$")
+# Exceptions to the {platform}-packages naming convention.
+# Most platforms derive their artifact name automatically as
+# f"{platform}-packages"; these entries exist only because
+# the workflow artifact names don't match that formula.
+GHA_ARTIFACT_NAME_EXCEPTIONS = {
+    "linux-64": "linux-packages",
+    "osx-64": "osx-packages",
+    "linux-aarch64": "linux-arm64-packages",
+}
+
+
+def _container_image_matches_platforms(
+    image_path: str, container_platforms: set[ContainerPlatform] | None
+) -> bool:
+    if container_platforms is None:
+        return True
+    m = IMAGE_RE.match(os.path.basename(image_path))
+    assert m, f"Could not parse image name from {image_path}"
+    _, tag = m.groups()
+    for platform in container_platforms:
+        suffix = docker_platform_tag_suffix(platform)
+        if suffix is None:
+            # The canonical linux/amd64 mulled tag is unsuffixed.
+            known_suffixes = {
+                docker_platform_tag_suffix(p)
+                for p in CONTAINER_PLATFORMS
+                if p != platform
+            }
+            known_suffixes.discard(None)
+            if not any(
+                tag.endswith(f"-{known_suffix}") for known_suffix in known_suffixes
+            ):
+                return True
+        elif tag.endswith(f"-{suffix}"):
+            return True
+    return False
+
+
+def _gha_artifact_names_for_platform(platform: str) -> set[str]:
+    return {
+        f"{platform}-packages",
+        GHA_ARTIFACT_NAME_EXCEPTIONS.get(platform, f"{platform}-packages"),
+    }
+
+
+def _job_platform_from_package_platform(package_platform: str) -> str:
+    if package_platform == "linux-64":
+        return "linux"
+    if package_platform == "osx-64":
+        return "osx"
+    return package_platform
 
 
 class UploadResult(Enum):
@@ -35,9 +87,17 @@ def upload_pr_artifacts(
     mulled_upload_target: str | None = None,
     label: str | None = None,
     artifact_source: str = "azure",
+    package_platform: str | None = None,
+    container_platforms: list[ContainerPlatform] | None = None,
 ) -> UploadResult:
     _config = utils.load_config(config)
-    repodata = utils.RepoData()
+    if package_platform is None:
+        repodata = utils.RepoData()
+        package_platform = repodata.platform2subdir(repodata.native_platform())
+    job_platform = _job_platform_from_package_platform(package_platform)
+    selected_container_platforms = (
+        set(container_platforms) if container_platforms is not None else None
+    )
 
     gh = utils.get_github_client()
 
@@ -49,7 +109,15 @@ def upload_pr_artifacts(
         # no PR found for the commit
         return UploadResult.NO_PR
     pr = prs[0]
-    artifacts = set(fetch_artifacts(pr, artifact_source, repo))
+    artifacts = set(
+        fetch_artifacts(
+            pr,
+            artifact_source,
+            repo,
+            job_platform=job_platform,
+            package_platform=package_platform,
+        )
+    )
     if not artifacts:
         # no artifacts found, fail and rebuild packages
         logger.info("No artifacts found.")
@@ -80,10 +148,8 @@ def upload_pr_artifacts(
                     zipfile.ZipFile(artifact_path).extractall(artifact_dir)
 
                 # get all the contained packages and images and upload them
-                platform_patterns = [
-                    repodata.platform2subdir(repodata.native_platform())
-                ]
-                if repodata.native_platform().startswith("linux"):
+                platform_patterns = [package_platform]
+                if package_platform.startswith("linux"):
                     platform_patterns.append("noarch")
 
                 for platform_pattern in platform_patterns:
@@ -93,6 +159,7 @@ def upload_pr_artifacts(
                         for pkg in glob.glob(pattern):
                             if dryrun:
                                 logger.info(f"Would upload {pkg} to anaconda.org.")
+                                success.append(True)
                             else:
                                 logger.info(f"Uploading {pkg} to anaconda.org.")
                                 # upload the package
@@ -104,6 +171,13 @@ def upload_pr_artifacts(
                     pattern = f"{tmpdir}/*/images/*.tar.gz"
                     logger.info(f"Checking for images at {pattern}.")
                     for img in glob.glob(pattern):
+                        if not _container_image_matches_platforms(
+                            img, selected_container_platforms
+                        ):
+                            logger.info(
+                                "Skipping image %s for container platform filter.", img
+                            )
+                            continue
                         m = IMAGE_RE.match(os.path.basename(img))
                         assert m, f"Could not parse image name from {img}"
                         name, tag = m.groups()
@@ -116,12 +190,16 @@ def upload_pr_artifacts(
                         os.rename(img, fixed_img_name)
                         if dryrun:
                             logger.info(f"Would upload {img} to {target}.")
+                            success.append(True)
                         else:
                             # upload the image
                             logger.info(f"Uploading {img} to {target}.")
                             success.append(
                                 skopeo_upload(fixed_img_name, target, creds=quay_login)
                             )
+        if not success:
+            logger.info("No matching artifacts found to upload.")
+            return UploadResult.NO_ARTIFACTS
         if all(success):
             return UploadResult.SUCCESS
         else:
@@ -148,7 +226,13 @@ def download_artifact(url: str, to_path: str, artifact_source: str) -> None:
                 f.write(chunk)
 
 
-def fetch_artifacts(pr: Any, artifact_source: str, repo: Any) -> Iterator[str]:
+def fetch_artifacts(
+    pr: Any,
+    artifact_source: str,
+    repo: Any,
+    job_platform: str | None = None,
+    package_platform: str | None = None,
+) -> Iterator[str]:
     """
     Fetch artifacts from a PR.
 
@@ -165,27 +249,33 @@ def fetch_artifacts(pr: Any, artifact_source: str, repo: Any) -> Iterator[str]:
     commit = commits[commits.totalCount - 1]
     # get the artifacts
     check_runs = commit.get_check_runs()
-    repodata = utils.RepoData()
-    platform = repodata.native_platform()
+    if job_platform is None or package_platform is None:
+        repodata = utils.RepoData()
+        job_platform = job_platform or repodata.native_platform()
+        package_platform = package_platform or repodata.platform2subdir(job_platform)
+    assert job_platform is not None
+    assert package_platform is not None
     for check_run in check_runs:
         if (
             artifact_source == "azure"
             and check_run.app.slug == "azure-pipelines"
-            and check_run.name.startswith(f"bioconda.bioconda-recipes (test_{platform}")
+            and check_run.name.startswith(
+                f"bioconda.bioconda-recipes (test_{job_platform}"
+            )
         ):
             # azure builds
             artifact_url = get_azure_artifacts(check_run)
             yield from artifact_url
         elif artifact_source == "circleci" and check_run.app.slug == "circleci-checks":
             # Circle CI builds
-            artifact_url = get_circleci_artifacts(check_run, platform)
+            artifact_url = get_circleci_artifacts(check_run, job_platform)
             yield from artifact_url
         elif (
             artifact_source == "github-actions"
             and check_run.app.slug == "github-actions"
         ):
             # GitHubActions builds
-            artifact_url = get_gha_artifacts(check_run, platform, repo)
+            artifact_url = get_gha_artifacts(check_run, package_platform, repo)
             yield from artifact_url
 
 
@@ -260,7 +350,10 @@ def get_gha_artifacts(check_run: Any, platform: str, repo: Any) -> Iterator[str]
         # The workflow run is different from the check run
         run = repo.get_workflow_run(int(gha_workflow_id))
         artifacts = run.get_artifacts()
+        artifact_names = _gha_artifact_names_for_platform(platform)
         for artifact in artifacts:
+            if artifact.name not in artifact_names:
+                continue
             # This URL is valid for 1 min and requires a token
             artifact_url = artifact.archive_download_url
             yield artifact_url

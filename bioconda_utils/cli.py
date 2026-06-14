@@ -49,6 +49,8 @@ warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 
 logger = logging.getLogger(__name__)
 
+PACKAGE_PLATFORMS = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64"]
+
 
 def enable_logging(default_loglevel="info", default_file_loglevel="debug"):
     """Adds the parameter ``--loglevel`` and sets up logging
@@ -814,6 +816,11 @@ def build(
     choices=CONTAINER_PLATFORMS,
     help="Docker platform to build/test/push for mulled containers. May be repeated.",
 )
+@arg(
+    "--package-platform",
+    choices=PACKAGE_PLATFORMS,
+    help="Conda package platform to upload from PR artifacts. Defaults to native platform.",
+)
 @enable_logging()
 def handle_merged_pr(
     recipe_folder,
@@ -825,6 +832,7 @@ def handle_merged_pr(
     quay_upload_target=None,
     artifact_source="azure",
     container_platform: list[ContainerPlatform] | None = None,
+    package_platform: str | None = None,
 ):
     label = os.getenv("BIOCONDA_LABEL", None) or None
     if repo is None:
@@ -840,8 +848,19 @@ def handle_merged_pr(
         mulled_upload_target=quay_upload_target,
         label=label,
         artifact_source=artifact_source,
+        package_platform=package_platform,
+        container_platforms=container_platform,
     )
     if res == UploadResult.NO_ARTIFACTS and fallback == "build":
+        if package_platform is not None and package_platform != "noarch":
+            native_package_platform = utils.RepoData.platform2subdir(
+                utils.RepoData.native_platform()
+            )
+            if package_platform != native_package_platform:
+                raise ValueError(
+                    "--fallback build cannot build non-native package platform "
+                    f"{package_platform} from {native_package_platform}"
+                )
         success = build(
             recipe_folder,
             config,

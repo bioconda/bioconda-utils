@@ -26,7 +26,7 @@ from . import upload
 from . import lint
 from . import graph
 from . import recipe as _recipe
-from ._types import ContainerPlatform, RecipeMetaLike
+from ._types import ContainerPlatform, RecipeMetaLike, docker_platform_tag_suffix
 
 logger = logging.getLogger(__name__)
 
@@ -48,14 +48,6 @@ class MulledImage(NamedTuple):
     remote_tag: str
 
 
-def _docker_platform_tag_suffix(
-    target_platform: ContainerPlatform | None,
-) -> str | None:
-    if target_platform in (None, "linux/amd64"):
-        return None
-    return target_platform.removeprefix("linux/").replace("/", "-")
-
-
 def mulled_image_metadata(
     spec: str,
     quay_target: str,
@@ -65,7 +57,7 @@ def mulled_image_metadata(
     pkg_name_and_version, pkg_build_string = spec.rsplit("--", 1)
     pkg_name, pkg_version = pkg_name_and_version.rsplit("=", 1)
     tag = f"{pkg_version}--{pkg_build_string}"
-    suffix = _docker_platform_tag_suffix(target_platform)
+    suffix = docker_platform_tag_suffix(target_platform)
     if suffix:
         tag = f"{tag}-{suffix}"
     return MulledImage(
