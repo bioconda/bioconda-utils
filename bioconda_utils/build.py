@@ -44,8 +44,12 @@ class MulledImage(NamedTuple):
     spec: str
     target_platform: ContainerPlatform | None
     repository: str
-    image_name: str
     remote_tag: str
+
+    @property
+    def image_name(self) -> str:
+        name, _ = self.spec.rsplit("--", 1)[0].rsplit("=", 1)
+        return name
 
 
 def mulled_image_metadata(
@@ -64,7 +68,6 @@ def mulled_image_metadata(
         spec=spec,
         target_platform=target_platform,
         repository=quay_target,
-        image_name=pkg_name,
         remote_tag=f"quay.io/{quay_target}/{pkg_name}:{tag}",
     )
 
