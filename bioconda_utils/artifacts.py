@@ -13,7 +13,11 @@ import backoff
 import json
 from pathlib import Path
 from bioconda_utils import utils
-from bioconda_utils._types import CONTAINER_PLATFORMS, ContainerPlatform, docker_platform_tag_suffix
+from bioconda_utils._types import (
+    CONTAINER_PLATFORMS,
+    ContainerPlatform,
+    docker_platform_tag_suffix,
+)
 from bioconda_utils.upload import anaconda_upload, skopeo_upload
 
 logger = logging.getLogger(__name__)

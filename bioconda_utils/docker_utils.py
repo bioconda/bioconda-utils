@@ -529,9 +529,7 @@ def purgeImage(
     pkg_name, pkg_version = pkg_name_and_version.rsplit("=", 1)
     suffix = docker_platform_tag_suffix(target_platform)
     suffix = f"-{suffix}" if suffix else ""
-    pkg_container_image = (
-        f"quay.io/{mulled_upload_target}/{pkg_name}:{pkg_version}--{pkg_build_string}{suffix}"
-    )
+    pkg_container_image = f"quay.io/{mulled_upload_target}/{pkg_name}:{pkg_version}--{pkg_build_string}{suffix}"
     cmd = ["docker", "rmi", pkg_container_image]
     utils.run(cmd, mask=False)
 
