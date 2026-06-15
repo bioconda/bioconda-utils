@@ -44,12 +44,21 @@ class MulledImage(NamedTuple):
     spec: str
     target_platform: ContainerPlatform | None
     repository: str
-    remote_tag: str
 
     @property
     def image_name(self) -> str:
         name, _ = self.spec.rsplit("--", 1)[0].rsplit("=", 1)
         return name
+
+    @property
+    def remote_tag(self) -> str:
+        pkg_name_and_version, pkg_build_string = self.spec.rsplit("--", 1)
+        pkg_name, pkg_version = pkg_name_and_version.rsplit("=", 1)
+        tag = f"{pkg_version}--{pkg_build_string}"
+        suffix = docker_platform_tag_suffix(self.target_platform)
+        if suffix:
+            tag = f"{tag}-{suffix}"
+        return f"quay.io/{self.repository}/{pkg_name}:{tag}"
 
 
 def mulled_image_metadata(
@@ -58,17 +67,10 @@ def mulled_image_metadata(
     target_platform: ContainerPlatform | None = None,
 ) -> MulledImage:
     """Return predictable remote image metadata for a mulled package spec."""
-    pkg_name_and_version, pkg_build_string = spec.rsplit("--", 1)
-    pkg_name, pkg_version = pkg_name_and_version.rsplit("=", 1)
-    tag = f"{pkg_version}--{pkg_build_string}"
-    suffix = docker_platform_tag_suffix(target_platform)
-    if suffix:
-        tag = f"{tag}-{suffix}"
     return MulledImage(
         spec=spec,
         target_platform=target_platform,
         repository=quay_target,
-        remote_tag=f"quay.io/{quay_target}/{pkg_name}:{tag}",
     )
 
 
