@@ -273,7 +273,9 @@ def build(
         )
         for pkg_path in pkg_paths:
             for target_platform in requested_platforms:
-                if container_platforms is None and not _container_platform_is_eligible(meta, target_platform):
+                if container_platforms is None and not _container_platform_is_eligible(
+                    meta, target_platform
+                ):
                     logger.info(
                         "TEST SKIP: skipping mulled-build for %s on %s",
                         recipe,
