@@ -1509,6 +1509,7 @@ def autobump(
     help="Platforms to annotate",
     nargs="+",
     type=str,
+    choices=sorted(conda.base.constants.PLATFORM_DIRECTORIES),
 )
 @arg(
     "--existing-only",
