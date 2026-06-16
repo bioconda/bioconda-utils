@@ -1509,7 +1509,7 @@ def autobump(
     help="Platforms to annotate",
     nargs="+",
     type=str,
-    default=["linux-64", "osx-64"],
+    choices=sorted(conda.base.constants.PLATFORM_DIRECTORIES),
 )
 @arg(
     "--existing-only",
@@ -1526,7 +1526,11 @@ def annotate_build_failures(
 ):
     valid_platform_names = set(conda.base.constants.PLATFORM_DIRECTORIES)
     if platforms is None:
-        platforms = ["linux-64", "osx-64"]
+        platforms = [
+            utils.RepoData.platform2subdir(p)
+            for p in utils.RepoData.platforms
+            if p != "noarch"
+        ]
     for recipe in recipes:
         if existing_only:
             platforms = [
