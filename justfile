@@ -8,19 +8,29 @@ format:
     ruff format .
     shfmt -i 4 -w {{shell_scripts}}
 
+# Install conda dependencies via pixi (project not installed — run `just install` separately)
 deps:
-    conda install --file bioconda_utils/bioconda_utils-requirements.txt -c conda-forge -c bioconda
-    conda install -c conda-forge ty ruff shfmt shellcheck
+    pixi install
+
+# Build & install the CLI into pixi's environment and symlink it into ~/.local/bin for global access.
+# This way the CLI can find its conda deps at runtime.
+install: deps
+    pixi run python -m pip install --no-deps --no-build-isolation .
+    mkdir -p ~/.local/bin
+    ln -sf $(pwd)/.pixi/envs/default/bin/bioconda-utils ~/.local/bin/bioconda-utils
+
+# After changing deps in pixi.toml, regenerate the shipped conda requirements file
+regenerate-requirements:
+    python scripts/generate-requirements-txt.py
+
+check-requirements:
+    python scripts/generate-requirements-txt.py --check
 
 check:
     ruff check .
     ty check .
     shellcheck {{shell_scripts}}
 
-# install a local build of the CLI for testing
-install:
-    python -m pip install --no-deps --no-build-isolation .
-
 # this takes a very long time to execute, use check if not finished with your work yet
 test: install
-    pytest
+    pixi run pytest
