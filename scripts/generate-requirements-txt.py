@@ -9,6 +9,7 @@ Usage:
     python scripts/generate-requirements-txt.py
     python scripts/generate-requirements-txt.py --check
 """
+
 import argparse
 from pathlib import Path
 
@@ -22,6 +23,7 @@ PIXI_TOML = REPO_ROOT / "pixi.toml"
 REQUIREMENTS_TXT = REPO_ROOT / "bioconda_utils" / "bioconda_utils-requirements.txt"
 SUPPORTED_DICT_KEYS = {"version", "build"}
 SPEC_OPERATORS = ("==", ">=", "<=", ">", "<", "~=", "!=")
+
 
 def read_pixi_deps():
     if not PIXI_TOML.exists():
