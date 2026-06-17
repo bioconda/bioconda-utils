@@ -1,5 +1,5 @@
 expected_failures:
-  - outputs_name_same_as_package_name
+  - missing_build_number # remove once build numbers per output are supported
 recipes:
   meta_package:
     package:
@@ -12,11 +12,11 @@ recipes:
         sha256: abc
     build:
       noarch: True
-      number: 0
     outputs:
-      - name: meta_package # offending entry
+      - name: meta_one
         build:
           noarch: True
+          number: 0
           run_exports:
             # add a run export
             # (note that jinja templating as in reality is not
@@ -29,6 +29,7 @@ recipes:
       - name: meta_two
         build:
           noarch: True
+          number: 0
           run_exports:
             # add a run export
             # (note that jinja templating as in reality is not

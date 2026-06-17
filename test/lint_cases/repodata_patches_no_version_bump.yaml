@@ -1,16 +1,18 @@
 expected_failures:
-  - cran_packages_to_conda_forge
+  - repodata_patches_no_version_bump
+  - build_number_needs_bump
 repodata:
-  conda-forge: # offending entry
-    three:
-      - version: 1.0
-    R:
-      - version: 1.0
+  bioconda:
+    bioconda-repodata-patches:
+      - version: "20260421"
+        platform: "noarch"
+      - version: "20250301"
+        platform: "noarch"
 recipes:
-  one:
+  bioconda-repodata-patches:
     package:
-      name: one
-      version: 0.1
+      name: bioconda-repodata-patches
+      version: "20260421"
     source:
       url: https://somewhere
       sha256: 123
@@ -23,10 +25,6 @@ recipes:
         # supported by our test system to the same
         # extend as in conda build)
         - "{{ pin_subpackage('one') }}"
-    requirements:
-      run:
-        - R # offending entry
-        - three # offending entry
     test:
       commands:
         - do nothing

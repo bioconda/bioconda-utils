@@ -39,7 +39,13 @@ class build_number_needs_bump(LintCheck):
     least as high as specified in the recipe already exists in the
     channel. Please increase the build number.
 
+    Currently, bioconda-utils does not support specifying build numbers
+    under outputs, so only a single global build number in the top-level
+    build section is supported.
+
     """
+
+    requires = ["missing_build_number"]
 
     def check_recipe(self, recipe: _recipe.Recipe) -> None:
         bldnos = utils.RepoData().get_package_data(
@@ -58,6 +64,11 @@ class build_number_needs_reset(LintCheck):
 
     No previous build of a package of this name and this version exists,
     the build number should therefore be 0.
+
+    Currently, bioconda-utils does not support specifying build numbers
+    under outputs, so only a single global build number in the top-level
+    build section is supported.
+
     """
 
     requires = ["missing_build_number"]
