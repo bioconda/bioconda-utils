@@ -1,11 +1,5 @@
 expected_failures:
-  - cran_packages_to_conda_forge
-repodata:
-  conda-forge: # offending entry
-    three:
-      - version: 1.0
-    R:
-      - version: 1.0
+  - extra_skip_lints_not_list
 recipes:
   one:
     package:
@@ -23,10 +17,6 @@ recipes:
         # supported by our test system to the same
         # extend as in conda build)
         - "{{ pin_subpackage('one') }}"
-    requirements:
-      run:
-        - R # offending entry
-        - three # offending entry
     test:
       commands:
         - do nothing
@@ -34,3 +24,6 @@ recipes:
       license: BSD
       home: https://elsewhere
       summary: the_summary
+    extra:
+      skip-lints:
+        some_lint # offending entry

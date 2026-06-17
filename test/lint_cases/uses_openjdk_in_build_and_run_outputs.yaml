@@ -1,5 +1,4 @@
-expected_failures:
-  - outputs_name_same_as_package_name
+expected_failures: []
 recipes:
   meta_package:
     package:
@@ -14,7 +13,7 @@ recipes:
       noarch: True
       number: 0
     outputs:
-      - name: meta_package # offending entry
+      - name: meta_one
         build:
           noarch: True
           run_exports:
@@ -23,6 +22,11 @@ recipes:
             # supported by our test system to the same
             # extend as in conda build)
             - "{{ pin_subpackage('meta_one') }}"
+        requirements:
+          build:
+            - openjdk
+          run:
+            - openjdk
         test:
           commands:
             - do nothing

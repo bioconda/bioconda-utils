@@ -1,10 +1,17 @@
 expected_failures:
-  - outputs_name_same_as_package_name
+  - missing_build_number
+#  - build_number_needs_bump # switch to this, once build numbers per output are supported
+repodata:
+  bioconda:
+    meta_one:
+      - version: 0.0.1
+    meta_two:
+      - version: 0.0.1
 recipes:
   meta_package:
     package:
       name: meta_package
-      version: 0.1
+      version: 0.0.1
     source:
       - url: https://somewhere
         sha256: 123
@@ -12,11 +19,11 @@ recipes:
         sha256: abc
     build:
       noarch: True
-      number: 0
     outputs:
-      - name: meta_package # offending entry
+      - name: meta_one
         build:
           noarch: True
+          number: 0 # offending entry
           run_exports:
             # add a run export
             # (note that jinja templating as in reality is not
@@ -29,6 +36,7 @@ recipes:
       - name: meta_two
         build:
           noarch: True
+          number: 0 # offending entry
           run_exports:
             # add a run export
             # (note that jinja templating as in reality is not

@@ -1103,14 +1103,7 @@ def recipe_requires_finalized_render(recipe):
 
 
 def _load_platform_metas(recipe, finalize=True):
-    # check if package is noarch, if so, build only on linux
-    # with temp_os, we can fool the MetaData if needed.
-    platform = os.environ.get("OSTYPE", sys.platform)
-    if platform.startswith("darwin"):
-        platform = "osx"
-    elif platform == "linux-gnu":
-        platform = "linux"
-
+    platform = RepoData.native_platform()
     config = load_conda_build_config(platform=platform)
     return platform, load_all_meta(recipe, config=config, finalize=finalize)
 
@@ -1133,7 +1126,7 @@ def check_recipe_skippable(recipe, check_channels):
     if os.environ.get("CI", None) == "true":
         first_meta = metas[0]
         if first_meta.get_value("build/noarch"):
-            if platform != "linux":
+            if not platform.startswith("linux"):
                 logger.info(
                     "FILTER: only building %s on linux because it defines noarch.",
                     recipe,
@@ -1724,7 +1717,9 @@ class RepoData:
         """
         # called from doc generator
         packages = self.df[self.df.name == name][["version", "platform"]]
-        versions = packages.groupby("version").agg(lambda x: list(set(x)))
+        versions = packages.groupby("version", observed=True).agg(
+            lambda x: list(set(x))
+        )
         return versions["platform"].to_dict()
 
     def get_latest_versions(self, channel):

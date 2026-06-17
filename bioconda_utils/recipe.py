@@ -599,6 +599,77 @@ class Recipe:
             return default
         return res
 
+    def get_all_section_occurrences(
+        self,
+        section: str = "",
+        outputs_exclusive: bool = False,
+        missing_as_empty: bool = False,
+    ) -> dict:
+        """Get all occurrences of a section, including from outputs: definitions
+
+        Gets all occurrences of a recipe section in a dictionary of dictionaries.
+        The main dictionary keys are the paths of the respective sections, with
+        each entry then containing the section contents as a dict. If just a
+        single package is created from the main recipe section, a dict containing
+        a single dict is returned. If an outputs: section defines multiple
+        packages that are to be built, all of the section dicts from all outputs
+        and the main section are returned, unless the outputs_exclusive argument
+        is set to True. Non-existant sections are not returned, unless the
+        missing_as_empty argument is set to True.
+
+        Args:
+            section: path to section within package, for example "build" or
+                "extra/identifiers"
+            outputs_exclusive: boolean whether to exclusively return outputs:
+                sections if multiple outputs: are specified
+            missing_as_empty: boolean whether to include missing sections as
+                empty dictionaries
+        """
+        sections = dict()
+        top_level_section = self.get(section, dict())
+        if top_level_section or missing_as_empty:
+            sections[section] = top_level_section
+        outputs = self.get("outputs", dict())
+        if outputs:
+            if outputs_exclusive:
+                sections = dict()
+            for n, o in enumerate(outputs):
+                current_output_path = f"outputs/{n}/{section}"
+                outputs_section = self.get(current_output_path, dict())
+                if outputs_section or missing_as_empty:
+                    sections[current_output_path] = outputs_section
+        return sections
+
+    def check_for_missing_inherited_section(
+        self,
+        section: str = "",
+    ) -> str:
+        """Return any required sections that are missing
+
+        For a required section like `about/summary`, check whether this is
+        specified for all defined packages of the recipe, including for recipes
+        with multiple `outputs:`. In this case, check whether each output has
+        this defined by itself or inherits it from the respective global recipe
+        section.
+
+        Returns:
+            full dpath to section where an entry is missing
+        """
+        # only go looking for `outputs:`, if the global section doesn't have it
+        if not self.get(section, ""):
+            outputs = self.get("outputs", "")
+            if outputs:
+                for o in range(len(outputs)):
+                    output_section = f"outputs/{o}/{section}"
+                    try:
+                        self.get(output_section)
+                    except KeyError:
+                        return output_section
+            # section missing globally, and no outputs specified, so it's missing
+            else:
+                return section
+        return ""
+
     def set(self, path, value):
         """Set a value or section in the recipe
 

@@ -1,5 +1,5 @@
 expected_failures:
-  - outputs_name_same_as_package_name
+  - compilers_must_be_in_build
 recipes:
   meta_package:
     package:
@@ -11,18 +11,19 @@ recipes:
       - url: https://elsewhere
         sha256: abc
     build:
-      noarch: True
       number: 0
     outputs:
-      - name: meta_package # offending entry
+      - name: meta_one
         build:
-          noarch: True
           run_exports:
             # add a run export
             # (note that jinja templating as in reality is not
             # supported by our test system to the same
             # extend as in conda build)
             - "{{ pin_subpackage('meta_one') }}"
+        requirements:
+          host:
+            - '{{compiler("c")}}' # offending entry
         test:
           commands:
             - do nothing

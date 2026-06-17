@@ -64,9 +64,10 @@ class extra_identifiers_not_list(LintCheck):
     """
 
     def check_recipe(self, recipe: _recipe.Recipe) -> None:
-        identifiers = recipe.get("extra/identifiers", None)
-        if identifiers and not isinstance(identifiers, list):
-            self.message(section="extra/identifiers")
+        identifiers_sections = recipe.get_all_section_occurrences("extra/identifiers")
+        for identifiers in identifiers_sections:
+            if not isinstance(identifiers_sections[identifiers], list):
+                self.message(section=identifiers)
 
 
 class extra_identifiers_not_string(LintCheck):
@@ -85,10 +86,11 @@ class extra_identifiers_not_string(LintCheck):
     requires = [extra_identifiers_not_list]
 
     def check_recipe(self, recipe: _recipe.Recipe) -> None:
-        identifiers = recipe.get("extra/identifiers", [])
-        for n, identifier in enumerate(identifiers):
-            if not isinstance(identifier, str):
-                self.message(section=f"extra/identifiers/{n}")
+        identifiers_sections = recipe.get_all_section_occurrences("extra/identifiers")
+        for identifiers in identifiers_sections:
+            for n, identifier in enumerate(identifiers_sections[identifiers]):
+                if not isinstance(identifier, str):
+                    self.message(section=f"{identifiers}/{n}")
 
 
 class extra_identifiers_missing_colon(LintCheck):
@@ -105,10 +107,11 @@ class extra_identifiers_missing_colon(LintCheck):
     requires = [extra_identifiers_not_string]
 
     def check_recipe(self, recipe: _recipe.Recipe) -> None:
-        identifiers = recipe.get("extra/identifiers", [])
-        for n, identifier in enumerate(identifiers):
-            if ":" not in identifier:
-                self.message(section=f"extra/identifiers/{n}")
+        identifiers_sections = recipe.get_all_section_occurrences("extra/identifiers")
+        for identifiers in identifiers_sections:
+            for n, identifier in enumerate(identifiers_sections[identifiers]):
+                if ":" not in identifier:
+                    self.message(section=f"{identifiers}/{n}")
 
 
 class extra_skip_lints_not_list(LintCheck):
@@ -123,5 +126,7 @@ class extra_skip_lints_not_list(LintCheck):
     """
 
     def check_recipe(self, recipe: _recipe.Recipe) -> None:
-        if not isinstance(recipe.get("extra/skip-lints", []), list):
-            self.message(section="extra/skip-lints")
+        identifiers_sections = recipe.get_all_section_occurrences("extra/skip-lints")
+        for identifiers in identifiers_sections:
+            if not isinstance(identifiers_sections[identifiers], list):
+                self.message(section=identifiers)

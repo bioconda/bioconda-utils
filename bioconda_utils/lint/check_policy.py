@@ -19,6 +19,9 @@ class uses_vcs_url(LintCheck):
     Please build from source archives and don't use the ``git_url``,
     ``svn_url`` or ``hg_url`` feature of conda.
 
+    This check currently only considers the top-level source section
+    and will not trigger for offending entries under ``outputs:``.
+
     """
 
     def check_source(self, source: dict[str, Any], section: str) -> None:
@@ -126,7 +129,7 @@ class cran_packages_to_conda_forge(LintCheck):
 
     """
 
-    def check_deps(self, deps: dict[str, list[str]]) -> None:
+    def check_deps(self, deps: dict[str, list[str]], package_location: str) -> None:
         # must have R in run a run dep
         if "R" in deps and any("run" in dep for dep in deps["R"]):
             # and all deps satisfied in conda-forge
@@ -155,6 +158,30 @@ class outputs_name_same_as_package_name(LintCheck):
             for o in outputs:
                 if o.get("name", "") == name:
                     self.message()
+
+
+class disallowed_top_level_section_with_outputs(LintCheck):
+    """When outputs: are specified, a there top level sections don't make any sense
+
+    If (multiple) ``outputs:`` are specified, the top level recipe will
+    not be built and thus should not contain a ``build: run_exports:``
+    or a ``requirements:`` section.
+
+    This enforces accepted CEP 0014: https://conda.org/learn/ceps/cep-0014/#outputs-section
+
+    """
+
+    disallowed_sections = (
+        "build/run_exports",
+        "requirements",
+    )
+
+    def check_recipe(self, recipe):
+        outputs = recipe.get("outputs", "")
+        if outputs:
+            for section in self.disallowed_sections:
+                if recipe.get("section", ""):
+                    self.message(section=section)
 
 
 class version_starts_with_v(LintCheck):
