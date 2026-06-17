@@ -71,7 +71,7 @@ def format_dep(pkg, ver):
     ver = str(ver)
     if ver == "*":
         return pkg
-    sep = "" if ver.startswith((">=", "<=", ">", "<", "~=", "!=")) else "="
+    sep = "" if ver.startswith(("==", ">=", "<=", ">", "<", "~=", "!=")) else "="
     return f"{pkg}{sep}{ver}"
 
 
