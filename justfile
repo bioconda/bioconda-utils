@@ -5,8 +5,8 @@
 shell_scripts := `git ls-files | while IFS= read -r f; do head -n 1 "$f" | grep -Eq '^#! */(usr/bin/env +)?(ba)?sh( |$)|^#! */bin/(ba)?sh( |$)' && printf '%s\n' "$f"; done | tr '\n' ' '`
 
 format:
-    ruff format .
-    shfmt -i 4 -w {{shell_scripts}}
+    pixi run -e dev ruff format .
+    pixi run -e dev shfmt -i 4 -w {{shell_scripts}}
 
 # Install conda dependencies via pixi (project not installed — run `just install` separately)
 deps:

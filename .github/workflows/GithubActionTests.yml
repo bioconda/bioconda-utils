@@ -21,7 +21,7 @@ jobs:
           environments: dev
           activate-environment: true
       - name: Check generated requirements
-        run: pixi run check-requirements
+        run: pixi run python scripts/generate-requirements-txt.py --check
       - name: ty check
         run: ty check .
   test-linux:
