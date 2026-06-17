@@ -21,10 +21,10 @@ install: deps
 
 # After changing deps in pixi.toml, regenerate the shipped conda requirements file
 regenerate-requirements:
-    python scripts/generate-requirements-txt.py
+    pixi run python scripts/generate-requirements-txt.py
 
 check-requirements:
-    python scripts/generate-requirements-txt.py --check
+    pixi run python scripts/generate-requirements-txt.py --check
 
 check:
     ruff check .
