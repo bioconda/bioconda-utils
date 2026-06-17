@@ -20,6 +20,8 @@ jobs:
           pixi-version: latest
           environments: dev
           activate-environment: true
+      - name: Check generated requirements
+        run: pixi run check-requirements
       - name: ty check
         run: ty check .
   test-linux:

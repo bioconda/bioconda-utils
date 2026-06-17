@@ -39,7 +39,7 @@ ORDERED_GROUPS = [
 ]
 
 def make_group_map():
-    """Build dict: package → header comment."""
+    """Build dict: package -> header comment."""
     m = {}
     for pkg, header in ORDERED_GROUPS:
         m[pkg] = header

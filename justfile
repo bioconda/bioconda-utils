@@ -27,9 +27,9 @@ check-requirements:
     pixi run python scripts/generate-requirements-txt.py --check
 
 check:
-    ruff check .
-    ty check .
-    shellcheck {{shell_scripts}}
+    pixi run -e dev ruff check .
+    pixi run -e dev ty check .
+    pixi run -e dev shellcheck {{shell_scripts}}
 
 # this takes a very long time to execute, use check if not finished with your work yet
 test: install
