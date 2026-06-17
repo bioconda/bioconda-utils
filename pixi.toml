@@ -10,7 +10,6 @@ conda-forge-pinning = "==2026.01.07.13.16.30"
 
 # basics
 python = "3.13.*"
-pip = "*"
 setuptools = "81.*"
 setuptools-scm = ">=8"
 conda = "26.3.*"
@@ -86,6 +85,7 @@ tabulate = "0.10.*"
 psutil = "*"
 
 [feature.test.dependencies]
+pip = "*"
 pytest = ">=3.3"
 pytest-cov = "*"
 
