@@ -2,11 +2,7 @@
 # runtime [dependencies] only; feature/dev/test dependencies are excluded
 # See https://github.com/bioconda/bioconda-utils/blob/main/pixi.toml
 
-
-# pinnings
 conda-forge-pinning==2026.01.07.13.16.30
-
-# basics
 python=3.13.*
 setuptools=81.*
 setuptools-scm>=8
@@ -34,11 +30,7 @@ involucro=1.1.*
 skopeo=1.22.*
 findutils
 git=2.*
-
-# hosters - special regex not supported by RE
 regex=2026.*
-
-# asyncio
 aiohttp=3.13.*
 aiohttp-jinja2
 aiohttp-session
@@ -47,25 +39,13 @@ aiofiles=25.*
 aioftp=0.27.*
 backoff=2.2.*
 cachetools=7.0.*
-
-# client API wrappers
 gitpython=3.1.*
 gidgethub=5.*
 pyjwt>=2.4.0
-
-# bioconductor-skeleton
 beautifulsoup4=4.*
 requests=2.33.*
-
-# merge handling
 pygithub
-
-# caching
 diskcache=5.*
 platformdirs=4.*
-
-# build failure output
 tabulate=0.10.*
-
-# resource reporting for builds
 psutil

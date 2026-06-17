@@ -23,31 +23,6 @@ REQUIREMENTS_TXT = REPO_ROOT / "bioconda_utils" / "bioconda_utils-requirements.t
 SUPPORTED_DICT_KEYS = {"version", "build"}
 SPEC_OPERATORS = ("==", ">=", "<=", ">", "<", "~=", "!=")
 
-# Ordering group headers to insert before certain packages for readability.
-ORDERED_GROUPS = [
-    ("conda-forge-pinning", "\n# pinnings"),
-    ("python", "\n# basics"),
-    ("argh", ""),
-    ("anaconda-client", ""),
-    ("regex", "\n# hosters - special regex not supported by RE"),
-    ("aiohttp", "\n# asyncio"),
-    ("gitpython", "\n# client API wrappers"),
-    ("beautifulsoup4", "\n# bioconductor-skeleton"),
-    ("requests", ""),
-    ("pygithub", "\n# merge handling"),
-    ("diskcache", "\n# caching"),
-    ("tabulate", "\n# build failure output"),
-    ("psutil", "\n# resource reporting for builds"),
-]
-
-def make_group_map():
-    """Build dict: package -> header comment."""
-    m = {}
-    for pkg, header in ORDERED_GROUPS:
-        m[pkg] = header
-    return m
-
-
 def read_pixi_deps():
     if not PIXI_TOML.exists():
         raise FileNotFoundError(f"{PIXI_TOML} does not exist")
@@ -106,7 +81,6 @@ def format_dep(pkg, ver):
 
 def generate():
     deps = read_pixi_deps()
-    group_map = make_group_map()
 
     lines = [
         "# auto-generated from pixi.toml -- do not edit directly",
@@ -116,9 +90,6 @@ def generate():
     ]
 
     for pkg in deps:
-        header = group_map.get(pkg)
-        if header:
-            lines.append(header)
         lines.append(format_dep(pkg, deps[pkg]))
 
     lines.append("")
