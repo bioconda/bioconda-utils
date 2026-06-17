@@ -1,5 +1,5 @@
 expected_failures:
-  - outputs_name_same_as_package_name
+  - extra_identifiers_missing_colon
 recipes:
   meta_package:
     package:
@@ -14,7 +14,7 @@ recipes:
       noarch: True
       number: 0
     outputs:
-      - name: meta_package # offending entry
+      - name: meta_one
         build:
           noarch: True
           run_exports:
@@ -38,6 +38,9 @@ recipes:
         test:
           imports:
             - no imports to see here
+        extra:
+          identifiers:
+            - "123" # offending entry
     about:
       license: MIT
       home: https://elsewhere

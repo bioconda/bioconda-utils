@@ -1,5 +1,5 @@
 expected_failures:
-  - outputs_name_same_as_package_name
+  - missing_home
 recipes:
   meta_package:
     package:
@@ -14,7 +14,7 @@ recipes:
       noarch: True
       number: 0
     outputs:
-      - name: meta_package # offending entry
+      - name: meta_one
         build:
           noarch: True
           run_exports:
@@ -26,7 +26,9 @@ recipes:
         test:
           commands:
             - do nothing
-      - name: meta_two
+        about:
+          home: https://elsewhere
+      - name: meta_two # missing about: home: section
         build:
           noarch: True
           run_exports:
@@ -40,5 +42,4 @@ recipes:
             - no imports to see here
     about:
       license: MIT
-      home: https://elsewhere
       summary: another_summary
