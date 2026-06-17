@@ -10,14 +10,14 @@ format:
 
 # Install conda dependencies via pixi (project not installed — run `just install` separately)
 deps:
-    pixi install
+    pixi install -e dev
 
 # Build & install the CLI into pixi's environment and symlink it into ~/.local/bin for global access.
 # This way the CLI can find its conda deps at runtime.
 install: deps
-    pixi run python -m pip install --no-deps --no-build-isolation .
+    pixi run -e dev python -m pip install --no-deps --no-build-isolation .
     mkdir -p ~/.local/bin
-    ln -sf $(pwd)/.pixi/envs/default/bin/bioconda-utils ~/.local/bin/bioconda-utils
+    ln -sf $(pwd)/.pixi/envs/dev/bin/bioconda-utils ~/.local/bin/bioconda-utils
 
 # After changing deps in pixi.toml, regenerate the shipped conda requirements file
 regenerate-requirements:
@@ -33,4 +33,4 @@ check:
 
 # this takes a very long time to execute, use check if not finished with your work yet
 test: install
-    pixi run pytest
+    pixi run -e dev pytest
