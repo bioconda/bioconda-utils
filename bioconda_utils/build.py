@@ -28,7 +28,6 @@ from . import graph
 from . import recipe as _recipe
 from ._types import (
     ContainerPlatform,
-    RecipeMetaLike,
     container_platform_is_native,
     docker_platform_tag_suffix,
 )
