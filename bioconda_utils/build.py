@@ -26,7 +26,12 @@ from . import upload
 from . import lint
 from . import graph
 from . import recipe as _recipe
-from ._types import ContainerPlatform, RecipeMetaLike, docker_platform_tag_suffix
+from ._types import (
+    ContainerPlatform,
+    RecipeMetaLike,
+    container_platform_is_native,
+    docker_platform_tag_suffix,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -290,7 +295,7 @@ def build(
                 use_presolved = (
                     presolved_mulled_test
                     and not mulled_upload_target
-                    and target_platform in (None, "linux/amd64")
+                    and container_platform_is_native(target_platform)
                 )
                 try:
                     report_resources(
