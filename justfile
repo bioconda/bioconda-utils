@@ -12,10 +12,16 @@ deps:
     conda install --file bioconda_utils/bioconda_utils-requirements.txt -c conda-forge -c bioconda
     conda install -c conda-forge ty ruff shfmt shellcheck
 
-check:
+ruff:
     ruff check .
+
+ty:
     ty check .
+
+shellcheck:
     shellcheck {{shell_scripts}}
+
+check: ruff ty shellcheck
 
 # install a local build of the CLI for testing
 install:
