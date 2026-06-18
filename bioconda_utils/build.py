@@ -79,22 +79,6 @@ def mulled_image_metadata(
     )
 
 
-def _container_platform_is_eligible(
-    meta: RecipeMetaLike,
-    target_platform: ContainerPlatform | None,
-) -> bool:
-    if target_platform in (None, "linux/amd64"):
-        return True
-    if meta.get_value("build/noarch", default=False):
-        return True
-    additional_platforms = meta.get_value("extra/additional-platforms", default=[])
-    if target_platform == "linux/arm64":
-        return "linux-aarch64" in additional_platforms
-    if target_platform == "linux/riscv64":
-        return "linux-riscv64" in additional_platforms
-    return False
-
-
 def conda_build_purge() -> None:
     """Calls conda build purge and optionally conda clean
 
@@ -283,15 +267,6 @@ def build(
         )
         for pkg_path in pkg_paths:
             for target_platform in requested_platforms:
-                if container_platforms is None and not _container_platform_is_eligible(
-                    meta, target_platform
-                ):
-                    logger.info(
-                        "TEST SKIP: skipping mulled-build for %s on %s",
-                        recipe,
-                        target_platform,
-                    )
-                    continue
                 use_presolved = (
                     presolved_mulled_test
                     and not mulled_upload_target
