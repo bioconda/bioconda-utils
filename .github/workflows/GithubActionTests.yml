@@ -25,12 +25,17 @@ jobs:
           eval "$(conda shell.bash hook)"
           conda create -n bioconda --quiet --yes --file test-requirements.txt --file bioconda_utils/bioconda_utils-requirements.txt
           conda activate bioconda
-          conda install -y -c conda-forge ty
+          conda install -y -c conda-forge ty shellcheck just
       - name: ty check
         run: |
           eval "$(conda shell.bash hook)"
           conda activate bioconda
           ty check .
+      - name: shellcheck
+        run: |
+          eval "$(conda shell.bash hook)"
+          conda activate bioconda
+          just shellcheck
   test-linux:
     name: Linux tests
     runs-on: ubuntu-latest
