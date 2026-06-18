@@ -98,3 +98,52 @@ shellcheck = "*"
 [environments]
 default = ["test"]
 dev = ["test", "dev"]
+
+[tasks.format]
+cmd = "ruff format ."
+default-environment = "dev"
+description = "Format Python files"
+
+[tasks.install]
+cmd = "python -m pip install --no-deps --no-build-isolation ."
+default-environment = "dev"
+description = "Build and install bioconda-utils into the Pixi environment"
+
+[tasks.global-install]
+cmd = """
+mkdir -p ~/.local/bin
+ln -sf "$CONDA_PREFIX/bin/bioconda-utils" ~/.local/bin/bioconda-utils
+"""
+depends-on = ["install"]
+default-environment = "dev"
+description = "Make the Pixi-installed CLI available in ~/.local/bin"
+
+[tasks.regenerate-requirements]
+cmd = "python scripts/generate-requirements-txt.py"
+description = "Regenerate the shipped conda requirements file"
+
+[tasks.check-requirements]
+cmd = "python scripts/generate-requirements-txt.py --check"
+description = "Check that the shipped conda requirements file is current"
+
+[tasks.check]
+cmd = "ruff check . && ty check ."
+depends-on = ["check-requirements"]
+default-environment = "dev"
+description = "Run fast Python static checks"
+
+[tasks.test]
+cmd = "pytest"
+depends-on = ["install"]
+default-environment = "dev"
+description = "Run the full test suite (slow)"
+
+[tasks.shfmt]
+cmd = "shfmt"
+default-environment = "dev"
+description = "Run shfmt with arguments supplied by the caller"
+
+[tasks.shellcheck]
+cmd = "shellcheck"
+default-environment = "dev"
+description = "Run ShellCheck with arguments supplied by the caller"

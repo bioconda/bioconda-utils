@@ -116,7 +116,7 @@ def main():
         if existing != content:
             print(
                 f"ERROR: {REQUIREMENTS_TXT} is out of date. "
-                "Run `just regenerate-requirements` to update."
+                "Run `pixi run regenerate-requirements` to update."
             )
             raise SystemExit(1)
         print(f"{REQUIREMENTS_TXT} is up to date")

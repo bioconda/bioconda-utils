@@ -1,13 +1,11 @@
-This project uses pixi for development dependency management and conda for runtime. Do not use pip or uv for dependencies.
+This project uses pixi for development dependency management and conda for runtime. Do not use pip or uv to manage dependencies.
 
 - Dependencies are declared in `pixi.toml` (single source of truth)
-- `pixi install` installs all conda deps (run `just deps`)
-- `just install` builds & installs the project into the pixi environment
-- The shipped `bioconda_utils/bioconda_utils-requirements.txt` is auto-generated from `pixi.toml` by `scripts/generate-requirements-txt.py`
-- After changing deps in `pixi.toml`, run `just regenerate-requirements` and commit the updated `.txt`
+- Pixi automatically installs the required environment when running a task
+- `just install` builds the project in the pixi environment and symlinks the CLI into `~/.local/bin`
 
-Do not run the full test suite unless absolutely, the long running tests take about an hour to complete. 
-Running cheap tests frequently is recommended.
-Occasionally run `just check` to verify your work.
+Do not run the full test suite unless absolutely necessary, the long running tests take about an hour to complete. 
+Run `just format` frequently and `just check` after a moderate amount of changes.
 
-Read ./justfile for commands frequently useful during development.
+Read `./justfile` for commands frequently useful during development. These
+commands are thin wrappers around tasks declared in `pixi.toml`.

@@ -14,10 +14,9 @@ ensure that your local setup matches that used to build recipes on travis-ci as
 closely as possible.
 
 However, if you would like to test in a standalone manner or help develop
-bioconda-utils, you can use `just`:
+bioconda-utils, you can use the Just wrappers around the Pixi tasks:
 
 ```bash
-just deps
 just install
 ```
 
