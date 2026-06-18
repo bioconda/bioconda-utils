@@ -57,7 +57,7 @@ def will_build_variant(meta: MetaData) -> bool:
         "build_number",
         name=meta.name(),
         version=meta.version(),
-        platform=["linux", "noarch"],
+        native=True,
     )
     current_num = int(meta.build_number())
     res = all(num < current_num for num in build_numbers)
@@ -96,7 +96,7 @@ def _have_partially_matching_build_id(meta: MetaData) -> bool:
         name=meta.name(),
         version=meta.version(),
         build_number=meta.build_number(),
-        platform=["linux", "noarch"],
+        native=True,
     )
     is_noarch = bool(meta.noarch)
     current_build_id = meta.build_id()
@@ -209,7 +209,7 @@ def have_variant(meta: MetaData) -> bool:
         name=meta.name(),
         version=meta.version(),
         build=meta.build_id(),
-        platform=["linux", "noarch"],
+        native=True,
     )
     if res:
         logger.debug(
@@ -269,7 +269,7 @@ def will_build_only_missing(metas: list[MetaData]) -> bool:
                     name=name,
                     version=version,
                     build_number=build_number,
-                    platform=["linux", "noarch"],
+                    native=True,
                 ),
             ),
         )
