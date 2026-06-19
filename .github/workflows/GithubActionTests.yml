@@ -24,6 +24,8 @@ jobs:
         run: pixi run python scripts/generate-requirements-txt.py --check
       - name: ty check
         run: ty check .
+      - name: shellcheck
+        run: pixi run just shellcheck
   test-linux:
     name: Linux tests
     runs-on: ubuntu-latest

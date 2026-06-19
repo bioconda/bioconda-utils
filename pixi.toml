@@ -94,6 +94,7 @@ ty = "*"
 ruff = "*"
 "go-shfmt" = "*"
 shellcheck = "*"
+just = "*"
 
 [environments]
 default = ["test"]
