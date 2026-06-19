@@ -9,14 +9,17 @@ format:
     pixi run format
     pixi run shfmt -i 4 -w {{shell_scripts}}
 
+
 # Symlink the CLI into ~/.local/bin for global access.
 # This way the CLI can find its conda deps at runtime.
 install:
     pixi run global-install
 
 # run typechecks and linters, use after a moderate amount of changes
-check:
+check: shellcheck
     pixi run check
+
+shellcheck:
     pixi run shellcheck {{shell_scripts}}
 
 # this takes a very long time to execute, use check if not finished with your work yet
