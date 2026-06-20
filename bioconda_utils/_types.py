@@ -19,6 +19,23 @@ def docker_platform_tag_suffix(target_platform: ContainerPlatform | None) -> str
     return target_platform.removeprefix("linux/").replace("/", "-")
 
 
+def docker_platform_staging_suffix(target_platform: ContainerPlatform) -> str:
+    """Return the suffix used for architecture-specific registry tags."""
+    return target_platform.removeprefix("linux/").replace("/", "-")
+
+
+def native_container_platform() -> ContainerPlatform:
+    """Return the supported Linux container platform matching this host."""
+    arch = platform.machine().lower()
+    if arch in ("x86_64", "amd64"):
+        return "linux/amd64"
+    if arch in ("aarch64", "arm64"):
+        return "linux/arm64"
+    if arch == "riscv64":
+        return "linux/riscv64"
+    raise ValueError(f"Unsupported native container architecture: {arch}")
+
+
 def container_platform_is_native(target_platform: ContainerPlatform | None) -> bool:
     """Return True if target_platform matches the host's native architecture.
 
@@ -28,14 +45,7 @@ def container_platform_is_native(target_platform: ContainerPlatform | None) -> b
     """
     if target_platform is None:
         return True
-    arch = platform.machine()
-    if target_platform == "linux/amd64":
-        return arch in ("x86_64", "amd64")
-    if target_platform == "linux/arm64":
-        return arch in ("aarch64", "arm64")
-    if target_platform == "linux/riscv64":
-        return arch == "riscv64"
-    return False
+    return target_platform == native_container_platform()
 
 
 class RecipeMetaLike(Protocol):

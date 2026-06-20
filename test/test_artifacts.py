@@ -121,6 +121,11 @@ def test_upload_pr_artifacts_filters_packages_and_arm64_images(monkeypatch, tmp_
         lambda pkg, label=None: uploaded_packages.append((pkg, label)) or True,
     )
     monkeypatch.setattr(
+        artifacts.utils,
+        "run",
+        lambda cmd, **_kwargs: type("R", (), {"stdout": "sha256:" + "a" * 64})(),
+    )
+    monkeypatch.setattr(
         artifacts,
         "skopeo_upload",
         lambda img, target, creds=None: (

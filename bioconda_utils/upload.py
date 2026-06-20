@@ -7,10 +7,71 @@ from pathlib import Path
 import shutil
 import subprocess as sp
 import logging
+import requests
+import backoff
 from . import utils
-from ._types import ContainerPlatform
+from ._types import (
+    ContainerPlatform,
+    docker_platform_tag_suffix,
+    native_container_platform,
+)
+from .container_manifests import platform_ref, registry_creds
 
 logger = logging.getLogger(__name__)
+_QUAY_REPOSITORIES_READY: set[tuple[str, str]] = set()
+
+
+@backoff.on_exception(
+    backoff.expo,
+    requests.RequestException,
+    max_tries=5,
+    max_time=60,
+)
+def ensure_quay_repository(namespace: str, repository: str) -> None:
+    """Ensure a Quay repository exists and is public before pushing."""
+    key = (namespace, repository)
+    if key in _QUAY_REPOSITORIES_READY:
+        return
+    token = os.environ.get("QUAY_OAUTH_TOKEN")
+    if not token:
+        # Existing public repositories can still be pushed with registry creds.
+        # New repositories require the API token to enforce public visibility.
+        logger.warning(
+            "QUAY_OAUTH_TOKEN is not set; cannot verify visibility for %s/%s",
+            namespace,
+            repository,
+        )
+        return
+    headers = {"Authorization": f"Bearer {token}"}
+    url = f"https://quay.io/api/v1/repository/{namespace}/{repository}"
+    response = requests.get(url, headers=headers, timeout=30)
+    if response.status_code == 404:
+        response = requests.post(
+            "https://quay.io/api/v1/repository",
+            headers=headers,
+            json={
+                "repository": repository,
+                "namespace": namespace,
+                "description": "",
+                "visibility": "public",
+            },
+            timeout=30,
+        )
+        if response.status_code not in (200, 201, 409):
+            response.raise_for_status()
+    elif response.status_code != 200:
+        response.raise_for_status()
+    else:
+        data = response.json()
+        if data.get("is_public") is False:
+            response = requests.post(
+                f"{url}/changevisibility",
+                headers=headers,
+                json={"visibility": "public"},
+                timeout=30,
+            )
+            response.raise_for_status()
+    _QUAY_REPOSITORIES_READY.add(key)
 
 
 def anaconda_upload(
@@ -72,7 +133,7 @@ def mulled_upload(
     image: str,
     quay_target: str,
     target_platform: ContainerPlatform | None = None,
-) -> sp.CompletedProcess:
+) -> str:
     """
     Upload the build Docker images to quay.io with ``mulled-build push``.
 
@@ -82,26 +143,46 @@ def mulled_upload(
       image: name of image to push
       quary_target: name of image on quay
       target_platform: Docker target platform to pass to mulled-build
+
+    Returns:
+      The digest of the pushed image (captured before push from the local
+      Docker daemon).
     """
-    cmd = ["mulled-build", "push", image, "-n", quay_target]
-    if target_platform:
-        cmd += ["--target-platform", target_platform]
+    target_platform = target_platform or native_container_platform()
+    pkg_name_and_version, pkg_build_string = image.rsplit("--", 1)
+    pkg_name, pkg_version = pkg_name_and_version.rsplit("=", 1)
+    canonical_ref = (
+        f"quay.io/{quay_target}/{pkg_name}:{pkg_version}--{pkg_build_string}"
+    )
+    local_ref = canonical_ref
+    if suffix := docker_platform_tag_suffix(target_platform):
+        local_ref = f"{canonical_ref}-{suffix}"
+    destination_ref = platform_ref(canonical_ref, target_platform)
+    creds = registry_creds()
+    if not creds:
+        raise ValueError("QUAY_LOGIN or QUAY_OAUTH_TOKEN is required")
+    ensure_quay_repository(quay_target, pkg_name)
 
-    # galaxy-lib always downloads involucro, unless it's in cwd or its path is
-    # explicitly given.
-    involucro_path = os.path.join(os.path.dirname(__file__), "involucro")
-    if not os.path.exists(involucro_path):
-        raise RuntimeError("internal involucro wrapper missing")
-    cmd += ["--involucro-path", involucro_path]
+    digest = utils.run(
+        ["skopeo", "inspect", "--format", "{{.Digest}}", f"docker-daemon:{local_ref}"],
+        mask=False,
+    ).stdout.strip()
+    if not digest.startswith("sha256:"):
+        raise RuntimeError(f"Invalid digest for {local_ref}: {digest}")
 
-    env = os.environ.copy()
-
-    mask = []
-    if os.environ.get("QUAY_OAUTH_TOKEN", False):
-        token = os.environ["QUAY_OAUTH_TOKEN"]
-        cmd.extend(["--oauth-token", token])
-        mask = [token]
-    return utils.run(cmd, mask=mask, env=env)
+    utils.run(
+        [
+            "skopeo",
+            "copy",
+            "--dest-creds",
+            creds,
+            f"docker-daemon:{local_ref}",
+            f"docker://{destination_ref}",
+        ],
+        mask=creds.split(":", 1),
+        env=os.environ.copy(),
+    )
+    return digest
 
 
 def skopeo_upload(

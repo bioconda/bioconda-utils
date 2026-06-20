@@ -20,6 +20,7 @@ import sys
 import os
 import shlex
 import logging
+from pathlib import Path
 from collections import defaultdict, Counter
 from functools import partial
 import inspect
@@ -44,6 +45,11 @@ from . import update_pinnings
 from . import graph
 from . import pkg_test
 from .githandler import BiocondaRepo, install_gpg_key
+from .container_manifests import (
+    load_image_records,
+    reconcile_manifests,
+    registry_creds,
+)
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 
@@ -655,6 +661,10 @@ from environment, even after successful build and test.""",
     choices=CONTAINER_PLATFORMS,
     help="Docker platform to build/test/push for mulled containers. May be repeated.",
 )
+@arg(
+    "--mulled-image-output",
+    help="Append uploaded mulled image metadata as JSONL for manifest publication.",
+)
 @arg("--exclude", nargs="+", help="Packages to exclude during this run")
 @arg(
     "--subdag-depth",
@@ -692,9 +702,11 @@ def build(
     no_presolved_mulled_test=False,
     no_fast_resolve=False,
     container_platform: list[ContainerPlatform] | None = None,
+    mulled_image_output: Path | None = None,
     exclude=None,
     subdag_depth=None,
 ):
+    mulled_image_output = Path(mulled_image_output) if mulled_image_output else None
     cfg = utils.load_config(config)
     setup = cfg.get("setup", None)
     if setup:
@@ -776,6 +788,7 @@ def build(
         presolved_mulled_test=not no_presolved_mulled_test,
         fast_resolve=not no_fast_resolve,
         container_platforms=container_platform,
+        mulled_image_output=mulled_image_output,
     )
     exit(0 if success else 1)
 
@@ -821,6 +834,10 @@ def build(
     choices=PACKAGE_PLATFORMS,
     help="Conda package platform to upload from PR artifacts. Defaults to native platform.",
 )
+@arg(
+    "--mulled-image-output",
+    help="Append uploaded mulled image metadata as JSONL for manifest publication.",
+)
 @enable_logging()
 def handle_merged_pr(
     recipe_folder,
@@ -833,7 +850,9 @@ def handle_merged_pr(
     artifact_source="azure",
     container_platform: list[ContainerPlatform] | None = None,
     package_platform: str | None = None,
+    mulled_image_output: Path | None = None,
 ):
+    mulled_image_output = Path(mulled_image_output) if mulled_image_output else None
     label = os.getenv("BIOCONDA_LABEL", None) or None
     if repo is None:
         raise ValueError("repo is required")
@@ -850,6 +869,7 @@ def handle_merged_pr(
         artifact_source=artifact_source,
         package_platform=package_platform,
         container_platforms=container_platform,
+        mulled_image_output=mulled_image_output,
     )
     if res == UploadResult.NO_ARTIFACTS and fallback == "build":
         if package_platform is not None and package_platform != "noarch":
@@ -869,10 +889,36 @@ def handle_merged_pr(
             mulled_upload_target=quay_upload_target if not dryrun else None,
             mulled_test=True,
             container_platform=container_platform,
+            mulled_image_output=mulled_image_output,
         )
     else:
         success = res != UploadResult.FAILURE
     exit(0 if success else 1)
+
+
+@arg("record_paths", nargs="+", help="JSONL record files or directories.")
+@arg(
+    "--platform",
+    action="append",
+    choices=CONTAINER_PLATFORMS,
+    help="Platforms to include. Defaults to all supported platforms.",
+)
+@enable_logging()
+def create_mulled_manifests(
+    record_paths: list[str],
+    platform: list[ContainerPlatform] | None = None,
+) -> None:
+    """Create or update canonical manifests for uploaded mulled images."""
+    records = load_image_records(record_paths)
+    if not records:
+        logger.info("No mulled image records found; nothing to reconcile.")
+        return
+    changed, total = reconcile_manifests(
+        records,
+        platform or list(CONTAINER_PLATFORMS),
+        creds=registry_creds(),
+    )
+    logger.info("Manifest summary: %d changed, %d checked", changed, total)
 
 
 @recipe_folder_and_config()
@@ -1679,6 +1725,7 @@ def main():
             clean_cran_skeleton,
             autobump,
             handle_merged_pr,
+            create_mulled_manifests,
             annotate_build_failures,
             list_build_failures,
             bulk_trigger_ci,

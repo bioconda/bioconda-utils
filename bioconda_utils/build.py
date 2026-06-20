@@ -10,6 +10,7 @@ from collections import defaultdict
 import itertools
 import logging
 import os
+from pathlib import Path
 
 from typing import Any, NamedTuple
 from bioconda_utils.skiplist import Skiplist
@@ -30,7 +31,9 @@ from ._types import (
     ContainerPlatform,
     container_platform_is_native,
     docker_platform_tag_suffix,
+    native_container_platform,
 )
+from .container_manifests import platform_ref, record_mulled_upload
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +67,12 @@ class MulledImage(NamedTuple):
             tag = f"{tag}-{suffix}"
         return f"quay.io/{self.repository}/{pkg_name}:{tag}"
 
+    @property
+    def canonical_tag(self) -> str:
+        pkg_name_and_version, pkg_build_string = self.spec.rsplit("--", 1)
+        pkg_name, pkg_version = pkg_name_and_version.rsplit("=", 1)
+        return f"quay.io/{self.repository}/{pkg_name}:{pkg_version}--{pkg_build_string}"
+
 
 def mulled_image_metadata(
     spec: str,
@@ -73,7 +82,7 @@ def mulled_image_metadata(
     """Return predictable remote image metadata for a mulled package spec."""
     return MulledImage(
         spec=spec,
-        target_platform=target_platform,
+        target_platform=target_platform or native_container_platform(),
         repository=quay_target,
     )
 
@@ -466,6 +475,7 @@ def build_recipes(
     presolved_mulled_test: bool = True,
     fast_resolve: bool = True,
     container_platforms: Sequence[ContainerPlatform] | None = None,
+    mulled_image_output: Path | None = None,
 ) -> bool:
     """
     Build one or many bioconda packages.
@@ -664,8 +674,20 @@ def build_recipes(
                             failed_uploads.append(pkg)
                 if mulled_upload_target:
                     for img in res.mulled_images or []:
-                        upload.mulled_upload(
+                        if img.target_platform is None:
+                            raise ValueError(
+                                "An explicit container platform is required when "
+                                "publishing manifest-ready mulled images"
+                            )
+                        digest = upload.mulled_upload(
                             img.spec, mulled_upload_target, img.target_platform
+                        )
+                        record_mulled_upload(
+                            mulled_image_output,
+                            img.canonical_tag,
+                            img.target_platform,
+                            platform_ref(img.canonical_tag, img.target_platform),
+                            digest,
                         )
                         docker_utils.purgeImage(
                             mulled_upload_target, img.spec, img.target_platform

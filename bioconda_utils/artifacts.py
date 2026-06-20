@@ -18,7 +18,16 @@ from bioconda_utils._types import (
     ContainerPlatform,
     docker_platform_tag_suffix,
 )
-from bioconda_utils.upload import anaconda_upload, skopeo_upload
+from bioconda_utils.upload import (
+    anaconda_upload,
+    ensure_quay_repository,
+    skopeo_upload,
+)
+from bioconda_utils.container_manifests import (
+    platform_ref,
+    record_mulled_upload,
+    registry_creds,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +102,7 @@ def upload_pr_artifacts(
     artifact_source: str = "azure",
     package_platform: str | None = None,
     container_platforms: list[ContainerPlatform] | None = None,
+    mulled_image_output: Path | None = None,
 ) -> UploadResult:
     _config = utils.load_config(config)
     if package_platform is None:
@@ -170,7 +180,18 @@ def upload_pr_artifacts(
                                 success.append(anaconda_upload(pkg, label=label))
 
                 if mulled_upload_target:
-                    quay_login = os.environ["QUAY_LOGIN"]
+                    quay_login = registry_creds()
+                    if not quay_login:
+                        raise ValueError("QUAY_LOGIN or QUAY_OAUTH_TOKEN is required")
+                    if not selected_container_platforms:
+                        raise ValueError(
+                            "container_platforms is required for mulled artifact uploads"
+                        )
+                    if len(selected_container_platforms) != 1:
+                        raise ValueError(
+                            "Artifact upload requires exactly one container platform"
+                        )
+                    target_platform = next(iter(selected_container_platforms))
 
                     pattern = f"{tmpdir}/*/images/*.tar.gz"
                     logger.info(f"Checking for images at {pattern}.")
@@ -185,22 +206,50 @@ def upload_pr_artifacts(
                         m = IMAGE_RE.match(os.path.basename(img))
                         assert m, f"Could not parse image name from {img}"
                         name, tag = m.groups()
+                        suffix = docker_platform_tag_suffix(target_platform)
+                        if suffix and tag.endswith(f"-{suffix}"):
+                            tag = tag[: -(len(suffix) + 1)]
                         if label:
                             # add label to tag
                             tag = f"{tag}-{label}"
-                        target = f"{mulled_upload_target}/{name}:{tag}"
+                        canonical_ref = f"quay.io/{mulled_upload_target}/{name}:{tag}"
+                        destination_ref = platform_ref(canonical_ref, target_platform)
+                        target = destination_ref.removeprefix("quay.io/")
                         # Skopeo can't handle a : in the file name
                         fixed_img_name = img.replace(":", "_")
                         os.rename(img, fixed_img_name)
+
+                        # Capture digest from the archive before pushing
+                        digest = utils.run(
+                            [
+                                "skopeo",
+                                "inspect",
+                                "--format",
+                                "{{.Digest}}",
+                                f"docker-archive:{fixed_img_name}",
+                            ],
+                            mask=False,
+                        ).stdout.strip()
+
                         if dryrun:
                             logger.info(f"Would upload {img} to {target}.")
                             success.append(True)
                         else:
                             # upload the image
                             logger.info(f"Uploading {img} to {target}.")
-                            success.append(
-                                skopeo_upload(fixed_img_name, target, creds=quay_login)
+                            ensure_quay_repository(mulled_upload_target, name)
+                            uploaded = skopeo_upload(
+                                fixed_img_name, target, creds=quay_login
                             )
+                            success.append(uploaded)
+                            if uploaded:
+                                record_mulled_upload(
+                                    mulled_image_output,
+                                    canonical_ref,
+                                    target_platform,
+                                    destination_ref,
+                                    digest,
+                                )
         if not success:
             logger.info("No matching artifacts found to upload.")
             return UploadResult.NO_ARTIFACTS
