@@ -82,8 +82,8 @@ jobs:
               echo "Skipping pytest - only docs modified"
           fi
   test-macosx:
-    name: OSX tests
-    runs-on: macos-15-intel
+    name: OSX ARM tests
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v6
         with:
