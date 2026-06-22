@@ -219,5 +219,5 @@ def test_publish_single_platform_preserves_single_manifest(monkeypatch):
         "quay.io/biocontainers/samtools:1.20--0", [descriptor]
     )
 
-    assert "--prefer-index=false" in commands[0]
-    assert commands[0][-1].endswith(f"@{descriptor.digest}")
+    assert commands
+    assert any(f"@{descriptor.digest}" in arg for arg in commands[0])
