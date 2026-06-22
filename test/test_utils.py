@@ -748,7 +748,6 @@ def test_rendering_sandboxing():
     # env = {
     #     # None of these should be passed to the recipe
     #     "CONDA_ARBITRARY_VAR": "conda-val-here",
-    #     "TRAVIS_ARBITRARY_VAR": "travis-val-here",
     #     "GITHUB_TOKEN": "asdf",
     #     "BUILDKITE_TOKEN": "asdf",
     # }
