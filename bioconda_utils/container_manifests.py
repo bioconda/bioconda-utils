@@ -265,6 +265,7 @@ def reconcile_manifest(
     """
     requested = tuple(dict.fromkeys(platforms))
     record_map = {r.platform: r for r in records}
+    current = _current_descriptors(canonical_ref, creds)
 
     descriptors: list[ManifestDescriptor] = []
     for platform in requested:
@@ -277,12 +278,19 @@ def reconcile_manifest(
                     source_ref=record.platform_ref,
                 )
             )
+        elif current and platform in current:
+            descriptors.append(
+                ManifestDescriptor(
+                    platform=platform,
+                    digest=current[platform],
+                    source_ref=canonical_ref,
+                )
+            )
 
     if not any(d.platform == "linux/amd64" for d in descriptors):
         raise RuntimeError(f"No amd64 image is available for {canonical_ref}")
 
     desired = {d.platform: d.digest for d in descriptors}
-    current = _current_descriptors(canonical_ref, creds)
     if current == desired:
         logger.info("Manifest already current: %s", canonical_ref)
         return False

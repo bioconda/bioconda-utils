@@ -156,13 +156,106 @@ def test_reconcile_publishes_and_verifies(monkeypatch):
     }
 
 
-def test_reconcile_requires_amd64(monkeypatch):
+def test_reconcile_preserves_existing_arm64_when_only_amd64_is_updated(monkeypatch):
+    canonical = "quay.io/biocontainers/samtools:1.20--0"
+    records = [
+        MulledImageRecord(
+            canonical, "linux/amd64", f"{canonical}-amd64", "sha256:" + "a" * 64
+        ),
+    ]
+    desired = {
+        "linux/amd64": "sha256:" + "a" * 64,
+        "linux/arm64": "sha256:" + "b" * 64,
+    }
+    current = iter(
+        [
+            {
+                "linux/amd64": "sha256:" + "0" * 64,
+                "linux/arm64": "sha256:" + "b" * 64,
+            },
+            desired,
+        ]
+    )
+    monkeypatch.setattr(
+        container_manifests,
+        "_current_descriptors",
+        lambda *_args: next(current),
+    )
+    published = []
+    monkeypatch.setattr(
+        container_manifests,
+        "_publish_manifest",
+        lambda ref, descriptors: published.append((ref, descriptors)),
+    )
+
+    assert container_manifests.reconcile_manifest(
+        canonical, records, ["linux/amd64", "linux/arm64"]
+    )
+    assert {item.platform: item.digest for item in published[0][1]} == desired
+    assert {
+        item.platform: item.source_ref for item in published[0][1]
+    } == {
+        "linux/amd64": f"{canonical}-amd64",
+        "linux/arm64": canonical,
+    }
+
+
+def test_reconcile_preserves_existing_amd64_when_only_arm64_is_updated(monkeypatch):
     canonical = "quay.io/biocontainers/samtools:1.20--0"
     records = [
         MulledImageRecord(
             canonical, "linux/arm64", f"{canonical}-arm64", "sha256:" + "b" * 64
         ),
     ]
+    desired = {
+        "linux/amd64": "sha256:" + "a" * 64,
+        "linux/arm64": "sha256:" + "b" * 64,
+    }
+    current = iter(
+        [
+            {
+                "linux/amd64": "sha256:" + "a" * 64,
+                "linux/arm64": "sha256:" + "0" * 64,
+            },
+            desired,
+        ]
+    )
+    monkeypatch.setattr(
+        container_manifests,
+        "_current_descriptors",
+        lambda *_args: next(current),
+    )
+    published = []
+    monkeypatch.setattr(
+        container_manifests,
+        "_publish_manifest",
+        lambda ref, descriptors: published.append((ref, descriptors)),
+    )
+
+    assert container_manifests.reconcile_manifest(
+        canonical, records, ["linux/amd64", "linux/arm64"]
+    )
+    assert {item.platform: item.digest for item in published[0][1]} == desired
+    assert {
+        item.platform: item.source_ref for item in published[0][1]
+    } == {
+        "linux/amd64": canonical,
+        "linux/arm64": f"{canonical}-arm64",
+    }
+
+
+def test_reconcile_requires_amd64_for_new_manifest(monkeypatch):
+    canonical = "quay.io/biocontainers/samtools:1.20--0"
+    records = [
+        MulledImageRecord(
+            canonical, "linux/arm64", f"{canonical}-arm64", "sha256:" + "b" * 64
+        ),
+    ]
+    monkeypatch.setattr(
+        container_manifests,
+        "_current_descriptors",
+        lambda *_args: None,
+    )
     with pytest.raises(RuntimeError, match="No amd64 image"):
         container_manifests.reconcile_manifest(
             canonical, records, ["linux/amd64", "linux/arm64"]
