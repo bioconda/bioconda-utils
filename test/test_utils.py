@@ -1078,7 +1078,7 @@ def test_load_meta_skipping():
     assert utils.load_all_meta(recipe) == []
 
 
-def test_native_platform_skipping():
+def test_native_platform_skipping(config_fixture):
     expections = (
         # Don't skip linux-x86 for any recipes
         ("one", "linux", False),
@@ -1132,8 +1132,6 @@ def test_native_platform_skipping():
         from_string=True,
     )
     r.write_recipes()
-    # Make sure RepoData singleton init
-    utils.RepoData.register_config(config_fixture)
     for recipe_name, platform, result in expections:
         recipe_folder = os.path.dirname(r.recipe_dirs[recipe_name])
         assert (
