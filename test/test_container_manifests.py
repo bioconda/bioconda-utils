@@ -192,9 +192,7 @@ def test_reconcile_preserves_existing_arm64_when_only_amd64_is_updated(monkeypat
         canonical, records, ["linux/amd64", "linux/arm64"]
     )
     assert {item.platform: item.digest for item in published[0][1]} == desired
-    assert {
-        item.platform: item.source_ref for item in published[0][1]
-    } == {
+    assert {item.platform: item.source_ref for item in published[0][1]} == {
         "linux/amd64": f"{canonical}-amd64",
         "linux/arm64": canonical,
     }
@@ -236,9 +234,7 @@ def test_reconcile_preserves_existing_amd64_when_only_arm64_is_updated(monkeypat
         canonical, records, ["linux/amd64", "linux/arm64"]
     )
     assert {item.platform: item.digest for item in published[0][1]} == desired
-    assert {
-        item.platform: item.source_ref for item in published[0][1]
-    } == {
+    assert {item.platform: item.source_ref for item in published[0][1]} == {
         "linux/amd64": canonical,
         "linux/arm64": f"{canonical}-arm64",
     }

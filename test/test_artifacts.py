@@ -233,9 +233,7 @@ def test_upload_pr_artifacts_dryrun_counts_matching_artifacts(monkeypatch, tmp_p
     assert result == artifacts.UploadResult.SUCCESS
 
 
-def test_upload_pr_artifacts_uses_archive_platform_not_filename(
-    monkeypatch, tmp_path
-):
+def test_upload_pr_artifacts_uses_archive_platform_not_filename(monkeypatch, tmp_path):
     archive = tmp_path / "artifact.zip"
     _write_artifact_zip(
         archive,

@@ -72,7 +72,9 @@ def test_mulled_upload_passes_target_platform(monkeypatch):
         commands.append(cmd)
         if "--config" in cmd:
             return type(
-                "R", (), {"stdout": json.dumps({"os": "linux", "architecture": "arm64"})}
+                "R",
+                (),
+                {"stdout": json.dumps({"os": "linux", "architecture": "arm64"})},
             )()
         return type("R", (), {"stdout": "sha256:" + "a" * 64})()
 
@@ -100,7 +102,9 @@ def test_mulled_upload_stages_amd64_under_suffixed_tag(monkeypatch):
         commands.append(cmd)
         if "--config" in cmd:
             return type(
-                "R", (), {"stdout": json.dumps({"os": "linux", "architecture": "amd64"})}
+                "R",
+                (),
+                {"stdout": json.dumps({"os": "linux", "architecture": "amd64"})},
             )()
         return type("R", (), {"stdout": "sha256:" + "a" * 64})()
 
@@ -141,7 +145,9 @@ def test_upload_mulled_image_source_records_destination_digest(monkeypatch):
         commands.append(cmd)
         if "--config" in cmd:
             return type(
-                "R", (), {"stdout": json.dumps({"os": "linux", "architecture": "arm64"})}
+                "R",
+                (),
+                {"stdout": json.dumps({"os": "linux", "architecture": "arm64"})},
             )()
         if "--format" in cmd:
             return type("R", (), {"stdout": "sha256:" + "d" * 64})()

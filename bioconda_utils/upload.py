@@ -275,4 +275,3 @@ def upload_mulled_image_source(
         platform_ref=destination_ref,
         digest=digest,
     )
-
