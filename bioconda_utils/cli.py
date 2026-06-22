@@ -9,7 +9,7 @@ Bioconda Utils Command Line Interface
 import warnings
 from bioconda_utils import bulk
 
-from bioconda_utils.artifacts import UploadResult, upload_pr_artifacts
+from bioconda_utils.artifacts import ArtifactSource, UploadResult, upload_pr_artifacts
 from bioconda_utils.skiplist import Skiplist
 from bioconda_utils.build_failure import (
     BuildFailureRecord,
@@ -34,7 +34,7 @@ from networkx.drawing.nx_pydot import write_dot
 import pandas
 
 from . import __version__ as VERSION
-from ._types import CONTAINER_PLATFORMS, ContainerPlatform
+from ._types import CONTAINER_PLATFORMS, ContainerPlatform, parse_quay_upload_target
 from . import utils
 from .build import build_recipes
 from . import docker_utils
@@ -56,6 +56,7 @@ warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 logger = logging.getLogger(__name__)
 
 PACKAGE_PLATFORMS = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64"]
+ARTIFACT_SOURCES = ["azure", "circleci", "github-actions"]
 
 
 def enable_logging(default_loglevel="info", default_file_loglevel="debug"):
@@ -763,6 +764,7 @@ def build(
         logger.warning("--lint-exclude has no effect unless --lint is specified.")
 
     label = os.getenv("BIOCONDA_LABEL", None) or None
+    mulled_upload_target = parse_quay_upload_target(mulled_upload_target)
 
     success = build_recipes(
         recipe_folder,
@@ -821,7 +823,7 @@ def build(
 )
 @arg(
     "--artifact-source",
-    choices=["azure", "circleci", "github-actions"],
+    choices=ARTIFACT_SOURCES,
     default="azure",
     help="Application hosting build artifacts (e.g., Azure, Circle CI, or GitHub Actions).",
 )
@@ -849,7 +851,7 @@ def handle_merged_pr(
     dryrun=False,
     fallback="build",
     quay_upload_target=None,
-    artifact_source="azure",
+    artifact_source: ArtifactSource = "azure",
     container_platform: list[ContainerPlatform] | None = None,
     package_platform: str | None = None,
     mulled_upload_records: Path | None = None,
@@ -858,6 +860,7 @@ def handle_merged_pr(
         Path(mulled_upload_records) if mulled_upload_records else None
     )
     label = os.getenv("BIOCONDA_LABEL", None) or None
+    quay_upload_target = parse_quay_upload_target(quay_upload_target)
     if repo is None:
         raise ValueError("repo is required")
     if git_range is None:

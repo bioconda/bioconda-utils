@@ -1,8 +1,10 @@
 import zipfile
 from pathlib import Path
 
-from bioconda_utils import artifacts
+from bioconda_utils import _types, artifacts
 from bioconda_utils.container_manifests import MulledImageRecord
+
+BIOCONTAINERS = _types.QuayUploadTarget("biocontainers")
 
 
 class _TotalList(list):
@@ -148,7 +150,7 @@ def test_upload_pr_artifacts_filters_packages_and_arm64_images(monkeypatch, tmp_
         str(tmp_path / "config.yaml"),
         "bioconda/bioconda-recipes",
         "abc123",
-        mulled_upload_target="biocontainers",
+        mulled_upload_target=BIOCONTAINERS,
         artifact_source="github-actions",
         package_platform="linux-aarch64",
         container_platforms=["linux/arm64"],
@@ -273,7 +275,7 @@ def test_upload_pr_artifacts_uses_archive_platform_not_filename(monkeypatch, tmp
         str(tmp_path / "config.yaml"),
         "bioconda/bioconda-recipes",
         "abc123",
-        mulled_upload_target="biocontainers",
+        mulled_upload_target=BIOCONTAINERS,
         artifact_source="github-actions",
         package_platform="linux-aarch64",
         container_platforms=["linux/arm64"],

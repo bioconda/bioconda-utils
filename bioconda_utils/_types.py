@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import platform
 import typing
-from typing import Any, Literal, Protocol, TypeAlias, cast
+from typing import Any, Literal, NewType, Protocol, TypeAlias, cast
 
 
 ContainerPlatform: TypeAlias = Literal["linux/amd64", "linux/arm64", "linux/riscv64"]
@@ -11,6 +11,18 @@ CONTAINER_PLATFORMS: tuple[ContainerPlatform, ...] = cast(
     tuple[ContainerPlatform, ...],
     typing.get_args(ContainerPlatform),
 )
+QuayUploadTarget = NewType("QuayUploadTarget", str)
+
+
+def parse_quay_upload_target(value: str | None) -> QuayUploadTarget | None:
+    """Validate the quay.io namespace used for mulled image uploads."""
+    if value is None:
+        return None
+    if not value or value != value.strip() or "/" in value or ":" in value:
+        raise ValueError(
+            f"--quay-upload-target must be a single quay.io namespace, not {value!r}"
+        )
+    return QuayUploadTarget(value)
 
 
 def docker_platform_tag_suffix(target_platform: ContainerPlatform | None) -> str | None:

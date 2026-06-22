@@ -29,9 +29,11 @@ from . import graph
 from . import recipe as _recipe
 from ._types import (
     ContainerPlatform,
+    QuayUploadTarget,
     container_platform_is_native,
     docker_platform_tag_suffix,
     native_container_platform,
+    parse_quay_upload_target,
 )
 from .container_manifests import write_image_record
 
@@ -76,7 +78,7 @@ class MulledImage(NamedTuple):
 
 def mulled_image_metadata(
     spec: str,
-    quay_target: str,
+    quay_target: QuayUploadTarget,
     target_platform: ContainerPlatform | None = None,
 ) -> MulledImage:
     """Return predictable remote image metadata for a mulled package spec."""
@@ -120,7 +122,7 @@ def build(
     skiplist_leafs: bool = False,
     live_logs: bool = True,
     presolved_mulled_test: bool = True,
-    mulled_upload_target: str | None = None,
+    mulled_upload_target: QuayUploadTarget | None = None,
     container_platforms: Sequence[ContainerPlatform] | None = None,
 ) -> BuildResult:
     """
@@ -269,6 +271,10 @@ def build(
     if mulled_test:
         logger.info("TEST START via mulled-build %s", recipe)
         mulled_images: list[MulledImage] = []
+        metadata_upload_target = mulled_upload_target or parse_quay_upload_target(
+            "biocontainers"
+        )
+        assert metadata_upload_target is not None
         # Use pre-solved test env unless we need the mulled-build image for upload
         requested_platforms: list[ContainerPlatform | None] = (
             list(container_platforms) if container_platforms else [None]
@@ -304,7 +310,7 @@ def build(
                 mulled_images.append(
                     mulled_image_metadata(
                         image_spec,
-                        mulled_upload_target or "biocontainers",
+                        metadata_upload_target,
                         target_platform,
                     )
                 )
@@ -459,7 +465,7 @@ def build_recipes(
     docker_builder: docker_utils.RecipeBuilder | None = None,
     label: str | None = None,
     anaconda_upload: bool = False,
-    mulled_upload_target: str | None = None,
+    mulled_upload_target: QuayUploadTarget | None = None,
     check_channels: list[str] | None = None,
     do_lint: bool | None = None,
     lint_exclude: list[str] | None = None,

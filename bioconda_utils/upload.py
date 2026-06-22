@@ -13,6 +13,7 @@ import backoff
 from . import utils
 from ._types import (
     ContainerPlatform,
+    QuayUploadTarget,
     docker_platform_tag_suffix,
     native_container_platform,
 )
@@ -132,7 +133,7 @@ def anaconda_upload(
 
 def mulled_upload(
     image: str,
-    quay_target: str,
+    quay_target: QuayUploadTarget,
     target_platform: ContainerPlatform | None = None,
 ) -> MulledImageRecord:
     """

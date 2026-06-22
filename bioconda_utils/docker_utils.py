@@ -60,7 +60,7 @@ from typing import Protocol
 from conda import exports as conda_exports
 
 from . import utils
-from ._types import ContainerPlatform, docker_platform_tag_suffix
+from ._types import ContainerPlatform, QuayUploadTarget, docker_platform_tag_suffix
 
 import logging
 
@@ -521,7 +521,7 @@ class RecipeBuilder:
 
 
 def purgeImage(
-    mulled_upload_target: str,
+    mulled_upload_target: QuayUploadTarget,
     img: str,
     target_platform: ContainerPlatform | None = None,
 ) -> None:
