@@ -1430,7 +1430,7 @@ class AsyncRequests:
     @staticmethod
     @backoff.on_exception(
         backoff.fibo,
-        aiohttp.ClientResponseError,
+        (aiohttp.ClientResponseError, aiohttp.ClientPayloadError),
         max_tries=20,
         giveup=lambda ex: (
             isinstance(ex, aiohttp.ClientResponseError)
