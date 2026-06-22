@@ -63,27 +63,25 @@ def _default_package_platform() -> PackagePlatform:
 
 
 def _download_artifact_contents(
-    artifact: str, artifact_source: ArtifactSource, tmpdir: str
+    artifact: str, artifact_source: ArtifactSource, artifact_dir: Path
 ) -> None:
-    """Download a CI artifact and normalize its extracted contents under tmpdir."""
+    """Download a CI artifact and normalize its extracted contents under artifact_dir."""
     match artifact_source:
         case "azure":
-            artifact_path = os.path.join(tmpdir, os.path.basename(artifact))
-            download_artifact(artifact, artifact_path, artifact_source)
-            zipfile.ZipFile(artifact_path).extractall(tmpdir)
-        case "circleci":
-            artifact_dir = os.path.join(tmpdir, *(artifact.split("/")[-4:-1]))
-            artifact_path = os.path.join(
-                tmpdir, artifact_dir, os.path.basename(artifact)
-            )
-            Path(artifact_dir).mkdir(parents=True, exist_ok=True)
-            download_artifact(artifact, artifact_path, artifact_source)
-        case "github-actions":
-            artifact_dir = os.path.join(tmpdir, "artifacts")
-            artifact_path = os.path.join(artifact_dir, os.path.basename(artifact))
-            Path(artifact_dir).mkdir(parents=True, exist_ok=True)
+            artifact_path = artifact_dir / os.path.basename(artifact)
             download_artifact(artifact, artifact_path, artifact_source)
             zipfile.ZipFile(artifact_path).extractall(artifact_dir)
+        case "circleci":
+            extract_dir = Path(artifact_dir, *artifact.split("/")[-4:-1])
+            artifact_path = extract_dir / os.path.basename(artifact)
+            extract_dir.mkdir(parents=True, exist_ok=True)
+            download_artifact(artifact, artifact_path, artifact_source)
+        case "github-actions":
+            extract_dir = artifact_dir / "artifacts"
+            artifact_path = extract_dir / os.path.basename(artifact)
+            extract_dir.mkdir(parents=True, exist_ok=True)
+            download_artifact(artifact, artifact_path, artifact_source)
+            zipfile.ZipFile(artifact_path).extractall(extract_dir)
         case _:
             raise ValueError(f"Unsupported artifact source: {artifact_source}")
 
@@ -98,24 +96,24 @@ def _package_platform_patterns(package_platform: PackagePlatform) -> list[str]:
 
 
 def _iter_package_paths(
-    tmpdir: str, package_platform: PackagePlatform
+    artifact_dir: Path, package_platform: PackagePlatform
 ) -> Iterator[str]:
     for platform_pattern in _package_platform_patterns(package_platform):
         for ext in (".tar.bz2", ".conda"):
-            pattern = f"{tmpdir}/*/packages/{platform_pattern}/*{ext}"
+            pattern = f"{artifact_dir!s}/*/packages/{platform_pattern}/*{ext}"
             logger.info(f"Checking for packages at {pattern}.")
             yield from glob.glob(pattern)
 
 
 def _upload_packages(
-    tmpdir: str,
+    artifact_dir: Path,
     package_platform: PackagePlatform,
     *,
     dryrun: bool,
     label: str | None,
 ) -> list[bool]:
     success = []
-    for pkg in _iter_package_paths(tmpdir, package_platform):
+    for pkg in _iter_package_paths(artifact_dir, package_platform):
         if dryrun:
             logger.info(f"Would upload {pkg} to anaconda.org.")
             success.append(True)
@@ -161,7 +159,7 @@ def _canonical_image_ref(
 
 
 def _upload_mulled_images(
-    tmpdir: str,
+    artifact_dir: Path,
     *,
     target_platform: ContainerPlatform,
     mulled_upload_target: QuayUploadTarget,
@@ -171,7 +169,7 @@ def _upload_mulled_images(
 ) -> list[bool]:
     """Upload matching mulled image archives and report per-image success."""
     success = []
-    pattern = f"{tmpdir}/*/images/*.tar.gz"
+    pattern = f"{artifact_dir!s}/*/images/*.tar.gz"
     logger.info(f"Checking for images at {pattern}.")
     image_seen = False
     image_matched = False
@@ -283,10 +281,11 @@ def upload_pr_artifacts(
     success = []
     for artifact in artifacts:
         with tempfile.TemporaryDirectory() as tmpdir:
-            _download_artifact_contents(artifact, artifact_source, tmpdir)
+            artifact_dir = Path(tmpdir)
+            _download_artifact_contents(artifact, artifact_source, artifact_dir)
             success.extend(
                 _upload_packages(
-                    tmpdir,
+                    artifact_dir,
                     package_platform,
                     dryrun=dryrun,
                     label=label,
@@ -297,7 +296,7 @@ def upload_pr_artifacts(
                 target_platform = _mulled_artifact_target_platform(container_platforms)
                 success.extend(
                     _upload_mulled_images(
-                        tmpdir,
+                        artifact_dir,
                         target_platform=target_platform,
                         mulled_upload_target=mulled_upload_target,
                         dryrun=dryrun,
@@ -316,7 +315,7 @@ def upload_pr_artifacts(
 
 
 @backoff.on_exception(backoff.expo, requests.exceptions.RequestException)
-def download_artifact(url: str, to_path: str, artifact_source: ArtifactSource) -> None:
+def download_artifact(url: str, to_path: Path, artifact_source: ArtifactSource) -> None:
     logger.info(f"Downloading artifact {url}.")
     headers = {}
     if artifact_source == "github-actions":
