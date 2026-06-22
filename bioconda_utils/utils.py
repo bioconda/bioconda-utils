@@ -540,7 +540,10 @@ def load_conda_build_config(platform=None, trim_skip=True):
     """
     Load conda build config while considering global pinnings from conda-forge.
     """
-    config = api.Config(no_download_source=True, set_build_id=False)
+    config_kwargs: dict[str, Any] = {"no_download_source": True, "set_build_id": False}
+    if RepoData.config is not None:
+        config_kwargs["channel_urls"] = tuple(RepoData.config["channels"])
+    config = api.Config(**config_kwargs)
 
     # get environment root
     bioconda_utils_bin = shutil.which("bioconda-utils")

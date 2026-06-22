@@ -14,12 +14,10 @@ ensure that your local setup matches that used to build recipes on travis-ci as
 closely as possible.
 
 However, if you would like to test in a standalone manner or help develop
-bioconda-utils, you can install requirements via conda into your root conda
-environment and then install the package:
+bioconda-utils, you can use the Just wrappers around the Pixi tasks:
 
 ```bash
-conda install --file bioconda_utils/bioconda_utils-requirements.txt -c conda-forge -c bioconda
-python -m pip install --no-deps --no-build-isolation .
+just install
 ```
 
 See the help for the `bioconda-utils` command-line interface for details:
