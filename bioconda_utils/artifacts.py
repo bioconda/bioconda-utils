@@ -12,6 +12,7 @@ import requests
 import backoff
 import json
 from pathlib import Path
+from urllib.parse import urlparse
 from bioconda_utils import utils
 from bioconda_utils._types import (
     ContainerPlatform,
@@ -63,24 +64,26 @@ def _default_package_platform() -> PackagePlatform:
 
 
 def _download_artifact_contents(
-    artifact: str, artifact_source: ArtifactSource, artifact_dir: Path
+    artifact_url: str, artifact_source: ArtifactSource, artifact_dir: Path
 ) -> None:
     """Download a CI artifact and normalize its extracted contents under artifact_dir."""
     match artifact_source:
         case "azure":
-            artifact_path = artifact_dir / os.path.basename(artifact)
-            download_artifact(artifact, artifact_path, artifact_source)
+            artifact_path = artifact_dir / os.path.basename(artifact_url)
+            download_artifact(artifact_url, artifact_path, artifact_source)
             zipfile.ZipFile(artifact_path).extractall(artifact_dir)
         case "circleci":
-            extract_dir = Path(artifact_dir, *artifact.split("/")[-4:-1])
-            artifact_path = extract_dir / os.path.basename(artifact)
+            url_parts = urlparse(artifact_url)
+            path_parts = url_parts.path.strip("/").split("/")
+            extract_dir = Path(artifact_dir, *path_parts[-4:-1])
+            artifact_path = extract_dir / path_parts[-1]
             extract_dir.mkdir(parents=True, exist_ok=True)
-            download_artifact(artifact, artifact_path, artifact_source)
+            download_artifact(artifact_url, artifact_path, artifact_source)
         case "github-actions":
             extract_dir = artifact_dir / "artifacts"
-            artifact_path = extract_dir / os.path.basename(artifact)
+            artifact_path = extract_dir / os.path.basename(artifact_url)
             extract_dir.mkdir(parents=True, exist_ok=True)
-            download_artifact(artifact, artifact_path, artifact_source)
+            download_artifact(artifact_url, artifact_path, artifact_source)
             zipfile.ZipFile(artifact_path).extractall(extract_dir)
         case _:
             raise ValueError(f"Unsupported artifact source: {artifact_source}")
@@ -279,10 +282,10 @@ def upload_pr_artifacts(
         return UploadResult.NO_ARTIFACTS
 
     success = []
-    for artifact in artifacts:
+    for artifact_url in artifacts:
         with tempfile.TemporaryDirectory() as tmpdir:
             artifact_dir = Path(tmpdir)
-            _download_artifact_contents(artifact, artifact_source, artifact_dir)
+            _download_artifact_contents(artifact_url, artifact_source, artifact_dir)
             success.extend(
                 _upload_packages(
                     artifact_dir,
@@ -374,22 +377,22 @@ def fetch_artifacts(
             )
         ):
             # azure builds
-            artifact_url = get_azure_artifacts(check_run)
+            artifact_url = get_azure_artifact_urls(check_run)
             yield from artifact_url
         elif artifact_source == "circleci" and check_run.app.slug == "circleci-checks":
             # Circle CI builds
-            artifact_url = get_circleci_artifacts(check_run, job_platform)
+            artifact_url = get_circleci_artifact_urls(check_run, job_platform)
             yield from artifact_url
         elif (
             artifact_source == "github-actions"
             and check_run.app.slug == "github-actions"
         ):
             # GitHubActions builds
-            artifact_url = get_gha_artifacts(check_run, package_platform, repo)
+            artifact_url = get_gha_artifact_urls(check_run, package_platform, repo)
             yield from artifact_url
 
 
-def get_azure_artifacts(check_run: Any) -> Iterator[str]:
+def get_azure_artifact_urls(check_run: Any) -> Iterator[str]:
     azure_build_id = parse_azure_build_id(check_run.details_url)
     url = f"https://dev.azure.com/bioconda/bioconda-recipes/_apis/build/builds/{azure_build_id}/artifacts?api-version=4.1"
     res = requests.get(url, json=True).json()
@@ -408,7 +411,7 @@ def parse_azure_build_id(url: str) -> str:
     return match.group(1)
 
 
-def get_circleci_artifacts(check_run: Any, platform: str) -> Iterator[str]:
+def get_circleci_artifact_urls(check_run: Any, platform: str) -> Iterator[str]:
     circleci_workflow_id = json.loads(check_run.external_id)["workflow-id"]
     # Must use a Personal token for API v2
     token = os.environ.get("CIRCLECI_TOKEN")
@@ -454,7 +457,7 @@ def parse_gha_build_id(url: str) -> str:
     return match.group(1)
 
 
-def get_gha_artifacts(
+def get_gha_artifact_urls(
     check_run: Any, platform: PackagePlatform, repo: Any
 ) -> Iterator[str]:
     gha_workflow_id = parse_gha_build_id(check_run.details_url)

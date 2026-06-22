@@ -50,7 +50,7 @@ def _write_artifact_zip(path: Path, members: dict[str, bytes]) -> None:
             artifact_zip.writestr(member_path, data)
 
 
-def test_get_gha_artifacts_filters_to_package_platform():
+def test_get_gha_artifact_urls_filters_to_package_platform():
     repo = type(
         "Repo",
         (),
@@ -65,12 +65,12 @@ def test_get_gha_artifacts_filters_to_package_platform():
         },
     )()
 
-    urls = list(artifacts.get_gha_artifacts(_CheckRun(), "linux-aarch64", repo))
+    urls = list(artifacts.get_gha_artifact_urls(_CheckRun(), "linux-aarch64", repo))
 
     assert urls == ["linux-arm64-url"]
 
 
-def test_get_gha_artifacts_accepts_legacy_x86_names():
+def test_get_gha_artifact_urls_accepts_legacy_x86_names():
     repo = type(
         "Repo",
         (),
@@ -85,7 +85,7 @@ def test_get_gha_artifacts_accepts_legacy_x86_names():
         },
     )()
 
-    urls = list(artifacts.get_gha_artifacts(_CheckRun(), "linux-64", repo))
+    urls = list(artifacts.get_gha_artifact_urls(_CheckRun(), "linux-64", repo))
 
     assert urls == ["linux-url", "linux-64-url"]
 
