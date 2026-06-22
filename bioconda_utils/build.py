@@ -29,6 +29,7 @@ from . import graph
 from . import recipe as _recipe
 from ._types import (
     ContainerPlatform,
+    PkgBuildRef,
     QuayUploadTarget,
     container_platform_is_native,
     docker_platform_tag_suffix,
@@ -50,34 +51,32 @@ class BuildResult(NamedTuple):
 class MulledImage(NamedTuple):
     """Mulled image metadata for one built package and target platform."""
 
-    spec: str
+    spec: PkgBuildRef
     target_platform: ContainerPlatform | None
     repository: str
 
     @property
     def image_name(self) -> str:
-        name, _ = self.spec.rsplit("--", 1)[0].rsplit("=", 1)
-        return name
+        return self.spec.name
 
     @property
     def remote_tag(self) -> str:
-        pkg_name_and_version, pkg_build_string = self.spec.rsplit("--", 1)
-        pkg_name, pkg_version = pkg_name_and_version.rsplit("=", 1)
-        tag = f"{pkg_version}--{pkg_build_string}"
+        tag = f"{self.spec.version}--{self.spec.build_string}"
         suffix = docker_platform_tag_suffix(self.target_platform)
         if suffix:
             tag = f"{tag}-{suffix}"
-        return f"quay.io/{self.repository}/{pkg_name}:{tag}"
+        return f"quay.io/{self.repository}/{self.spec.name}:{tag}"
 
     @property
     def canonical_tag(self) -> str:
-        pkg_name_and_version, pkg_build_string = self.spec.rsplit("--", 1)
-        pkg_name, pkg_version = pkg_name_and_version.rsplit("=", 1)
-        return f"quay.io/{self.repository}/{pkg_name}:{pkg_version}--{pkg_build_string}"
+        return (
+            f"quay.io/{self.repository}/{self.spec.name}:"
+            f"{self.spec.version}--{self.spec.build_string}"
+        )
 
 
 def mulled_image_metadata(
-    spec: str,
+    spec: PkgBuildRef,
     quay_target: QuayUploadTarget,
     target_platform: ContainerPlatform | None = None,
 ) -> MulledImage:

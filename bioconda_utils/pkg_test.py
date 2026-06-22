@@ -11,7 +11,7 @@ import logging
 from collections.abc import Sequence
 
 from . import utils
-from ._types import ContainerPlatform
+from ._types import ContainerPlatform, PkgBuildRef
 
 from conda_build.metadata import MetaData
 from conda_index.index import update_index
@@ -64,9 +64,9 @@ def get_tests(path: str) -> str:
     return f"bash -c {shlex.quote(tests)}"
 
 
-def get_image_name(path: str) -> str:
+def get_image_name(path: str) -> PkgBuildRef:
     """
-    Returns name of generated docker image.
+    Returns a package build reference parsed from a built package filename.
 
     Parameters
     ----------
@@ -88,19 +88,18 @@ def get_image_name(path: str) -> str:
     version = toks[-2]
     name = "-".join(toks[:-2])
 
-    spec = f"{name}={version}--{build_string}"
-    return spec
+    return PkgBuildRef(name, version, build_string)
 
 
 def _generate_explicit_spec(
-    spec: str, channels: Sequence[str], conda_bld_dir: str, tmpdir: str
+    spec: PkgBuildRef, channels: Sequence[str], conda_bld_dir: str, tmpdir: str
 ) -> str | None:
     """Generate an @EXPLICIT spec file by dry-running conda create.
 
     Parameters
     ----------
-    spec : str
-        Package spec in name=version--build format
+    spec : PkgBuildRef
+        Package build reference (name, version, build string)
     channels : list
         List of resolved channel URLs (no "local")
     conda_bld_dir : str
@@ -113,8 +112,8 @@ def _generate_explicit_spec(
     str or None
         Path to explicit spec file, or None on failure
     """
-    # Convert spec from mulled format (name=version--build) to conda format (name=version=build)
-    pkg_spec = spec.replace("--", "=")
+    # Convert to conda format (name=version=build)
+    pkg_spec = f"{spec.name}={spec.version}={spec.build_string}"
 
     channel_args = []
     for ch in channels:
@@ -359,7 +358,7 @@ def test_package(
     cmd = [
         "mulled-build",
         "build-and-test",
-        spec,
+        str(spec),
         "-n",
         "biocontainers",
         "--test",

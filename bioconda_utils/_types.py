@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import platform
 import typing
-from typing import Any, Literal, NewType, Protocol, TypeAlias, cast
+from typing import Any, Literal, NamedTuple, NewType, Protocol, TypeAlias, cast
 
 
 ContainerPlatform: TypeAlias = Literal["linux/amd64", "linux/arm64", "linux/riscv64"]
@@ -10,6 +10,11 @@ ContainerPlatform: TypeAlias = Literal["linux/amd64", "linux/arm64", "linux/risc
 CONTAINER_PLATFORMS: tuple[ContainerPlatform, ...] = cast(
     tuple[ContainerPlatform, ...],
     typing.get_args(ContainerPlatform),
+)
+PackagePlatform: TypeAlias = Literal["linux-64", "linux-aarch64", "osx-64", "osx-arm64"]
+PACKAGE_PLATFORMS: tuple[PackagePlatform, ...] = cast(
+    tuple[PackagePlatform, ...],
+    typing.get_args(PackagePlatform),
 )
 QuayUploadTarget = NewType("QuayUploadTarget", str)
 
@@ -58,6 +63,22 @@ def container_platform_is_native(target_platform: ContainerPlatform | None) -> b
     if target_platform is None:
         return True
     return target_platform == native_container_platform()
+
+
+class PkgBuildRef(NamedTuple):
+    """A built package identity: name, version, build string.
+
+    Produced from a ``.tar.bz2`` or ``.conda`` package filename by
+    extracting the name, version, and build string.  Can be stringified
+    back to the standard ``name=version--build_string`` form via ``str()``.
+    """
+
+    name: str
+    version: str
+    build_string: str
+
+    def __str__(self) -> str:
+        return f"{self.name}={self.version}--{self.build_string}"
 
 
 class RecipeMetaLike(Protocol):

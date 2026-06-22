@@ -5,13 +5,15 @@ from unittest.mock import Mock
 import pytest
 
 from bioconda_utils import _types, build, docker_utils, pkg_test, upload
+from bioconda_utils._types import PkgBuildRef
 
+SAMTOOLS_1_3_0 = PkgBuildRef(name="samtools", version="1.3", build_string="0")
 BIOCONTAINERS = _types.QuayUploadTarget("biocontainers")
 
 
 def test_mulled_image_metadata_uses_platform_suffix():
-    image = build.mulled_image_metadata("samtools=1.3--0", BIOCONTAINERS, "linux/arm64")
-    assert image.spec == "samtools=1.3--0"
+    image = build.mulled_image_metadata(SAMTOOLS_1_3_0, BIOCONTAINERS, "linux/arm64")
+    assert image.spec == SAMTOOLS_1_3_0
     assert image.target_platform == "linux/arm64"
     assert image.repository == "biocontainers"
     assert image.image_name == "samtools"
@@ -19,7 +21,7 @@ def test_mulled_image_metadata_uses_platform_suffix():
 
 
 def test_mulled_image_metadata_keeps_amd64_unsuffixed():
-    image = build.mulled_image_metadata("samtools=1.3--0", BIOCONTAINERS, "linux/amd64")
+    image = build.mulled_image_metadata(SAMTOOLS_1_3_0, BIOCONTAINERS, "linux/amd64")
     assert image.remote_tag == "quay.io/biocontainers/samtools:1.3--0"
 
 
@@ -28,7 +30,7 @@ def test_mulled_image_metadata_records_native_platform(monkeypatch):
     monkeypatch.setattr(
         build, "native_container_platform", _types.native_container_platform
     )
-    image = build.mulled_image_metadata("samtools=1.3--0", BIOCONTAINERS)
+    image = build.mulled_image_metadata(SAMTOOLS_1_3_0, BIOCONTAINERS)
     assert image.target_platform == "linux/arm64"
 
 
@@ -82,7 +84,7 @@ def test_mulled_upload_passes_target_platform(monkeypatch):
         run,
     )
 
-    record = upload.mulled_upload("samtools=1.3--0", BIOCONTAINERS, "linux/arm64")
+    record = upload.mulled_upload(SAMTOOLS_1_3_0, BIOCONTAINERS, "linux/arm64")
 
     ref = "quay.io/biocontainers/samtools:1.3--0-arm64"
     assert any(ref in arg for arg in commands[1])
@@ -112,7 +114,7 @@ def test_mulled_upload_stages_amd64_under_suffixed_tag(monkeypatch):
         run,
     )
 
-    upload.mulled_upload("samtools=1.3--0", BIOCONTAINERS, "linux/amd64")
+    upload.mulled_upload(SAMTOOLS_1_3_0, BIOCONTAINERS, "linux/amd64")
 
     assert "quay.io/biocontainers/samtools:1.3--0-amd64" in " ".join(commands[1])
 
@@ -130,7 +132,7 @@ def test_mulled_upload_rejects_wrong_source_platform(monkeypatch):
     )
 
     with pytest.raises(RuntimeError, match="Image platform mismatch"):
-        upload.mulled_upload("samtools=1.3--0", BIOCONTAINERS, "linux/arm64")
+        upload.mulled_upload(SAMTOOLS_1_3_0, BIOCONTAINERS, "linux/arm64")
 
 
 def test_upload_mulled_image_source_records_destination_digest(monkeypatch):
@@ -206,7 +208,7 @@ def test_purge_image_uses_platform_suffix(monkeypatch):
         lambda cmd, **_kwargs: commands.append(cmd),
     )
 
-    docker_utils.purgeImage(BIOCONTAINERS, "samtools=1.3--0", "linux/arm64")
+    docker_utils.purgeImage(BIOCONTAINERS, SAMTOOLS_1_3_0, "linux/arm64")
 
     assert commands
     assert "quay.io/biocontainers/samtools:1.3--0-arm64" in " ".join(commands[0])

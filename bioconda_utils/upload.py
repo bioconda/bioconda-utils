@@ -13,6 +13,7 @@ import backoff
 from . import utils
 from ._types import (
     ContainerPlatform,
+    PkgBuildRef,
     QuayUploadTarget,
     docker_platform_tag_suffix,
     native_container_platform,
@@ -132,7 +133,7 @@ def anaconda_upload(
 
 
 def mulled_upload(
-    image: str,
+    image: PkgBuildRef,
     quay_target: QuayUploadTarget,
     target_platform: ContainerPlatform | None = None,
 ) -> MulledImageRecord:
@@ -142,7 +143,7 @@ def mulled_upload(
     Calls ``mulled-build push <image> -n <quay_target>``
 
     Args:
-      image: name of image to push
+      image: package build reference (name, version, build string)
       quary_target: name of image on quay
       target_platform: Docker target platform to pass to mulled-build
 
@@ -150,10 +151,8 @@ def mulled_upload(
       A manifest publication record for the image uploaded to quay.io.
     """
     target_platform = target_platform or native_container_platform()
-    pkg_name_and_version, pkg_build_string = image.rsplit("--", 1)
-    pkg_name, pkg_version = pkg_name_and_version.rsplit("=", 1)
     canonical_ref = (
-        f"quay.io/{quay_target}/{pkg_name}:{pkg_version}--{pkg_build_string}"
+        f"quay.io/{quay_target}/{image.name}:{image.version}--{image.build_string}"
     )
     local_ref = canonical_ref
     if suffix := docker_platform_tag_suffix(target_platform):

@@ -60,7 +60,12 @@ from typing import Protocol
 from conda import exports as conda_exports
 
 from . import utils
-from ._types import ContainerPlatform, QuayUploadTarget, docker_platform_tag_suffix
+from ._types import (
+    ContainerPlatform,
+    PkgBuildRef,
+    QuayUploadTarget,
+    docker_platform_tag_suffix,
+)
 
 import logging
 
@@ -522,14 +527,15 @@ class RecipeBuilder:
 
 def purgeImage(
     mulled_upload_target: QuayUploadTarget,
-    img: str,
+    img: PkgBuildRef,
     target_platform: ContainerPlatform | None = None,
 ) -> None:
-    pkg_name_and_version, pkg_build_string = img.rsplit("--", 1)
-    pkg_name, pkg_version = pkg_name_and_version.rsplit("=", 1)
     suffix = docker_platform_tag_suffix(target_platform)
     suffix = f"-{suffix}" if suffix else ""
-    pkg_container_image = f"quay.io/{mulled_upload_target}/{pkg_name}:{pkg_version}--{pkg_build_string}{suffix}"
+    pkg_container_image = (
+        f"quay.io/{mulled_upload_target}/{img.name}:"
+        f"{img.version}--{img.build_string}{suffix}"
+    )
     cmd = ["docker", "rmi", pkg_container_image]
     utils.run(cmd, mask=False)
 

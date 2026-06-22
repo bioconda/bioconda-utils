@@ -34,7 +34,13 @@ from networkx.drawing.nx_pydot import write_dot
 import pandas
 
 from . import __version__ as VERSION
-from ._types import CONTAINER_PLATFORMS, ContainerPlatform, parse_quay_upload_target
+from ._types import (
+    CONTAINER_PLATFORMS,
+    PACKAGE_PLATFORMS,
+    ContainerPlatform,
+    PackagePlatform,
+    parse_quay_upload_target,
+)
 from . import utils
 from .build import build_recipes
 from . import docker_utils
@@ -55,7 +61,6 @@ warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 
 logger = logging.getLogger(__name__)
 
-PACKAGE_PLATFORMS = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64"]
 ARTIFACT_SOURCES = ["azure", "circleci", "github-actions"]
 
 
@@ -853,7 +858,7 @@ def handle_merged_pr(
     quay_upload_target=None,
     artifact_source: ArtifactSource = "azure",
     container_platform: list[ContainerPlatform] | None = None,
-    package_platform: str | None = None,
+    package_platform: PackagePlatform | None = None,
     mulled_upload_records: Path | None = None,
 ):
     mulled_upload_records = (
