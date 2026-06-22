@@ -132,6 +132,8 @@ eval "$(conda shell.posix activate base)"
 set -u
 
 printf 'creating environment at %s ...\n' "${prefix}" 1>&2
+# ${conda_impl} and ${create_command} are intentionally word-split (e.g. "conda" or "mamba env")
+# shellcheck disable=SC2086
 CONDA_YES=1 \
     ${conda_impl} \
     ${create_command} \
@@ -153,11 +155,9 @@ if [ -n "${env_activate_file}${env_execute_file}" ]; then
     fi
     if [ -n "${env_execute_file-}" ]; then
         printf 'writing execution script to %s ...\n' "${env_execute_file}" 1>&2
-        printf '%s\n' \
-            '#! /bin/bash' \
-            "${activate_script}" \
-            'exec "${@}"' \
-            >"${env_execute_file}"
+        # ${@} must be literal in the generated script, not expanded at write time
+        # shellcheck disable=SC2016
+        printf '%s\n' '#! /bin/bash' "${activate_script}" 'exec "${@}"' >"${env_execute_file}"
         chmod +x "${env_execute_file}"
     fi
 fi
@@ -204,9 +204,11 @@ if [ -n "${strip_files_globs}" ]; then
                 -n 64 \
                 -- \
                 stat -L -c '%d,%i:%n' -- |
-            sed \
-                ${skip_inode_expressions} \
-                -e 's/^[^:]*://' |
+            {
+                # ${skip_inode_expressions} is intentionally word-split to pass multiple sed arguments
+                # shellcheck disable=SC2086
+                sed ${skip_inode_expressions} -e 's/^[^:]*://'
+            } |
             tr \\n \\0 |
             xargs \
                 -0 \

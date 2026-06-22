@@ -20,6 +20,8 @@ miniconda_boostrap_prefix="$(pwd)/miniconda"
         -p "${miniconda_boostrap_prefix}"
 
     # Install the base Conda installation.
+    # conda.sh is created by the Miniconda installer above and doesn't exist at analysis time
+    # shellcheck disable=SC1091
     . "${miniconda_boostrap_prefix}/etc/profile.d/conda.sh"
 
     # Install conda, mamba and some additional tools:
@@ -38,6 +40,8 @@ miniconda_boostrap_prefix="$(pwd)/miniconda"
     conda remove --yes --all \
         --prefix="${conda_install_prefix}"
 
+    # ${tools} may be empty or space-separated list; word splitting is intentional
+    # shellcheck disable=SC2086
     conda create --yes \
         --prefix="${conda_install_prefix}" \
         --channel=conda-forge \
@@ -47,8 +51,7 @@ miniconda_boostrap_prefix="$(pwd)/miniconda"
         tini \
         \
         libgcc-ng \
-        ${tools} \
-        ;
+        ${tools}
 
     mv \
         ./print-env-activate \

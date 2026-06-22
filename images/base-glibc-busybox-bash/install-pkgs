@@ -1,4 +1,6 @@
 #! /bin/sh
+# local is available in Debian's dash (patched) and BusyBox ash
+# shellcheck disable=SC3043
 set -xeu
 
 arch=$(uname -m)
@@ -291,14 +293,19 @@ get_deps() {
             libaudit1 libpam-modules libpam-runtime libpam0g |
             grep -vFx "$(printf %s\\n "${@}")"
     )"
-    [ -f "${root_fs}/.pkg.lst" ] &&
+    if [ -f "${root_fs}/.pkg.lst" ]; then
+        # ignore_pkgs is intentionally word-split to iterate multiple packages; $(cat -s) output also word-split
+        # shellcheck disable=SC2086,SC2046
         ignore_pkgs=$(printf %s\\n ${ignore_pkgs} $(cat -s "${root_fs}/.pkg.lst"))
+    fi
 
     local new_pkgs="${*}"
     local old_pkgs=''
     while ! [ "${new_pkgs}" = "${old_pkgs}" ]; do
         old_pkgs="${new_pkgs}"
         new_pkgs="$(
+            # ${old_pkgs} is intentionally word-split to pass multiple packages as separate arguments
+            # shellcheck disable=SC2086
             apt-cache depends \
                 --no-recommends --no-suggests --no-conflicts \
                 --no-breaks --no-replaces --no-enhances \
@@ -306,11 +313,13 @@ get_deps() {
                 sed -n 's/.*Depends: //p' | cat -s
         )"
         new_pkgs="$(
-            printf %s\\n ${old_pkgs} ${new_pkgs} |
-                sort -u |
-                grep -vFx "$(printf %s\\n ${ignore_pkgs})"
+            # ${old_pkgs}, ${new_pkgs}, and ${ignore_pkgs} are intentionally word-split for package iteration
+            # shellcheck disable=SC2086
+            printf %s\\n ${old_pkgs} ${new_pkgs} | sort -u | grep -vFx "$(printf %s\\n ${ignore_pkgs})"
         )"
     done
+    # ${new_pkgs} is intentionally word-split to emit one package per line
+    # shellcheck disable=SC2086
     printf %s\\n ${new_pkgs}
 }
 
