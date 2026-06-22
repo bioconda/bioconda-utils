@@ -2,6 +2,7 @@ import zipfile
 from pathlib import Path
 
 from bioconda_utils import artifacts
+from bioconda_utils.container_manifests import MulledImageRecord
 
 
 class _TotalList(list):
@@ -100,7 +101,7 @@ def test_upload_pr_artifacts_filters_packages_and_arm64_images(monkeypatch, tmp_
         },
     )
     uploaded_packages = []
-    uploaded_images = []
+    uploaded_sources = []
 
     monkeypatch.setattr(artifacts.utils, "load_config", lambda _config: {})
     monkeypatch.setattr(artifacts.utils, "get_github_client", _FakeClient)
@@ -121,16 +122,26 @@ def test_upload_pr_artifacts_filters_packages_and_arm64_images(monkeypatch, tmp_
         lambda pkg, label=None: uploaded_packages.append((pkg, label)) or True,
     )
     monkeypatch.setattr(
-        artifacts.utils,
-        "run",
-        lambda cmd, **_kwargs: type("R", (), {"stdout": "sha256:" + "a" * 64})(),
+        artifacts,
+        "inspect_image_platform",
+        lambda source_ref: (
+            "linux/arm64" if source_ref.endswith("-arm64.tar.gz") else "linux/amd64"
+        ),
     )
+
+    def upload_source(source_ref, canonical_ref, target_platform, **_kwargs):
+        uploaded_sources.append((source_ref, canonical_ref, target_platform))
+        return MulledImageRecord(
+            canonical_ref,
+            target_platform,
+            f"{canonical_ref}-arm64",
+            "sha256:" + "a" * 64,
+        )
+
     monkeypatch.setattr(
         artifacts,
-        "skopeo_upload",
-        lambda img, target, creds=None: (
-            uploaded_images.append((img, target, creds)) or True
-        ),
+        "upload_mulled_image_source",
+        upload_source,
     )
 
     result = artifacts.upload_pr_artifacts(
@@ -148,11 +159,11 @@ def test_upload_pr_artifacts_filters_packages_and_arm64_images(monkeypatch, tmp_
         "samtools-1.0-0.conda",
         "helper-1.0-0.conda",
     ]
-    assert uploaded_images == [
+    assert uploaded_sources == [
         (
-            uploaded_images[0][0],
-            "biocontainers/samtools:1.0--0-arm64",
-            "login:password",
+            uploaded_sources[0][0],
+            "quay.io/biocontainers/samtools:1.0--0",
+            "linux/arm64",
         )
     ]
 
@@ -220,3 +231,55 @@ def test_upload_pr_artifacts_dryrun_counts_matching_artifacts(monkeypatch, tmp_p
     )
 
     assert result == artifacts.UploadResult.SUCCESS
+
+
+def test_upload_pr_artifacts_uses_archive_platform_not_filename(
+    monkeypatch, tmp_path
+):
+    archive = tmp_path / "artifact.zip"
+    _write_artifact_zip(
+        archive,
+        {
+            "packages/linux-aarch64/samtools-1.0-0.conda": b"arm package",
+            "images/samtools---1.0--0-arm64.tar.gz": b"actually x86 image",
+        },
+    )
+    uploaded_sources = []
+
+    monkeypatch.setattr(artifacts.utils, "load_config", lambda _config: {})
+    monkeypatch.setattr(artifacts.utils, "get_github_client", _FakeClient)
+    monkeypatch.setattr(
+        artifacts,
+        "fetch_artifacts",
+        lambda *_args, **_kwargs: ["https://example.test/artifact.zip"],
+    )
+    monkeypatch.setenv("QUAY_LOGIN", "login:password")
+
+    def download_artifact(_url, to_path, _artifact_source):
+        Path(to_path).write_bytes(archive.read_bytes())
+
+    monkeypatch.setattr(artifacts, "download_artifact", download_artifact)
+    monkeypatch.setattr(artifacts, "anaconda_upload", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        artifacts,
+        "inspect_image_platform",
+        lambda _source_ref: "linux/amd64",
+    )
+    monkeypatch.setattr(
+        artifacts,
+        "upload_mulled_image_source",
+        lambda *args, **_kwargs: uploaded_sources.append(args),
+    )
+
+    result = artifacts.upload_pr_artifacts(
+        str(tmp_path / "config.yaml"),
+        "bioconda/bioconda-recipes",
+        "abc123",
+        mulled_upload_target="biocontainers",
+        artifact_source="github-actions",
+        package_platform="linux-aarch64",
+        container_platforms=["linux/arm64"],
+    )
+
+    assert result == artifacts.UploadResult.FAILURE
+    assert uploaded_sources == []

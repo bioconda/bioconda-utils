@@ -2,6 +2,7 @@
 Deploy Artifacts to Anaconda and Quay
 """
 
+import json
 import os
 from pathlib import Path
 import shutil
@@ -15,7 +16,7 @@ from ._types import (
     docker_platform_tag_suffix,
     native_container_platform,
 )
-from .container_manifests import platform_ref, registry_creds
+from .container_manifests import MulledImageRecord, platform_ref, registry_creds
 
 logger = logging.getLogger(__name__)
 _QUAY_REPOSITORIES_READY: set[tuple[str, str]] = set()
@@ -133,7 +134,7 @@ def mulled_upload(
     image: str,
     quay_target: str,
     target_platform: ContainerPlatform | None = None,
-) -> str:
+) -> MulledImageRecord:
     """
     Upload the build Docker images to quay.io with ``mulled-build push``.
 
@@ -145,8 +146,7 @@ def mulled_upload(
       target_platform: Docker target platform to pass to mulled-build
 
     Returns:
-      The digest of the pushed image (captured before push from the local
-      Docker daemon).
+      A manifest publication record for the image uploaded to quay.io.
     """
     target_platform = target_platform or native_container_platform()
     pkg_name_and_version, pkg_build_string = image.rsplit("--", 1)
@@ -157,76 +157,122 @@ def mulled_upload(
     local_ref = canonical_ref
     if suffix := docker_platform_tag_suffix(target_platform):
         local_ref = f"{canonical_ref}-{suffix}"
-    destination_ref = platform_ref(canonical_ref, target_platform)
-    creds = registry_creds()
-    if not creds:
-        raise ValueError("QUAY_LOGIN or QUAY_OAUTH_TOKEN is required")
-    ensure_quay_repository(quay_target, pkg_name)
-
-    digest = utils.run(
-        ["skopeo", "inspect", "--format", "{{.Digest}}", f"docker-daemon:{local_ref}"],
-        mask=False,
-    ).stdout.strip()
-    if not digest.startswith("sha256:"):
-        raise RuntimeError(f"Invalid digest for {local_ref}: {digest}")
-
-    utils.run(
-        [
-            "skopeo",
-            "copy",
-            "--dest-creds",
-            creds,
-            f"docker-daemon:{local_ref}",
-            f"docker://{destination_ref}",
-        ],
-        mask=creds.split(":", 1),
-        env=os.environ.copy(),
+    return upload_mulled_image_source(
+        f"docker-daemon:{local_ref}",
+        canonical_ref,
+        target_platform,
     )
-    return digest
 
 
-def skopeo_upload(
-    image_file: str,
-    target: str,
-    creds: str,
-    registry: str = "quay.io",
-    timeout: int = 600,
-) -> bool:
-    """
-    Upload an image to docker registy
-
-    Uses ``skopeo`` to upload tar archives of docker images as created
-    with e.g.``docker save`` to a docker registry.
-
-    The image name and tag are read from the archive.
-
-    Args:
-      image_file: path to the file to be uploaded (may be gzip'ed). NOTE: may not contain a colon!
-      target: namespace/repo for the image
-      creds: login credentials (``USER:PASS``)
-      registry: url of the registry. defaults to "quay.io"
-      timeout: timeout in seconds
-    """
-    cmd = [
-        "skopeo",
-        "--command-timeout",
-        f"{timeout}s",
-        "copy",
-        f"docker-archive:{image_file}",
-        f"docker://{registry}/{target}",
-        "--dest-creds",
-        creds,
-    ]
+def _skopeo_env() -> dict[str, str]:
     env = os.environ.copy()
     skopeo_bin = shutil.which("skopeo")
     if skopeo_bin is None:
         raise FileNotFoundError("Unable to find skopeo on PATH")
     env["SSL_CERT_DIR"] = str(Path(skopeo_bin).parents[1] / "ssl")
-    try:
-        utils.run(cmd, mask=creds.split(":"), env=env)
-        return True
-    except sp.CalledProcessError as exc:
-        logger.error("Failed to upload %s to %s", image_file, target)
-        for line in exc.stdout.splitlines():
-            logger.error("> %s", line)
-        return False
+    return env
+
+
+def _skopeo_auth_args(creds: str | None, *, option: str) -> tuple[list[str], list[str]]:
+    if not creds:
+        return [], []
+    return [option, creds], creds.split(":", 1)
+
+
+def inspect_image_platform(source_ref: str) -> str:
+    """Return the Docker platform recorded in an image source config."""
+    raw = utils.run(
+        ["skopeo", "inspect", "--config", source_ref],
+        mask=False,
+        env=_skopeo_env(),
+    ).stdout
+    config = json.loads(raw)
+    os_name = config.get("os")
+    architecture = config.get("architecture")
+    variant = config.get("variant")
+    if not os_name or not architecture:
+        raise RuntimeError(f"Image config for {source_ref} has no OS/architecture")
+    platform = f"{os_name}/{architecture}"
+    if variant:
+        platform += f"/{variant}"
+    return platform
+
+
+def inspect_remote_digest(ref: str, creds: str | None) -> str:
+    """Inspect a remote image ref and return its registry digest."""
+    auth_args, mask = _skopeo_auth_args(creds, option="--creds")
+    digest = utils.run(
+        [
+            "skopeo",
+            "inspect",
+            "--format",
+            "{{.Digest}}",
+            *auth_args,
+            f"docker://{ref}",
+        ],
+        mask=mask,
+        env=_skopeo_env(),
+    ).stdout.strip()
+    if not digest.startswith("sha256:"):
+        raise RuntimeError(f"Registry returned an invalid digest for {ref}: {digest}")
+    return digest
+
+
+def _quay_namespace_and_repository(canonical_ref: str) -> tuple[str, str]:
+    repository, separator, _tag = canonical_ref.rpartition(":")
+    if not separator:
+        raise ValueError(f"Expected tagged image ref: {canonical_ref}")
+    parts = repository.split("/")
+    if len(parts) != 3 or parts[0] != "quay.io":
+        raise ValueError(f"Expected quay.io namespace/repository ref: {canonical_ref}")
+    return parts[1], parts[2]
+
+
+def upload_mulled_image_source(
+    source_ref: str,
+    canonical_ref: str,
+    target_platform: ContainerPlatform,
+    *,
+    timeout: int = 600,
+    validate_platform: bool = True,
+) -> MulledImageRecord:
+    """Upload one mulled image source to its platform staging ref.
+
+    The returned digest is inspected from the destination registry ref after
+    upload, so manifest records reflect what Quay actually stores.
+    """
+    creds = registry_creds()
+    if not creds:
+        raise ValueError("QUAY_LOGIN or QUAY_OAUTH_TOKEN is required")
+    if validate_platform:
+        source_platform = inspect_image_platform(source_ref)
+        if source_platform != target_platform:
+            raise RuntimeError(
+                f"Image platform mismatch for {source_ref}: "
+                f"expected {target_platform}, found {source_platform}"
+            )
+    namespace, repository = _quay_namespace_and_repository(canonical_ref)
+    ensure_quay_repository(namespace, repository)
+    destination_ref = platform_ref(canonical_ref, target_platform)
+    dest_auth_args, mask = _skopeo_auth_args(creds, option="--dest-creds")
+    utils.run(
+        [
+            "skopeo",
+            "--command-timeout",
+            f"{timeout}s",
+            "copy",
+            source_ref,
+            f"docker://{destination_ref}",
+            *dest_auth_args,
+        ],
+        mask=mask,
+        env=_skopeo_env(),
+    )
+    digest = inspect_remote_digest(destination_ref, creds)
+    return MulledImageRecord(
+        canonical_ref=canonical_ref,
+        platform=target_platform,
+        platform_ref=destination_ref,
+        digest=digest,
+    )
+

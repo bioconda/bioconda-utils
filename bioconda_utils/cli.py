@@ -662,8 +662,8 @@ from environment, even after successful build and test.""",
     help="Docker platform to build/test/push for mulled containers. May be repeated.",
 )
 @arg(
-    "--mulled-image-output",
-    help="Append uploaded mulled image metadata as JSONL for manifest publication.",
+    "--mulled-upload-records",
+    help="Append uploaded mulled image records as JSONL for manifest publication.",
 )
 @arg("--exclude", nargs="+", help="Packages to exclude during this run")
 @arg(
@@ -702,11 +702,13 @@ def build(
     no_presolved_mulled_test=False,
     no_fast_resolve=False,
     container_platform: list[ContainerPlatform] | None = None,
-    mulled_image_output: Path | None = None,
+    mulled_upload_records: Path | None = None,
     exclude=None,
     subdag_depth=None,
 ):
-    mulled_image_output = Path(mulled_image_output) if mulled_image_output else None
+    mulled_upload_records = (
+        Path(mulled_upload_records) if mulled_upload_records else None
+    )
     cfg = utils.load_config(config)
     setup = cfg.get("setup", None)
     if setup:
@@ -788,7 +790,7 @@ def build(
         presolved_mulled_test=not no_presolved_mulled_test,
         fast_resolve=not no_fast_resolve,
         container_platforms=container_platform,
-        mulled_image_output=mulled_image_output,
+        mulled_upload_records=mulled_upload_records,
     )
     exit(0 if success else 1)
 
@@ -835,8 +837,8 @@ def build(
     help="Conda package platform to upload from PR artifacts. Defaults to native platform.",
 )
 @arg(
-    "--mulled-image-output",
-    help="Append uploaded mulled image metadata as JSONL for manifest publication.",
+    "--mulled-upload-records",
+    help="Append uploaded mulled image records as JSONL for manifest publication.",
 )
 @enable_logging()
 def handle_merged_pr(
@@ -850,9 +852,11 @@ def handle_merged_pr(
     artifact_source="azure",
     container_platform: list[ContainerPlatform] | None = None,
     package_platform: str | None = None,
-    mulled_image_output: Path | None = None,
+    mulled_upload_records: Path | None = None,
 ):
-    mulled_image_output = Path(mulled_image_output) if mulled_image_output else None
+    mulled_upload_records = (
+        Path(mulled_upload_records) if mulled_upload_records else None
+    )
     label = os.getenv("BIOCONDA_LABEL", None) or None
     if repo is None:
         raise ValueError("repo is required")
@@ -869,7 +873,7 @@ def handle_merged_pr(
         artifact_source=artifact_source,
         package_platform=package_platform,
         container_platforms=container_platform,
-        mulled_image_output=mulled_image_output,
+        mulled_upload_records=mulled_upload_records,
     )
     if res == UploadResult.NO_ARTIFACTS and fallback == "build":
         if package_platform is not None and package_platform != "noarch":
@@ -889,7 +893,7 @@ def handle_merged_pr(
             mulled_upload_target=quay_upload_target if not dryrun else None,
             mulled_test=True,
             container_platform=container_platform,
-            mulled_image_output=mulled_image_output,
+            mulled_upload_records=mulled_upload_records,
         )
     else:
         success = res != UploadResult.FAILURE

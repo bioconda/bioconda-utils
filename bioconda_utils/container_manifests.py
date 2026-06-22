@@ -60,27 +60,6 @@ def write_image_record(path: str | Path, record: MulledImageRecord) -> None:
         handle.write("\n")
 
 
-def record_mulled_upload(
-    output_path: Path | None,
-    canonical_ref: str,
-    platform: ContainerPlatform,
-    platform_ref: str,
-    digest: str,
-) -> None:
-    """Append an upload record to *output_path* (JSONL), if configured."""
-    if output_path is None:
-        return
-    write_image_record(
-        output_path,
-        MulledImageRecord(
-            canonical_ref=canonical_ref,
-            platform=platform,
-            platform_ref=platform_ref,
-            digest=digest,
-        ),
-    )
-
-
 def load_image_records(paths: Iterable[str]) -> list[MulledImageRecord]:
     """Load and de-duplicate JSONL records from files or directories."""
     records: set[MulledImageRecord] = set()

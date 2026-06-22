@@ -14,18 +14,16 @@ import json
 from pathlib import Path
 from bioconda_utils import utils
 from bioconda_utils._types import (
-    CONTAINER_PLATFORMS,
     ContainerPlatform,
     docker_platform_tag_suffix,
 )
 from bioconda_utils.upload import (
     anaconda_upload,
-    ensure_quay_repository,
-    skopeo_upload,
+    inspect_image_platform,
+    upload_mulled_image_source,
 )
 from bioconda_utils.container_manifests import (
-    platform_ref,
-    record_mulled_upload,
+    write_image_record,
     registry_creds,
 )
 
@@ -41,33 +39,6 @@ GHA_ARTIFACT_NAME_EXCEPTIONS = {
     "osx-64": "osx-packages",
     "linux-aarch64": "linux-arm64-packages",
 }
-
-
-def _container_image_matches_platforms(
-    image_path: str, container_platforms: set[ContainerPlatform] | None
-) -> bool:
-    if container_platforms is None:
-        return True
-    m = IMAGE_RE.match(os.path.basename(image_path))
-    assert m, f"Could not parse image name from {image_path}"
-    _, tag = m.groups()
-    for platform in container_platforms:
-        suffix = docker_platform_tag_suffix(platform)
-        if suffix is None:
-            # The canonical linux/amd64 mulled tag is unsuffixed.
-            known_suffixes = {
-                docker_platform_tag_suffix(p)
-                for p in CONTAINER_PLATFORMS
-                if p != platform
-            }
-            known_suffixes.discard(None)
-            if not any(
-                tag.endswith(f"-{known_suffix}") for known_suffix in known_suffixes
-            ):
-                return True
-        elif tag.endswith(f"-{suffix}"):
-            return True
-    return False
 
 
 def _gha_artifact_names_for_platform(platform: str) -> set[str]:
@@ -102,7 +73,7 @@ def upload_pr_artifacts(
     artifact_source: str = "azure",
     package_platform: str | None = None,
     container_platforms: list[ContainerPlatform] | None = None,
-    mulled_image_output: Path | None = None,
+    mulled_upload_records: Path | None = None,
 ) -> UploadResult:
     _config = utils.load_config(config)
     if package_platform is None:
@@ -195,14 +166,24 @@ def upload_pr_artifacts(
 
                     pattern = f"{tmpdir}/*/images/*.tar.gz"
                     logger.info(f"Checking for images at {pattern}.")
+                    image_seen = False
+                    image_matched = False
                     for img in glob.glob(pattern):
-                        if not _container_image_matches_platforms(
-                            img, selected_container_platforms
-                        ):
+                        image_seen = True
+                        # Skopeo can't handle a : in the file name
+                        fixed_img_name = img.replace(":", "_")
+                        os.rename(img, fixed_img_name)
+                        source_ref = f"docker-archive:{fixed_img_name}"
+                        source_platform = inspect_image_platform(source_ref)
+                        if source_platform != target_platform:
                             logger.info(
-                                "Skipping image %s for container platform filter.", img
+                                "Skipping image %s for %s; archive platform is %s.",
+                                img,
+                                target_platform,
+                                source_platform,
                             )
                             continue
+                        image_matched = True
                         m = IMAGE_RE.match(os.path.basename(img))
                         assert m, f"Could not parse image name from {img}"
                         name, tag = m.groups()
@@ -213,43 +194,36 @@ def upload_pr_artifacts(
                             # add label to tag
                             tag = f"{tag}-{label}"
                         canonical_ref = f"quay.io/{mulled_upload_target}/{name}:{tag}"
-                        destination_ref = platform_ref(canonical_ref, target_platform)
-                        target = destination_ref.removeprefix("quay.io/")
-                        # Skopeo can't handle a : in the file name
-                        fixed_img_name = img.replace(":", "_")
-                        os.rename(img, fixed_img_name)
-
-                        # Capture digest from the archive before pushing
-                        digest = utils.run(
-                            [
-                                "skopeo",
-                                "inspect",
-                                "--format",
-                                "{{.Digest}}",
-                                f"docker-archive:{fixed_img_name}",
-                            ],
-                            mask=False,
-                        ).stdout.strip()
 
                         if dryrun:
-                            logger.info(f"Would upload {img} to {target}.")
+                            logger.info(
+                                "Would upload %s to platform staging ref for %s.",
+                                img,
+                                canonical_ref,
+                            )
                             success.append(True)
                         else:
                             # upload the image
-                            logger.info(f"Uploading {img} to {target}.")
-                            ensure_quay_repository(mulled_upload_target, name)
-                            uploaded = skopeo_upload(
-                                fixed_img_name, target, creds=quay_login
+                            logger.info(
+                                "Uploading %s to platform staging ref for %s.",
+                                img,
+                                canonical_ref,
                             )
-                            success.append(uploaded)
-                            if uploaded:
-                                record_mulled_upload(
-                                    mulled_image_output,
-                                    canonical_ref,
-                                    target_platform,
-                                    destination_ref,
-                                    digest,
-                                )
+                            record = upload_mulled_image_source(
+                                source_ref,
+                                canonical_ref,
+                                target_platform,
+                                validate_platform=False,
+                            )
+                            success.append(True)
+                            if mulled_upload_records is not None:
+                                write_image_record(mulled_upload_records, record)
+                    if image_seen and not image_matched:
+                        logger.error(
+                            "Found mulled image artifacts, but none matched %s.",
+                            target_platform,
+                        )
+                        success.append(False)
         if not success:
             logger.info("No matching artifacts found to upload.")
             return UploadResult.NO_ARTIFACTS

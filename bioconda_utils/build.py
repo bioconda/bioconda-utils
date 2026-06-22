@@ -33,7 +33,7 @@ from ._types import (
     docker_platform_tag_suffix,
     native_container_platform,
 )
-from .container_manifests import platform_ref, record_mulled_upload
+from .container_manifests import write_image_record
 
 logger = logging.getLogger(__name__)
 
@@ -475,7 +475,7 @@ def build_recipes(
     presolved_mulled_test: bool = True,
     fast_resolve: bool = True,
     container_platforms: Sequence[ContainerPlatform] | None = None,
-    mulled_image_output: Path | None = None,
+    mulled_upload_records: Path | None = None,
 ) -> bool:
     """
     Build one or many bioconda packages.
@@ -679,16 +679,11 @@ def build_recipes(
                                 "An explicit container platform is required when "
                                 "publishing manifest-ready mulled images"
                             )
-                        digest = upload.mulled_upload(
+                        record = upload.mulled_upload(
                             img.spec, mulled_upload_target, img.target_platform
                         )
-                        record_mulled_upload(
-                            mulled_image_output,
-                            img.canonical_tag,
-                            img.target_platform,
-                            platform_ref(img.canonical_tag, img.target_platform),
-                            digest,
-                        )
+                        if mulled_upload_records is not None:
+                            write_image_record(mulled_upload_records, record)
                         docker_utils.purgeImage(
                             mulled_upload_target, img.spec, img.target_platform
                         )

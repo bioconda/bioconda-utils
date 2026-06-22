@@ -1,5 +1,8 @@
 import os
+import json
 from unittest.mock import Mock
+
+import pytest
 
 from bioconda_utils import _types, build, docker_utils, pkg_test, upload
 
@@ -63,39 +66,99 @@ def test_mulled_upload_passes_target_platform(monkeypatch):
     commands = []
     monkeypatch.setenv("QUAY_LOGIN", "user:token")
     monkeypatch.setattr(upload, "ensure_quay_repository", lambda *_args: None)
+    monkeypatch.setattr(upload, "_skopeo_env", lambda: {})
+
+    def run(cmd, **_kwargs):
+        commands.append(cmd)
+        if "--config" in cmd:
+            return type(
+                "R", (), {"stdout": json.dumps({"os": "linux", "architecture": "arm64"})}
+            )()
+        return type("R", (), {"stdout": "sha256:" + "a" * 64})()
+
     monkeypatch.setattr(
         upload.utils,
         "run",
-        lambda cmd, **_kwargs: (
-            commands.append(cmd),
-            type("R", (), {"stdout": "sha256:" + "a" * 64})(),
-        )[1],
+        run,
     )
 
-    upload.mulled_upload("samtools=1.3--0", "biocontainers", "linux/arm64")
+    record = upload.mulled_upload("samtools=1.3--0", "biocontainers", "linux/arm64")
 
-    assert len(commands) > 1
     ref = "quay.io/biocontainers/samtools:1.3--0-arm64"
     assert any(ref in arg for arg in commands[1])
+    assert record.platform_ref == ref
+    assert record.digest == "sha256:" + "a" * 64
 
 
 def test_mulled_upload_stages_amd64_under_suffixed_tag(monkeypatch):
     commands = []
     monkeypatch.setenv("QUAY_LOGIN", "user:token")
     monkeypatch.setattr(upload, "ensure_quay_repository", lambda *_args: None)
+    monkeypatch.setattr(upload, "_skopeo_env", lambda: {})
+
+    def run(cmd, **_kwargs):
+        commands.append(cmd)
+        if "--config" in cmd:
+            return type(
+                "R", (), {"stdout": json.dumps({"os": "linux", "architecture": "amd64"})}
+            )()
+        return type("R", (), {"stdout": "sha256:" + "a" * 64})()
+
     monkeypatch.setattr(
         upload.utils,
         "run",
-        lambda cmd, **_kwargs: (
-            commands.append(cmd),
-            type("R", (), {"stdout": "sha256:" + "a" * 64})(),
-        )[1],
+        run,
     )
 
     upload.mulled_upload("samtools=1.3--0", "biocontainers", "linux/amd64")
 
-    assert len(commands) > 1
     assert "quay.io/biocontainers/samtools:1.3--0-amd64" in " ".join(commands[1])
+
+
+def test_mulled_upload_rejects_wrong_source_platform(monkeypatch):
+    monkeypatch.setenv("QUAY_LOGIN", "user:token")
+    monkeypatch.setattr(upload, "ensure_quay_repository", lambda *_args: None)
+    monkeypatch.setattr(upload, "_skopeo_env", lambda: {})
+    monkeypatch.setattr(
+        upload.utils,
+        "run",
+        lambda _cmd, **_kwargs: type(
+            "R", (), {"stdout": json.dumps({"os": "linux", "architecture": "amd64"})}
+        )(),
+    )
+
+    with pytest.raises(RuntimeError, match="Image platform mismatch"):
+        upload.mulled_upload("samtools=1.3--0", "biocontainers", "linux/arm64")
+
+
+def test_upload_mulled_image_source_records_destination_digest(monkeypatch):
+    commands = []
+    monkeypatch.setenv("QUAY_LOGIN", "user:token")
+    monkeypatch.setattr(upload, "ensure_quay_repository", lambda *_args: None)
+    monkeypatch.setattr(upload, "_skopeo_env", lambda: {})
+
+    def run(cmd, **_kwargs):
+        commands.append(cmd)
+        if "--config" in cmd:
+            return type(
+                "R", (), {"stdout": json.dumps({"os": "linux", "architecture": "arm64"})}
+            )()
+        if "--format" in cmd:
+            return type("R", (), {"stdout": "sha256:" + "d" * 64})()
+        return type("R", (), {"stdout": ""})()
+
+    monkeypatch.setattr(upload.utils, "run", run)
+
+    record = upload.upload_mulled_image_source(
+        "docker-archive:/tmp/samtools.tar.gz",
+        "quay.io/biocontainers/samtools:1.3--0",
+        "linux/arm64",
+    )
+
+    assert commands[1][0:4] == ["skopeo", "--command-timeout", "600s", "copy"]
+    assert commands[2][0:4] == ["skopeo", "inspect", "--format", "{{.Digest}}"]
+    assert commands[2][-1] == "docker://quay.io/biocontainers/samtools:1.3--0-arm64"
+    assert record.digest == "sha256:" + "d" * 64
 
 
 def test_ensure_quay_repository_creates_public_repository(monkeypatch):
