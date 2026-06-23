@@ -1,4 +1,6 @@
+import base64
 import json
+from pathlib import Path
 
 import pytest
 
@@ -143,7 +145,7 @@ def test_reconcile_publishes_and_verifies(monkeypatch):
     monkeypatch.setattr(
         container_manifests,
         "_publish_manifest",
-        lambda ref, descriptors: published.append((ref, descriptors)),
+        lambda ref, descriptors, **_kwargs: published.append((ref, descriptors)),
     )
 
     assert container_manifests.reconcile_manifest(
@@ -185,7 +187,7 @@ def test_reconcile_preserves_existing_arm64_when_only_amd64_is_updated(monkeypat
     monkeypatch.setattr(
         container_manifests,
         "_publish_manifest",
-        lambda ref, descriptors: published.append((ref, descriptors)),
+        lambda ref, descriptors, **_kwargs: published.append((ref, descriptors)),
     )
 
     assert container_manifests.reconcile_manifest(
@@ -227,7 +229,7 @@ def test_reconcile_preserves_existing_amd64_when_only_arm64_is_updated(monkeypat
     monkeypatch.setattr(
         container_manifests,
         "_publish_manifest",
-        lambda ref, descriptors: published.append((ref, descriptors)),
+        lambda ref, descriptors, **_kwargs: published.append((ref, descriptors)),
     )
 
     assert container_manifests.reconcile_manifest(
@@ -282,7 +284,7 @@ def test_initial_publish_succeeds_when_no_manifest_exists(monkeypatch):
     monkeypatch.setattr(
         container_manifests,
         "_publish_manifest",
-        lambda ref, descriptors: published.append((ref, descriptors)),
+        lambda ref, descriptors, **_kwargs: published.append((ref, descriptors)),
     )
 
     assert container_manifests.reconcile_manifest(
@@ -310,3 +312,320 @@ def test_publish_single_platform_preserves_single_manifest(monkeypatch):
 
     assert commands
     assert any(f"@{descriptor.digest}" in arg for arg in commands[0])
+
+
+def test_publish_manifest_injects_docker_config_when_creds_provided(monkeypatch):
+    captured: dict = {}
+    config_paths: list = []
+
+    def fake_run(command, **_kwargs):
+        captured["command"] = command
+        captured["env"] = _kwargs.get("env")
+        captured["redacted_secrets"] = _kwargs.get("redacted_secrets")
+        captured["live"] = _kwargs.get("live")
+        docker_config = _kwargs["env"]["DOCKER_CONFIG"]
+        config_paths.append(Path(docker_config))
+        return None
+
+    monkeypatch.setattr(container_manifests.utils, "run", fake_run)
+    descriptor = ManifestDescriptor(
+        "linux/amd64",
+        "sha256:" + "a" * 64,
+        "quay.io/biocontainers/samtools:1.20--0-amd64",
+    )
+
+    container_manifests._publish_manifest(
+        "quay.io/biocontainers/samtools:1.20--0",
+        [descriptor],
+        creds="alice:s3cret",
+    )
+
+    assert len(config_paths) == 1
+    config_path = config_paths[0]
+    assert not config_path.exists(), "temp DOCKER_CONFIG should be removed"
+
+    assert captured["redacted_secrets"] == ["s3cret"]
+    assert captured["live"] is True
+    assert captured["env"]["DOCKER_CONFIG"]
+
+
+def test_publish_manifest_cleans_up_docker_config_on_failure(monkeypatch):
+    config_paths: list = []
+
+    def fake_run(command, **_kwargs):
+        docker_config = _kwargs["env"]["DOCKER_CONFIG"]
+        config_paths.append(Path(docker_config))
+        raise RuntimeError("buildx failed")
+
+    monkeypatch.setattr(container_manifests.utils, "run", fake_run)
+    descriptor = ManifestDescriptor(
+        "linux/amd64",
+        "sha256:" + "a" * 64,
+        "quay.io/biocontainers/samtools:1.20--0-amd64",
+    )
+
+    with pytest.raises(RuntimeError, match="buildx failed"):
+        container_manifests._publish_manifest(
+            "quay.io/biocontainers/samtools:1.20--0",
+            [descriptor],
+            creds="alice:s3cret",
+        )
+
+    assert not config_paths[0].exists(), "temp DOCKER_CONFIG should be cleaned up"
+
+
+def test_publish_manifest_handles_oauth_token_format(monkeypatch):
+    captured: dict = {}
+
+    def fake_run(command, **_kwargs):
+        docker_config = Path(_kwargs["env"]["DOCKER_CONFIG"])
+        captured["config"] = json.loads((docker_config / "config.json").read_text())
+        return None
+
+    monkeypatch.setattr(container_manifests.utils, "run", fake_run)
+    descriptor = ManifestDescriptor(
+        "linux/amd64",
+        "sha256:" + "a" * 64,
+        "quay.io/biocontainers/samtools:1.20--0-amd64",
+    )
+
+    container_manifests._publish_manifest(
+        "quay.io/biocontainers/samtools:1.20--0",
+        [descriptor],
+        creds="$oauthtoken:TOKEN",
+    )
+
+    assert captured["config"]["auths"]["quay.io"]["auth"] == base64.b64encode(
+        b"$oauthtoken:TOKEN"
+    ).decode("ascii")
+
+
+def test_publish_manifest_rejects_malformed_creds(monkeypatch):
+    descriptor = ManifestDescriptor(
+        "linux/amd64",
+        "sha256:" + "a" * 64,
+        "quay.io/biocontainers/samtools:1.20--0-amd64",
+    )
+    with pytest.raises(ValueError, match="Cannot parse credentials"):
+        container_manifests._publish_manifest(
+            "quay.io/biocontainers/samtools:1.20--0",
+            [descriptor],
+            creds="no-colon-here",
+        )
+
+
+def test_publish_manifest_without_creds_omits_docker_config(monkeypatch):
+    captured: dict = {}
+
+    def fake_run(command, **_kwargs):
+        captured["env"] = _kwargs.get("env")
+        captured["redacted_secrets"] = _kwargs.get("redacted_secrets")
+        return None
+
+    monkeypatch.setattr(container_manifests.utils, "run", fake_run)
+    descriptor = ManifestDescriptor(
+        "linux/amd64",
+        "sha256:" + "a" * 64,
+        "quay.io/biocontainers/samtools:1.20--0-amd64",
+    )
+
+    container_manifests._publish_manifest(
+        "quay.io/biocontainers/samtools:1.20--0",
+        [descriptor],
+    )
+
+    assert captured["redacted_secrets"] is False
+    assert "DOCKER_CONFIG" not in captured["env"]
+
+
+def test_publish_manifest_preserves_user_docker_config(monkeypatch, tmp_path):
+    source_dir = tmp_path / "docker-config"
+    source_dir.mkdir()
+    user_config = {
+        "auths": {
+            "ghcr.io": {"auth": base64.b64encode(b"gh-user:gh-token").decode("ascii")}
+        },
+        "credsStore": "desktop",
+        "credHelpers": {"registry.example.org": "secretservice"},
+        "experimental": "enabled",
+    }
+    (source_dir / "config.json").write_text(json.dumps(user_config))
+    monkeypatch.setenv("DOCKER_CONFIG", str(source_dir))
+
+    captured: dict = {}
+
+    def fake_run(command, **_kwargs):
+        captured["config"] = json.loads(
+            (Path(_kwargs["env"]["DOCKER_CONFIG"]) / "config.json").read_text()
+        )
+        return None
+
+    monkeypatch.setattr(container_manifests.utils, "run", fake_run)
+    descriptor = ManifestDescriptor(
+        "linux/amd64",
+        "sha256:" + "a" * 64,
+        "quay.io/biocontainers/samtools:1.20--0-amd64",
+    )
+
+    container_manifests._publish_manifest(
+        "quay.io/biocontainers/samtools:1.20--0",
+        [descriptor],
+        creds="alice:s3cret",
+    )
+
+    assert captured["config"]["credsStore"] == "desktop"
+    assert captured["config"]["credHelpers"] == {
+        "registry.example.org": "secretservice"
+    }
+    assert captured["config"]["experimental"] == "enabled"
+    assert captured["config"]["auths"]["ghcr.io"] == user_config["auths"]["ghcr.io"]
+    assert captured["config"]["auths"]["quay.io"]["auth"] == base64.b64encode(
+        b"alice:s3cret"
+    ).decode("ascii")
+
+
+def test_publish_manifest_overrides_existing_auth_for_target_host(
+    monkeypatch, tmp_path
+):
+    source_dir = tmp_path / "docker-config"
+    source_dir.mkdir()
+    (source_dir / "config.json").write_text(
+        json.dumps(
+            {
+                "auths": {
+                    "quay.io": {
+                        "auth": base64.b64encode(b"old-user:old-token").decode("ascii")
+                    }
+                }
+            }
+        )
+    )
+    monkeypatch.setenv("DOCKER_CONFIG", str(source_dir))
+
+    captured: dict = {}
+
+    def fake_run(command, **_kwargs):
+        captured["config"] = json.loads(
+            (Path(_kwargs["env"]["DOCKER_CONFIG"]) / "config.json").read_text()
+        )
+        return None
+
+    monkeypatch.setattr(container_manifests.utils, "run", fake_run)
+    descriptor = ManifestDescriptor(
+        "linux/amd64",
+        "sha256:" + "a" * 64,
+        "quay.io/biocontainers/samtools:1.20--0-amd64",
+    )
+
+    container_manifests._publish_manifest(
+        "quay.io/biocontainers/samtools:1.20--0",
+        [descriptor],
+        creds="new-user:new-token",
+    )
+
+    assert captured["config"]["auths"]["quay.io"]["auth"] == base64.b64encode(
+        b"new-user:new-token"
+    ).decode("ascii")
+
+
+def test_publish_manifest_handles_missing_user_docker_config(monkeypatch, tmp_path):
+    monkeypatch.setenv("DOCKER_CONFIG", str(tmp_path / "does-not-exist"))
+
+    captured: dict = {}
+
+    def fake_run(command, **_kwargs):
+        captured["config"] = json.loads(
+            (Path(_kwargs["env"]["DOCKER_CONFIG"]) / "config.json").read_text()
+        )
+        return None
+
+    monkeypatch.setattr(container_manifests.utils, "run", fake_run)
+    descriptor = ManifestDescriptor(
+        "linux/amd64",
+        "sha256:" + "a" * 64,
+        "quay.io/biocontainers/samtools:1.20--0-amd64",
+    )
+
+    container_manifests._publish_manifest(
+        "quay.io/biocontainers/samtools:1.20--0",
+        [descriptor],
+        creds="alice:s3cret",
+    )
+
+    assert captured["config"] == {
+        "auths": {
+            "quay.io": {"auth": base64.b64encode(b"alice:s3cret").decode("ascii")}
+        }
+    }
+
+
+def test_publish_manifest_warns_and_proceeds_on_malformed_user_config(
+    monkeypatch, tmp_path, caplog
+):
+    source_dir = tmp_path / "docker-config"
+    source_dir.mkdir()
+    (source_dir / "config.json").write_text("{not valid json")
+    monkeypatch.setenv("DOCKER_CONFIG", str(source_dir))
+
+    captured: dict = {}
+
+    def fake_run(command, **_kwargs):
+        captured["config"] = json.loads(
+            (Path(_kwargs["env"]["DOCKER_CONFIG"]) / "config.json").read_text()
+        )
+        return None
+
+    monkeypatch.setattr(container_manifests.utils, "run", fake_run)
+    descriptor = ManifestDescriptor(
+        "linux/amd64",
+        "sha256:" + "a" * 64,
+        "quay.io/biocontainers/samtools:1.20--0-amd64",
+    )
+
+    with caplog.at_level("WARNING", logger="bioconda_utils.container_manifests"):
+        container_manifests._publish_manifest(
+            "quay.io/biocontainers/samtools:1.20--0",
+            [descriptor],
+            creds="alice:s3cret",
+        )
+
+    assert "Could not read existing docker config" in caplog.text
+    assert captured["config"] == {
+        "auths": {
+            "quay.io": {"auth": base64.b64encode(b"alice:s3cret").decode("ascii")}
+        }
+    }
+
+
+def test_publish_manifest_ignores_non_object_user_config(monkeypatch, tmp_path, caplog):
+    source_dir = tmp_path / "docker-config"
+    source_dir.mkdir()
+    (source_dir / "config.json").write_text(json.dumps(["not", "an", "object"]))
+    monkeypatch.setenv("DOCKER_CONFIG", str(source_dir))
+
+    captured: dict = {}
+
+    def fake_run(command, **_kwargs):
+        captured["config"] = json.loads(
+            (Path(_kwargs["env"]["DOCKER_CONFIG"]) / "config.json").read_text()
+        )
+        return None
+
+    monkeypatch.setattr(container_manifests.utils, "run", fake_run)
+    descriptor = ManifestDescriptor(
+        "linux/amd64",
+        "sha256:" + "a" * 64,
+        "quay.io/biocontainers/samtools:1.20--0-amd64",
+    )
+
+    with caplog.at_level("WARNING", logger="bioconda_utils.container_manifests"):
+        container_manifests._publish_manifest(
+            "quay.io/biocontainers/samtools:1.20--0",
+            [descriptor],
+            creds="alice:s3cret",
+        )
+
+    assert "is not a JSON object" in caplog.text
+    assert captured["config"]["auths"]["quay.io"]["auth"] == base64.b64encode(
+        b"alice:s3cret"
+    ).decode("ascii")

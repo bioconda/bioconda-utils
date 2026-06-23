@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
+import shutil
+import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -119,10 +122,10 @@ def _skopeo_auth_args(creds: str | None, *, option: str) -> tuple[list[str], lis
 
 
 def _inspect_raw(ref: str, creds: str | None) -> tuple[dict[str, Any], str]:
-    auth_args, mask = _skopeo_auth_args(creds, option="--creds")
+    auth_args, redacted_secrets = _skopeo_auth_args(creds, option="--creds")
     raw = utils.run(
         ["skopeo", "inspect", "--raw", *auth_args, f"docker://{ref}"],
-        mask=mask,
+        redacted_secrets=redacted_secrets,
         env=skopeo_env(),
     ).stdout
     manifest = json.loads(raw)
@@ -135,7 +138,7 @@ def _inspect_raw(ref: str, creds: str | None) -> tuple[dict[str, Any], str]:
             *auth_args,
             f"docker://{ref}",
         ],
-        mask=mask,
+        redacted_secrets=redacted_secrets,
         env=skopeo_env(),
     ).stdout.strip()
     if not digest.startswith("sha256:"):
@@ -144,10 +147,10 @@ def _inspect_raw(ref: str, creds: str | None) -> tuple[dict[str, Any], str]:
 
 
 def _inspect_config_platform(ref: str, creds: str | None) -> str:
-    auth_args, mask = _skopeo_auth_args(creds, option="--creds")
+    auth_args, redacted_secrets = _skopeo_auth_args(creds, option="--creds")
     raw = utils.run(
         ["skopeo", "inspect", "--config", *auth_args, f"docker://{ref}"],
-        mask=mask,
+        redacted_secrets=redacted_secrets,
         env=skopeo_env(),
     ).stdout
     config = json.loads(raw)
@@ -171,10 +174,10 @@ def _descriptor_platform(descriptor: dict[str, Any]) -> str:
 
 
 def _ref_exists(ref: str, creds: str | None) -> bool:
-    auth_args, mask = _skopeo_auth_args(creds, option="--creds")
+    auth_args, redacted_secrets = _skopeo_auth_args(creds, option="--creds")
     result = utils.run(
         ["skopeo", "inspect", *auth_args, f"docker://{ref}"],
-        mask=mask,
+        redacted_secrets=redacted_secrets,
         env=skopeo_env(),
         check=False,
         quiet_failure=True,
@@ -213,8 +216,72 @@ def _current_descriptors(
     return {platform: digest}
 
 
+def _docker_config_env(
+    canonical_ref: str, creds: str | None
+) -> tuple[dict[str, str] | None, list[str] | None, Path | None]:
+    """Build a DOCKER_CONFIG env for buildx when credentials are supplied.
+
+    The user's existing ``config.json`` (resolved via ``$DOCKER_CONFIG`` or
+    ``~/.docker/config.json``) is loaded and merged with an ``auths[host].auth``
+    entry so settings like ``credsStore``, ``credHelpers``, and registry mirrors
+    are preserved. The merged file is written to a tempdir that the caller must
+    remove via ``_release_docker_config``.
+
+    Returns (env, redacted_secrets, tempdir). When creds is None, returns
+    (None, None, None) so callers can fall back to the ambient
+    ``~/.docker/config.json``.
+    """
+    if not creds:
+        return None, None, None
+    host, separator, _ = canonical_ref.partition("/")
+    if not separator:
+        raise ValueError(f"Expected a fully-qualified image ref: {canonical_ref}")
+    user, separator, password = creds.partition(":")
+    if not separator or not password:
+        raise ValueError(
+            f"Cannot parse credentials for docker login to {host}: "
+            "expected 'user:password' or '$oauthtoken:token'"
+        )
+    auth = base64.b64encode(f"{user}:{password}".encode("utf-8")).decode("ascii")
+    source_dir = Path(os.environ.get("DOCKER_CONFIG") or Path.home() / ".docker")
+    source_config = source_dir / "config.json"
+    config: dict[str, Any] = {}
+    if source_config.is_file():
+        try:
+            config = json.loads(source_config.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning(
+                "Could not read existing docker config at %s (%s); "
+                "proceeding without merged settings",
+                source_config,
+                exc,
+            )
+    if not isinstance(config, dict):
+        logger.warning(
+            "Existing docker config at %s is not a JSON object; ignoring it",
+            source_config,
+        )
+        config = {}
+    config.setdefault("auths", {})[host] = {"auth": auth}
+    config_dir = Path(tempfile.mkdtemp(prefix="bioconda-docker-"))
+    (config_dir / "config.json").write_text(
+        json.dumps(config),
+        encoding="utf-8",
+    )
+    return {"DOCKER_CONFIG": str(config_dir)}, [password], config_dir
+
+
+def _release_docker_config(config_dir: Path | None) -> None:
+    if config_dir is None:
+        return
+    shutil.rmtree(config_dir, ignore_errors=True)
+
+
 def _publish_manifest(
-    canonical_ref: str, descriptors: list[ManifestDescriptor]
+    canonical_ref: str,
+    descriptors: list[ManifestDescriptor],
+    *,
+    creds: str | None = None,
 ) -> None:
     sources = [
         f"{descriptor.source_ref}@{descriptor.digest}" for descriptor in descriptors
@@ -230,11 +297,18 @@ def _publish_manifest(
     if len(descriptors) == 1:
         command += ["--prefer-index=false"]
     command += ["--tag", canonical_ref, *sources]
-    utils.run(
-        command,
-        mask=False,
-        live=True,
-    )
+    docker_env, redacted_secrets, config_dir = _docker_config_env(canonical_ref, creds)
+    try:
+        utils.run(
+            command,
+            redacted_secrets=redacted_secrets
+            if redacted_secrets is not None
+            else False,
+            live=True,
+            env={**os.environ, **(docker_env or {})},
+        )
+    finally:
+        _release_docker_config(config_dir)
 
 
 def reconcile_manifest(
@@ -283,7 +357,7 @@ def reconcile_manifest(
         logger.info("Manifest already current: %s", canonical_ref)
         return False
 
-    _publish_manifest(canonical_ref, descriptors)
+    _publish_manifest(canonical_ref, descriptors, creds=creds)
 
     current = _current_descriptors(canonical_ref, creds)
     if current != desired:

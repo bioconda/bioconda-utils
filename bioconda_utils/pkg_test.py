@@ -251,7 +251,7 @@ create-env --conda=: /usr/local
 
         logger.debug("Pre-solved mulled test command: %s", cmd)
         with utils.Progress():
-            p = utils.run(cmd, mask=False, live=live_logs)
+            p = utils.run(cmd, redacted_secrets=False, live=live_logs)
         return p
 
 
@@ -390,6 +390,6 @@ def test_package(
         env["CONDA_IMAGE"] = conda_image
     with tempfile.TemporaryDirectory() as d:
         with utils.Progress():
-            p = utils.run(cmd, env=env, cwd=d, mask=False, live=live_logs)
+            p = utils.run(cmd, env=env, cwd=d, redacted_secrets=False, live=live_logs)
 
     return p

@@ -413,7 +413,7 @@ class RecipeBuilder:
 
         try:
             with utils.Progress():
-                p = utils.run(cmd, mask=False)
+                p = utils.run(cmd, redacted_secrets=False)
         except sp.CalledProcessError as e:
             logger.error(
                 "DOCKER FAILED: Error building docker container %s. ",
@@ -516,13 +516,13 @@ class RecipeBuilder:
 
         logger.debug("DOCKER: cmd: %s", cmd)
         with utils.Progress():
-            p = utils.run(cmd, mask=False, live=live_logs)
+            p = utils.run(cmd, redacted_secrets=False, live=live_logs)
         return p
 
     def cleanup(self) -> None:
         if self.build_image and not self.keep_image:
             cmd = ["docker", "rmi", self.docker_temp_image]
-            utils.run(cmd, mask=False)
+            utils.run(cmd, redacted_secrets=False)
 
 
 def purgeImage(
@@ -537,9 +537,9 @@ def purgeImage(
         f"{img.version}--{img.build_string}{suffix}"
     )
     cmd = ["docker", "rmi", pkg_container_image]
-    utils.run(cmd, mask=False)
+    utils.run(cmd, redacted_secrets=False)
 
 
 def pruneStoppedContainers() -> None:
     cmd = ["docker", "container", "prune", "-f"]
-    utils.run(cmd, mask=False)
+    utils.run(cmd, redacted_secrets=False)

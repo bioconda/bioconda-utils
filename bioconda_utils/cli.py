@@ -337,7 +337,8 @@ def duplicates(
                     token = ["-t", token]
                 logger.info(
                     utils.run(
-                        [utils.bin_for("anaconda")] + token + subcmd, mask=token
+                        [utils.bin_for("anaconda")] + token + subcmd,
+                        redacted_secrets=token,
                     ).stdout
                 )
 
@@ -720,7 +721,7 @@ def build(
     if setup:
         logger.debug("Running setup: %s", setup)
         for cmd in setup:
-            utils.run(shlex.split(cmd), mask=False)
+            utils.run(shlex.split(cmd), redacted_secrets=False)
 
     recipes = get_recipes(cfg, recipe_folder, packages, git_range)
 

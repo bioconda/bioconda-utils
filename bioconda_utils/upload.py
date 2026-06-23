@@ -115,7 +115,7 @@ def anaconda_upload(
     logger.info("UPLOAD uploading package %s", package)
     try:
         cmds = ["anaconda", "-t", token, "upload", package] + label_arg
-        utils.run(cmds, mask=[token])
+        utils.run(cmds, redacted_secrets=[token])
         logger.info("UPLOAD SUCCESS: uploaded package %s", package)
         return True
 
@@ -172,7 +172,7 @@ def inspect_image_platform(source_ref: str) -> str:
     """Return the Docker platform recorded in an image source config."""
     raw = utils.run(
         ["skopeo", "inspect", "--config", source_ref],
-        mask=False,
+        redacted_secrets=False,
         env=skopeo_env(),
     ).stdout
     config = json.loads(raw)
@@ -189,7 +189,7 @@ def inspect_image_platform(source_ref: str) -> str:
 
 def inspect_remote_digest(ref: str, creds: str | None) -> str:
     """Inspect a remote image ref and return its registry digest."""
-    auth_args, mask = _skopeo_auth_args(creds, option="--creds")
+    auth_args, redacted_secrets = _skopeo_auth_args(creds, option="--creds")
     digest = utils.run(
         [
             "skopeo",
@@ -199,7 +199,7 @@ def inspect_remote_digest(ref: str, creds: str | None) -> str:
             *auth_args,
             f"docker://{ref}",
         ],
-        mask=mask,
+        redacted_secrets=redacted_secrets,
         env=skopeo_env(),
     ).stdout.strip()
     if not digest.startswith("sha256:"):
@@ -243,7 +243,7 @@ def upload_mulled_image_source(
     namespace, repository = _quay_namespace_and_repository(canonical_ref)
     ensure_quay_repository(namespace, repository)
     destination_ref = platform_ref(canonical_ref, target_platform)
-    dest_auth_args, mask = _skopeo_auth_args(creds, option="--dest-creds")
+    dest_auth_args, redacted_secrets = _skopeo_auth_args(creds, option="--dest-creds")
     utils.run(
         [
             "skopeo",
@@ -254,7 +254,7 @@ def upload_mulled_image_source(
             f"docker://{destination_ref}",
             *dest_auth_args,
         ],
-        mask=mask,
+        redacted_secrets=redacted_secrets,
         env=skopeo_env(),
     )
     digest = inspect_remote_digest(destination_ref, creds)

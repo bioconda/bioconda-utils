@@ -632,7 +632,7 @@ def temp_os(platform):
 def run(
     cmds: list[str],
     env: dict[str, str] | None = None,
-    mask: list[str] | bool | None = None,
+    redacted_secrets: list[str] | bool | None = None,
     mask_envvars: bool = False,
     live: bool = False,
     mylogger: logging.Logger = logger,
@@ -653,8 +653,8 @@ def run(
     Arguments:
       cmd: List of command and arguments
       env: Optional environment for command, if None, use environment of the parent process
-      mask: List of terms to mask (secrets)
-      mask_envvars: Mask all environment variables; used if mask is None.
+      redacted_secrets: List of terms to redact (secrets)
+      mask_envvars: Mask all environment variables; used if redacted_secrets is None.
       live: Whether output should be sent to log
       check: raise CalledProcessError on failure
       kwargs: Additional arguments to `subprocess.Popen`
@@ -667,8 +667,8 @@ def run(
       FileNotFoundError if the command could not be found
     """
     logq = queue.Queue()
-    if mask is None and mask_envvars:
-        mask = [val for val in os.environ.values() if val]
+    if redacted_secrets is None and mask_envvars:
+        redacted_secrets = [val for val in os.environ.values() if val]
 
     def pushqueue(out, pipe):
         """Reads from a pipe and pushes into a queue, pushing "None" to
@@ -677,21 +677,23 @@ def run(
             out.put((pipe, line))
         out.put(None)  # End-of-data-token
 
-    def do_mask(arg: str) -> str:
-        """Masks secrets in **arg**"""
-        if mask is None:
+    def redact_secrets(arg: str) -> str:
+        """Redacts secrets in **arg**"""
+        if redacted_secrets is None:
             # caller has not considered masking, hide the entire command
             # for security reasons
             return "<hidden>"
-        if mask is False:
+        if redacted_secrets is False:
             # masking has been deactivated
             return arg
-        if isinstance(mask, list):
-            for mitem in mask:
+        if isinstance(redacted_secrets, list):
+            for mitem in redacted_secrets:
                 arg = arg.replace(mitem, "<hidden>")
         return arg
 
-    mylogger.log(loglevel, "(COMMAND) %s", " ".join(do_mask(arg) for arg in cmds))
+    mylogger.log(
+        loglevel, "(COMMAND) %s", " ".join(redact_secrets(arg) for arg in cmds)
+    )
 
     # bufsize=4 result of manual experimentation. Changing it can
     # drop performance drastically.
@@ -716,7 +718,7 @@ def run(
             try:
                 for _ in range(2):  # Run until we've got both `None` tokens
                     for pipe, line in iter(logq.get, None):
-                        line = do_mask(line.decode(errors="replace").rstrip())
+                        line = redact_secrets(line.decode(errors="replace").rstrip())
                         output_lines.append(line)
                         # only keep the last 1000 lines to avoid memory issues
                         if len(output_lines) > 1000:
@@ -742,9 +744,9 @@ def run(
 
         output = "\n".join(output_lines)
         if isinstance(cmds, str):
-            masked_cmds = do_mask(cmds)
+            masked_cmds = redact_secrets(cmds)
         else:
-            masked_cmds = [do_mask(c) for c in cmds]
+            masked_cmds = [redact_secrets(c) for c in cmds]
 
         if proc.poll() is None:
             mylogger.log(loglevel, "Command closed STDOUT/STDERR but is still running")
@@ -1070,7 +1072,7 @@ def file_from_commit(commit: str, filename: str) -> str:
     if commit == "HEAD":
         return open(filename).read()
 
-    p = run(["git", "show", f"{commit}:{filename}"], mask=False, loglevel=0)
+    p = run(["git", "show", f"{commit}:{filename}"], redacted_secrets=False, loglevel=0)
     return str(p.stdout)
 
 
@@ -1082,8 +1084,10 @@ def changed_since_master(recipe_folder):
     repo and have added the main repo as ``upstream``, then you'll have to do
     a ``git checkout master && git pull upstream master`` to update your fork.
     """
-    p = run(["git", "fetch", "origin", "master"], mask=False, loglevel=0)
-    p = run(["git", "diff", "FETCH_HEAD", "--name-only"], mask=False, loglevel=0)
+    p = run(["git", "fetch", "origin", "master"], redacted_secrets=False, loglevel=0)
+    p = run(
+        ["git", "diff", "FETCH_HEAD", "--name-only"], redacted_secrets=False, loglevel=0
+    )
     return [
         os.path.dirname(os.path.relpath(i, recipe_folder))
         for i in p.stdout.splitlines(False)
