@@ -17,7 +17,12 @@ from ._types import (
     docker_platform_tag_suffix,
     native_container_platform,
 )
-from .container_manifests import MulledImageRecord, platform_ref, registry_creds
+from .container_manifests import (
+    MulledImageRecord,
+    platform_ref,
+    registry_creds,
+    _skopeo_auth_args,
+)
 
 logger = logging.getLogger(__name__)
 _QUAY_REPOSITORIES_READY: set[tuple[str, str]] = set()
@@ -161,12 +166,6 @@ def mulled_upload(
         canonical_ref,
         target_platform,
     )
-
-
-def _skopeo_auth_args(creds: str | None, *, option: str) -> tuple[list[str], list[str]]:
-    if not creds:
-        return [], []
-    return [option, creds], creds.split(":", 1)
 
 
 def inspect_image_platform(source_ref: str) -> str:

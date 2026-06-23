@@ -112,14 +112,14 @@ def registry_creds() -> str | None:
     return None
 
 
-def _skopeo_args(creds: str | None) -> tuple[list[str], list[str]]:
+def _skopeo_auth_args(creds: str | None, *, option: str) -> tuple[list[str], list[str]]:
     if not creds:
         return [], []
-    return ["--creds", creds], creds.split(":", 1)
+    return [option, creds], creds.split(":", 1)
 
 
 def _inspect_raw(ref: str, creds: str | None) -> tuple[dict[str, Any], str]:
-    auth_args, mask = _skopeo_args(creds)
+    auth_args, mask = _skopeo_auth_args(creds, option="--creds")
     raw = utils.run(
         ["skopeo", "inspect", "--raw", *auth_args, f"docker://{ref}"],
         mask=mask,
@@ -144,7 +144,7 @@ def _inspect_raw(ref: str, creds: str | None) -> tuple[dict[str, Any], str]:
 
 
 def _inspect_config_platform(ref: str, creds: str | None) -> str:
-    auth_args, mask = _skopeo_args(creds)
+    auth_args, mask = _skopeo_auth_args(creds, option="--creds")
     raw = utils.run(
         ["skopeo", "inspect", "--config", *auth_args, f"docker://{ref}"],
         mask=mask,
@@ -171,7 +171,7 @@ def _descriptor_platform(descriptor: dict[str, Any]) -> str:
 
 
 def _ref_exists(ref: str, creds: str | None) -> bool:
-    auth_args, mask = _skopeo_args(creds)
+    auth_args, mask = _skopeo_auth_args(creds, option="--creds")
     result = utils.run(
         ["skopeo", "inspect", *auth_args, f"docker://{ref}"],
         mask=mask,
@@ -305,7 +305,9 @@ def reconcile_manifests(
     *,
     creds: str | None = None,
 ) -> tuple[int, int]:
-    """Reconcile each canonical ref represented by uploaded image records."""
+    """Reconcile each canonical ref represented by uploaded image records.
+    Returns (n_changed, n_total) for logging/progress reporting.
+    """
     records = list(records)
     canonical_refs = sorted({record.canonical_ref for record in records})
     changed = 0
