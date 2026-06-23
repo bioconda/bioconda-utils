@@ -53,7 +53,7 @@ class MulledImage(NamedTuple):
 
     pkg_ref: PkgBuildRef
     target_platform: ContainerPlatform | None
-    repository: str
+    quay_namespace: str
 
     @property
     def image_name(self) -> str:
@@ -65,12 +65,12 @@ class MulledImage(NamedTuple):
         suffix = docker_platform_tag_suffix(self.target_platform)
         if suffix:
             tag = f"{tag}-{suffix}"
-        return f"quay.io/{self.repository}/{self.pkg_ref.name}:{tag}"
+        return f"quay.io/{self.quay_namespace}/{self.pkg_ref.name}:{tag}"
 
     @property
     def canonical_tag(self) -> str:
         return (
-            f"quay.io/{self.repository}/{self.pkg_ref.name}:"
+            f"quay.io/{self.quay_namespace}/{self.pkg_ref.name}:"
             f"{self.pkg_ref.version}--{self.pkg_ref.build_string}"
         )
 
@@ -84,7 +84,7 @@ def mulled_image_metadata(
     return MulledImage(
         pkg_ref=pkg_ref,
         target_platform=target_platform or native_container_platform(),
-        repository=quay_target,
+        quay_namespace=quay_target,
     )
 
 

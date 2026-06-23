@@ -48,12 +48,12 @@ def platform_ref(canonical_ref: str, platform: ContainerPlatform) -> str:
     >>> platform_ref("quay.io/biocontainers/samtools:1.20--0", "linux/arm64")
     'quay.io/biocontainers/samtools:1.20--0-arm64'
     """
-    repository, separator, tag = canonical_ref.rpartition(":")
-    if not separator or "/" not in repository:
+    image_ref, separator, tag = canonical_ref.rpartition(":")
+    if not separator or "/" not in image_ref:
         raise ValueError(
             f"Expected a fully-qualified tagged image ref: {canonical_ref}"
         )
-    return f"{repository}:{tag}-{docker_platform_staging_suffix(platform)}"
+    return f"{image_ref}:{tag}-{docker_platform_staging_suffix(platform)}"
 
 
 def write_image_record(path: str | Path, record: MulledImageRecord) -> None:

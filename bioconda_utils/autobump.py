@@ -323,10 +323,10 @@ class ExcludeOtherChannel(Filter):
         super().__init__(scanner)
         self.channels = channels
         logger.info("Loading package lists for %s", channels)
-        repo = utils.RepoData()
+        channel_data = utils.RepoData()
         if cache:
-            repo.set_cache(cache)
-        self.other = set(repo.get_package_data("name", channels=channels))
+            channel_data.set_cache(cache)
+        self.other = set(channel_data.get_package_data("name", channels=channels))
 
     def get_info(self) -> str:
         return super().get_info().replace("**channels**", ", ".join(self.channels))

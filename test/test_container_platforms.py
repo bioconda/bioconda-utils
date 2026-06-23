@@ -15,7 +15,7 @@ def test_mulled_image_metadata_uses_platform_suffix():
     image = build.mulled_image_metadata(SAMTOOLS_1_3_0, BIOCONTAINERS, "linux/arm64")
     assert image.pkg_ref == SAMTOOLS_1_3_0
     assert image.target_platform == "linux/arm64"
-    assert image.repository == "biocontainers"
+    assert image.quay_namespace == "biocontainers"
     assert image.image_name == "samtools"
     assert image.remote_tag == "quay.io/biocontainers/samtools:1.3--0-arm64"
 

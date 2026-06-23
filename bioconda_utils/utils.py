@@ -1656,10 +1656,10 @@ class RepoData:
 
         def to_dataframe(json_data, meta_data):
             channel, platform = meta_data
-            repo = json.loads(json_data)
-            subdir = repo["info"]["subdir"]
-            packages = repo["packages"]
-            packages.update(repo.get("packages.conda", {}))
+            raw = json.loads(json_data)
+            subdir = raw["info"]["subdir"]
+            packages = raw["packages"]
+            packages.update(raw.get("packages.conda", {}))
 
             df = pd.DataFrame.from_dict(packages, "index", columns=self._load_columns)
             # Ensure that version is always a string.
