@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from . import utils
+from .utils import skopeo_env
 from ._types import (
     CONTAINER_PLATFORMS,
     ContainerPlatform,
@@ -42,7 +43,11 @@ class ManifestDescriptor:
 
 
 def platform_ref(canonical_ref: str, platform: ContainerPlatform) -> str:
-    """Return the architecture-specific staging ref for a canonical image ref."""
+    """Return the architecture-specific staging ref for a canonical image ref.
+
+    >>> platform_ref("quay.io/biocontainers/samtools:1.20--0", "linux/arm64")
+    'quay.io/biocontainers/samtools:1.20--0-arm64'
+    """
     repository, separator, tag = canonical_ref.rpartition(":")
     if not separator or "/" not in repository:
         raise ValueError(
@@ -118,6 +123,7 @@ def _inspect_raw(ref: str, creds: str | None) -> tuple[dict[str, Any], str]:
     raw = utils.run(
         ["skopeo", "inspect", "--raw", *auth_args, f"docker://{ref}"],
         mask=mask,
+        env=skopeo_env(),
     ).stdout
     manifest = json.loads(raw)
     digest = utils.run(
@@ -130,6 +136,7 @@ def _inspect_raw(ref: str, creds: str | None) -> tuple[dict[str, Any], str]:
             f"docker://{ref}",
         ],
         mask=mask,
+        env=skopeo_env(),
     ).stdout.strip()
     if not digest.startswith("sha256:"):
         raise RuntimeError(f"Registry returned an invalid digest for {ref}: {digest}")
@@ -141,6 +148,7 @@ def _inspect_config_platform(ref: str, creds: str | None) -> str:
     raw = utils.run(
         ["skopeo", "inspect", "--config", *auth_args, f"docker://{ref}"],
         mask=mask,
+        env=skopeo_env(),
     ).stdout
     config = json.loads(raw)
     os_name = config.get("os")
@@ -167,6 +175,7 @@ def _ref_exists(ref: str, creds: str | None) -> bool:
     result = utils.run(
         ["skopeo", "inspect", *auth_args, f"docker://{ref}"],
         mask=mask,
+        env=skopeo_env(),
         check=False,
         quiet_failure=True,
     )

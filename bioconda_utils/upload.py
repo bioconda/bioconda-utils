@@ -4,13 +4,12 @@ Deploy Artifacts to Anaconda and Quay
 
 import json
 import os
-from pathlib import Path
-import shutil
 import subprocess as sp
 import logging
 import requests
 import backoff
 from . import utils
+from .utils import skopeo_env
 from ._types import (
     ContainerPlatform,
     PkgBuildRef,
@@ -164,15 +163,6 @@ def mulled_upload(
     )
 
 
-def _skopeo_env() -> dict[str, str]:
-    env = os.environ.copy()
-    skopeo_bin = shutil.which("skopeo")
-    if skopeo_bin is None:
-        raise FileNotFoundError("Unable to find skopeo on PATH")
-    env["SSL_CERT_DIR"] = str(Path(skopeo_bin).parents[1] / "ssl")
-    return env
-
-
 def _skopeo_auth_args(creds: str | None, *, option: str) -> tuple[list[str], list[str]]:
     if not creds:
         return [], []
@@ -184,7 +174,7 @@ def inspect_image_platform(source_ref: str) -> str:
     raw = utils.run(
         ["skopeo", "inspect", "--config", source_ref],
         mask=False,
-        env=_skopeo_env(),
+        env=skopeo_env(),
     ).stdout
     config = json.loads(raw)
     os_name = config.get("os")
@@ -211,7 +201,7 @@ def inspect_remote_digest(ref: str, creds: str | None) -> str:
             f"docker://{ref}",
         ],
         mask=mask,
-        env=_skopeo_env(),
+        env=skopeo_env(),
     ).stdout.strip()
     if not digest.startswith("sha256:"):
         raise RuntimeError(f"Registry returned an invalid digest for {ref}: {digest}")
@@ -266,7 +256,7 @@ def upload_mulled_image_source(
             *dest_auth_args,
         ],
         mask=mask,
-        env=_skopeo_env(),
+        env=skopeo_env(),
     )
     digest = inspect_remote_digest(destination_ref, creds)
     return MulledImageRecord(

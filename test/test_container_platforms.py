@@ -13,7 +13,7 @@ BIOCONTAINERS = _types.QuayUploadTarget("biocontainers")
 
 def test_mulled_image_metadata_uses_platform_suffix():
     image = build.mulled_image_metadata(SAMTOOLS_1_3_0, BIOCONTAINERS, "linux/arm64")
-    assert image.spec == SAMTOOLS_1_3_0
+    assert image.pkg_ref == SAMTOOLS_1_3_0
     assert image.target_platform == "linux/arm64"
     assert image.repository == "biocontainers"
     assert image.image_name == "samtools"
@@ -66,7 +66,7 @@ def test_mulled_upload_passes_target_platform(monkeypatch):
     commands = []
     monkeypatch.setenv("QUAY_LOGIN", "user:token")
     monkeypatch.setattr(upload, "ensure_quay_repository", lambda *_args: None)
-    monkeypatch.setattr(upload, "_skopeo_env", lambda: {})
+    monkeypatch.setattr(upload.utils, "skopeo_env", lambda: {})
 
     def run(cmd, **_kwargs):
         commands.append(cmd)
@@ -96,7 +96,7 @@ def test_mulled_upload_stages_amd64_under_suffixed_tag(monkeypatch):
     commands = []
     monkeypatch.setenv("QUAY_LOGIN", "user:token")
     monkeypatch.setattr(upload, "ensure_quay_repository", lambda *_args: None)
-    monkeypatch.setattr(upload, "_skopeo_env", lambda: {})
+    monkeypatch.setattr(upload.utils, "skopeo_env", lambda: {})
 
     def run(cmd, **_kwargs):
         commands.append(cmd)
@@ -122,7 +122,7 @@ def test_mulled_upload_stages_amd64_under_suffixed_tag(monkeypatch):
 def test_mulled_upload_rejects_wrong_source_platform(monkeypatch):
     monkeypatch.setenv("QUAY_LOGIN", "user:token")
     monkeypatch.setattr(upload, "ensure_quay_repository", lambda *_args: None)
-    monkeypatch.setattr(upload, "_skopeo_env", lambda: {})
+    monkeypatch.setattr(upload.utils, "skopeo_env", lambda: {})
     monkeypatch.setattr(
         upload.utils,
         "run",
@@ -139,7 +139,7 @@ def test_upload_mulled_image_source_records_destination_digest(monkeypatch):
     commands = []
     monkeypatch.setenv("QUAY_LOGIN", "user:token")
     monkeypatch.setattr(upload, "ensure_quay_repository", lambda *_args: None)
-    monkeypatch.setattr(upload, "_skopeo_env", lambda: {})
+    monkeypatch.setattr(upload.utils, "skopeo_env", lambda: {})
 
     def run(cmd, **_kwargs):
         commands.append(cmd)

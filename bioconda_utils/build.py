@@ -51,38 +51,38 @@ class BuildResult(NamedTuple):
 class MulledImage(NamedTuple):
     """Mulled image metadata for one built package and target platform."""
 
-    spec: PkgBuildRef
+    pkg_ref: PkgBuildRef
     target_platform: ContainerPlatform | None
     repository: str
 
     @property
     def image_name(self) -> str:
-        return self.spec.name
+        return self.pkg_ref.name
 
     @property
     def remote_tag(self) -> str:
-        tag = f"{self.spec.version}--{self.spec.build_string}"
+        tag = f"{self.pkg_ref.version}--{self.pkg_ref.build_string}"
         suffix = docker_platform_tag_suffix(self.target_platform)
         if suffix:
             tag = f"{tag}-{suffix}"
-        return f"quay.io/{self.repository}/{self.spec.name}:{tag}"
+        return f"quay.io/{self.repository}/{self.pkg_ref.name}:{tag}"
 
     @property
     def canonical_tag(self) -> str:
         return (
-            f"quay.io/{self.repository}/{self.spec.name}:"
-            f"{self.spec.version}--{self.spec.build_string}"
+            f"quay.io/{self.repository}/{self.pkg_ref.name}:"
+            f"{self.pkg_ref.version}--{self.pkg_ref.build_string}"
         )
 
 
 def mulled_image_metadata(
-    spec: PkgBuildRef,
+    pkg_ref: PkgBuildRef,
     quay_target: QuayUploadTarget,
     target_platform: ContainerPlatform | None = None,
 ) -> MulledImage:
     """Return predictable remote image metadata for a mulled package spec."""
     return MulledImage(
-        spec=spec,
+        pkg_ref=pkg_ref,
         target_platform=target_platform or native_container_platform(),
         repository=quay_target,
     )
@@ -685,12 +685,12 @@ def build_recipes(
                                 "publishing manifest-ready mulled images"
                             )
                         record = upload.mulled_upload(
-                            img.spec, mulled_upload_target, img.target_platform
+                            img.pkg_ref, mulled_upload_target, img.target_platform
                         )
                         if mulled_upload_records is not None:
                             write_image_record(mulled_upload_records, record)
                         docker_utils.purgeImage(
-                            mulled_upload_target, img.spec, img.target_platform
+                            mulled_upload_target, img.pkg_ref, img.target_platform
                         )
 
         # remove traces of the build

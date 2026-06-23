@@ -23,7 +23,7 @@ import warnings
 import psutil
 
 from threading import Event, Thread
-from pathlib import PurePath
+from pathlib import Path, PurePath
 from collections import Counter, defaultdict, namedtuple, deque
 from collections.abc import Iterable
 from itertools import product, chain, groupby, zip_longest
@@ -420,6 +420,16 @@ def bin_for(name: str = "conda") -> str:
     if "CONDA_ROOT" in os.environ:
         return os.path.join(os.environ["CONDA_ROOT"], "bin", name)
     return name
+
+
+def skopeo_env() -> dict[str, str]:
+    """Return an environment dict with SSL_CERT_DIR set for conda's skopeo."""
+    env = os.environ.copy()
+    skopeo_bin = shutil.which("skopeo")
+    if skopeo_bin is None:
+        raise FileNotFoundError("Unable to find skopeo on PATH")
+    env["SSL_CERT_DIR"] = str(Path(skopeo_bin).parents[1] / "ssl")
+    return env
 
 
 @contextlib.contextmanager
