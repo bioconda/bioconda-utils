@@ -189,11 +189,6 @@ def inspect_image_platform(source_ref: str) -> str:
     return parse_skopeo_config_platform(config, ref=source_ref)
 
 
-def inspect_remote_digest(ref: str, creds: str | None) -> str:
-    """Inspect a remote image ref and return its registry digest."""
-    return skopeo_inspect_digest(ref, creds)
-
-
 def _quay_namespace_and_repository(canonical_ref: str) -> tuple[str, str]:
     repository, separator, _tag = canonical_ref.rpartition(":")
     if not separator:
@@ -244,7 +239,7 @@ def upload_mulled_image_source(
         redacted_secrets=redacted_secrets,
         env=skopeo_env(),
     )
-    digest = inspect_remote_digest(destination_ref, creds)
+    digest = skopeo_inspect_digest(destination_ref, creds)
     return MulledImageRecord(
         canonical_ref=canonical_ref,
         platform=target_platform,
