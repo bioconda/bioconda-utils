@@ -679,11 +679,6 @@ def build_recipes(
                             failed_uploads.append(pkg)
                 if mulled_upload_target:
                     for img in res.mulled_images or []:
-                        if img.target_platform is None:
-                            raise ValueError(
-                                "An explicit container platform is required when "
-                                "publishing manifest-ready mulled images"
-                            )
                         record = upload.mulled_upload(
                             img.pkg_ref, mulled_upload_target, img.target_platform
                         )
