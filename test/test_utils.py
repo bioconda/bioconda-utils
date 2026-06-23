@@ -122,11 +122,11 @@ def single_build(request, recipes_fixture):
         docker_builder = docker_utils.RecipeBuilder(
             use_host_conda_bld=True, docker_base_image=BUILD_ENV_IMAGE
         )
-        mulled_test = True
+        mulled_build_and_test = True
         logger.error("DONE")
     else:
         docker_builder = None
-        mulled_test = False
+        mulled_build_and_test = False
     logger.error(
         "Fixture: Building 'one' %s",
         "within docker" if docker_builder else "locally",
@@ -135,7 +135,7 @@ def single_build(request, recipes_fixture):
         recipe=recipes_fixture.recipe_dirs["one"],
         pkg_paths=recipes_fixture.pkgs["one"],
         docker_builder=docker_builder,
-        mulled_test=mulled_test,
+        mulled_build_and_test=mulled_build_and_test,
     )
     logger.error(
         "Fixture: Building 'one' %s -- DONE",
@@ -155,10 +155,10 @@ def multi_build(request, recipes_fixture, config_fixture):
         docker_builder = docker_utils.RecipeBuilder(
             use_host_conda_bld=True, docker_base_image=BUILD_ENV_IMAGE
         )
-        mulled_test = True
+        mulled_build_and_test = True
     else:
         docker_builder = None
-        mulled_test = False
+        mulled_build_and_test = False
     logger.error(
         "Fixture: Building one/two/three %s",
         "within docker" if docker_builder else "locally",
@@ -168,7 +168,7 @@ def multi_build(request, recipes_fixture, config_fixture):
         config_fixture,
         recipes_fixture.recipe_dirnames,
         docker_builder=docker_builder,
-        mulled_test=mulled_test,
+        mulled_build_and_test=mulled_build_and_test,
     )
     logger.error(
         "Fixture: Building one/two/three %s -- DONE",
@@ -191,10 +191,10 @@ def multi_build_exclude(request, recipes_fixture, config_fixture):
         docker_builder = docker_utils.RecipeBuilder(
             use_host_conda_bld=True, docker_base_image=BUILD_ENV_IMAGE
         )
-        mulled_test = True
+        mulled_build_and_test = True
     else:
         docker_builder = None
-        mulled_test = False
+        mulled_build_and_test = False
     logger.error(
         "Fixture: Building one/two (and not three) %s",
         "within docker" if docker_builder else "locally",
@@ -204,7 +204,7 @@ def multi_build_exclude(request, recipes_fixture, config_fixture):
         config_fixture,
         recipes_fixture.recipe_dirnames,
         docker_builder=docker_builder,
-        mulled_test=mulled_test,
+        mulled_build_and_test=mulled_build_and_test,
         exclude=["three"],
     )
     logger.error(
@@ -244,7 +244,7 @@ def single_upload():
         recipe=r.recipe_dirs[name],
         pkg_paths=r.pkgs[name],
         docker_builder=None,
-        mulled_test=False,
+        mulled_build_and_test=False,
     )
     pkg = r.pkgs[name][0]
 
@@ -314,14 +314,14 @@ def test_single_build_pkg_dir(recipes_fixture):
         pkg_dir=os.getcwd() + "/output",
         docker_base_image=BUILD_ENV_IMAGE,
     )
-    mulled_test = False
+    mulled_build_and_test = False
     logger.error("DONE")
     logger.error("Fixture: Building 'one' within docker with pkg_dir")
     res = build.build(
         recipe=recipes_fixture.recipe_dirs["one"],
         pkg_paths=recipes_fixture.pkgs["one"],
         docker_builder=docker_builder,
-        mulled_test=mulled_test,
+        mulled_build_and_test=mulled_build_and_test,
     )
     logger.error("Fixture: Building 'one' within docker and pkg_dir -- DONE")
     assert res.success
@@ -408,7 +408,7 @@ def test_docker_build_fails(recipes_fixture, config_fixture):
         config_fixture,
         recipes_fixture.recipe_dirnames,
         docker_builder=docker_builder,
-        mulled_test=True,
+        mulled_build_and_test=True,
     )
     assert not result
 
@@ -459,10 +459,10 @@ def test_get_deps():
 
 
 @pytest.mark.long_running_1
-@pytest.mark.parametrize("mulled_test", PARAMS, ids=IDS)
-def test_conda_as_dep(config_fixture, mulled_test):
+@pytest.mark.parametrize("mulled_build_and_test", PARAMS, ids=IDS)
+def test_conda_as_dep(config_fixture, mulled_build_and_test):
     docker_builder = None
-    if mulled_test:
+    if mulled_build_and_test:
         docker_builder = docker_utils.RecipeBuilder(
             use_host_conda_bld=True,
             docker_base_image=BUILD_ENV_IMAGE,
@@ -493,7 +493,7 @@ def test_conda_as_dep(config_fixture, mulled_test):
         testonly=False,
         force=False,
         docker_builder=docker_builder,
-        mulled_test=mulled_test,
+        mulled_build_and_test=mulled_build_and_test,
     )
     assert build_result
 
@@ -748,13 +748,12 @@ def test_rendering_sandboxing():
     # env = {
     #     # None of these should be passed to the recipe
     #     "CONDA_ARBITRARY_VAR": "conda-val-here",
-    #     "TRAVIS_ARBITRARY_VAR": "travis-val-here",
     #     "GITHUB_TOKEN": "asdf",
     #     "BUILDKITE_TOKEN": "asdf",
     # }
 
     # If GITHUB_TOKEN is already set in the bash environment, then we get
-    # a message on stdout+stderr (this is the case on travis-ci).
+    # a message on stdout+stderr (this is the case in GitHub Actions).
     #
     # However if GITHUB_TOKEN is not already set in the bash env (e.g., when
     # testing locally), then we get a SystemError.
@@ -768,7 +767,7 @@ def test_rendering_sandboxing():
             build.build(
                 recipe=r.recipe_dirs["one"],
                 pkg_paths=pkg_paths,
-                mulled_test=False,
+                mulled_build_and_test=False,
                 raise_error=True,
             )
         assert "'GITHUB_TOKEN' is undefined" in str(excinfo.value.stdout)
@@ -779,7 +778,7 @@ def test_rendering_sandboxing():
             build.build(
                 recipe=r.recipe_dirs["one"],
                 pkg_paths=pkg_paths,
-                mulled_test=False,
+                mulled_build_and_test=False,
             )
         assert "'GITHUB_TOKEN' is undefined" in str(excinfo.value)
 
@@ -788,7 +787,6 @@ def test_sandboxed():
     env = {
         "PATH": "/foo/bar",
         "CONDA_ARBITRARY_VAR": "conda-val-here",
-        "TRAVIS_ARBITRARY_VAR": "travis-val-here",
         "GITHUB_TOKEN": "asdf",
         "BUILDKITE_TOKEN": "asdf",
     }
@@ -796,7 +794,6 @@ def test_sandboxed():
         print(os.environ)
         assert os.environ["PATH"] == "/foo/bar"
         assert "CONDA_ARBITRARY_VAR" not in os.environ
-        assert "TRAVIS_ARBITRARY_VAR" not in os.environ
         assert "GITHUB_TOKEN" not in os.environ
         assert "BUILDKITE_TOKEN" not in os.environ
 
@@ -825,7 +822,7 @@ def test_env_sandboxing():
     pkg_paths = utils.built_package_paths(r.recipe_dirs["one"])
 
     with utils.temp_env({"GITHUB_TOKEN": "token_here"}):
-        build.build(recipe=r.recipe_dirs["one"], pkg_paths=pkg_paths, mulled_test=False)
+        build.build(recipe=r.recipe_dirs["one"], pkg_paths=pkg_paths, mulled_build_and_test=False)
 
     for pkg in pkg_paths:
         assert os.path.exists(pkg)
@@ -877,7 +874,7 @@ def test_skip_dependencies(config_fixture):
         r.recipe_dirnames,
         testonly=False,
         force=False,
-        mulled_test=False,
+        mulled_build_and_test=False,
     )
     for pkg in pkgs["one"]:
         assert os.path.exists(pkg)
@@ -900,7 +897,7 @@ class TestSubdags:
             recipes_fixture.recipe_dirnames,
             n_workers=n_workers,
             worker_offset=worker_offset,
-            mulled_test=False,
+            mulled_build_and_test=False,
         )
 
     def test_subdags_out_of_range(self, recipes_fixture, config_fixture):
@@ -929,7 +926,7 @@ def test_build_empty_extra_container():
     build_result = build.build(
         recipe=r.recipe_dirs["one"],
         pkg_paths=pkgs,
-        mulled_test=True,
+        mulled_build_and_test=True,
     )
     assert build_result.success
     for pkg in pkgs:
@@ -978,7 +975,7 @@ def test_build_container_no_default_gcc(tmpdir):
         recipe=r.recipe_dirs["one"],
         pkg_paths=pkg_paths,
         docker_builder=docker_builder,
-        mulled_test=False,
+        mulled_build_and_test=False,
     )
     assert build_result.success
 
@@ -1014,7 +1011,7 @@ def no_test_conda_forge_pins(caplog, config_fixture):
         r.recipe_dirnames,
         testonly=False,
         force=False,
-        mulled_test=False,
+        mulled_build_and_test=False,
     )
     assert build_result
 
@@ -1050,7 +1047,7 @@ def test_bioconda_pins(caplog, config_fixture):
         r.recipe_dirnames,
         testonly=False,
         force=False,
-        mulled_test=False,
+        mulled_build_and_test=False,
     )
     assert build_result
 
@@ -1211,7 +1208,7 @@ def test_cb3_outputs(config_fixture):
         r.recipe_dirnames,
         testonly=False,
         force=False,
-        mulled_test=False,
+        mulled_build_and_test=False,
     )
     assert build_result
 
@@ -1247,7 +1244,7 @@ def test_compiler(config_fixture):
         r.recipe_dirnames,
         testonly=False,
         force=False,
-        mulled_test=False,
+        mulled_build_and_test=False,
     )
     assert build_result
 
@@ -1321,7 +1318,7 @@ def test_nested_recipes(config_fixture):
         r.recipe_dirnames,
         testonly=False,
         force=False,
-        mulled_test=False,
+        mulled_build_and_test=False,
     )
     assert build_results
 
@@ -1371,7 +1368,7 @@ def test_conda_build_sysroot(config_fixture):
         r.recipe_dirnames,
         testonly=False,
         force=False,
-        mulled_test=False,
+        mulled_build_and_test=False,
     )
     assert build_result
 
@@ -1420,16 +1417,16 @@ def test_skip_unsatisfiable_pin_compatible(config_fixture):
         [r.recipe_dirs["one"]],
         testonly=False,
         force=False,
-        mulled_test=False,
+        mulled_build_and_test=False,
     )
     assert build_result
     assert len(utils.load_all_meta(r.recipe_dirs["two"])) == 1
 
 
-@pytest.mark.parametrize("mulled_test", PARAMS, ids=IDS)
+@pytest.mark.parametrize("mulled_build_and_test", PARAMS, ids=IDS)
 @pytest.mark.parametrize("pkg_format", ["1", "2"])
 def test_pkg_test_conda_package_format(
-    config_fixture, pkg_format, mulled_test, tmp_path, monkeypatch
+    config_fixture, pkg_format, mulled_build_and_test, tmp_path, monkeypatch
 ):
     """
     Running a mulled-build test with .tar.bz2/.conda package formats
@@ -1471,7 +1468,7 @@ def test_pkg_test_conda_package_format(
     )
     r.write_recipes()
     docker_builder = None
-    if mulled_test:
+    if mulled_build_and_test:
         # Override conda_build.pkg_format in build_script_template.
         build_script_template = re.sub(
             "^(conda config.*)",
@@ -1490,7 +1487,7 @@ def test_pkg_test_conda_package_format(
         config_fixture,
         r.recipe_dirnames,
         docker_builder=docker_builder,
-        mulled_test=mulled_test,
+        mulled_build_and_test=mulled_build_and_test,
     )
     assert build_result
 

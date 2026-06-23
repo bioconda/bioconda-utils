@@ -86,7 +86,7 @@ def build(
     recipe: str,
     pkg_paths: list[str] | None = None,
     testonly: bool = False,
-    mulled_test: bool = True,
+    mulled_build_and_test: bool = True,
     channels: list[str] | None = None,
     docker_builder: docker_utils.RecipeBuilder | None = None,
     raise_error: bool = False,
@@ -96,7 +96,7 @@ def build(
     dag: nx.DiGraph | None = None,
     skiplist_leafs: bool = False,
     live_logs: bool = True,
-    presolved_mulled_test: bool = True,
+    presolved_mulled_build_and_test: bool = True,
     mulled_upload_target: QuayUploadTarget | None = None,
     container_platforms: Sequence[ContainerPlatform] | None = None,
 ) -> BuildResult:
@@ -107,7 +107,8 @@ def build(
       recipe: Path to recipe
       pkg_paths: List of paths to expected packages
       testonly: Only run the tests described in the meta.yaml
-      mulled_test: Run tests in minimal docker container
+      mulled_build_and_test: Build the mulled container and run the recipe's
+        tests inside it (wraps `mulled-build build-and-test`).
       channels: Channels to include via the ``--channel`` argument to
         conda-build. Higher priority channels should come first.
       docker_builder : docker_utils.RecipeBuilder object
@@ -243,8 +244,8 @@ def build(
     finally:
         report_resources(f"Finished build for {recipe}", docker_builder is not None)
 
-    if mulled_test:
-        logger.info("TEST START via mulled-build %s", recipe)
+    if mulled_build_and_test:
+        logger.info("BUILD AND TEST START via mulled-build %s", recipe)
         mulled_images: list[MulledImage] = []
         # Use pre-solved test env unless we need the mulled-build image for upload
         requested_platforms: list[ContainerPlatform | None] = (
@@ -253,7 +254,7 @@ def build(
         for pkg_path in pkg_paths:
             for target_platform in requested_platforms:
                 use_presolved = (
-                    presolved_mulled_test
+                    presolved_mulled_build_and_test
                     and not mulled_upload_target
                     and container_platform_is_native(target_platform)
                 )
@@ -329,7 +330,7 @@ def remove_cycles(
     return dag.subgraph(name for name in dag if name not in nodes_in_cycles)
 
 
-def get_subdags(
+def get_worker_subdag(
     dag: nx.DiGraph,
     n_workers: int,
     worker_offset: int,
@@ -424,7 +425,7 @@ def build_recipes(
     recipe_folder: str,
     config_path: str,
     recipes: list[str],
-    mulled_test: bool = True,
+    mulled_build_and_test: bool = True,
     testonly: bool = False,
     force: bool = False,
     docker_builder: docker_utils.RecipeBuilder | None = None,
@@ -443,7 +444,7 @@ def build_recipes(
     live_logs: bool = True,
     exclude: list[str] | None = None,
     subdag_depth: int | None = None,
-    presolved_mulled_test: bool = True,
+    presolved_mulled_build_and_test: bool = True,
     fast_resolve: bool = True,
     container_platforms: Sequence[ContainerPlatform] | None = None,
     mulled_upload_records: Path | None = None,
@@ -457,7 +458,8 @@ def build_recipes(
       packages: Glob indicating which packages should be considered. Note that packages
         matching the glob will still be filtered out by any blacklists
         specified in the config.
-      mulled_test: If true, test the package in a minimal container.
+      mulled_build_and_test: If true, build the mulled container and run the
+        recipe's tests inside it.
       testonly: If true, only run test.
       force: If true, build the recipe even though it would otherwise be filtered out.
       docker_builder: If specified, use to build all recipes
@@ -518,7 +520,7 @@ def build_recipes(
 
     skip_dependent = defaultdict(list)
     dag = remove_cycles(dag, name2recipes, failed, skip_dependent)
-    subdag = get_subdags(dag, n_workers, worker_offset, subdag_depth)
+    subdag = get_worker_subdag(dag, n_workers, worker_offset, subdag_depth)
     if not subdag:
         logger.info("Nothing to be done.")
         return True
@@ -618,7 +620,7 @@ def build_recipes(
             recipe=recipe,
             pkg_paths=pkg_paths,
             testonly=testonly,
-            mulled_test=mulled_test,
+            mulled_build_and_test=mulled_build_and_test,
             channels=config["channels"],
             docker_builder=docker_builder,
             linter=linter,
@@ -627,7 +629,7 @@ def build_recipes(
             record_build_failure=record_build_failures,
             skiplist_leafs=skiplist_leafs,
             live_logs=live_logs,
-            presolved_mulled_test=presolved_mulled_test,
+            presolved_mulled_build_and_test=presolved_mulled_build_and_test,
             mulled_upload_target=mulled_upload_target,
             container_platforms=container_platforms,
         )

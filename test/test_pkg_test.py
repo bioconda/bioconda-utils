@@ -43,8 +43,8 @@ one:
 """)
 
 
-# Skip mulled_test on default since we already run pkg_test.test_package for every test case.
-def _build_pkg(recipe, mulled_test=False, docker_builder=None):
+# Skip mulled_build_and_test on default since we already run pkg_test.test_package for every test case.
+def _build_pkg(recipe, mulled_build_and_test=False, docker_builder=None):
     r = Recipes(recipe, from_string=True)
     r.write_recipes()
     recipe = r.recipe_dirs["one"]
@@ -54,7 +54,7 @@ def _build_pkg(recipe, mulled_test=False, docker_builder=None):
     build.build(
         recipe=r.recipe_dirs["one"],
         pkg_paths=built_packages,
-        mulled_test=mulled_test,
+        mulled_build_and_test=mulled_build_and_test,
         docker_builder=docker_builder,
     )
     return built_packages

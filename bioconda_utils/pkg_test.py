@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 CREATE_ENV_IMAGE = os.getenv("CREATE_ENV_IMAGE", "quay.io/bioconda/create-env:latest")
 
 
-def get_tests(path: str) -> str:
+def get_test_command(path: str) -> str:
     "Extract tests from a built package"
     tmp = tempfile.mkdtemp()
     for tar, member in stream_conda_info(path):
@@ -322,7 +322,7 @@ def test_package(
         for channel in channels
     ]
 
-    tests = get_tests(path)
+    tests = get_test_command(path)
     logger.debug("Tests to run: %s", tests)
 
     # Try the pre-solved path first for faster testing

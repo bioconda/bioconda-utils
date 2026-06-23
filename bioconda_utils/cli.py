@@ -532,9 +532,10 @@ def do_lint(
     help="Docker platform to build for (e.g. linux/arm64). Requires --docker.",
 )
 @arg(
-    "--mulled-test",
+    "--mulled-build-and-test",
     action="store_true",
-    help="Run a mulled-build test on the built package",
+    help="Build a mulled Docker container for the package and run the "
+    "recipe's tests inside it (wraps `mulled-build build-and-test`).",
 )
 @arg(
     "--mulled-upload-target",
@@ -651,10 +652,10 @@ from environment, even after successful build and test.""",
     help="Disable live logging during the build process",
 )
 @arg(
-    "--no-presolved-mulled-test",
+    "--no-presolved-mulled-build-and-test",
     action="store_true",
-    help="Disable pre-solved mulled tests: always use mulled-build to solve and install "
-    "the test environment from scratch.",
+    help="Disable the pre-solved mulled-build-and-test fast path: always use "
+    "mulled-build to solve and install the test environment from scratch.",
 )
 @arg(
     "--no-fast-resolve",
@@ -688,7 +689,7 @@ def build(
     force=False,
     docker=None,
     platform=None,
-    mulled_test=False,
+    mulled_build_and_test=False,
     build_script_template=None,
     pkg_dir=None,
     anaconda_upload=False,
@@ -706,7 +707,7 @@ def build(
     record_build_failures=False,
     skiplist_leafs=False,
     disable_live_logs=False,
-    no_presolved_mulled_test=False,
+    no_presolved_mulled_build_and_test=False,
     no_fast_resolve=False,
     container_platform: list[ContainerPlatform] | None = None,
     mulled_upload_records: Path | None = None,
@@ -778,7 +779,7 @@ def build(
         recipes,
         testonly=testonly,
         force=force,
-        mulled_test=mulled_test,
+        mulled_build_and_test=mulled_build_and_test,
         docker_builder=docker_builder,
         anaconda_upload=anaconda_upload,
         mulled_upload_target=mulled_upload_target,
@@ -795,7 +796,7 @@ def build(
         live_logs=(not disable_live_logs),
         exclude=exclude,
         subdag_depth=subdag_depth,
-        presolved_mulled_test=not no_presolved_mulled_test,
+        presolved_mulled_build_and_test=not no_presolved_mulled_build_and_test,
         fast_resolve=not no_fast_resolve,
         container_platforms=container_platform,
         mulled_upload_records=mulled_upload_records,
@@ -900,7 +901,7 @@ def handle_merged_pr(
             git_range=git_range,
             anaconda_upload=not dryrun,
             mulled_upload_target=quay_upload_target if not dryrun else None,
-            mulled_test=True,
+            mulled_build_and_test=True,
             container_platform=container_platform,
             mulled_upload_records=mulled_upload_records,
         )

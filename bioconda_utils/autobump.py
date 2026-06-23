@@ -490,7 +490,7 @@ class CheckPinning(Filter):
             reason = cls.find_reason(recipe, metas)
         else:
             reason = None
-        recipe.conda_release()
+        recipe.conda_render_cleanup()
         return reason
 
     @classmethod

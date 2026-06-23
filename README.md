@@ -10,8 +10,8 @@
 Since `bioconda-utils` is tightly coupled to `bioconda-recipes`, it is
 strongly recommended that `bioconda-utils` be set up and used according to the
 instructions at https://bioconda.github.io/contributor/index.html. This will
-ensure that your local setup matches that used to build recipes on travis-ci as
-closely as possible.
+ensure that your local setup matches that used to build recipes in GitHub
+Actions as closely as possible.
 
 However, if you would like to test in a standalone manner or help develop
 bioconda-utils, you can use the Just wrappers around the Pixi tasks:

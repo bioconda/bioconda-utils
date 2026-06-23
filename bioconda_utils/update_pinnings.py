@@ -326,7 +326,7 @@ def check(
     Args:
       recipe: The recipe to check
       build_config: conda build config object
-      keep_metas: If true, `Recipe.conda_release` is not called
+      keep_metas: If true, `Recipe.conda_render_cleanup` is not called
       skip_variant_keys: Variant keys to skip a recipe for if they are used
 
     Returns:
@@ -387,5 +387,5 @@ def check(
         else:
             flags |= State.BUMP
     if not keep_metas:
-        recipe.conda_release()
+        recipe.conda_render_cleanup()
     return flags, recipe
