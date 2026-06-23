@@ -13,7 +13,12 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from . import utils
-from .utils import skopeo_env
+from .utils import (
+    skopeo_env,
+    skopeo_auth_args,
+    skopeo_inspect_digest,
+    parse_skopeo_config_platform,
+)
 from ._types import (
     CONTAINER_PLATFORMS,
     ContainerPlatform,
@@ -115,54 +120,27 @@ def registry_creds() -> str | None:
     return None
 
 
-def _skopeo_auth_args(creds: str | None, *, option: str) -> tuple[list[str], list[str]]:
-    if not creds:
-        return [], []
-    return [option, creds], creds.split(":", 1)
-
-
 def _inspect_raw(ref: str, creds: str | None) -> tuple[dict[str, Any], str]:
-    auth_args, redacted_secrets = _skopeo_auth_args(creds, option="--creds")
+    auth_args, redacted_secrets = skopeo_auth_args(creds, option="--creds")
     raw = utils.run(
         ["skopeo", "inspect", "--raw", *auth_args, f"docker://{ref}"],
         redacted_secrets=redacted_secrets,
         env=skopeo_env(),
     ).stdout
     manifest = json.loads(raw)
-    digest = utils.run(
-        [
-            "skopeo",
-            "inspect",
-            "--format",
-            "{{.Digest}}",
-            *auth_args,
-            f"docker://{ref}",
-        ],
-        redacted_secrets=redacted_secrets,
-        env=skopeo_env(),
-    ).stdout.strip()
-    if not digest.startswith("sha256:"):
-        raise RuntimeError(f"Registry returned an invalid digest for {ref}: {digest}")
+    digest = skopeo_inspect_digest(ref, creds)
     return manifest, digest
 
 
 def _inspect_config_platform(ref: str, creds: str | None) -> str:
-    auth_args, redacted_secrets = _skopeo_auth_args(creds, option="--creds")
+    auth_args, redacted_secrets = skopeo_auth_args(creds, option="--creds")
     raw = utils.run(
         ["skopeo", "inspect", "--config", *auth_args, f"docker://{ref}"],
         redacted_secrets=redacted_secrets,
         env=skopeo_env(),
     ).stdout
     config = json.loads(raw)
-    os_name = config.get("os")
-    architecture = config.get("architecture")
-    variant = config.get("variant")
-    if not os_name or not architecture:
-        raise RuntimeError(f"Image config for {ref} has no OS/architecture")
-    result = f"{os_name}/{architecture}"
-    if variant:
-        result += f"/{variant}"
-    return result
+    return parse_skopeo_config_platform(config, ref=ref)
 
 
 def _descriptor_platform(descriptor: dict[str, Any]) -> str:
@@ -174,7 +152,7 @@ def _descriptor_platform(descriptor: dict[str, Any]) -> str:
 
 
 def _ref_exists(ref: str, creds: str | None) -> bool:
-    auth_args, redacted_secrets = _skopeo_auth_args(creds, option="--creds")
+    auth_args, redacted_secrets = skopeo_auth_args(creds, option="--creds")
     result = utils.run(
         ["skopeo", "inspect", *auth_args, f"docker://{ref}"],
         redacted_secrets=redacted_secrets,

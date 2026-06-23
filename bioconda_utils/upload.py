@@ -9,7 +9,12 @@ import logging
 import requests
 import backoff
 from . import utils
-from .utils import skopeo_env
+from .utils import (
+    skopeo_env,
+    skopeo_auth_args,
+    skopeo_inspect_digest,
+    parse_skopeo_config_platform,
+)
 from ._types import (
     ContainerPlatform,
     PkgBuildRef,
@@ -21,7 +26,6 @@ from .container_manifests import (
     MulledImageRecord,
     platform_ref,
     registry_creds,
-    _skopeo_auth_args,
 )
 
 logger = logging.getLogger(__name__)
@@ -44,7 +48,8 @@ def ensure_quay_repository(namespace: str, repository: str) -> None:
         # Existing public repositories can still be pushed with registry creds.
         # New repositories require the API token to enforce public visibility.
         logger.warning(
-            "QUAY_OAUTH_TOKEN is not set; cannot verify visibility for %s/%s",
+            "QUAY_OAUTH_TOKEN is not set; cannot verify visibility for %s/%s. "
+            "If the repository does not exist, skopeo may auto-create it as private.",
             namespace,
             repository,
         )
@@ -71,6 +76,11 @@ def ensure_quay_repository(namespace: str, repository: str) -> None:
     else:
         data = response.json()
         if data.get("is_public") is False:
+            logger.warning(
+                "Repository %s/%s is private; changing visibility to public",
+                namespace,
+                repository,
+            )
             response = requests.post(
                 f"{url}/changevisibility",
                 headers=headers,
@@ -176,35 +186,12 @@ def inspect_image_platform(source_ref: str) -> str:
         env=skopeo_env(),
     ).stdout
     config = json.loads(raw)
-    os_name = config.get("os")
-    architecture = config.get("architecture")
-    variant = config.get("variant")
-    if not os_name or not architecture:
-        raise RuntimeError(f"Image config for {source_ref} has no OS/architecture")
-    platform = f"{os_name}/{architecture}"
-    if variant:
-        platform += f"/{variant}"
-    return platform
+    return parse_skopeo_config_platform(config, ref=source_ref)
 
 
 def inspect_remote_digest(ref: str, creds: str | None) -> str:
     """Inspect a remote image ref and return its registry digest."""
-    auth_args, redacted_secrets = _skopeo_auth_args(creds, option="--creds")
-    digest = utils.run(
-        [
-            "skopeo",
-            "inspect",
-            "--format",
-            "{{.Digest}}",
-            *auth_args,
-            f"docker://{ref}",
-        ],
-        redacted_secrets=redacted_secrets,
-        env=skopeo_env(),
-    ).stdout.strip()
-    if not digest.startswith("sha256:"):
-        raise RuntimeError(f"Registry returned an invalid digest for {ref}: {digest}")
-    return digest
+    return skopeo_inspect_digest(ref, creds)
 
 
 def _quay_namespace_and_repository(canonical_ref: str) -> tuple[str, str]:
@@ -243,7 +230,7 @@ def upload_mulled_image_source(
     namespace, repository = _quay_namespace_and_repository(canonical_ref)
     ensure_quay_repository(namespace, repository)
     destination_ref = platform_ref(canonical_ref, target_platform)
-    dest_auth_args, redacted_secrets = _skopeo_auth_args(creds, option="--dest-creds")
+    dest_auth_args, redacted_secrets = skopeo_auth_args(creds, option="--dest-creds")
     utils.run(
         [
             "skopeo",

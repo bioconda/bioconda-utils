@@ -432,6 +432,39 @@ def skopeo_env() -> dict[str, str]:
     return env
 
 
+def skopeo_auth_args(creds: str | None, *, option: str) -> tuple[list[str], list[str]]:
+    """Build skopeo credential CLI args and redacted secrets list."""
+    if not creds:
+        return [], []
+    return [option, creds], creds.split(":", 1)
+
+
+def skopeo_inspect_digest(ref: str, creds: str | None) -> str:
+    """Inspect a remote image ref and return its registry digest."""
+    auth_args, redacted_secrets = skopeo_auth_args(creds, option="--creds")
+    digest = run(
+        ["skopeo", "inspect", "--format", "{{.Digest}}", *auth_args, f"docker://{ref}"],
+        redacted_secrets=redacted_secrets,
+        env=skopeo_env(),
+    ).stdout.strip()
+    if not digest.startswith("sha256:"):
+        raise RuntimeError(f"Registry returned an invalid digest for {ref}: {digest}")
+    return digest
+
+
+def parse_skopeo_config_platform(config: dict, *, ref: str = "") -> str:
+    """Extract os/arch/variant from a skopeo inspect --config result."""
+    os_name = config.get("os")
+    architecture = config.get("architecture")
+    variant = config.get("variant")
+    if not os_name or not architecture:
+        raise RuntimeError(f"Image config for {ref} has no OS/architecture")
+    result = f"{os_name}/{architecture}"
+    if variant:
+        result += f"/{variant}"
+    return result
+
+
 @contextlib.contextmanager
 def temp_env(env):
     """

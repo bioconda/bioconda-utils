@@ -281,6 +281,12 @@ def upload_pr_artifacts(
         logger.info("No artifacts found.")
         return UploadResult.NO_ARTIFACTS
 
+    target_platform = (
+        _mulled_artifact_target_platform(container_platforms)
+        if mulled_upload_target
+        else None
+    )
+
     success = []
     for artifact_url in artifacts:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -295,8 +301,7 @@ def upload_pr_artifacts(
                 )
             )
 
-            if mulled_upload_target:
-                target_platform = _mulled_artifact_target_platform(container_platforms)
+            if mulled_upload_target and target_platform is not None:
                 success.extend(
                     _upload_mulled_images(
                         artifact_dir,

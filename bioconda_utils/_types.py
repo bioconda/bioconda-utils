@@ -31,7 +31,7 @@ def parse_quay_upload_target(value: str | None) -> QuayUploadTarget | None:
 
 
 def docker_platform_tag_suffix(target_platform: ContainerPlatform | None) -> str | None:
-    if target_platform in (None, "linux/amd64"):
+    if target_platform is None or target_platform == "linux/amd64":
         return None
     return target_platform.removeprefix("linux/").replace("/", "-")
 
