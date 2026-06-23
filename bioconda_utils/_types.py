@@ -31,13 +31,32 @@ def parse_quay_upload_target(value: str | None) -> QuayUploadTarget | None:
 
 
 def docker_platform_tag_suffix(target_platform: ContainerPlatform | None) -> str | None:
+    """Suffix mulled-build appends to an image tag, mirroring galaxy's rule.
+
+    MUST stay in sync with
+    ``galaxy.tool_util.deps.mulled.mulled_build.docker_platform_tag_suffix``
+    (and ``apply_platform_tag_suffix``) in the ``galaxy-tool-util`` package:
+    amd64 is left unsuffixed, every other architecture gets ``-<arch>``.
+    ``mulled_upload`` relies on this so its ``docker-daemon:`` source ref
+    matches the tag mulled-build actually produces locally. If galaxy ever
+    changes its suffix rule, this function must change with it.
+    """
     if target_platform is None or target_platform == "linux/amd64":
         return None
     return target_platform.removeprefix("linux/").replace("/", "-")
 
 
 def docker_platform_staging_suffix(target_platform: ContainerPlatform) -> str:
-    """Return the suffix used for architecture-specific registry tags."""
+    """Return the *always-suffixed* tag used for per-arch registry staging.
+
+    Unlike :func:`docker_platform_tag_suffix` (which mirrors mulled-build and
+    leaves amd64 unsuffixed), this always appends a suffix -- including
+    ``-amd64`` -- so every architecture gets a distinct registry tag that
+    ``docker buildx imagetools create`` can assemble into a multi-platform
+    manifest at the unsuffixed canonical tag. Nothing in ``galaxy-tool-util``
+    produces these tags; they are a bioconda-utils convention used only by
+    :func:`bioconda_utils.container_manifests.platform_ref`.
+    """
     return target_platform.removeprefix("linux/").replace("/", "-")
 
 

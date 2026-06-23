@@ -32,9 +32,7 @@ from ._types import (
     PkgBuildRef,
     QuayUploadTarget,
     container_platform_is_native,
-    docker_platform_tag_suffix,
     native_container_platform,
-    parse_quay_upload_target,
 )
 from .container_manifests import write_image_record
 
@@ -53,38 +51,16 @@ class MulledImage(NamedTuple):
 
     pkg_ref: PkgBuildRef
     target_platform: ContainerPlatform | None
-    quay_namespace: str
-
-    @property
-    def image_name(self) -> str:
-        return self.pkg_ref.name
-
-    @property
-    def remote_tag(self) -> str:
-        tag = f"{self.pkg_ref.version}--{self.pkg_ref.build_string}"
-        suffix = docker_platform_tag_suffix(self.target_platform)
-        if suffix:
-            tag = f"{tag}-{suffix}"
-        return f"quay.io/{self.quay_namespace}/{self.pkg_ref.name}:{tag}"
-
-    @property
-    def canonical_tag(self) -> str:
-        return (
-            f"quay.io/{self.quay_namespace}/{self.pkg_ref.name}:"
-            f"{self.pkg_ref.version}--{self.pkg_ref.build_string}"
-        )
 
 
 def mulled_image_metadata(
     pkg_ref: PkgBuildRef,
-    quay_target: QuayUploadTarget,
     target_platform: ContainerPlatform | None = None,
 ) -> MulledImage:
-    """Return predictable remote image metadata for a mulled package spec."""
+    """Return mulled image metadata for a built package."""
     return MulledImage(
         pkg_ref=pkg_ref,
         target_platform=target_platform or native_container_platform(),
-        quay_namespace=quay_target,
     )
 
 
@@ -270,10 +246,6 @@ def build(
     if mulled_test:
         logger.info("TEST START via mulled-build %s", recipe)
         mulled_images: list[MulledImage] = []
-        metadata_upload_target = mulled_upload_target or parse_quay_upload_target(
-            "biocontainers"
-        )
-        assert metadata_upload_target is not None
         # Use pre-solved test env unless we need the mulled-build image for upload
         requested_platforms: list[ContainerPlatform | None] = (
             list(container_platforms) if container_platforms else [None]
@@ -306,13 +278,7 @@ def build(
                     )
                 logger.info("TEST SUCCESS %s", recipe)
                 image_spec = pkg_test.get_image_name(pkg_path)
-                mulled_images.append(
-                    mulled_image_metadata(
-                        image_spec,
-                        metadata_upload_target,
-                        target_platform,
-                    )
-                )
+                mulled_images.append(mulled_image_metadata(image_spec, target_platform))
         return BuildResult(True, mulled_images)
 
     return BuildResult(True, None)

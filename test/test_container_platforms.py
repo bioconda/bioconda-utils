@@ -11,18 +11,10 @@ SAMTOOLS_1_3_0 = PkgBuildRef(name="samtools", version="1.3", build_string="0")
 BIOCONTAINERS = _types.QuayUploadTarget("biocontainers")
 
 
-def test_mulled_image_metadata_uses_platform_suffix():
-    image = build.mulled_image_metadata(SAMTOOLS_1_3_0, BIOCONTAINERS, "linux/arm64")
+def test_mulled_image_metadata_records_target_platform():
+    image = build.mulled_image_metadata(SAMTOOLS_1_3_0, "linux/arm64")
     assert image.pkg_ref == SAMTOOLS_1_3_0
     assert image.target_platform == "linux/arm64"
-    assert image.quay_namespace == "biocontainers"
-    assert image.image_name == "samtools"
-    assert image.remote_tag == "quay.io/biocontainers/samtools:1.3--0-arm64"
-
-
-def test_mulled_image_metadata_keeps_amd64_unsuffixed():
-    image = build.mulled_image_metadata(SAMTOOLS_1_3_0, BIOCONTAINERS, "linux/amd64")
-    assert image.remote_tag == "quay.io/biocontainers/samtools:1.3--0"
 
 
 def test_mulled_image_metadata_records_native_platform(monkeypatch):
@@ -30,7 +22,7 @@ def test_mulled_image_metadata_records_native_platform(monkeypatch):
     monkeypatch.setattr(
         build, "native_container_platform", _types.native_container_platform
     )
-    image = build.mulled_image_metadata(SAMTOOLS_1_3_0, BIOCONTAINERS)
+    image = build.mulled_image_metadata(SAMTOOLS_1_3_0)
     assert image.target_platform == "linux/arm64"
 
 
