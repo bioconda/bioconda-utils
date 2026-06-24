@@ -253,23 +253,49 @@ def build(
         )
         for pkg_path in pkg_paths:
             for target_platform in requested_platforms:
-                use_presolved = (
+                use_temporary_test_container = (
                     presolved_mulled_build_and_test
                     and not mulled_upload_target
                     and container_platform_is_native(target_platform)
                 )
+                built_mulled_image = False
                 try:
                     report_resources(
                         f"Starting mulled build for {pkg_path} on {target_platform or 'native'}"
                     )
-                    pkg_test.test_package(
-                        pkg_path,
-                        base_image=base_image,
-                        conda_image=mulled_conda_image,
-                        live_logs=live_logs,
-                        presolved=use_presolved,
-                        target_platform=target_platform,
-                    )
+                    if use_temporary_test_container:
+                        try:
+                            result = pkg_test.test_package_in_temporary_container(
+                                pkg_path,
+                                base_image=base_image,
+                                conda_image=mulled_conda_image,
+                                live_logs=live_logs,
+                            )
+                        except Exception as exc:
+                            logger.info(
+                                "Pre-solved test failed (%s), falling back to "
+                                "mulled-build",
+                                exc,
+                            )
+                            result = None
+                        if result is None:
+                            pkg_test.build_and_test_mulled_image(
+                                pkg_path,
+                                base_image=base_image,
+                                conda_image=mulled_conda_image,
+                                live_logs=live_logs,
+                                target_platform=target_platform,
+                            )
+                            built_mulled_image = True
+                    else:
+                        pkg_test.build_and_test_mulled_image(
+                            pkg_path,
+                            base_image=base_image,
+                            conda_image=mulled_conda_image,
+                            live_logs=live_logs,
+                            target_platform=target_platform,
+                        )
+                        built_mulled_image = True
                 except sp.CalledProcessError:
                     logger.error("TEST FAILED: %s", recipe)
                     return BuildResult(False, None)
@@ -278,8 +304,11 @@ def build(
                         f"Finished mulled build for {pkg_path} on {target_platform or 'native'}"
                     )
                 logger.info("TEST SUCCESS %s", recipe)
-                image_spec = pkg_test.get_image_name(pkg_path)
-                mulled_images.append(mulled_image_metadata(image_spec, target_platform))
+                if built_mulled_image:
+                    image_spec = pkg_test.get_image_name(pkg_path)
+                    mulled_images.append(
+                        mulled_image_metadata(image_spec, target_platform)
+                    )
         return BuildResult(True, mulled_images)
 
     return BuildResult(True, None)

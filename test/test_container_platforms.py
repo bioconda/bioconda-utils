@@ -33,7 +33,7 @@ def test_test_package_passes_target_platform(monkeypatch, tmp_path):
 
     commands = []
     monkeypatch.setattr(pkg_test, "update_index", lambda _path: None)
-    monkeypatch.setattr(pkg_test, "get_tests", lambda _path: "true")
+    monkeypatch.setattr(pkg_test, "get_test_command", lambda _path: "true")
     monkeypatch.setattr(os.path, "exists", lambda path: True)
     monkeypatch.setattr(
         pkg_test.utils,

@@ -822,7 +822,11 @@ def test_env_sandboxing():
     pkg_paths = utils.built_package_paths(r.recipe_dirs["one"])
 
     with utils.temp_env({"GITHUB_TOKEN": "token_here"}):
-        build.build(recipe=r.recipe_dirs["one"], pkg_paths=pkg_paths, mulled_build_and_test=False)
+        build.build(
+            recipe=r.recipe_dirs["one"],
+            pkg_paths=pkg_paths,
+            mulled_build_and_test=False,
+        )
 
     for pkg in pkg_paths:
         assert os.path.exists(pkg)
