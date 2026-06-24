@@ -1085,10 +1085,10 @@ def test_load_meta_skipping():
 def test_native_platform_skipping(config_fixture):
     expections = (
         # Don't skip linux-x86 for any recipes
-        ("one", "linux", False),
-        ("two", "linux", False),
-        ("three", "linux", False),
-        ("four", "linux", False),
+        ("one", "linux-64", False),
+        ("two", "linux-64", False),
+        ("three", "linux-64", False),
+        ("four", "linux-64", False),
         # Skip recipes without linux aarch64 enable on linux-aarch64 platform
         ("one", "linux-aarch64", True),
         ("three", "linux-aarch64", True),

@@ -16,6 +16,7 @@ from bioconda_utils.build_failure import (
     collect_build_failure_dataframe,
 )
 
+import argparse
 import sys
 import os
 import shlex
@@ -36,9 +37,9 @@ import pandas
 from . import __version__ as VERSION
 from ._types import (
     CONTAINER_PLATFORMS,
-    PACKAGE_PLATFORMS,
+    PACKAGE_SUBDIRS,
     ContainerPlatform,
-    PackagePlatform,
+    PackageSubdir,
     parse_quay_upload_target,
 )
 from . import utils
@@ -643,6 +644,12 @@ from environment, even after successful build and test.""",
 )
 @arg(
     "--skiplist-leafs",
+    dest="skiplist_leaves",
+    action="store_true",
+    help=argparse.SUPPRESS,
+)
+@arg(
+    "--skiplist-leaves",
     action="store_true",
     help="Skiplist leaf recipes (i.e. ones that are not depended on by any other recipes) that fail to build.",
 )
@@ -705,7 +712,7 @@ def build(
     mulled_conda_image=pkg_test.CREATE_ENV_IMAGE,
     docker_base_image=None,
     record_build_failures=False,
-    skiplist_leafs=False,
+    skiplist_leaves=False,
     disable_live_logs=False,
     no_presolved_mulled_build_and_test=False,
     no_fast_resolve=False,
@@ -792,7 +799,7 @@ def build(
         keep_old_work=keep_old_work,
         mulled_conda_image=mulled_conda_image,
         record_build_failures=record_build_failures,
-        skiplist_leafs=skiplist_leafs,
+        skiplist_leaves=skiplist_leaves,
         live_logs=(not disable_live_logs),
         exclude=exclude,
         subdag_depth=subdag_depth,
@@ -842,7 +849,7 @@ def build(
 )
 @arg(
     "--package-platform",
-    choices=PACKAGE_PLATFORMS,
+    choices=PACKAGE_SUBDIRS,
     help="Conda package platform to upload from PR artifacts. Defaults to native platform.",
 )
 @arg(
@@ -860,7 +867,7 @@ def handle_merged_pr(
     quay_upload_target=None,
     artifact_source: ArtifactSource = "azure",
     container_platform: list[ContainerPlatform] | None = None,
-    package_platform: PackagePlatform | None = None,
+    package_platform: PackageSubdir | None = None,
     mulled_upload_records: Path | None = None,
 ):
     mulled_upload_records = (
@@ -886,10 +893,8 @@ def handle_merged_pr(
         mulled_upload_records=mulled_upload_records,
     )
     if res == UploadResult.NO_ARTIFACTS and fallback == "build":
-        if package_platform is not None and package_platform != "noarch":
-            native_package_platform = utils.RepoData.platform2subdir(
-                utils.RepoData.native_platform()
-            )
+        if package_platform is not None:
+            native_package_platform = utils.RepoData.native_subdir()
             if package_platform != native_package_platform:
                 raise ValueError(
                     "--fallback build cannot build non-native package platform "
@@ -1634,11 +1639,7 @@ def annotate_build_failures(
 ):
     valid_platform_names = set(conda.base.constants.PLATFORM_DIRECTORIES)
     if platforms is None:
-        platforms = [
-            utils.RepoData.platform2subdir(p)
-            for p in utils.RepoData.platforms
-            if p != "noarch"
-        ]
+        platforms = [p for p in utils.RepoData.platforms if p != "noarch"]
     for recipe in recipes:
         if existing_only:
             platforms = [

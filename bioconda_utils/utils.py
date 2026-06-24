@@ -64,6 +64,8 @@ from jsonschema import validate
 from colorlog import ColoredFormatter
 from boltons.funcutils import FunctionBuilder
 
+from bioconda_utils._types import OsLabel, PackageSubdir, Subdir
+
 cast(Any, conda.gateways.logging).initialize_logging = lambda: None
 
 logger = logging.getLogger(__name__)
@@ -172,7 +174,7 @@ class LogFuncFilter:
       trunc_msg: The message to emit when logging is truncated, to inform user that
                  messages will from now on be hidden.
       max_lines: Max number of log messages to allow to pass
-      consectuctive: If try, filter applies to consectutive messages and resets
+      consecutive: If true, filter applies to consecutive messages and resets
                      if a message from a different source is encountered.
 
     Fixme:
@@ -557,7 +559,7 @@ def load_all_meta(recipe, config=None, finalize=True):
 
 def load_meta_fast(recipe: str, env=None):
     """
-    Given a package name, find the current meta.yaml file, parse it, and return
+    Given a recipe path, find the current meta.yaml file, parse it, and return
     the dict.
 
     Args:
@@ -565,7 +567,7 @@ def load_meta_fast(recipe: str, env=None):
       env: Optional variables to expand
 
     Returns:
-      Tuple of original recipe string and rendered dict
+      Tuple of rendered dict and recipe path
     """
     if not env:
         env = {}
@@ -579,9 +581,23 @@ def load_meta_fast(recipe: str, env=None):
         raise ValueError(f"Problem inspecting {recipe}")
 
 
-def load_conda_build_config(platform=None, trim_skip=True):
+def subdir_to_oslabel(subdir: PackageSubdir) -> OsLabel:
+    """Return the two-part OS label conda-build's ``config.platform`` expects.
+
+    conda-build keys :data:`conda_build.variants.DEFAULT_COMPILERS` on the bare
+    OS label (``linux``/``osx``) and joins it with the arch to form the build
+    subdir. Passing a full subdir such as ``"linux-64"`` therefore raises
+    ``KeyError`` at render time. Use this at the ``config.platform`` boundary.
+    """
+    return "linux" if subdir.startswith("linux") else "osx"
+
+
+def load_conda_build_config(platform: OsLabel | None = None, trim_skip: bool = True):
     """
     Load conda build config while considering global pinnings from conda-forge.
+
+    ``platform`` is a two-part OS label (``"linux"``/``"osx"``), *not* a subdir;
+    pass it through :func:`subdir_to_oslabel` first.
     """
     config_kwargs: dict[str, Any] = {"no_download_source": True, "set_build_id": False}
     if RepoData.config is not None:
@@ -1153,9 +1169,9 @@ def recipe_requires_finalized_render(recipe):
 
 
 def _load_platform_metas(recipe, finalize=True):
-    platform = RepoData.native_platform()
-    config = load_conda_build_config(platform=platform)
-    return platform, load_all_meta(recipe, config=config, finalize=finalize)
+    subdir = RepoData.native_subdir()
+    config = load_conda_build_config(platform=subdir_to_oslabel(subdir))
+    return subdir, load_all_meta(recipe, config=config, finalize=finalize)
 
 
 def _meta_subdir(meta):
@@ -1168,7 +1184,7 @@ def check_recipe_skippable(recipe, check_channels):
     Return True if the same number of builds (per subdir) defined by the recipe
     are already in channel_packages.
     """
-    platform, metas = _load_platform_metas(recipe, finalize=False)
+    subdir, metas = _load_platform_metas(recipe, finalize=False)
     # The recipe likely defined skip: True
     if not metas:
         return True
@@ -1176,7 +1192,7 @@ def check_recipe_skippable(recipe, check_channels):
     if os.environ.get("CI", None) == "true":
         first_meta = metas[0]
         if first_meta.get_value("build/noarch"):
-            if not platform.startswith("linux"):
+            if not subdir.startswith("linux"):
                 logger.info(
                     "FILTER: only building %s on linux because it defines noarch.",
                     recipe,
@@ -1270,7 +1286,7 @@ def get_package_paths(recipe, check_channels, force=False, finalize=True):
             return []
     if not finalize:
         logger.debug("Using non-finalized render for %s (fast resolve)", recipe)
-    platform, metas = _load_platform_metas(recipe, finalize=finalize)
+    _, metas = _load_platform_metas(recipe, finalize=finalize)
 
     # The recipe likely defined skip: True
     if not metas:
@@ -1592,8 +1608,14 @@ class RepoData:
 
     #: Columns available in internal dataframe
     columns = _load_columns + ["channel", "subdir", "platform"]
-    #: Platforms loaded
-    platforms = ["linux", "linux-aarch64", "osx", "osx-arm64", "noarch"]
+    #: Subdirs loaded (the ``platform`` column stores these directly)
+    platforms: list[Subdir] = [
+        "linux-64",
+        "linux-aarch64",
+        "osx-64",
+        "osx-arm64",
+        "noarch",
+    ]
     # config object
     config = None
 
@@ -1652,7 +1674,7 @@ class RepoData:
             self._df_ts = datetime.datetime.now()
         return self._df
 
-    def _make_repodata_url(self, channel, platform):
+    def _make_repodata_url(self, channel, subdir: Subdir):
         if channel == "defaults":
             # caveat: this only gets defaults main, not 'free', 'r' or 'pro'
             url_template = self.REPODATA_DEFAULTS_URL
@@ -1661,13 +1683,9 @@ class RepoData:
         local_url_template = self.LOCAL_REPODATA
 
         if channel.startswith("file://"):  # Allow local channels
-            url = local_url_template.format(
-                channel=channel, subdir=self.platform2subdir(platform)
-            )
+            url = local_url_template.format(channel=channel, subdir=subdir)
         else:
-            url = url_template.format(
-                channel=channel, subdir=self.platform2subdir(platform)
-            )
+            url = url_template.format(channel=channel, subdir=subdir)
         return url
 
     def _load_channel_dataframe_cached(self):
@@ -1726,34 +1744,14 @@ class RepoData:
         return res
 
     @staticmethod
-    def native_platform():
+    def native_subdir() -> PackageSubdir:
+        """Return the conda subdir of the host we are running on."""
         arch = platform.machine()
-        if sys.platform.startswith("linux") and arch == "aarch64":
-            return "linux-aarch64"
         if sys.platform.startswith("linux"):
-            return "linux"
-        if sys.platform.startswith("darwin") and arch == "arm64":
-            return "osx-arm64"
+            return "linux-aarch64" if arch == "aarch64" else "linux-64"
         if sys.platform.startswith("darwin"):
-            return "osx"
+            return "osx-arm64" if arch == "arm64" else "osx-64"
         raise ValueError("Running on unsupported platform")
-
-    @staticmethod
-    def platform2subdir(platform):
-        if platform == "linux":
-            return "linux-64"
-        elif platform == "linux-aarch64":
-            return "linux-aarch64"
-        elif platform == "osx":
-            return "osx-64"
-        elif platform == "osx-arm64":
-            return "osx-arm64"
-        elif platform == "noarch":
-            return "noarch"
-        else:
-            raise ValueError(
-                "Unsupported platform: bioconda only supports linux, linux-aarch64, osx, osx-arm64 and noarch."
-            )
 
     def get_versions(self, name):
         """Get versions available for package
@@ -1762,8 +1760,8 @@ class RepoData:
           name: package name
 
         Returns:
-          Dictionary mapping version numbers to list of architectures
-          e.g. {'0.1': ['linux'], '0.2': ['linux', 'osx'], '0.3': ['noarch']}
+          Dictionary mapping version numbers to list of subdirs
+          e.g. {'0.1': ['linux-64'], '0.2': ['linux-64', 'osx-64'], '0.3': ['noarch']}
         """
         # called from doc generator
         packages = self.df[self.df.name == name][["version", "platform"]]
@@ -1801,7 +1799,7 @@ class RepoData:
         If **key** is a list of string, returns tuple iterator.
         """
         if native:
-            platform = ["noarch", self.native_platform()]
+            platform = ["noarch", self.native_subdir()]
 
         if version is not None:
             version = str(version)

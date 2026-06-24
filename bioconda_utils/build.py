@@ -29,6 +29,7 @@ from . import graph
 from . import recipe as _recipe
 from ._types import (
     ContainerPlatform,
+    PackageSubdir,
     PkgBuildRef,
     QuayUploadTarget,
     container_platform_is_native,
@@ -94,7 +95,7 @@ def build(
     mulled_conda_image: str = pkg_test.CREATE_ENV_IMAGE,
     record_build_failure: bool = False,
     dag: nx.DiGraph | None = None,
-    skiplist_leafs: bool = False,
+    skiplist_leaves: bool = False,
     live_logs: bool = True,
     presolved_mulled_build_and_test: bool = True,
     mulled_upload_target: QuayUploadTarget | None = None,
@@ -119,7 +120,7 @@ def build(
       linter: Linter to use for checking recipes
       record_build_failure: If True, record build failures in a file next to the meta.yaml
       dag: optional nx.DiGraph with dependency information
-      skiplist_leafs: If True, blacklist leaf packages that fail to build
+      skiplist_leaves: If True, blacklist leaf packages that fail to build
       live_logs: If True, enable live logging during the build process
     """
     if record_build_failure and not dag:
@@ -191,9 +192,7 @@ def build(
             )
             # Use presence of expected packages to check for success
             if docker_builder.pkg_dir is not None:
-                platform = utils.RepoData.native_platform()
-                subfolder = utils.RepoData.platform2subdir(platform)
-                conda_build_config = utils.load_conda_build_config(platform=subfolder)
+                conda_build_config = utils.load_conda_build_config()
                 pkg_paths = [
                     p.replace(conda_build_config.output_folder, docker_builder.pkg_dir)
                     for p in pkg_paths
@@ -237,7 +236,7 @@ def build(
             logger.error("Build output:\n%s", exc.output)
         if record_build_failure:
             assert dag is not None
-            store_build_failure_record(recipe, exc.output, meta, dag, skiplist_leafs)
+            store_build_failure_record(recipe, exc.output, meta, dag, skiplist_leaves)
         if raise_error:
             raise exc
         return BuildResult(False, None)
@@ -315,7 +314,7 @@ def build(
 
 
 def store_build_failure_record(
-    recipe: str, output: Any, meta: Any, dag: nx.DiGraph, skiplist_leafs: bool
+    recipe: str, output: Any, meta: Any, dag: nx.DiGraph, skiplist_leaves: bool
 ) -> None:
     """
     Write the exception to a file next to the meta.yaml
@@ -326,7 +325,7 @@ def store_build_failure_record(
     build_failure_record = BuildFailureRecord(recipe)
     # if recipe is a leaf (i.e. not used by others as dependency)
     # we can automatically blacklist it if desired
-    build_failure_record.fill(log=output, skiplist=skiplist_leafs and is_leaf)
+    build_failure_record.fill(log=output, skiplist=skiplist_leaves and is_leaf)
 
     build_failure_record.write()
     build_failure_record.commit_and_push_changes()
@@ -426,7 +425,7 @@ def get_worker_subdag(
 
 
 def do_not_consider_for_additional_platform(
-    recipe_folder: str, recipe: str, platform: str
+    recipe_folder: str, recipe: str, platform: PackageSubdir
 ) -> bool:
     """
     Given a recipe, check this recipe should skip in current platform or not.
@@ -434,18 +433,18 @@ def do_not_consider_for_additional_platform(
     Arguments:
       recipe_folder: Directory containing possibly many, and possibly nested, recipes.
       recipe: Relative path to recipe
-      platform: current native platform
+      platform: current native subdir
 
     Returns:
       Return True if current native platform are not included in recipe's additional platforms (no need to build).
     """
     recipe_obj = _recipe.Recipe.from_file(recipe_folder, recipe)
-    # On linux-aarch64 or osx-arm64 env, only build recipe with matching extra_additional_platforms
+    # On linux-aarch64 or osx-arm64 env, only build recipe with matching additional_platforms
     if platform == "linux-aarch64":
-        if "linux-aarch64" not in recipe_obj.extra_additional_platforms:
+        if "linux-aarch64" not in recipe_obj.additional_platforms:
             return True
     if platform == "osx-arm64":
-        if "osx-arm64" not in recipe_obj.extra_additional_platforms:
+        if "osx-arm64" not in recipe_obj.additional_platforms:
             return True
     return False
 
@@ -469,7 +468,7 @@ def build_recipes(
     keep_old_work: bool = False,
     mulled_conda_image: str = pkg_test.CREATE_ENV_IMAGE,
     record_build_failures: bool = False,
-    skiplist_leafs: bool = False,
+    skiplist_leaves: bool = False,
     live_logs: bool = True,
     exclude: list[str] | None = None,
     subdag_depth: int | None = None,
@@ -505,7 +504,7 @@ def build_recipes(
       worker_offset: If n_workers is >1, then every worker_offset within a given group of
         sub-DAGs will be processed.
       keep_old_work: Do not remove anything from environment, even after successful build and test.
-      skiplist_leafs: If True, blacklist leaf packages that fail to build
+      skiplist_leaves: If True, blacklist leaf packages that fail to build
       live_logs: If True, enable live logging during the build process
       exclude: list of recipes to exclude. Typically used for
         temporary exclusion; otherwise consider adding recipe to skiplist.
@@ -575,7 +574,7 @@ def build_recipes(
     failed_uploads = []
 
     for recipe, name in recipe_jobs:
-        platform = utils.RepoData().native_platform()
+        platform = utils.RepoData().native_subdir()
         if not force and do_not_consider_for_additional_platform(
             recipe_folder, recipe, platform
         ):
@@ -610,7 +609,10 @@ def build_recipes(
             #   2. linux-64 hosts — sysroot run_exports inject __glibc here
             #      regardless of the recipe's text form.
             finalize = docker_builder is None or not fast_resolve
-            if not finalize and utils.RepoData.native_platform() == "linux":
+            if (
+                not finalize
+                and utils.subdir_to_oslabel(utils.RepoData.native_subdir()) == "linux"
+            ):
                 finalize = True
             if not finalize and utils.recipe_requires_finalized_render(recipe):
                 finalize = True
@@ -656,7 +658,7 @@ def build_recipes(
             mulled_conda_image=mulled_conda_image,
             dag=dag,
             record_build_failure=record_build_failures,
-            skiplist_leafs=skiplist_leafs,
+            skiplist_leaves=skiplist_leaves,
             live_logs=live_logs,
             presolved_mulled_build_and_test=presolved_mulled_build_and_test,
             mulled_upload_target=mulled_upload_target,

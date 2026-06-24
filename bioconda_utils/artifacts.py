@@ -5,7 +5,7 @@ import re
 import tempfile
 import zipfile
 import logging
-from typing import Any, Literal, cast
+from typing import Any, Literal
 from collections.abc import Iterator
 
 import requests
@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 from bioconda_utils import utils
 from bioconda_utils._types import (
     ContainerPlatform,
-    PackagePlatform,
+    PackageSubdir,
     QuayUploadTarget,
     docker_platform_tag_suffix,
 )
@@ -38,19 +38,19 @@ IMAGE_RE = re.compile(r"(.+)(?::|%3A|---)(.+)\.tar\.gz$")
 # Most platforms derive their artifact name automatically as
 # f"{platform}-packages"; these entries exist only because
 # the workflow artifact names don't match that formula.
-GHA_ARTIFACT_NAME_EXCEPTIONS: dict[PackagePlatform, str] = {
+GHA_ARTIFACT_NAME_EXCEPTIONS: dict[PackageSubdir, str] = {
     "linux-64": "linux-packages",
     "osx-64": "osx-packages",
     "linux-aarch64": "linux-arm64-packages",
 }
 
 
-def _gha_artifact_names_for_platform(platform: PackagePlatform) -> set[str]:
+def _gha_artifact_names_for_platform(platform: PackageSubdir) -> set[str]:
     default_name = f"{platform}-packages"
     return {default_name, GHA_ARTIFACT_NAME_EXCEPTIONS.get(platform, default_name)}
 
 
-def _job_platform_from_package_platform(package_platform: PackagePlatform) -> str:
+def _job_platform_from_package_platform(package_platform: PackageSubdir) -> str:
     if package_platform == "linux-64":
         return "linux"
     if package_platform == "osx-64":
@@ -58,9 +58,8 @@ def _job_platform_from_package_platform(package_platform: PackagePlatform) -> st
     return package_platform
 
 
-def _default_package_platform() -> PackagePlatform:
-    repodata = utils.RepoData()
-    return cast(PackagePlatform, repodata.platform2subdir(repodata.native_platform()))
+def _default_package_platform() -> PackageSubdir:
+    return utils.RepoData().native_subdir()
 
 
 def _download_artifact_contents(
@@ -89,7 +88,7 @@ def _download_artifact_contents(
             raise ValueError(f"Unsupported artifact source: {artifact_source}")
 
 
-def _package_platform_patterns(package_platform: PackagePlatform) -> list[str]:
+def _package_platform_patterns(package_platform: PackageSubdir) -> list[str]:
     """Return package subdirs to upload for a platform artifact."""
     platform_patterns: list[str] = [package_platform]
     if package_platform.startswith("linux"):
@@ -99,7 +98,7 @@ def _package_platform_patterns(package_platform: PackagePlatform) -> list[str]:
 
 
 def _iter_package_paths(
-    artifact_dir: Path, package_platform: PackagePlatform
+    artifact_dir: Path, package_platform: PackageSubdir
 ) -> Iterator[str]:
     for platform_pattern in _package_platform_patterns(package_platform):
         for ext in (".tar.bz2", ".conda"):
@@ -110,7 +109,7 @@ def _iter_package_paths(
 
 def _upload_packages(
     artifact_dir: Path,
-    package_platform: PackagePlatform,
+    package_platform: PackageSubdir,
     *,
     dryrun: bool,
     label: str | None,
@@ -247,7 +246,7 @@ def upload_pr_artifacts(
     mulled_upload_target: QuayUploadTarget | None = None,
     label: str | None = None,
     artifact_source: ArtifactSource = "azure",
-    package_platform: PackagePlatform | None = None,
+    package_platform: PackageSubdir | None = None,
     container_platforms: list[ContainerPlatform] | None = None,
     mulled_upload_records: Path | None = None,
 ) -> UploadResult:
@@ -347,7 +346,7 @@ def fetch_artifacts(
     artifact_source: ArtifactSource,
     repo: Any,
     job_platform: str | None = None,
-    package_platform: PackagePlatform | None = None,
+    package_platform: PackageSubdir | None = None,
 ) -> Iterator[str]:
     """
     Fetch artifacts from a PR.
@@ -367,9 +366,9 @@ def fetch_artifacts(
     check_runs = commit.get_check_runs()
     if job_platform is None or package_platform is None:
         repodata = utils.RepoData()
-        job_platform = job_platform or repodata.native_platform()
-        package_platform = package_platform or cast(
-            PackagePlatform, repodata.platform2subdir(job_platform)
+        package_platform = package_platform or repodata.native_subdir()
+        job_platform = job_platform or _job_platform_from_package_platform(
+            package_platform
         )
     assert job_platform is not None
     assert package_platform is not None
@@ -463,7 +462,7 @@ def parse_gha_build_id(url: str) -> str:
 
 
 def get_gha_artifact_urls(
-    check_run: Any, platform: PackagePlatform, repo: Any
+    check_run: Any, platform: PackageSubdir, repo: Any
 ) -> Iterator[str]:
     gha_workflow_id = parse_gha_build_id(check_run.details_url)
     if gha_workflow_id:

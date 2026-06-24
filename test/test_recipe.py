@@ -280,9 +280,9 @@ def test_recipe_package_names(recipes):
 
 
 @with_recipes
-def test_recipe_extra_additional_platforms(recipes):
+def test_recipe_additional_platforms(recipes):
     for recipe in recipes:
-        assert recipe.extra_additional_platforms == []
+        assert recipe.additional_platforms == []
         recipe.meta_yaml += [
             "extra:",
             "  additional-platforms:",
@@ -290,7 +290,7 @@ def test_recipe_extra_additional_platforms(recipes):
             "    - osx-arm64",
         ]
         recipe.render()
-        assert recipe.extra_additional_platforms == [
+        assert recipe.additional_platforms == [
             "linux-aarch64",
             "osx-arm64",
         ]
@@ -299,27 +299,27 @@ def test_recipe_extra_additional_platforms(recipes):
 @with_recipes
 def test_recipe_extra_additional_platform_osx(recipes):
     for recipe in recipes:
-        assert recipe.extra_additional_platforms == []
+        assert recipe.additional_platforms == []
         recipe.meta_yaml += [
             "extra:",
             "  additional-platforms:",
             "    - osx-arm64",
         ]
         recipe.render()
-        assert recipe.extra_additional_platforms == ["osx-arm64"]
+        assert recipe.additional_platforms == ["osx-arm64"]
 
 
 @with_recipes
 def test_recipe_extra_additional_platform_linux(recipes):
     for recipe in recipes:
-        assert recipe.extra_additional_platforms == []
+        assert recipe.additional_platforms == []
         recipe.meta_yaml += [
             "extra:",
             "  additional-platforms:",
             "    - linux-aarch64",
         ]
         recipe.render()
-        assert recipe.extra_additional_platforms == ["linux-aarch64"]
+        assert recipe.additional_platforms == ["linux-aarch64"]
 
 
 @with_recipes

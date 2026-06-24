@@ -11,11 +11,19 @@ CONTAINER_PLATFORMS: tuple[ContainerPlatform, ...] = cast(
     tuple[ContainerPlatform, ...],
     typing.get_args(ContainerPlatform),
 )
-PackagePlatform: TypeAlias = Literal["linux-64", "linux-aarch64", "osx-64", "osx-arm64"]
-PACKAGE_PLATFORMS: tuple[PackagePlatform, ...] = cast(
-    tuple[PackagePlatform, ...],
-    typing.get_args(PackagePlatform),
+#: A conda package subdir for a *built* (per-architecture) package. ``noarch``
+#: is excluded: noarch packages have no per-architecture artifact.
+PackageSubdir: TypeAlias = Literal["linux-64", "linux-aarch64", "osx-64", "osx-arm64"]
+PACKAGE_SUBDIRS: tuple[PackageSubdir, ...] = cast(
+    tuple[PackageSubdir, ...],
+    typing.get_args(PackageSubdir),
 )
+#: Any conda subdir, including ``noarch`` (the repodata namespace).
+Subdir: TypeAlias = PackageSubdir | Literal["noarch"]
+#: A two-part OS label -- the form conda-build's ``config.platform`` and its
+#: ``DEFAULT_COMPILERS`` table require (see ``conda_build.variants``). This is
+#: *not* a subdir: ``"linux-64"`` is not a valid ``OsLabel``.
+OsLabel: TypeAlias = Literal["linux", "osx"]
 QuayUploadTarget = NewType("QuayUploadTarget", str)
 
 

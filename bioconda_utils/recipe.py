@@ -442,8 +442,8 @@ class Recipe:
         return []
 
     @property
-    def extra_additional_platforms(self) -> list:
-        """The extra additional-platforms list"""
+    def additional_platforms(self) -> list:
+        """The extra.additional-platforms list"""
         if (
             "extra" in self.meta
             and self.meta["extra"]
