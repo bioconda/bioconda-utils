@@ -48,6 +48,7 @@ import asyncio
 import logging
 import os
 import pickle
+from pathlib import Path
 import random
 
 from collections import defaultdict, Counter
@@ -233,7 +234,7 @@ class Scanner(AsyncPipeline[Recipe]):
         self,
         recipe_source: RecipeSource,
         cache_fn: str | None = None,
-        status_fn: str | None = None,
+        status_fn: Path | None = None,
     ) -> None:
         super().__init__()
         #: recipe source
@@ -628,7 +629,7 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
         self,
         scanner: Scanner,
         hoster_factory: HosterFactory,
-        unparsed_file: str | None = None,
+        unparsed_file: Path | None = None,
     ) -> None:
         super().__init__(scanner)
         #: output file name for unparsed urls
@@ -920,7 +921,7 @@ class UpdateChecksums(Filter):
 
         template = "had no change to checksum after update?!"
 
-    def __init__(self, scanner: Scanner, failed_file: str | None = None) -> None:
+    def __init__(self, scanner: Scanner, failed_file: Path | None = None) -> None:
         super().__init__(scanner)
         #: failed urls - for later inspection
         self.failed_urls: list[str] = []

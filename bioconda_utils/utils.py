@@ -238,7 +238,7 @@ class LoggingSourceRenameFilter:
 def setup_logger(
     name: str = "bioconda_utils",
     loglevel: str | int = logging.INFO,
-    logfile: str | None = None,
+    logfile: Path | None = None,
     logfile_level: str | int = logging.DEBUG,
     log_command_max_lines=None,
     prefix: str = "BIOCONDA ",
@@ -1320,14 +1320,14 @@ def get_package_paths(recipe, check_channels, force=False, finalize=True):
     )
 
 
-def validate_config(config):
+def validate_config(config: Path | dict):
     """
     Validate config against schema
 
     Parameters
     ----------
-    config : str or dict
-        If str, assume it's a path to YAML file and load it. If dict, use it
+    config : Path or dict
+        If Path, assume it's a path to YAML file and load it. If dict, use it
         directly.
     """
     if not isinstance(config, dict):
@@ -1342,14 +1342,14 @@ def validate_config(config):
     validate(config, schema)
 
 
-def load_config(path):
+def load_config(path: Path | dict):
     """
     Parses config file, building paths to relevant blacklists
 
     Parameters
     ----------
-    path : str
-        Path to YAML config file
+    path : Path or dict
+        Path to YAML config file, or pre-loaded dict.
     """
     validate_config(path)
 

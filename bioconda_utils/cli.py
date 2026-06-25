@@ -90,7 +90,7 @@ def enable_logging(default_loglevel="info", default_file_loglevel="debug"):
             "--loglevel",
             help="Set logging level (debug, info, warning, error, critical)",
         )
-        @arg("--logfile", help="Write log to file")
+        @arg("--logfile", type=Path, help="Write log to file")
         @arg("--logfile-level", help="Log level for log file")
         @arg(
             "--log-command-max-lines",
@@ -100,7 +100,7 @@ def enable_logging(default_loglevel="info", default_file_loglevel="debug"):
         def wrapper(
             *args,
             loglevel=default_loglevel,
-            logfile=None,
+            logfile: Path | None = None,
             logfile_level=default_file_loglevel,
             log_command_max_lines=None,
             **kwargs,
@@ -189,6 +189,7 @@ def recipe_folder_and_config(allow_missing_for=None):
         @arg(
             "config",
             nargs="?",
+            type=Path,
             help="Path to Bioconda config (default: config.yml)",
         )
         @utils.wraps(func)
@@ -280,7 +281,7 @@ def get_recipes(
 # `recipes/bowtie` or `recipes/bowtie/1.0.1`.
 
 
-@arg("config", help="Path to yaml file specifying the configuration")
+@arg("config", type=Path, help="Path to yaml file specifying the configuration")
 @arg(
     "--strict-version",
     action="store_true",
@@ -933,6 +934,7 @@ def handle_merged_pr(
 @arg(
     "record_paths",
     nargs="*",
+    type=Path,
     help="Mulled image record files (JSONL) or directories containing them.",
 )
 @arg(
@@ -943,7 +945,7 @@ def handle_merged_pr(
 )
 @enable_logging()
 def create_mulled_manifests(
-    record_paths: list[str] | None = None,
+    record_paths: list[Path] | None = None,
     platform: list[ContainerPlatform] | None = None,
 ) -> None:
     """Create or update canonical manifests for uploaded mulled images."""
@@ -952,7 +954,7 @@ def create_mulled_manifests(
         if not default_path.exists():
             logger.info("No mulled image records found; nothing to reconcile.")
             return
-        record_paths = [str(default_path)]
+        record_paths = [default_path]
     records = load_image_records(record_paths)
     if not records:
         logger.info("No mulled image records found; nothing to reconcile.")
@@ -1413,9 +1415,13 @@ def clean_cran_skeleton(recipe, no_windows=False):
      the first time. Caution: The cache will not be updated if
      exclude-channels is changed""",
 )
-@arg("--unparsed-urls", help="""Write unrecognized urls to this file""")
-@arg("--failed-urls", help="""Write urls with permanent failure to this file""")
-@arg("--recipe-status", help="""Write status for each recipe to this file""")
+@arg("--unparsed-urls", type=Path, help="""Write unrecognized urls to this file""")
+@arg(
+    "--failed-urls",
+    type=Path,
+    help="""Write urls with permanent failure to this file""",
+)
+@arg("--recipe-status", type=Path, help="""Write status for each recipe to this file""")
 @arg("--check-branch", help="""Check if recipe has active branch""")
 @arg(
     "--only-active",
@@ -1468,9 +1474,9 @@ def autobump(
     packages="*",
     exclude=None,
     cache=None,
-    failed_urls=None,
-    unparsed_urls=None,
-    recipe_status=None,
+    failed_urls: Path | None = None,
+    unparsed_urls: Path | None = None,
+    recipe_status: Path | None = None,
     exclude_subrecipes=None,
     exclude_channels="conda-forge",
     ignore_skiplists=False,

@@ -239,7 +239,7 @@ class UploadResult(Enum):
 
 
 def upload_pr_artifacts(
-    config: str,
+    config: Path | dict,
     repo_name: str,
     git_sha: str,
     dryrun: bool = False,

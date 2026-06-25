@@ -451,7 +451,7 @@ def do_not_consider_for_additional_platform(
 
 def build_recipes(
     recipe_folder: str,
-    config_path: str,
+    config_path: Path,
     recipes: list[str],
     mulled_build_and_test: bool = True,
     testonly: bool = False,

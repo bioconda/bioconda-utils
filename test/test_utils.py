@@ -107,7 +107,7 @@ def recipes_fixture():
 def config_fixture():
     """Loads config"""
     config = utils.load_config(
-        os.path.join(os.path.dirname(__file__), "test-config.yaml")
+        Path(os.path.join(os.path.dirname(__file__), "test-config.yaml"))
     )
     yield config
 

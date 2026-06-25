@@ -147,7 +147,7 @@ def test_upload_pr_artifacts_filters_packages_and_arm64_images(monkeypatch, tmp_
     )
 
     result = artifacts.upload_pr_artifacts(
-        str(tmp_path / "config.yaml"),
+        tmp_path / "config.yaml",
         "bioconda/bioconda-recipes",
         "abc123",
         mulled_upload_target=BIOCONTAINERS,
@@ -193,7 +193,7 @@ def test_upload_pr_artifacts_returns_no_artifacts_when_nothing_matches(
     monkeypatch.setattr(artifacts, "download_artifact", download_artifact)
 
     result = artifacts.upload_pr_artifacts(
-        str(tmp_path / "config.yaml"),
+        tmp_path / "config.yaml",
         "bioconda/bioconda-recipes",
         "abc123",
         artifact_source="github-actions",
@@ -224,7 +224,7 @@ def test_upload_pr_artifacts_dryrun_counts_matching_artifacts(monkeypatch, tmp_p
     monkeypatch.setattr(artifacts, "download_artifact", download_artifact)
 
     result = artifacts.upload_pr_artifacts(
-        str(tmp_path / "config.yaml"),
+        tmp_path / "config.yaml",
         "bioconda/bioconda-recipes",
         "abc123",
         dryrun=True,
@@ -272,7 +272,7 @@ def test_upload_pr_artifacts_uses_archive_platform_not_filename(monkeypatch, tmp
     )
 
     result = artifacts.upload_pr_artifacts(
-        str(tmp_path / "config.yaml"),
+        tmp_path / "config.yaml",
         "bioconda/bioconda-recipes",
         "abc123",
         mulled_upload_target=BIOCONTAINERS,

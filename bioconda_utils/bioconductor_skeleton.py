@@ -6,6 +6,7 @@ import itertools
 import json
 import logging
 import os
+from pathlib import Path
 import re
 import shutil
 import sys
@@ -1346,7 +1347,7 @@ def updateDataPackages(bioc_data_packages, pkg, urls, md5, tarball):
 def write_recipe(
     package,
     recipe_dir,
-    config,
+    config: Path | dict,
     bioc_data_packages=None,
     force=False,
     bioc_version=None,
@@ -1372,7 +1373,7 @@ def write_recipe(
 
     recipe_dir : str
 
-    config : str or dict
+    config : Path or dict
 
     bioc_data_packages : str
         Path to the bioc_data_packages recipe, which stores the URL and MD5 of

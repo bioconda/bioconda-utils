@@ -88,7 +88,7 @@ def write_image_record(path: str | Path, record: MulledImageRecord) -> None:
         handle.write("\n")
 
 
-def load_image_records(paths: Iterable[str]) -> list[MulledImageRecord]:
+def load_image_records(paths: Iterable[str | Path]) -> list[MulledImageRecord]:
     """Load and de-duplicate JSONL records from files or directories."""
     records: set[MulledImageRecord] = set()
     files: list[Path] = []
