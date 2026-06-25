@@ -8,7 +8,9 @@ import logging
 import os
 import shutil
 import tempfile
+import uuid
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -26,6 +28,12 @@ from ._types import (
 )
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_MULLED_RECORDS_DIR = (
+    Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+    / "bioconda-utils"
+    / "mulled-records"
+)
 
 INDEX_MEDIA_TYPES = {
     "application/vnd.docker.distribution.manifest.list.v2+json",
@@ -65,10 +73,16 @@ def platform_ref(canonical_ref: str, platform: ContainerPlatform) -> str:
 
 
 def write_image_record(path: str | Path, record: MulledImageRecord) -> None:
-    """Append one image record as JSONL, creating parent directories as needed."""
+    """Write one image record to a uniquely-named JSONL file inside *path*.
+
+    The target directory is created if it does not exist.  Each call produces
+    a separate file (timestamp + UUID), so concurrent writers never collide.
+    """
     output = Path(path)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    with output.open("a", encoding="utf-8") as handle:
+    output.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+    file_path = output / f"{timestamp}_{uuid.uuid4().hex}.jsonl"
+    with file_path.open("w", encoding="utf-8") as handle:
         json.dump(asdict(record), handle, sort_keys=True)
         handle.write("\n")
 

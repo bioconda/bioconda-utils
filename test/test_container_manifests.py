@@ -43,11 +43,27 @@ def test_record_roundtrip_and_deduplication(tmp_path):
         platform_ref="quay.io/biocontainers/samtools:1.20--0-arm64",
         digest="sha256:" + "a" * 64,
     )
-    first = tmp_path / "first" / "images.jsonl"
-    second = tmp_path / "second.jsonl"
-    container_manifests.write_image_record(str(first), record)
-    container_manifests.write_image_record(str(second), record)
+    dir_a = tmp_path / "a"
+    dir_b = tmp_path / "b"
+    container_manifests.write_image_record(str(dir_a), record)
+    container_manifests.write_image_record(str(dir_b), record)
 
+    assert container_manifests.load_image_records([str(tmp_path)]) == [record]
+
+
+def test_write_image_record_creates_unique_file(tmp_path):
+    record = MulledImageRecord(
+        canonical_ref="quay.io/biocontainers/samtools:1.20--0",
+        platform="linux/arm64",
+        platform_ref="quay.io/biocontainers/samtools:1.20--0-arm64",
+        digest="sha256:" + "a" * 64,
+    )
+    container_manifests.write_image_record(str(tmp_path), record)
+    assert tmp_path.is_dir()
+    files = list(tmp_path.iterdir())
+    assert len(files) == 1
+    assert files[0].suffix == ".jsonl"
+    assert files[0].name.startswith("20")
     assert container_manifests.load_image_records([str(tmp_path)]) == [record]
 
 

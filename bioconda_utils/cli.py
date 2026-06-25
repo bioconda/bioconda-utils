@@ -40,6 +40,7 @@ from ._types import (
     PACKAGE_SUBDIRS,
     ContainerPlatform,
     PackageSubdir,
+    QuayUploadTarget,
     parse_quay_upload_target,
 )
 from . import utils
@@ -53,6 +54,7 @@ from . import graph
 from . import pkg_test
 from .githandler import BiocondaRepo, install_gpg_key
 from .container_manifests import (
+    DEFAULT_MULLED_RECORDS_DIR,
     load_image_records,
     reconcile_manifests,
     registry_creds,
@@ -63,6 +65,17 @@ warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 logger = logging.getLogger(__name__)
 
 ARTIFACT_SOURCES = ["azure", "circleci", "github-actions"]
+
+
+def _resolve_mulled_upload_records(
+    records: str | Path | None, upload_target: str | QuayUploadTarget | None
+) -> Path | None:
+    """Resolve ``--mulled-upload-records``, defaulting when uploading."""
+    if records:
+        return Path(records)
+    if upload_target:
+        return DEFAULT_MULLED_RECORDS_DIR
+    return None
 
 
 def enable_logging(default_loglevel="info", default_file_loglevel="debug"):
@@ -721,8 +734,8 @@ def build(
     exclude=None,
     subdag_depth=None,
 ):
-    mulled_upload_records = (
-        Path(mulled_upload_records) if mulled_upload_records else None
+    mulled_upload_records = _resolve_mulled_upload_records(
+        mulled_upload_records, mulled_upload_target
     )
     cfg = utils.load_config(config)
     setup = cfg.get("setup", None)
@@ -870,11 +883,11 @@ def handle_merged_pr(
     package_platform: PackageSubdir | None = None,
     mulled_upload_records: Path | None = None,
 ):
-    mulled_upload_records = (
-        Path(mulled_upload_records) if mulled_upload_records else None
+    quay_upload_target = parse_quay_upload_target(quay_upload_target)
+    mulled_upload_records = _resolve_mulled_upload_records(
+        mulled_upload_records, quay_upload_target
     )
     label = os.getenv("BIOCONDA_LABEL", None) or None
-    quay_upload_target = parse_quay_upload_target(quay_upload_target)
     if repo is None:
         raise ValueError("repo is required")
     if git_range is None:
@@ -915,7 +928,7 @@ def handle_merged_pr(
     exit(0 if success else 1)
 
 
-@arg("record_paths", nargs="+", help="JSONL record files or directories.")
+@arg("record_paths", nargs="*", help="JSONL record files or directories.")
 @arg(
     "--platform",
     action="append",
@@ -924,10 +937,16 @@ def handle_merged_pr(
 )
 @enable_logging()
 def create_mulled_manifests(
-    record_paths: list[str],
+    record_paths: list[str] | None = None,
     platform: list[ContainerPlatform] | None = None,
 ) -> None:
     """Create or update canonical manifests for uploaded mulled images."""
+    if not record_paths:
+        default_path = DEFAULT_MULLED_RECORDS_DIR
+        if not default_path.exists():
+            logger.info("No mulled image records found; nothing to reconcile.")
+            return
+        record_paths = [str(default_path)]
     records = load_image_records(record_paths)
     if not records:
         logger.info("No mulled image records found; nothing to reconcile.")
