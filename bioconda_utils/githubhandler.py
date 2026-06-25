@@ -169,7 +169,7 @@ class GitHubHandler:
             team_id = team
         else:
             team_id = await self.get_team_id(team, team)
-            if not team:
+            if not team_id:
                 logger.error("Could not find team for name '%s'", team)
                 return False
 
