@@ -419,8 +419,7 @@ def do_lint(
     """
     Lint recipes
 
-    If --push-status is not set, reports a TSV of linting results to stdout.
-    Otherwise pushes a commit status to the specified commit on github.
+    Reports a TSV of linting results to stdout.
     """
     if list_checks:
         print("\n".join(str(check) for check in lint.get_checks()))
