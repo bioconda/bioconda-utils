@@ -54,6 +54,36 @@ def test_test_package_passes_target_platform(monkeypatch, tmp_path):
     assert cmd[cmd.index("--target-platform") + 1] == "linux/arm64"
 
 
+def test_recipe_builder_build_image_passes_target_platform(monkeypatch, tmp_path):
+    commands = []
+    builder = docker_utils.RecipeBuilder.__new__(docker_utils.RecipeBuilder)
+    builder.image_build_dir = str(tmp_path)
+    builder.requirements = None
+    builder.docker_temp_image = "tmp-bioconda-builder"
+    builder.docker_base_image = "quay.io/bioconda/build-env:latest"
+    builder.dockerfile_template = "FROM {docker_base_image}\n{proxies}\n"
+    builder.target_platform = "linux/arm64"
+    builder.build_image = True
+    builder.keep_image = True
+
+    monkeypatch.setattr(
+        docker_utils.sp,
+        "check_output",
+        lambda _cmd: b"Docker version 24.0.0, build 0000000",
+    )
+    monkeypatch.setattr(
+        docker_utils.utils,
+        "run",
+        lambda cmd, **_kwargs: commands.append(cmd),
+    )
+
+    builder._build_image()
+
+    assert commands
+    assert commands[0][0:3] == ["docker", "build", "--platform"]
+    assert commands[0][3] == "linux/arm64"
+
+
 def test_mulled_upload_passes_target_platform(monkeypatch):
     commands = []
     monkeypatch.setenv("QUAY_LOGIN", "user:token")

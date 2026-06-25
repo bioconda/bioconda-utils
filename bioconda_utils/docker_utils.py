@@ -410,6 +410,8 @@ class RecipeBuilder:
         else:
             # Network flag was added in 1.13.0, do not add it for lower versions. xref #5387
             cmd = ["docker", "build", "-t", self.docker_temp_image, build_dir]
+        if self.target_platform:
+            cmd[2:2] = ["--platform", self.target_platform]
 
         try:
             with utils.Progress():
