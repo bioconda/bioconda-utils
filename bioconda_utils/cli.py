@@ -928,7 +928,7 @@ def handle_merged_pr(
     exit(0 if success else 1)
 
 
-@arg("record_paths", nargs="*", help="JSONL record files or directories.")
+@arg("record_paths", nargs="*", help="Mulled image record files (JSONL) or directories containing them.")
 @arg(
     "--platform",
     action="append",
