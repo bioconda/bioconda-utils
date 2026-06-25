@@ -15,7 +15,6 @@ import cachetools
 import gidgethub
 import gidgethub.abc
 import gidgethub.aiohttp
-import gidgethub.sansio
 
 if TYPE_CHECKING:
     import aiohttp
@@ -24,12 +23,6 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 #: State for Github Issues
 IssueState = Enum("IssueState", "open closed all")  # pylint: disable=invalid-name
-
-#: State of Github Check Run
-#: Pull request review state
-ReviewState = Enum(
-    "ReviewState", "APPROVED CHANGES_REQUESTED COMMENTED DISMISSED PENDING"
-)
 
 
 class GitHubHandler:
@@ -43,24 +36,13 @@ class GitHubHandler:
     """
 
     USER = "/user"
-    USER_ORGS = "/user/orgs"
 
     PULLS = "/repos/{user}/{repo}/pulls{/number}{?head,base,state}"
-    PULL_REVIEWS = "/repos/{user}/{repo}/pulls/{number}/reviews{/review_id}"
-    BRANCH_PROTECTION = "/repos/{user}/{repo}/branches/{branch}/protection"
     ISSUES = "/repos/{user}/{repo}/issues{/number}"
-    GET_CHECK_RUNS = "/repos/{user}/{repo}/commits/{commit}/check-runs"
-    GET_STATUSES = "/repos/{user}/{repo}/commits/{commit}/statuses"
     ORG_MEMBERS = "/orgs/{user}/members{/username}"
-    ORG = "/orgs/{user}"
     ORG_TEAMS = "/orgs/{user}/teams{/team_slug}"
 
-    PROJECT_COL_CARDS = "/projects/columns/{column_id}/cards"
-    PROJECT_CARDS = "/projects/columns/cards/{card_id}"
-
     TEAMS_MEMBERSHIP = "/teams/{team_id}/memberships/{username}"
-
-    SEARCH_ISSUES = "/search/issues?q="
 
     STATE = IssueState
 
@@ -96,16 +78,6 @@ class GitHubHandler:
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.user}/{self.repo})"
-
-    @property
-    def rate_limit(self) -> gidgethub.sansio.RateLimit:
-        """Last recorded rate limit data"""
-        return self.api.rate_limit
-
-    def set_oauth_token(self, token: str) -> None:
-        """Update oauth token for the wrapped GitHubAPI object"""
-        self.token = token
-        self.api.oauth_token = token
 
     @abc.abstractmethod
     def create_api_object(self, *args, **kwargs):
@@ -242,38 +214,6 @@ class GitHubHandler:
             return await self.is_team_member(username, team)
         return True
 
-    async def search_issues(
-        self, author=None, pr=False, issue=False, sha=None, closed=None
-    ):
-        """Search issues/PRs on our repos
-
-        Arguments:
-          author: login name of user to search
-          sha: SHA of commit to search for
-          pr: whether to consider only PRs
-          issue: whether to consider only non-PR issues
-          closed: search only closed if true, only open if false
-        """
-        query = ["org:" + self.user]
-
-        if pr and not issue:
-            query += ["is:pr"]
-        elif issue and not pr:
-            query += ["is:issue"]
-
-        if closed is not None:
-            if closed:
-                query += ["is:closed"]
-            else:
-                query += ["is:open"]
-
-        if author:
-            query += ["author:" + author]
-        if sha:
-            query += ["sha:" + sha]
-
-        return await self.api.getitem(self.SEARCH_ISSUES + "+".join(query))
-
     # pylint: disable=too-many-arguments
     @backoff.on_exception(
         backoff.fibo,
@@ -325,19 +265,6 @@ class GitHubHandler:
                     return {}
                 return []
             raise
-
-    async def get_issue(self, number: int) -> dict[str, Any]:
-        """Retrieve a single PR or Issue by its number
-
-        Arguments:
-          number: PR/Issue number
-        Returns:
-          The dict will contain a 'pull_request' key (containing dict)
-          if the Issue is a PR.
-        """
-        var_data = copy(self.var_default)
-        var_data["number"] = str(number)
-        return await self.api.getitem(self.ISSUES, var_data)
 
     # pylint: disable=too-many-arguments
     async def create_pr(
@@ -428,148 +355,6 @@ class GitHubHandler:
         logger.info("Modifying PR %s", number)
         return await self.api.patch(self.ISSUES, var_data, data=data)
 
-    async def get_check_runs(self, sha: str) -> list[dict[str, Any]]:
-        """List check runs for **sha**
-
-        Arguments:
-          sha: The commit SHA for which  to search for check runs
-        Returns:
-          List of check run "objects"
-        """
-        var_data = copy(self.var_default)
-        var_data["commit"] = sha
-        accept = "application/vnd.github.antiope-preview+json"
-        res = await self.api.getitem(self.GET_CHECK_RUNS, var_data, accept=accept)
-        return res["check_runs"]
-
-    async def get_statuses(self, sha: str) -> list[dict[str, Any]]:
-        """List status checks for **sha**
-
-        Arguments:
-          sha: The commit SHA for which to find statuses
-        Returns:
-          List of status "objects"
-        """
-        var_data = copy(self.var_default)
-        var_data["commit"] = sha
-        return await self.api.getitem(self.GET_STATUSES, var_data)
-
-    async def get_pr_reviews(self, pr_number: int) -> list[dict[str, Any]]:
-        """Get reviews filed for a PR
-
-        Arguments:
-          pr_number: Number of PR
-        Returns:
-          List of dictionaries each having ``body`` (`str`), ``state`` (`ReviewState`),
-          and ``commit_id`` (SHA, `str`) as well as a ``user`` `dict`.
-        """
-        var_data = copy(self.var_default)
-        var_data["number"] = str(pr_number)
-        return await self.api.getitem(self.PULL_REVIEWS, var_data)
-
-    async def get_branch_protection(self, branch: str = "master") -> dict[str, Any]:
-        """Retrieve protection settings for branch
-
-        Arguments:
-          branch: Branch for which to get protection settings
-
-        Returns:
-          Deep dict as example below. Protections not in place will not be present
-          in dict.
-
-          .. code-block:: yaml
-
-             required_status_checks:  # require status checks to pass
-                 strict: False        # require PR branch to be up to date with base
-                 contexts:            # list of status checks required
-                    - bioconda-test
-                 enforce_admins:      # admins, too, must follow rules
-                    - enabled: True
-             required_pull_request_reviews:          # require approving review
-                 required_approving_review_count: 1  # 1 - 6 valid
-                 dismiss_stale_reviews: False        # auto dismiss approval after push
-                 require_code_owner_reviews: False
-                 dismissal_restrictions:             # specify who may dismiss reviews
-                    users:
-                      - login: bla
-                    teams:
-                      - id: 1
-                      - name: Bl Ub
-                      - slug: bl-ub
-             restrictions:             # specify who may push
-               users:
-                 - login: bla
-               teams:
-                 - id: 1
-             enforce_admins:
-               enabled: True  # apply to admins also
-        """
-        var_data = copy(self.var_default)
-        var_data["branch"] = branch
-        accept = "application/vnd.github.luke-cage-preview+json"
-        res = await self.api.getitem(self.BRANCH_PROTECTION, var_data, accept=accept)
-        return res
-
-    def _deparse_card_pr_number(self, card: dict[str, Any]) -> dict[str, Any]:
-        """Extracts the card's issue's number from the content_url
-
-        This is a hack. The card data returned from github does not contain
-        content_id or anything referencing the PR/issue except for the
-        content_url. We deparse this here manually.
-
-        Arguments:
-          card: Card dict as returned from github
-        Results:
-          Card dict with ``issue_number`` field added if card is not a note
-        """
-        if "content_url" not in card:  # not content_url to parse
-            return card
-        if "issue_number" in card:  # target value already taken
-            return card
-
-        issue_url = gidgethub.sansio.format_url(self.ISSUES, self.var_default)
-        content_url = card["content_url"]
-        if content_url.startswith(issue_url):
-            try:
-                card["issue_number"] = int(content_url.lstrip(issue_url))
-            except ValueError:
-                pass
-        if "issue_number" not in card:
-            logger.error(
-                "Failed to deparse content url to issue number.\ncontent_url=%s\nissue_url=%s\n",
-                content_url,
-                issue_url,
-            )
-        return card
-
-    async def list_project_cards(self, column_id: int) -> list[dict[str, Any]]:
-        """List cards in a project column
-
-        Arguments:
-          column_id: ID number of project column
-        """
-        var_data = {"column_id": str(column_id)}
-        accept = "application/vnd.github.inertia-preview+json"
-        res = await self.api.getitem(self.PROJECT_COL_CARDS, var_data, accept=accept)
-        return [self._deparse_card_pr_number(card) for card in res]
-
-    async def delete_project_card(self, card_id: int) -> bool:
-        """Deletes a project card
-
-        Arguments:
-          card_id: ID of the card to delete
-        Returns:
-          True if the deletion succeeded
-        """
-        var_data = {"card_id": str(card_id)}
-        accept = "application/vnd.github.inertia-preview+json"
-        try:
-            await self.api.delete(self.PROJECT_CARDS, var_data, accept=accept)
-            return True
-        except gidgethub.BadRequest:
-            logger.exception("Failed to delete project cards %s", card_id)
-            return False
-
 
 class AiohttpGitHubHandler(GitHubHandler):
     """GitHubHandler using Aiohttp for HTTP requests
@@ -589,20 +374,3 @@ class AiohttpGitHubHandler(GitHubHandler):
             cache=cachetools.LRUCache(maxsize=500),
         )
         self.session = session
-
-
-class Event(gidgethub.sansio.Event):
-    """Adds **get(path)** method to Github Webhook event"""
-
-    def get(self, path: str, altvalue=KeyError) -> str:
-        """Get subkeys from even data using slash separated path"""
-        data = self.data
-        try:
-            for item in path.split("/"):
-                data = data[item]
-        except (KeyError, TypeError):
-            if altvalue is KeyError:
-                raise KeyError(f"No '{path}' in event type {self.event}") from None
-            else:
-                return altvalue
-        return data
