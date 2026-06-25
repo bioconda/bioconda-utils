@@ -41,9 +41,8 @@ def test_test_package_passes_target_platform(monkeypatch, tmp_path):
         lambda cmd, **_kwargs: commands.append(cmd),
     )
 
-    pkg_test.test_package(
+    pkg_test.build_and_test_mulled_image(
         str(package),
-        presolved=False,
         target_platform="linux/arm64",
     )
 

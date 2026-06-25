@@ -43,7 +43,7 @@ one:
 """)
 
 
-# Skip mulled_build_and_test on default since we already run pkg_test.test_package for every test case.
+# Skip mulled_build_and_test on default since these tests call mulled-build directly.
 def _build_pkg(recipe, mulled_build_and_test=False, docker_builder=None):
     r = Recipes(recipe, from_string=True)
     r.write_recipes()
@@ -67,7 +67,7 @@ def test_pkg_test():
     """
     built_packages = _build_pkg(RECIPE_ONE)
     for pkg in built_packages:
-        pkg_test.test_package(pkg)
+        pkg_test.build_and_test_mulled_image(pkg)
 
 
 @pytest.mark.skipif(SKIP_OSX, reason="skipping on osx")
@@ -78,7 +78,7 @@ def test_pkg_test_mulled_build_error():
     built_packages = _build_pkg(RECIPE_ONE)
     with pytest.raises(sp.CalledProcessError):
         for pkg in built_packages:
-            pkg_test.test_package(pkg, mulled_args="--wrong-arg")
+            pkg_test.build_and_test_mulled_image(pkg, mulled_args="--wrong-arg")
 
 
 @pytest.mark.skipif(SKIP_OSX, reason="skipping on osx")
@@ -88,4 +88,4 @@ def test_pkg_test_custom_base_image():
     """
     built_packages = _build_pkg(RECIPE_CUSTOM_BASE)
     for pkg in built_packages:
-        pkg_test.test_package(pkg, base_image="debian:latest")
+        pkg_test.build_and_test_mulled_image(pkg, base_image="debian:latest")

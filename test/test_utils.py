@@ -330,7 +330,7 @@ def test_single_build_pkg_dir(recipes_fixture):
 @pytest.mark.skipif(SKIP_DOCKER_TESTS, reason="skipping on osx")
 def test_single_build_with_post_test(single_build):
     for pkg in single_build:
-        pkg_test.test_package(pkg)
+        pkg_test.build_and_test_mulled_image(pkg)
 
 
 @pytest.mark.long_running_1
