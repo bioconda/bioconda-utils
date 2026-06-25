@@ -25,6 +25,7 @@ from ._types import (
     CONTAINER_PLATFORMS,
     ContainerPlatform,
     docker_platform_staging_suffix,
+    normalize_container_platform,
 )
 
 logger = logging.getLogger(__name__)
@@ -146,7 +147,7 @@ def _inspect_raw(ref: str, creds: str | None) -> tuple[dict[str, Any], str]:
     return manifest, digest
 
 
-def _inspect_config_platform(ref: str, creds: str | None) -> str:
+def _inspect_config_platform(ref: str, creds: str | None) -> ContainerPlatform:
     auth_args, redacted_secrets = skopeo_auth_args(creds, option="--creds")
     raw = utils.run(
         ["skopeo", "inspect", "--config", *auth_args, f"docker://{ref}"],
@@ -157,12 +158,13 @@ def _inspect_config_platform(ref: str, creds: str | None) -> str:
     return parse_skopeo_config_platform(config, ref=ref)
 
 
-def _descriptor_platform(descriptor: dict[str, Any]) -> str:
+def _descriptor_platform(descriptor: dict[str, Any]) -> ContainerPlatform:
     platform = descriptor.get("platform") or {}
-    result = f"{platform.get('os')}/{platform.get('architecture')}"
-    if variant := platform.get("variant"):
-        result += f"/{variant}"
-    return result
+    return normalize_container_platform(
+        platform.get("os"),
+        platform.get("architecture"),
+        variant=platform.get("variant"),
+    )
 
 
 def _ref_exists(ref: str, creds: str | None) -> bool:
@@ -192,12 +194,12 @@ def _ref_exists(ref: str, creds: str | None) -> bool:
 
 def _current_descriptors(
     canonical_ref: str, creds: str | None
-) -> dict[str, str] | None:
+) -> dict[ContainerPlatform, str] | None:
     if not _ref_exists(canonical_ref, creds):
         return None
     manifest, digest = _inspect_raw(canonical_ref, creds)
     if manifest.get("mediaType") in INDEX_MEDIA_TYPES or "manifests" in manifest:
-        descriptors: dict[str, str] = {}
+        descriptors: dict[ContainerPlatform, str] = {}
         for descriptor in manifest.get("manifests", []):
             platform = _descriptor_platform(descriptor)
             if platform in descriptors:

@@ -11,6 +11,7 @@ CONTAINER_PLATFORMS: tuple[ContainerPlatform, ...] = cast(
     tuple[ContainerPlatform, ...],
     typing.get_args(ContainerPlatform),
 )
+CONTAINER_PLATFORM_SET = frozenset(CONTAINER_PLATFORMS)
 #: A conda package subdir for a *built* (per-architecture) package. ``noarch``
 #: is excluded: noarch packages have no per-architecture artifact.
 PackageSubdir: TypeAlias = Literal["linux-64", "linux-aarch64", "osx-64", "osx-arm64"]
@@ -25,6 +26,32 @@ Subdir: TypeAlias = PackageSubdir | Literal["noarch"]
 #: *not* a subdir: ``"linux-64"`` is not a valid ``OsLabel``.
 OsLabel: TypeAlias = Literal["linux", "osx"]
 QuayUploadTarget = NewType("QuayUploadTarget", str)
+
+
+def normalize_container_platform(
+    os_name: Any,
+    architecture: Any,
+    *,
+    variant: Any = None,
+    ref: str = "",
+) -> ContainerPlatform:
+    """Return the supported Docker platform, ignoring OCI variant metadata.
+
+    Registry descriptors and image configs may include a CPU variant field, for
+    example ``linux/arm64/v8``. Internally bioconda-utils keys container images
+    by Docker's two-part platform values from :data:`ContainerPlatform`.
+    """
+    if not isinstance(os_name, str) or not isinstance(architecture, str):
+        location = f" for {ref}" if ref else ""
+        raise RuntimeError(f"Image platform{location} has no OS/architecture")
+    platform_value = f"{os_name}/{architecture}"
+    if platform_value not in CONTAINER_PLATFORM_SET:
+        suffix = f"/{variant}" if variant else ""
+        location = f" for {ref}" if ref else ""
+        raise RuntimeError(
+            f"Unsupported container platform{location}: {platform_value}{suffix}"
+        )
+    return cast(ContainerPlatform, platform_value)
 
 
 def parse_quay_upload_target(value: str | None) -> QuayUploadTarget | None:

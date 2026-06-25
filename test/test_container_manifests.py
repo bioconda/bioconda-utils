@@ -133,6 +133,87 @@ def test_reconcile_is_idempotent(monkeypatch):
     assert publish == []
 
 
+def test_current_descriptors_normalizes_registry_platform_variants(monkeypatch):
+    canonical = "quay.io/biocontainers/samtools:1.20--0"
+    manifest = {
+        "mediaType": "application/vnd.oci.image.index.v1+json",
+        "manifests": [
+            {
+                "digest": "sha256:" + "a" * 64,
+                "platform": {"os": "linux", "architecture": "amd64"},
+            },
+            {
+                "digest": "sha256:" + "b" * 64,
+                "platform": {
+                    "os": "linux",
+                    "architecture": "arm64",
+                    "variant": "v8",
+                },
+            },
+        ],
+    }
+    monkeypatch.setattr(container_manifests, "_ref_exists", lambda *_args: True)
+    monkeypatch.setattr(
+        container_manifests,
+        "_inspect_raw",
+        lambda *_args: (manifest, "sha256:" + "0" * 64),
+    )
+
+    assert container_manifests._current_descriptors(canonical, None) == {
+        "linux/amd64": "sha256:" + "a" * 64,
+        "linux/arm64": "sha256:" + "b" * 64,
+    }
+
+
+def test_reconcile_is_idempotent_with_registry_platform_variant(monkeypatch):
+    canonical = "quay.io/biocontainers/samtools:1.20--0"
+    records = [
+        MulledImageRecord(
+            canonical, "linux/amd64", f"{canonical}-amd64", "sha256:" + "a" * 64
+        ),
+        MulledImageRecord(
+            canonical, "linux/arm64", f"{canonical}-arm64", "sha256:" + "b" * 64
+        ),
+    ]
+    manifest = {
+        "mediaType": "application/vnd.oci.image.index.v1+json",
+        "manifests": [
+            {
+                "digest": "sha256:" + "a" * 64,
+                "platform": {"os": "linux", "architecture": "amd64"},
+            },
+            {
+                "digest": "sha256:" + "b" * 64,
+                "platform": {
+                    "os": "linux",
+                    "architecture": "arm64",
+                    "variant": "v8",
+                },
+            },
+        ],
+    }
+    monkeypatch.setattr(container_manifests, "_ref_exists", lambda *_args: True)
+    monkeypatch.setattr(
+        container_manifests,
+        "_inspect_raw",
+        lambda *_args: (manifest, "sha256:" + "0" * 64),
+    )
+    publish = []
+    monkeypatch.setattr(
+        container_manifests,
+        "_publish_manifest",
+        lambda *args: publish.append(args),
+    )
+
+    assert (
+        container_manifests.reconcile_manifest(
+            canonical, records, ["linux/amd64", "linux/arm64"]
+        )
+        is False
+    )
+    assert publish == []
+
+
 def test_reconcile_publishes_and_verifies(monkeypatch):
     canonical = "quay.io/biocontainers/samtools:1.20--0"
     records = [

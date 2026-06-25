@@ -178,7 +178,7 @@ def mulled_upload(
     )
 
 
-def inspect_image_platform(source_ref: str) -> str:
+def inspect_image_platform(source_ref: str) -> ContainerPlatform:
     """Return the Docker platform recorded in an image source config."""
     raw = utils.run(
         ["skopeo", "inspect", "--config", source_ref],

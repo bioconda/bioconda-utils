@@ -66,7 +66,15 @@ def test_mulled_upload_passes_target_platform(monkeypatch):
             return type(
                 "R",
                 (),
-                {"stdout": json.dumps({"os": "linux", "architecture": "arm64"})},
+                {
+                    "stdout": json.dumps(
+                        {
+                            "os": "linux",
+                            "architecture": "arm64",
+                            "variant": "v8",
+                        }
+                    )
+                },
             )()
         return type("R", (), {"stdout": "sha256:" + "a" * 64})()
 

@@ -64,7 +64,13 @@ from jsonschema import validate
 from colorlog import ColoredFormatter
 from boltons.funcutils import FunctionBuilder
 
-from bioconda_utils._types import OsLabel, PackageSubdir, Subdir
+from bioconda_utils._types import (
+    ContainerPlatform,
+    OsLabel,
+    PackageSubdir,
+    Subdir,
+    normalize_container_platform,
+)
 
 cast(Any, conda.gateways.logging).initialize_logging = lambda: None
 
@@ -454,17 +460,14 @@ def skopeo_inspect_digest(ref: str, creds: str | None) -> str:
     return digest
 
 
-def parse_skopeo_config_platform(config: dict, *, ref: str = "") -> str:
-    """Extract os/arch/variant from a skopeo inspect --config result."""
-    os_name = config.get("os")
-    architecture = config.get("architecture")
-    variant = config.get("variant")
-    if not os_name or not architecture:
-        raise RuntimeError(f"Image config for {ref} has no OS/architecture")
-    result = f"{os_name}/{architecture}"
-    if variant:
-        result += f"/{variant}"
-    return result
+def parse_skopeo_config_platform(config: dict, *, ref: str = "") -> ContainerPlatform:
+    """Extract and normalize the Docker platform from a skopeo image config."""
+    return normalize_container_platform(
+        config.get("os"),
+        config.get("architecture"),
+        variant=config.get("variant"),
+        ref=ref,
+    )
 
 
 @contextlib.contextmanager
