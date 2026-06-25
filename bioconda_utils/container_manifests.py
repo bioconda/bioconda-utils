@@ -19,7 +19,7 @@ from .utils import (
     skopeo_env,
     skopeo_auth_args,
     skopeo_inspect_digest,
-    parse_skopeo_config_platform,
+    parse_oci_config_platform,
 )
 from ._types import (
     CONTAINER_PLATFORMS,
@@ -155,7 +155,7 @@ def _inspect_config_platform(ref: str, creds: str | None) -> ContainerPlatform:
         env=skopeo_env(),
     ).stdout
     config = json.loads(raw)
-    return parse_skopeo_config_platform(config, ref=ref)
+    return parse_oci_config_platform(config, ref=ref)
 
 
 def _descriptor_platform(descriptor: dict[str, Any]) -> ContainerPlatform:

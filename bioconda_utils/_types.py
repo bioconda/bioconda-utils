@@ -2,7 +2,16 @@ from __future__ import annotations
 
 import platform
 import typing
-from typing import Any, Literal, NamedTuple, NewType, Protocol, TypeAlias, cast
+from typing import (
+    Any,
+    Literal,
+    NamedTuple,
+    NewType,
+    Protocol,
+    TypedDict,
+    TypeAlias,
+    cast,
+)
 
 
 ContainerPlatform: TypeAlias = Literal["linux/amd64", "linux/arm64", "linux/riscv64"]
@@ -117,6 +126,19 @@ def container_platform_is_native(target_platform: ContainerPlatform | None) -> b
     if target_platform is None:
         return True
     return target_platform == native_container_platform()
+
+
+class OCIImageConfig(TypedDict, total=False):
+    """OCI image config JSON – the output of ``skopeo inspect --config``.
+
+    Only the platform fields that bioconda-utils reads are declared here;
+    the full spec (``created``, ``rootfs``, ``history``, …) is wider.
+    See https://github.com/opencontainers/image-spec/blob/main/config.md
+    """
+
+    architecture: str
+    os: str
+    variant: str
 
 
 class PkgBuildRef(NamedTuple):

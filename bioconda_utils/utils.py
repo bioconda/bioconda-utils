@@ -66,6 +66,7 @@ from boltons.funcutils import FunctionBuilder
 
 from bioconda_utils._types import (
     ContainerPlatform,
+    OCIImageConfig,
     OsLabel,
     PackageSubdir,
     Subdir,
@@ -460,7 +461,9 @@ def skopeo_inspect_digest(ref: str, creds: str | None) -> str:
     return digest
 
 
-def parse_skopeo_config_platform(config: dict, *, ref: str = "") -> ContainerPlatform:
+def parse_oci_config_platform(
+    config: OCIImageConfig, *, ref: str = ""
+) -> ContainerPlatform:
     """Extract and normalize the Docker platform from a skopeo image config."""
     return normalize_container_platform(
         config.get("os"),
