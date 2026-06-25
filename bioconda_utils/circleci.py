@@ -2,16 +2,12 @@
 CircleCI Web-API Bindings
 """
 
-from dataclasses import dataclass
 import abc
 import logging
 from typing import Any
 from collections.abc import Mapping
 import uritemplate
 import json
-import re
-
-import aiohttp
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -163,46 +159,6 @@ class CircleAPI(abc.ABC):
             res = new_res
         return res
 
-    async def trigger_rebuild(self, branch: str, sha: str) -> Any:
-        """Trigger rebuilding **sha** on **branch**.
-
-        Arguments:
-          branch: Must be ``pull/123`` if on fork, otherwise name of branch
-          sha: The SHA to rebuild
-        """
-        data = {"revision": sha, "branch": branch}
-        return await self._make_request(
-            "POST", self.TRIGGER_REBUILD, self.var_data, data=data
-        )
-
-    async def trigger_job(
-        self,
-        branch: str = "master",
-        project: str | None = None,
-        job: str | None = None,
-        params: dict[str, Any] | None = None,
-    ) -> str | None:
-        """Trigger specific job
-
-        Arguments:
-          branch: Must be ``pull/123`` if on fork, otherwise name of branch
-          project: Optionally the project (repo) name
-          job: Specific job from circle/config.yml to run
-          params: Optional dict of parameters (envvars) to override
-        """
-        var_data = self.var_data
-        var_data["path"] = branch
-        if project:
-            var_data["project"] = project
-
-        data = {"build_parameters": params or {}}
-
-        if job:
-            data["build_parameters"]["CIRCLE_JOB"] = job
-
-        res = await self._make_request("POST", self.BUILDS, var_data, data=data)
-        return res.get("build_url")
-
     async def get_artifacts(
         self, path: str, head_sha: str
     ) -> list[tuple[str, str, int]]:
@@ -228,67 +184,3 @@ class CircleAPI(abc.ABC):
                 for artifact in await self.list_artifacts(buildno)
             )
         return artifacts
-
-
-@dataclass
-class _SlackMessageItem:
-    urls: dict[str, str]
-    success: bool
-
-
-class SlackMessage:
-    """Parses a Slack message as sent by CircleCI"""
-
-    parsed: list[_SlackMessageItem]
-
-    def __init__(self, _headers: Mapping[str, str], data: bytes) -> None:
-        response_text = data.decode("utf-8")
-        try:
-            data = json.loads(response_text)
-        except json.decoder.JSONDecodeError:
-            raise RuntimeError("Unable to decode CircleCI Slack message")
-        self.parsed = []
-        for attachment in data["attachments"]:
-            text = attachment["text"]
-            if text.startswith("Success:"):
-                success = True
-            elif text.startswith("Failed:"):
-                success = False
-            else:
-                continue
-            urls = {
-                key: url for url, key in re.findall(r"<(http[^|>]+)\|([^>]+)>", text)
-            }
-            self.parsed.append(
-                _SlackMessageItem(
-                    urls=urls,
-                    success=success,
-                )
-            )
-
-    def __str__(self) -> str:
-        return "|".join(
-            f"success={x.success} {':'.join(x.urls.keys())}" for x in self.parsed
-        )
-
-
-class AsyncCircleAPI(CircleAPI):
-    """CircleCI API using `aiohttp`"""
-
-    def __init__(
-        self, session: aiohttp.ClientSession, *args: Any, **kwargs: Any
-    ) -> None:
-        self._session = session
-        super().__init__(*args, **kwargs)
-
-    async def _request(
-        self,
-        method: str,
-        url: str,
-        headers: Mapping[str, str],
-        body: bytes = b"",
-    ) -> tuple[int, Mapping[str, str], bytes]:
-        async with self._session.request(
-            method, url, headers=headers, data=body
-        ) as response:
-            return response.status, response.headers, await response.read()

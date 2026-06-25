@@ -390,30 +390,6 @@ def duplicates(
     help="""Exclude this linting function. Can be used
      multiple times.""",
 )
-@arg(
-    "--push-status",
-    action="store_true",
-    help="""If set, the lint status will
-     be sent to the current commit on github. Also needs --user and --repo to
-     be set. Requires the env var GITHUB_TOKEN to be set. Note that pull
-     requests from forks will not have access to encrypted variables on
-     ci, so this feature may be of limited use.""",
-)
-@arg("--commit", help="Commit on github on which to update status")
-@arg(
-    "--push-comment",
-    action="store_true",
-    help="""If set, the lint status
-     will be posted as a comment in the corresponding pull request (given by
-     --pull-request). Also needs --user and --repo to be set. Requires the env
-     var GITHUB_TOKEN to be set.""",
-)
-@arg(
-    "--pull-request",
-    type=int,
-    help="""Pull request id on github on which to
-     post a comment.""",
-)
 @arg("--user", help="Github user")
 @arg("--repo", help="Github repo")
 @arg(
@@ -423,13 +399,6 @@ def duplicates(
      "master HEAD" to check commits in HEAD vs master, or just "HEAD" to
      include uncommitted changes). All recipes modified within this range will
      be built if not present in the channel.""",
-)
-@arg(
-    "--full-report",
-    action="store_true",
-    help="""Default behavior is to
-     summarize the linting results; use this argument to get the full
-     results as a TSV printed to stdout.""",
 )
 @arg("--try-fix", help="""Attempt to fix problems where found""")
 @enable_logging()
@@ -442,14 +411,9 @@ def do_lint(
     cache=None,
     list_checks=False,
     exclude=None,
-    push_status=False,
     user="bioconda",
-    commit=None,
-    push_comment=False,
-    pull_request=None,
     repo="bioconda-recipes",
     git_range=None,
-    full_report=False,
     try_fix=False,
 ):
     """
@@ -1063,9 +1027,7 @@ def dependent(
             "One of `--dependencies` or `--reverse-dependencies` is required."
         )
 
-    d, n2r = graph.build(
-        utils.get_recipes(recipe_folder, "*"), config, restrict=restrict
-    )
+    d, _ = graph.build(utils.get_recipes(recipe_folder, "*"), config, restrict=restrict)
 
     if reverse_dependencies is not None:
         func, packages = nx.algorithms.descendants, reverse_dependencies

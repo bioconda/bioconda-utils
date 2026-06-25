@@ -11,7 +11,6 @@ import json
 from typing import Any, NamedTuple
 from collections.abc import AsyncIterator, Mapping
 
-import aiohttp
 import uritemplate
 
 
@@ -166,29 +165,7 @@ class Room(NamedTuple):
 
 
 class GitterAPI:
-    """Sans-IO Base Class for Gitter API
-
-    .. rubric:: Methods
-
-    .. autosummary::
-
-       list_rooms
-       get_room
-       join_room
-       leave_room
-       edit_room
-       list_unread_items
-       mark_as_read
-       get_message
-       send_message
-       edit_message
-       list_groups
-       get_user
-       iter_chat
-
-    .. rubric:: Details
-
-    """
+    """Sans-IO Base Class for Gitter API"""
 
     #: Base URL for Gitter API calls
     _GITTER_API = "https://api.gitter.im/v1"
@@ -332,167 +309,7 @@ class GitterAPI:
             except json.decoder.JSONDecodeError:
                 logger.error("Failed to decode json in line %s", line_str)
 
-    async def list_rooms(self, name: str | None = None) -> list[Room]:
-        """Get list of current user's rooms
-
-        The list is filtered to match provided arguments.
-
-        Args:
-          name: Room name
-        """
-        _, data = await self._make_request("GET", self._ROOMS, {})
-        if not data:
-            return []
-        rooms = [Room.from_dict(item) for item in data]
-        if name:
-            rooms = list(filter(lambda room: room.name == name, rooms))
-        return rooms
-
-    async def get_room(self, uri: str) -> Room:
-        """Get a room using its URI"""
-        _, data = await self._make_request("POST", self._ROOMS, {}, {"uri": uri})
-        return Room.from_dict(data)
-
-    async def join_room(self, user: User, room: Room) -> None:
-        """Add **user** to a **room**"""
-        await self._make_request(
-            "POST", self._USER_ROOMS, {"userId": user.id}, {"id": room.id}
-        )
-
-    async def leave_room(self, user: User, room: Room) -> bool:
-        """Remove **user** from **room**"""
-        try:
-            await self._make_request(
-                "DELETE",
-                self._ROOM_USERS,
-                {"roomId": room.id, "userId": user.id},
-            )
-        except aiohttp.ClientResponseError as exc:
-            if exc.code in (404,):
-                return False
-        return True
-
-    async def edit_room(
-        self,
-        room: Room,
-        topic: str | None = None,
-        tags: str | None = None,
-        noindex: bool | None = None,
-    ) -> None:
-        """Set **topic**, **tags** or **noindex** for **room**"""
-        data = {}
-        if topic:
-            data["topic"] = topic
-        if tags:
-            data["tags"] = tags
-        if noindex:
-            data["noindex"] = str(noindex)
-        await self._make_request("PUT", self._ROOMS, {"roomId": room.id}, data)
-
-    async def list_unread_items(
-        self, user: User, room: Room
-    ) -> tuple[list[str], list[str]]:
-        """Get Ids for unread items of **user** in **room**
-
-        Returns:
-          Two lists of chat IDs are returned. The first are all unread mentions, the second only
-          those in which the user was @Mentioned.
-        """
-        _, data = await self._make_request(
-            "GET", self._UNREAD, {"userId": user.id, "roomId": room.id}
-        )
-        return data.get("chat", []), data.get("mention", [])
-
-    async def mark_as_read(self, user: User, room: Room, ids: list[str]) -> None:
-        """Mark chat messages listed in **ids** as read"""
-        await self._make_request(
-            "POST",
-            self._UNREAD,
-            {"userId": user.id, "roomId": room.id},
-            {"chat": ids},
-        )
-
-    async def get_message(self, room: Room, msgid: str) -> Message:
-        """Get a single message by its **id**"""
-        _, data = await self._make_request(
-            "GET", self._MESSAGES, {"roomId": room.id, "messageId": msgid}
-        )
-        return Message.from_dict(data)
-
-    async def send_message(self, room: Room, text: str, *args: Any) -> Message:
-        """Send a new message"""
-        _, data = await self._make_request(
-            "POST", self._MESSAGES, {"roomId": room.id}, {"text": text % args}
-        )
-        return Message.from_dict(data)
-
-    async def edit_message(self, room: Room, message: Message, text: str) -> Message:
-        """Edit a message"""
-        _, data = await self._make_request(
-            "PUT",
-            self._MESSAGES,
-            {"roomId": room.id, "messageId": message.id},
-            {"text": text},
-        )
-        return Message.from_dict(data)
-
-    async def list_groups(self) -> Any:
-        """Get list of current user's groups"""
-        _, data = await self._make_request("GET", self._LIST_GROUPS, {})
-        return data
-
     async def get_user(self) -> User:
         """Get current user"""
         _, data = await self._make_request("GET", self._GET_USER, {})
         return User.from_dict(data)
-
-    async def iter_chat(self, room: Room) -> AsyncIterator[Message]:
-        """Listen to chat messages
-
-        Args:
-          room: Room to listen in. Use `list_rooms` to find `Room`.
-
-        Returns:
-          async iterator over chat messages
-        """
-        stream = self._make_stream_request("GET", self._MESSAGES, {"roomId": room.id})
-        async for data in stream:
-            yield Message.from_dict(data)
-
-
-class AioGitterAPI(GitterAPI):
-    """AioHTTP based implementation of GitterAPI"""
-
-    def __init__(
-        self, session: aiohttp.ClientSession, *args: Any, **kwargs: Any
-    ) -> None:
-        self._session = session
-        super().__init__(*args, **kwargs)
-
-    async def _request(
-        self,
-        method: str,
-        url: str,
-        headers: Mapping[str, str],
-        body: bytes = b"",
-    ) -> tuple[int, Mapping[str, str], bytes]:
-        async with self._session.request(
-            method, url, headers=headers, data=body
-        ) as response:
-            response.raise_for_status()
-            return response.status, response.headers, await response.read()
-
-    async def _stream_request(
-        self,
-        method: str,
-        url: str,
-        headers: Mapping[str, str],
-        body: bytes = b"",
-    ) -> AsyncIterator[bytes]:
-        timeout = aiohttp.ClientTimeout(total=3600, sock_read=3600)
-        async with self._session.request(
-            method, url, headers=headers, data=body, timeout=timeout
-        ) as response:
-            response.raise_for_status()
-            async for line_bytes in response.content:
-                yield line_bytes

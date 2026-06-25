@@ -587,18 +587,6 @@ class TempGitHandler(GitHandlerBase):
     _local_mirror_tmpdir: str | tempfile.TemporaryDirectory | None = None
 
     @classmethod
-    def set_mirror_dir(cls, dirname: str) -> None:
-        """Set directory where repo mirrors are kept for caching
-
-        Use this if you want to preserve a cache across invocations
-        of the Python interpreter.
-
-        Args:
-          dirname: Name of directory in which remote repos will be cached.
-        """
-        cls._local_mirror_tmpdir = dirname
-
-    @classmethod
     def _get_local_mirror(cls, url: str) -> git.Repo:
         """Get a (cached) local mirror of a remote repo
 
@@ -711,8 +699,4 @@ class TempGitHandler(GitHandlerBase):
 
 
 class BiocondaRepo(GitHandler, BiocondaRepoMixin):
-    pass
-
-
-class TempBiocondaRepo(TempGitHandler, BiocondaRepoMixin):
     pass

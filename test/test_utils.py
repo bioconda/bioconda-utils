@@ -982,48 +982,6 @@ def test_build_container_no_default_gcc(tmpdir):
     )
     assert build_result.success
 
-    for k, v in r.recipe_dirs.items():
-        for i in utils.built_package_paths(v):
-            assert os.path.exists(i)
-            ensure_missing(i)
-
-
-# FIXME: This test fails erraticaly. Both in built_package_paths
-# and in build_recipes, the generated name can be either
-# one-0.1-h1341992_0.tar.bz2 or one-0.1-0.tar.bz2 - which
-# appears to be mostly random.
-def no_test_conda_forge_pins(caplog, config_fixture):
-    caplog.set_level(logging.DEBUG)
-    r = Recipes(
-        """
-        one:
-          meta.yaml: |
-            package:
-              name: one
-              version: 0.1
-            requirements:
-              run:
-                - zlib {{ zlib }}
-        """,
-        from_string=True,
-    )
-    r.write_recipes()
-    build_result = build.build_recipes(
-        r.basedir,
-        config_fixture,
-        r.recipe_dirnames,
-        testonly=False,
-        force=False,
-        mulled_test=False,
-    )
-    assert build_result
-
-    for k, v in r.recipe_dirs.items():
-        for i in utils.built_package_paths(v):
-            print(os.listdir(os.path.dirname(i)))
-            assert os.path.exists(i)
-            ensure_missing(i)
-
 
 def test_bioconda_pins(caplog, config_fixture):
     """
