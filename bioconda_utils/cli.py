@@ -68,11 +68,11 @@ ARTIFACT_SOURCES = ["azure", "circleci", "github-actions"]
 
 
 def _resolve_mulled_upload_records(
-    records: str | Path | None, upload_target: str | QuayUploadTarget | None
+    records: Path | None, upload_target: str | QuayUploadTarget | None
 ) -> Path | None:
     """Resolve ``--mulled-upload-records``, defaulting when uploading."""
     if records:
-        return Path(records)
+        return records
     if upload_target:
         return DEFAULT_MULLED_RECORDS_DIR
     return None
@@ -691,6 +691,7 @@ from environment, even after successful build and test.""",
 )
 @arg(
     "--mulled-upload-records",
+    type=Path,
     help="Append uploaded mulled image records as JSONL for manifest publication.",
 )
 @arg("--exclude", nargs="+", help="Packages to exclude during this run")
@@ -867,6 +868,7 @@ def build(
 )
 @arg(
     "--mulled-upload-records",
+    type=Path,
     help="Append uploaded mulled image records as JSONL for manifest publication.",
 )
 @enable_logging()
@@ -928,7 +930,11 @@ def handle_merged_pr(
     exit(0 if success else 1)
 
 
-@arg("record_paths", nargs="*", help="Mulled image record files (JSONL) or directories containing them.")
+@arg(
+    "record_paths",
+    nargs="*",
+    help="Mulled image record files (JSONL) or directories containing them.",
+)
 @arg(
     "--platform",
     action="append",
