@@ -68,8 +68,11 @@ from bioconda_utils._types import (
     ContainerPlatform,
     OCIImageConfig,
     OsLabel,
+    PACKAGE_SUBDIRS,
     PackageSubdir,
     Subdir,
+    container_platform_to_package_subdir,
+    native_container_platform,
     normalize_container_platform,
 )
 
@@ -1614,14 +1617,9 @@ class RepoData:
 
     #: Columns available in internal dataframe
     columns = _load_columns + ["channel", "subdir", "platform"]
-    #: Subdirs loaded (the ``platform`` column stores these directly)
-    platforms: list[Subdir] = [
-        "linux-64",
-        "linux-aarch64",
-        "osx-64",
-        "osx-arm64",
-        "noarch",
-    ]
+    #: Conda repodata subdirs loaded by default. The dataframe ``platform``
+    #: column stores these subdir strings directly for historical reasons.
+    platforms: list[Subdir] = [*PACKAGE_SUBDIRS, "noarch"]
     # config object
     config = None
 
@@ -1751,11 +1749,11 @@ class RepoData:
 
     @staticmethod
     def native_subdir() -> PackageSubdir:
-        """Return the conda subdir of the host we are running on."""
-        arch = platform.machine()
+        """Return the conda package subdir notation for this host."""
         if sys.platform.startswith("linux"):
-            return "linux-aarch64" if arch == "aarch64" else "linux-64"
+            return container_platform_to_package_subdir(native_container_platform())
         if sys.platform.startswith("darwin"):
+            arch = platform.machine().lower()
             return "osx-arm64" if arch == "arm64" else "osx-64"
         raise ValueError("Running on unsupported platform")
 

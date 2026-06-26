@@ -4,11 +4,54 @@ from unittest.mock import Mock
 
 import pytest
 
-from bioconda_utils import _types, build, docker_utils, pkg_test, upload
+from bioconda_utils import _types, build, cli, docker_utils, pkg_test, upload
 from bioconda_utils._types import PkgBuildRef
 
 SAMTOOLS_1_3_0 = PkgBuildRef(name="samtools", version="1.3", build_string="0")
 BIOCONTAINERS = _types.QuayUploadTarget("biocontainers")
+
+
+def test_container_platform_maps_to_package_subdir():
+    assert _types.container_platform_to_package_subdir("linux/amd64") == "linux-64"
+    assert _types.container_platform_to_package_subdir("linux/arm64") == "linux-aarch64"
+    assert (
+        _types.container_platform_to_package_subdir("linux/riscv64") == "linux-riscv64"
+    )
+
+
+def test_osx_package_subdir_has_no_container_platform():
+    with pytest.raises(ValueError, match="cannot be installed in Linux"):
+        _types.package_subdir_to_container_platform("osx-64")
+
+
+def test_cli_rejects_docker_build_container_platform_mismatch():
+    with pytest.raises(ValueError, match="linux-aarch64 packages require linux/arm64"):
+        cli._validate_container_platforms_for_build(
+            docker=True,
+            platform="linux/arm64",
+            container_platform=["linux/amd64", "linux/arm64"],
+        )
+
+
+def test_cli_rejects_native_build_container_platform_mismatch(monkeypatch):
+    monkeypatch.setattr(cli.utils.RepoData, "native_subdir", lambda: "linux-64")
+
+    with pytest.raises(ValueError, match="linux-64 packages require linux/amd64"):
+        cli._validate_container_platforms_for_build(
+            docker=False,
+            platform=None,
+            container_platform=["linux/arm64"],
+        )
+
+
+def test_cli_accepts_matching_container_platform(monkeypatch):
+    monkeypatch.setattr(cli.utils.RepoData, "native_subdir", lambda: "linux-64")
+
+    cli._validate_container_platforms_for_build(
+        docker=False,
+        platform=None,
+        container_platform=["linux/amd64"],
+    )
 
 
 def test_mulled_image_metadata_records_target_platform():

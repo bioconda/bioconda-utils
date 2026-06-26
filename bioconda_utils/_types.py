@@ -14,6 +14,8 @@ from typing import (
 )
 
 
+#: Docker/OCI platform notation used by Docker, buildx, skopeo, registry
+#: manifests, and mulled-build's ``--target-platform``.
 ContainerPlatform: TypeAlias = Literal["linux/amd64", "linux/arm64", "linux/riscv64"]
 # get_args() preserves the runtime values but not their Literal type.
 CONTAINER_PLATFORMS: tuple[ContainerPlatform, ...] = cast(
@@ -21,20 +23,57 @@ CONTAINER_PLATFORMS: tuple[ContainerPlatform, ...] = cast(
     typing.get_args(ContainerPlatform),
 )
 CONTAINER_PLATFORM_SET = frozenset(CONTAINER_PLATFORMS)
-#: A conda package subdir for a *built* (per-architecture) package. ``noarch``
-#: is excluded: noarch packages have no per-architecture artifact.
-PackageSubdir: TypeAlias = Literal["linux-64", "linux-aarch64", "osx-64", "osx-arm64"]
+#: Conda package subdir notation for *built* per-architecture packages. This
+#: is the directory under a conda channel, for example ``linux-64`` or
+#: ``linux-aarch64``. ``noarch`` is excluded because noarch packages have no
+#: per-architecture artifact.
+PackageSubdir: TypeAlias = Literal[
+    "linux-64", "linux-aarch64", "linux-riscv64", "osx-64", "osx-arm64"
+]
 PACKAGE_SUBDIRS: tuple[PackageSubdir, ...] = cast(
     tuple[PackageSubdir, ...],
     typing.get_args(PackageSubdir),
 )
-#: Any conda subdir, including ``noarch`` (the repodata namespace).
+#: Conda repodata subdir notation, including ``noarch``.
 Subdir: TypeAlias = PackageSubdir | Literal["noarch"]
 #: A two-part OS label -- the form conda-build's ``config.platform`` and its
 #: ``DEFAULT_COMPILERS`` table require (see ``conda_build.variants``). This is
 #: *not* a subdir: ``"linux-64"`` is not a valid ``OsLabel``.
 OsLabel: TypeAlias = Literal["linux", "osx"]
 QuayUploadTarget = NewType("QuayUploadTarget", str)
+
+#: Architecture-equivalent Linux package/container platforms. Keep this as the
+#: single source for converting between conda channel subdirs and Docker/OCI
+#: platform strings. macOS package subdirs intentionally have no container
+#: platform because mulled containers are Linux images.
+PACKAGE_SUBDIR_TO_CONTAINER_PLATFORM: dict[PackageSubdir, ContainerPlatform] = {
+    "linux-64": "linux/amd64",
+    "linux-aarch64": "linux/arm64",
+    "linux-riscv64": "linux/riscv64",
+}
+CONTAINER_PLATFORM_TO_PACKAGE_SUBDIR: dict[ContainerPlatform, PackageSubdir] = {
+    container_platform: package_subdir
+    for package_subdir, container_platform in PACKAGE_SUBDIR_TO_CONTAINER_PLATFORM.items()
+}
+
+
+def package_subdir_to_container_platform(
+    package_subdir: PackageSubdir,
+) -> ContainerPlatform:
+    """Return the Linux container platform that matches a conda package subdir."""
+    try:
+        return PACKAGE_SUBDIR_TO_CONTAINER_PLATFORM[package_subdir]
+    except KeyError as exc:
+        raise ValueError(
+            f"{package_subdir} packages cannot be installed in Linux mulled containers"
+        ) from exc
+
+
+def container_platform_to_package_subdir(
+    container_platform: ContainerPlatform,
+) -> PackageSubdir:
+    """Return the conda package subdir matching a Linux container platform."""
+    return CONTAINER_PLATFORM_TO_PACKAGE_SUBDIR[container_platform]
 
 
 def normalize_container_platform(

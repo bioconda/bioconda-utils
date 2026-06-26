@@ -34,10 +34,10 @@ logger = logging.getLogger(__name__)
 
 ArtifactSource = Literal["azure", "circleci", "github-actions"]
 IMAGE_RE = re.compile(r"(.+)(?::|%3A|---)(.+)\.tar\.gz$")
-# Exceptions to the {platform}-packages naming convention.
-# Most platforms derive their artifact name automatically as
-# f"{platform}-packages"; these entries exist only because
-# the workflow artifact names don't match that formula.
+# GitHub Actions artifact names are external workflow labels derived from, but
+# not identical to, conda package subdirs. Most package subdirs use
+# f"{platform}-packages"; these exceptions keep compatibility with historical
+# workflow names.
 GHA_ARTIFACT_NAME_EXCEPTIONS: dict[PackageSubdir, str] = {
     "linux-64": "linux-packages",
     "osx-64": "osx-packages",
@@ -46,11 +46,13 @@ GHA_ARTIFACT_NAME_EXCEPTIONS: dict[PackageSubdir, str] = {
 
 
 def _gha_artifact_names_for_platform(platform: PackageSubdir) -> set[str]:
+    """Return GitHub Actions artifact names that may contain a package subdir."""
     default_name = f"{platform}-packages"
     return {default_name, GHA_ARTIFACT_NAME_EXCEPTIONS.get(platform, default_name)}
 
 
 def _job_platform_from_package_platform(package_platform: PackageSubdir) -> str:
+    """Return the legacy CI job platform label for a conda package subdir."""
     if package_platform == "linux-64":
         return "linux"
     if package_platform == "osx-64":

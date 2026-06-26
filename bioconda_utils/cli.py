@@ -41,6 +41,8 @@ from ._types import (
     ContainerPlatform,
     PackageSubdir,
     QuayUploadTarget,
+    container_platform_to_package_subdir,
+    package_subdir_to_container_platform,
     parse_quay_upload_target,
 )
 from . import utils
@@ -76,6 +78,45 @@ def _resolve_mulled_upload_records(
     if upload_target:
         return DEFAULT_MULLED_RECORDS_DIR
     return None
+
+
+def _build_package_platform(
+    docker: bool | None, platform: ContainerPlatform | None
+) -> PackageSubdir:
+    """Return the conda package subdir produced by this build invocation."""
+    if docker and platform:
+        return container_platform_to_package_subdir(platform)
+    return utils.RepoData.native_subdir()
+
+
+def _validate_container_platforms_for_build(
+    *,
+    docker: bool | None,
+    platform: ContainerPlatform | None,
+    container_platform: list[ContainerPlatform] | None,
+) -> None:
+    """Reject mulled container platforms that cannot install built packages."""
+    if not container_platform:
+        return
+
+    package_platform = _build_package_platform(docker, platform)
+    requested_platforms = set(container_platform)
+    try:
+        expected_container_platform = package_subdir_to_container_platform(
+            package_platform
+        )
+    except ValueError as exc:
+        raise ValueError(
+            "--container-platform cannot be used with package platform "
+            f"{package_platform}; mulled containers are Linux-only"
+        ) from exc
+    if requested_platforms != {expected_container_platform}:
+        requested = ", ".join(container_platform)
+        raise ValueError(
+            "--container-platform must match the package build platform: "
+            f"{package_platform} packages require {expected_container_platform}, "
+            f"not {requested}"
+        )
 
 
 def enable_logging(default_loglevel="info", default_file_loglevel="debug"):
@@ -788,6 +829,11 @@ def build(
 
     if docker and platform and container_platform is None:
         container_platform = [platform]
+    _validate_container_platforms_for_build(
+        docker=docker,
+        platform=platform,
+        container_platform=container_platform,
+    )
 
     if lint_exclude and not lint:
         logger.warning("--lint-exclude has no effect unless --lint is specified.")
