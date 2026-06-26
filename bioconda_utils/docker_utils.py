@@ -62,6 +62,7 @@ from conda import exports as conda_exports
 from . import utils
 from ._types import (
     ContainerPlatform,
+    PACKAGE_SUBDIRS,
     PkgBuildRef,
     QuayUploadTarget,
     docker_platform_tag_suffix,
@@ -70,6 +71,13 @@ from ._types import (
 import logging
 
 logger = logging.getLogger(__name__)
+
+LOCAL_CHANNEL_SUBDIRS = tuple(
+    subdir for subdir in PACKAGE_SUBDIRS if subdir.startswith("linux-")
+) + ("noarch",)
+LOCAL_CHANNEL_MKDIRS = "\n  ".join(
+    f'mkdir -p "${{local_channel}}"/{subdir}' for subdir in LOCAL_CHANNEL_SUBDIRS
+)
 
 
 class CondaBuildConfigFile(Protocol):
@@ -99,13 +107,11 @@ set -eo pipefail
 #
 # Note that if the directory didn't exist on the host, then the staging area
 # will exist in the container but will be empty.  Channels expect at least
-# a linux-64/linux-aarch64 and noarch directory within that directory, so we
-# make sure it exists before adding the channel.
+# Linux and noarch channel subdirectories within that directory, so we make
+# sure they exist before adding the channel.
 # Also ensure conda-build's local channel directory exists the same way.
 for local_channel in '/opt/conda/conda-bld' '{self.container_staging}'; do
-  mkdir -p "${{local_channel}}"/linux-64
-  mkdir -p "${{local_channel}}"/linux-aarch64
-  mkdir -p "${{local_channel}}"/noarch
+  {local_channel_mkdirs}
   conda index "${{local_channel}}"
 done
 conda config --add channels file://{self.container_staging} 2> >(
@@ -131,7 +137,7 @@ conda index {self.container_staging}
 # Ensure permissions are correct on the host.
 HOST_USER={self.user_info[uid]}
 chown $HOST_USER:$HOST_USER {self.container_staging}/{arch}/*
-"""  # noqa: E501,E122: line too long, continuation line missing indentation or outdented
+"""  # noqa: E501
 
 # ----------------------------------------------------------------------------
 # DOCKERFILE_TEMPLATE
@@ -474,7 +480,11 @@ class RecipeBuilder:
         build_dir = os.path.realpath(tempfile.mkdtemp())
         # conda_exports.subdir is {platform}-{arch} like: 'linux-64' 'linux-aarch64'
         script = self.build_script_template.format_map(
-            {"self": self, "arch": "noarch" if noarch else conda_exports.subdir}
+            {
+                "self": self,
+                "arch": "noarch" if noarch else conda_exports.subdir,
+                "local_channel_mkdirs": LOCAL_CHANNEL_MKDIRS,
+            }
         )
         with open(os.path.join(build_dir, "build_script.bash"), "w") as fout:
             fout.write(script)

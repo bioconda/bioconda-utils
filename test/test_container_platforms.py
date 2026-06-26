@@ -24,6 +24,26 @@ def test_osx_package_subdir_has_no_container_platform():
         _types.package_subdir_to_container_platform("osx-64")
 
 
+def test_docker_build_script_creates_supported_linux_channel_subdirs():
+    script = docker_utils.BUILD_SCRIPT_TEMPLATE.format_map(
+        {
+            "self": Mock(
+                container_staging="/opt/host-conda-bld",
+                conda_build_args="",
+                container_recipe="/opt/recipe",
+                user_info={"uid": 1000},
+            ),
+            "arch": "linux-riscv64",
+            "local_channel_mkdirs": docker_utils.LOCAL_CHANNEL_MKDIRS,
+        }
+    )
+
+    assert 'mkdir -p "${local_channel}"/linux-64' in script
+    assert 'mkdir -p "${local_channel}"/linux-aarch64' in script
+    assert 'mkdir -p "${local_channel}"/linux-riscv64' in script
+    assert 'mkdir -p "${local_channel}"/noarch' in script
+
+
 def test_docker_platform_tag_suffix_matches_mulled_build_convention(monkeypatch):
     monkeypatch.setattr(_types.platform, "machine", lambda: "x86_64")
     assert _types.docker_platform_tag_suffix(None) is None

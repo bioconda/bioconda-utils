@@ -1099,6 +1099,10 @@ def test_native_platform_skipping(config_fixture):
         ("two", "osx-arm64", True),
         ("three", "osx-arm64", False),
         ("four", "osx-arm64", False),
+        ("one", "linux-riscv64", True),
+        ("two", "linux-riscv64", True),
+        ("four", "linux-riscv64", True),
+        ("five", "linux-riscv64", False),
     )
     r = Recipes(
         """
@@ -1132,6 +1136,14 @@ def test_native_platform_skipping(config_fixture):
               additional-platforms:
                 - linux-aarch64
                 - osx-arm64
+        five:
+          meta.yaml: |
+            package:
+              name: five
+              version: "0.1"
+            extra:
+              additional-platforms:
+                - linux-riscv64
         """,
         from_string=True,
     )

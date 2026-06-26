@@ -29,6 +29,7 @@ from . import graph
 from . import recipe as _recipe
 from ._types import (
     ContainerPlatform,
+    PACKAGE_SUBDIRS,
     PackageSubdir,
     PkgBuildRef,
     QuayUploadTarget,
@@ -439,13 +440,13 @@ def do_not_consider_for_additional_platform(
       Return True if current native platform are not included in recipe's additional platforms (no need to build).
     """
     recipe_obj = _recipe.Recipe.from_file(recipe_folder, recipe)
-    # On linux-aarch64 or osx-arm64 env, only build recipe with matching additional_platforms
-    if platform == "linux-aarch64":
-        if "linux-aarch64" not in recipe_obj.additional_platforms:
-            return True
-    if platform == "osx-arm64":
-        if "osx-arm64" not in recipe_obj.additional_platforms:
-            return True
+    primary_platforms: set[PackageSubdir] = {"linux-64", "osx-64"}
+    additional_platforms = set(PACKAGE_SUBDIRS) - primary_platforms
+    if (
+        platform in additional_platforms
+        and platform not in recipe_obj.additional_platforms
+    ):
+        return True
     return False
 
 
