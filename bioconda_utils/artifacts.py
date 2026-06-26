@@ -181,7 +181,8 @@ def _upload_mulled_images(
         image_seen = True
         # Skopeo can't handle a : in the file name
         fixed_img_name = img.replace(":", "_")
-        os.rename(img, fixed_img_name)
+        if ":" in img:
+            os.rename(img, fixed_img_name)
         source_ref = f"docker-archive:{fixed_img_name}"
         # Use the archive's manifest, not the filename, as the platform source of truth.
         source_platform = inspect_image_platform(source_ref)
