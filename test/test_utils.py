@@ -1151,7 +1151,7 @@ def test_native_platform_skipping(config_fixture):
     for recipe_name, platform, result in expections:
         recipe_folder = os.path.dirname(r.recipe_dirs[recipe_name])
         assert (
-            build.do_not_consider_for_additional_platform(
+            build.should_skip_platform(
                 recipe_folder, r.recipe_dirs[recipe_name], platform
             )
             == result

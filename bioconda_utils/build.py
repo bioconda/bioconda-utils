@@ -425,29 +425,27 @@ def get_worker_subdag(
     return subdags
 
 
-def do_not_consider_for_additional_platform(
+def should_skip_platform(
     recipe_folder: str, recipe: str, platform: PackageSubdir
 ) -> bool:
     """
-    Given a recipe, check this recipe should skip in current platform or not.
+    Return True if *platform* is a non-primary subdir (``linux-aarch64``,
+    ``osx-arm64``, ``linux-riscv64``) and the recipe does not list it in
+    ``extra.additional-platforms``.
 
-    Arguments:
-      recipe_folder: Directory containing possibly many, and possibly nested, recipes.
-      recipe: Relative path to recipe
-      platform: current native subdir
-
-    Returns:
-      Return True if current native platform are not included in recipe's additional platforms (no need to build).
+    The ``linux-64`` and ``osx-64`` subdirs are always built — they are assumed
+    to be universally compatible.  Any other subdir requires explicit opt-in
+    via ``extra.additional-platforms`` in ``meta.yaml``.  Without this gate,
+    every recipe would be attempted on every non-x86_64 builder, wasting time
+    on recipes that have not been verified for that platform.
     """
     recipe_obj = _recipe.Recipe.from_file(recipe_folder, recipe)
     primary_platforms: set[PackageSubdir] = {"linux-64", "osx-64"}
     additional_platforms = set(PACKAGE_SUBDIRS) - primary_platforms
-    if (
+    return (
         platform in additional_platforms
         and platform not in recipe_obj.additional_platforms
-    ):
-        return True
-    return False
+    )
 
 
 def build_recipes(
@@ -576,9 +574,7 @@ def build_recipes(
 
     for recipe, name in recipe_jobs:
         platform = utils.RepoData().native_subdir()
-        if not force and do_not_consider_for_additional_platform(
-            recipe_folder, recipe, platform
-        ):
+        if not force and should_skip_platform(recipe_folder, recipe, platform):
             logger.info(
                 "BUILD SKIP: skipping %s for additional platform %s",
                 recipe,
