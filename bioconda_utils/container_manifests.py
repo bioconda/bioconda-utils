@@ -327,6 +327,7 @@ def reconcile_manifest(
 
     Digests are captured at push time and carried in the records,
     so no registry polling or staging-tag bootstrap is needed.
+    The manifest may contain any non-empty subset of requested platforms.
 
     Returns True when a manifest was changed and False when it was already current.
     """
@@ -354,8 +355,8 @@ def reconcile_manifest(
                 )
             )
 
-    if not any(d.platform == "linux/amd64" for d in descriptors):
-        raise RuntimeError(f"No amd64 image is available for {canonical_ref}")
+    if not descriptors:
+        raise RuntimeError(f"No images are available for {canonical_ref}")
 
     desired = {d.platform: d.digest for d in descriptors}
     if current == desired:
