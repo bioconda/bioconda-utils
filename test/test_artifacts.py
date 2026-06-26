@@ -235,6 +235,13 @@ def test_upload_pr_artifacts_dryrun_counts_matching_artifacts(monkeypatch, tmp_p
     assert result == artifacts.UploadResult.SUCCESS
 
 
+def test_mulled_artifact_target_platform_allows_ambient_registry_auth(monkeypatch):
+    monkeypatch.delenv("QUAY_LOGIN", raising=False)
+    monkeypatch.delenv("QUAY_OAUTH_TOKEN", raising=False)
+
+    assert artifacts._mulled_artifact_target_platform(["linux/arm64"]) == "linux/arm64"
+
+
 def test_upload_pr_artifacts_uses_archive_platform_not_filename(monkeypatch, tmp_path):
     archive = tmp_path / "artifact.zip"
     _write_artifact_zip(

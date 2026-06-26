@@ -26,8 +26,8 @@ from bioconda_utils.upload import (
     upload_mulled_image_source,
 )
 from bioconda_utils.container_manifests import (
+    resolve_registry_creds,
     write_image_record,
-    registry_creds,
 )
 
 logger = logging.getLogger(__name__)
@@ -131,9 +131,6 @@ def _mulled_artifact_target_platform(
     container_platforms: list[ContainerPlatform] | None,
 ) -> ContainerPlatform:
     """Validate and return the single container platform represented by an artifact."""
-    quay_login = registry_creds()
-    if not quay_login:
-        raise ValueError("QUAY_LOGIN or QUAY_OAUTH_TOKEN is required")
     selected_container_platforms = (
         set(container_platforms) if container_platforms is not None else None
     )
@@ -170,6 +167,7 @@ def _upload_mulled_images(
     dryrun: bool,
     label: str | None,
     mulled_upload_records: Path | None,
+    use_existing_auth: bool,
 ) -> list[bool]:
     """Upload matching mulled image archives and report per-image success."""
     success = []
@@ -221,6 +219,7 @@ def _upload_mulled_images(
                 canonical_ref,
                 target_platform,
                 validate_platform=False,
+                use_existing_auth=use_existing_auth,
             )
             success.append(True)
             if mulled_upload_records is not None:
@@ -252,6 +251,7 @@ def upload_pr_artifacts(
     package_platform: PackageSubdir | None = None,
     container_platforms: list[ContainerPlatform] | None = None,
     mulled_upload_records: Path | None = None,
+    use_existing_auth: bool = False,
 ) -> UploadResult:
     """Upload package and image artifacts from the PR associated with git_sha."""
     _config = utils.load_config(config)
@@ -288,6 +288,8 @@ def upload_pr_artifacts(
         if mulled_upload_target
         else None
     )
+    if mulled_upload_target and not dryrun:
+        resolve_registry_creds(use_existing_auth=use_existing_auth)
 
     success = []
     for artifact_url in artifacts:
@@ -312,6 +314,7 @@ def upload_pr_artifacts(
                         dryrun=dryrun,
                         label=label,
                         mulled_upload_records=mulled_upload_records,
+                        use_existing_auth=use_existing_auth,
                     )
                 )
 

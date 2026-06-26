@@ -25,7 +25,7 @@ from ._types import (
 from .container_manifests import (
     MulledImageRecord,
     platform_ref,
-    registry_creds,
+    resolve_registry_creds,
 )
 
 logger = logging.getLogger(__name__)
@@ -150,6 +150,8 @@ def mulled_upload(
     image: PkgBuildRef,
     quay_target: QuayUploadTarget,
     target_platform: ContainerPlatform | None = None,
+    *,
+    use_existing_auth: bool = False,
 ) -> MulledImageRecord:
     """
     Upload the build Docker images to quay.io with ``mulled-build push``.
@@ -160,6 +162,8 @@ def mulled_upload(
       image: package build reference (name, version, build string)
       quary_target: name of image on quay
       target_platform: Docker target platform to pass to mulled-build
+      use_existing_auth: Use existing Docker/skopeo registry auth when no
+        QUAY_LOGIN or QUAY_OAUTH_TOKEN is configured.
 
     Returns:
       A manifest publication record for the image uploaded to quay.io.
@@ -175,6 +179,7 @@ def mulled_upload(
         f"docker-daemon:{local_ref}",
         canonical_ref,
         target_platform,
+        use_existing_auth=use_existing_auth,
     )
 
 
@@ -206,15 +211,14 @@ def upload_mulled_image_source(
     *,
     timeout: int = 600,
     validate_platform: bool = True,
+    use_existing_auth: bool = False,
 ) -> MulledImageRecord:
     """Upload one mulled image source to its platform staging ref.
 
     The returned digest is inspected from the destination registry ref after
     upload, so manifest records reflect what Quay actually stores.
     """
-    creds = registry_creds()
-    if not creds:
-        raise ValueError("QUAY_LOGIN or QUAY_OAUTH_TOKEN is required")
+    creds = resolve_registry_creds(use_existing_auth=use_existing_auth)
     if validate_platform:
         source_platform = inspect_image_platform(source_ref)
         if source_platform != target_platform:

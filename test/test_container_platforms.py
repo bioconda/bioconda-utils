@@ -303,6 +303,50 @@ def test_upload_mulled_image_source_records_destination_digest(monkeypatch):
     assert record.digest == "sha256:" + "d" * 64
 
 
+def test_upload_mulled_image_source_requires_registry_auth_by_default(monkeypatch):
+    monkeypatch.delenv("QUAY_LOGIN", raising=False)
+    monkeypatch.delenv("QUAY_OAUTH_TOKEN", raising=False)
+
+    with pytest.raises(ValueError, match="--use-existing-auth"):
+        upload.upload_mulled_image_source(
+            "docker-archive:/tmp/samtools.tar.gz",
+            "quay.io/biocontainers/samtools:1.3--0",
+            "linux/arm64",
+        )
+
+
+def test_upload_mulled_image_source_can_use_ambient_registry_auth(monkeypatch):
+    commands = []
+    monkeypatch.delenv("QUAY_LOGIN", raising=False)
+    monkeypatch.delenv("QUAY_OAUTH_TOKEN", raising=False)
+    monkeypatch.setattr(upload, "ensure_quay_repository", lambda *_args: None)
+    monkeypatch.setattr(upload.utils, "skopeo_env", lambda: {})
+
+    def run(cmd, **_kwargs):
+        commands.append(cmd)
+        if "--config" in cmd:
+            return type(
+                "R",
+                (),
+                {"stdout": json.dumps({"os": "linux", "architecture": "arm64"})},
+            )()
+        if "--format" in cmd:
+            return type("R", (), {"stdout": "sha256:" + "d" * 64})()
+        return type("R", (), {"stdout": ""})()
+
+    monkeypatch.setattr(upload.utils, "run", run)
+
+    upload.upload_mulled_image_source(
+        "docker-archive:/tmp/samtools.tar.gz",
+        "quay.io/biocontainers/samtools:1.3--0",
+        "linux/arm64",
+        use_existing_auth=True,
+    )
+
+    assert "--dest-creds" not in commands[1]
+    assert "--creds" not in commands[2]
+
+
 def test_ensure_quay_repository_creates_public_repository(monkeypatch):
     upload._QUAY_REPOSITORIES_READY.clear()
     monkeypatch.setenv("QUAY_OAUTH_TOKEN", "token")

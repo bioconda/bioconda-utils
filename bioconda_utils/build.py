@@ -101,6 +101,7 @@ def build(
     presolved_mulled_build_and_test: bool = True,
     mulled_upload_target: QuayUploadTarget | None = None,
     container_platforms: Sequence[ContainerPlatform] | None = None,
+    use_existing_auth: bool = False,
 ) -> BuildResult:
     """
     Build a single recipe for a single env
@@ -123,6 +124,8 @@ def build(
       dag: optional nx.DiGraph with dependency information
       skiplist_leaves: If True, blacklist leaf packages that fail to build
       live_logs: If True, enable live logging during the build process
+      use_existing_auth: Use existing Docker/skopeo registry auth when no
+        QUAY_LOGIN or QUAY_OAUTH_TOKEN is configured.
     """
     if record_build_failure and not dag:
         raise ValueError("record_build_failure requires dag to be set")
@@ -475,6 +478,7 @@ def build_recipes(
     fast_resolve: bool = True,
     container_platforms: Sequence[ContainerPlatform] | None = None,
     mulled_upload_records: Path | None = None,
+    use_existing_auth: bool = False,
 ) -> bool:
     """
     Build one or many bioconda packages.
@@ -503,6 +507,8 @@ def build_recipes(
       worker_offset: If n_workers is >1, then every worker_offset within a given group of
         sub-DAGs will be processed.
       keep_old_work: Do not remove anything from environment, even after successful build and test.
+      use_existing_auth: Use existing Docker/skopeo registry auth when no
+        QUAY_LOGIN or QUAY_OAUTH_TOKEN is configured.
       skiplist_leaves: If True, blacklist leaf packages that fail to build
       live_logs: If True, enable live logging during the build process
       exclude: list of recipes to exclude. Typically used for
@@ -660,6 +666,7 @@ def build_recipes(
             presolved_mulled_build_and_test=presolved_mulled_build_and_test,
             mulled_upload_target=mulled_upload_target,
             container_platforms=container_platforms,
+            use_existing_auth=use_existing_auth,
         )
 
         if not res.success:
@@ -676,7 +683,10 @@ def build_recipes(
                 if mulled_upload_target:
                     for img in res.mulled_images or []:
                         record = upload.mulled_upload(
-                            img.pkg_ref, mulled_upload_target, img.target_platform
+                            img.pkg_ref,
+                            mulled_upload_target,
+                            img.target_platform,
+                            use_existing_auth=use_existing_auth,
                         )
                         if mulled_upload_records is not None:
                             write_image_record(mulled_upload_records, record)

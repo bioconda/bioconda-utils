@@ -141,6 +141,24 @@ def registry_creds() -> str | None:
     return None
 
 
+def resolve_registry_creds(*, use_existing_auth: bool = False) -> str | None:
+    """Return explicit registry credentials or validate ambient-auth opt-in."""
+    creds = registry_creds()
+    if creds:
+        return creds
+    if use_existing_auth:
+        logger.warning(
+            "QUAY_LOGIN and QUAY_OAUTH_TOKEN are not set; using existing "
+            "Docker/skopeo registry authentication. New Quay repositories "
+            "cannot be created or made public without QUAY_OAUTH_TOKEN."
+        )
+        return None
+    raise ValueError(
+        "QUAY_LOGIN or QUAY_OAUTH_TOKEN is required unless --use-existing-auth "
+        "is specified"
+    )
+
+
 def _inspect_raw(ref: str, creds: str | None) -> tuple[dict[str, Any], str]:
     auth_args, redacted_secrets = skopeo_auth_args(creds, option="--creds")
     raw = utils.run(

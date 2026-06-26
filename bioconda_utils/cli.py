@@ -59,7 +59,7 @@ from .container_manifests import (
     DEFAULT_MULLED_RECORDS_DIR,
     load_image_records,
     reconcile_manifests,
-    registry_creds,
+    resolve_registry_creds,
 )
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
@@ -736,6 +736,12 @@ from environment, even after successful build and test.""",
     type=Path,
     help="Append uploaded mulled image records as JSONL for manifest publication.",
 )
+@arg(
+    "--use-existing-auth",
+    action="store_true",
+    help="Use existing Docker/skopeo registry authentication when QUAY_LOGIN "
+    "and QUAY_OAUTH_TOKEN are unset.",
+)
 @arg("--exclude", nargs="+", help="Packages to exclude during this run")
 @arg(
     "--subdag-depth",
@@ -774,6 +780,7 @@ def build(
     no_fast_resolve=False,
     container_platform: list[ContainerPlatform] | None = None,
     mulled_upload_records: Path | None = None,
+    use_existing_auth: bool = False,
     exclude=None,
     subdag_depth=None,
 ):
@@ -868,6 +875,7 @@ def build(
         fast_resolve=not no_fast_resolve,
         container_platforms=container_platform,
         mulled_upload_records=mulled_upload_records,
+        use_existing_auth=use_existing_auth,
     )
     exit(0 if success else 1)
 
@@ -918,6 +926,12 @@ def build(
     type=Path,
     help="Append uploaded mulled image records as JSONL for manifest publication.",
 )
+@arg(
+    "--use-existing-auth",
+    action="store_true",
+    help="Use existing Docker/skopeo registry authentication when QUAY_LOGIN "
+    "and QUAY_OAUTH_TOKEN are unset.",
+)
 @enable_logging()
 def handle_merged_pr(
     recipe_folder,
@@ -931,6 +945,7 @@ def handle_merged_pr(
     container_platform: list[ContainerPlatform] | None = None,
     package_platform: PackageSubdir | None = None,
     mulled_upload_records: Path | None = None,
+    use_existing_auth: bool = False,
 ):
     quay_upload_target = parse_quay_upload_target(quay_upload_target)
     mulled_upload_records = _resolve_mulled_upload_records(
@@ -953,6 +968,7 @@ def handle_merged_pr(
         package_platform=package_platform,
         container_platforms=container_platform,
         mulled_upload_records=mulled_upload_records,
+        use_existing_auth=use_existing_auth,
     )
     if res == UploadResult.NO_ARTIFACTS and fallback == "build":
         if package_platform is not None:
@@ -971,6 +987,7 @@ def handle_merged_pr(
             mulled_build_and_test=True,
             container_platform=container_platform,
             mulled_upload_records=mulled_upload_records,
+            use_existing_auth=use_existing_auth,
         )
     else:
         success = res != UploadResult.FAILURE
@@ -989,10 +1006,17 @@ def handle_merged_pr(
     choices=CONTAINER_PLATFORMS,
     help="Platforms to include. Defaults to all supported platforms.",
 )
+@arg(
+    "--use-existing-auth",
+    action="store_true",
+    help="Use existing Docker/skopeo registry authentication when QUAY_LOGIN "
+    "and QUAY_OAUTH_TOKEN are unset.",
+)
 @enable_logging()
 def create_mulled_manifests(
     record_paths: list[Path] | None = None,
     platform: list[ContainerPlatform] | None = None,
+    use_existing_auth: bool = False,
 ) -> None:
     """Create or update canonical manifests for uploaded mulled images."""
     if not record_paths:
@@ -1008,7 +1032,7 @@ def create_mulled_manifests(
     changed, total = reconcile_manifests(
         records,
         platform or list(CONTAINER_PLATFORMS),
-        creds=registry_creds(),
+        creds=resolve_registry_creds(use_existing_auth=use_existing_auth),
     )
     logger.info("Manifest summary: %d changed, %d checked", changed, total)
 
