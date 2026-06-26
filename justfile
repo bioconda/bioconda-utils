@@ -84,12 +84,51 @@ restore-galaxy-dev:
             pixi remove --pypi "$1" --no-install
         fi
     }
+    restore_conda_galaxy_tool_util() {
+        pixi run python - <<'PY'
+    import pathlib
+    import re
+
+    path = pathlib.Path("pixi.toml")
+    lines = path.read_text().splitlines()
+    dependency_header = lines.index("[dependencies]")
+    next_header = next(
+        (
+            index
+            for index in range(dependency_header + 1, len(lines))
+            if lines[index].startswith("[")
+        ),
+        len(lines),
+    )
+    dependency_lines = lines[dependency_header + 1 : next_header]
+    dependency_lines = [
+        line
+        for line in dependency_lines
+        if line != "# mulled test and container build"
+        and not re.match(r'^galaxy-tool-util\s*=', line)
+    ]
+    insert_index = next(
+        (
+            index
+            for index, line in enumerate(dependency_lines)
+            if re.match(r'^involucro\s*=', line)
+        ),
+        None,
+    )
+    if insert_index is None:
+        raise RuntimeError("Could not find involucro dependency in pixi.toml")
+    dependency_lines[insert_index:insert_index] = [
+        "# mulled test and container build",
+        'galaxy-tool-util = "25.*"',
+    ]
+    lines[dependency_header + 1 : next_header] = dependency_lines
+    path.write_text("\n".join(lines) + "\n")
+    PY
+    }
     remove_pypi_dep_if_present galaxy-tool-util
     remove_pypi_dep_if_present galaxy-util
     remove_pypi_dep_if_present galaxy-tool-util-models
-    if ! has_toml_key dependencies galaxy-tool-util; then
-        pixi add "galaxy-tool-util=25.*" --no-install
-    fi
+    restore_conda_galaxy_tool_util
     pixi install
 
 # run typechecks and linters, use after a moderate amount of changes
