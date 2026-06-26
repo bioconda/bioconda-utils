@@ -15,6 +15,38 @@ format:
 install:
     pixi run global-install
 
+# Use when testing bioconda-utils against an unpublished Galaxy change, such
+# as mulled-build --target-platform support from a sibling Galaxy checkout.
+# This replaces the conda galaxy-tool-util dependency with editable PyPI
+# packages from Galaxy and mutates pixi.toml/pixi.lock for local development.
+# Run `just restore-galaxy-dev` before committing normal dependency metadata.
+install-galaxy-dev galaxy_dir="../galaxy":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    galaxy_dir="$(realpath "{{galaxy_dir}}")"
+    test -f "${galaxy_dir}/packages/tool_util/pyproject.toml"
+    test -f "${galaxy_dir}/packages/util/pyproject.toml"
+    test -f "${galaxy_dir}/packages/tool_util_models/pyproject.toml"
+    pixi remove --pypi galaxy-tool-util galaxy-util galaxy-tool-util-models --no-install || true
+    pixi remove galaxy-tool-util --no-install || true
+    pixi add --pypi --editable "galaxy-tool-util-models @ file://${galaxy_dir}/packages/tool_util_models" --no-install
+    pixi add --pypi --editable "galaxy-util @ file://${galaxy_dir}/packages/util" --no-install
+    pixi add --pypi --editable "galaxy-tool-util @ file://${galaxy_dir}/packages/tool_util" --no-install
+    pixi install
+    pixi run mulled-build --help | grep -q -- "--target-platform"
+    pixi run involucro --help | grep -q -- "-platform"
+    pixi run python -c 'import importlib.metadata as md; print("galaxy-tool-util", md.version("galaxy-tool-util"))'
+
+# Use after `just install-galaxy-dev` when you are done testing unpublished
+# Galaxy changes. This removes editable Galaxy PyPI overrides and restores the
+# normal conda-provided galaxy-tool-util dependency.
+restore-galaxy-dev:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    pixi remove --pypi galaxy-tool-util galaxy-util galaxy-tool-util-models --no-install || true
+    pixi add "galaxy-tool-util=25.*" --no-install
+    pixi install
+
 # run typechecks and linters, use after a moderate amount of changes
 check: shellcheck
     pixi run check
