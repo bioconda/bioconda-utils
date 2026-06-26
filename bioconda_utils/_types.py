@@ -114,17 +114,17 @@ def parse_quay_upload_target(value: str | None) -> QuayUploadTarget | None:
 
 
 def docker_platform_tag_suffix(target_platform: ContainerPlatform | None) -> str | None:
-    """Suffix mulled-build appends to an image tag, mirroring galaxy's rule.
+    """Suffix mulled-build appends to a local image tag for a target platform.
 
-    MUST stay in sync with
-    ``galaxy.tool_util.deps.mulled.mulled_build.docker_platform_tag_suffix``
-    (and ``apply_platform_tag_suffix``) in the ``galaxy-tool-util`` package:
-    amd64 is left unsuffixed, every other architecture gets ``-<arch>``.
-    ``mulled_upload`` relies on this so its ``docker-daemon:`` source ref
-    matches the tag mulled-build actually produces locally. If galaxy ever
-    changes its suffix rule, this function must change with it.
+    This mirrors Galaxy/mulled-build's current convention: amd64 is left
+    unsuffixed, every other architecture gets ``-<arch>``, and ``None`` means
+    the native Docker platform. ``mulled_upload`` relies on this so its
+    ``docker-daemon:`` source ref matches the tag mulled-build actually
+    produces locally. If Galaxy changes this convention, this function and its
+    tests must change with it.
     """
-    if target_platform is None or target_platform == "linux/amd64":
+    target_platform = target_platform or native_container_platform()
+    if target_platform == "linux/amd64":
         return None
     return target_platform.removeprefix("linux/").replace("/", "-")
 

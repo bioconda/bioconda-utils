@@ -67,6 +67,20 @@ def test_write_image_record_creates_unique_file(tmp_path):
     assert container_manifests.load_image_records([str(tmp_path)]) == [record]
 
 
+def test_load_records_from_directory_ignores_non_jsonl_files(tmp_path):
+    record = MulledImageRecord(
+        canonical_ref="quay.io/biocontainers/samtools:1.20--0",
+        platform="linux/arm64",
+        platform_ref="quay.io/biocontainers/samtools:1.20--0-arm64",
+        digest="sha256:" + "a" * 64,
+    )
+    container_manifests.write_image_record(str(tmp_path), record)
+    (tmp_path / "README.md").write_text("not json\n", encoding="utf-8")
+    (tmp_path / ".gitkeep").write_text("", encoding="utf-8")
+
+    assert container_manifests.load_image_records([str(tmp_path)]) == [record]
+
+
 def test_load_records_rejects_mismatched_platform_ref(tmp_path):
     path = tmp_path / "images.jsonl"
     path.write_text(
@@ -390,7 +404,7 @@ def test_initial_publish_succeeds_when_no_manifest_exists(monkeypatch):
     assert len(published) == 1
 
 
-def test_publish_single_platform_preserves_single_manifest(monkeypatch):
+def test_publish_single_platform_creates_index(monkeypatch):
     commands = []
     monkeypatch.setattr(
         container_manifests.utils,
@@ -408,6 +422,7 @@ def test_publish_single_platform_preserves_single_manifest(monkeypatch):
     )
 
     assert commands
+    assert "--prefer-index=false" not in commands[0]
     assert any(f"@{descriptor.digest}" in arg for arg in commands[0])
 
 

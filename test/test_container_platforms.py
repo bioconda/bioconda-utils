@@ -24,6 +24,17 @@ def test_osx_package_subdir_has_no_container_platform():
         _types.package_subdir_to_container_platform("osx-64")
 
 
+def test_docker_platform_tag_suffix_matches_mulled_build_convention(monkeypatch):
+    monkeypatch.setattr(_types.platform, "machine", lambda: "x86_64")
+    assert _types.docker_platform_tag_suffix(None) is None
+    assert _types.docker_platform_tag_suffix("linux/amd64") is None
+    assert _types.docker_platform_tag_suffix("linux/arm64") == "arm64"
+    assert _types.docker_platform_tag_suffix("linux/riscv64") == "riscv64"
+
+    monkeypatch.setattr(_types.platform, "machine", lambda: "aarch64")
+    assert _types.docker_platform_tag_suffix(None) == "arm64"
+
+
 def test_cli_rejects_docker_build_container_platform_mismatch():
     with pytest.raises(ValueError, match="linux-aarch64 packages require linux/arm64"):
         cli._validate_container_platforms_for_build(
@@ -52,6 +63,39 @@ def test_cli_accepts_matching_container_platform(monkeypatch):
         platform=None,
         container_platform=["linux/amd64"],
     )
+
+
+def test_handle_merged_pr_fallback_rejects_container_platform_mismatch(
+    monkeypatch, tmp_path
+):
+    recipe_folder = tmp_path / "recipes"
+    recipe_folder.mkdir()
+    config = tmp_path / "config.yaml"
+    config.write_text("channels: []\n", encoding="utf-8")
+
+    monkeypatch.setattr(cli.utils.RepoData, "native_subdir", lambda: "linux-aarch64")
+    monkeypatch.setattr(
+        cli,
+        "upload_pr_artifacts",
+        lambda *_args, **_kwargs: cli.UploadResult.NO_ARTIFACTS,
+    )
+    monkeypatch.setattr(cli.utils, "load_config", lambda _config: {})
+    monkeypatch.setattr(cli, "get_recipes", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        cli,
+        "build_recipes",
+        lambda *_args, **_kwargs: pytest.fail("build should not start"),
+    )
+
+    with pytest.raises(ValueError, match="linux-aarch64 packages require linux/arm64"):
+        cli.handle_merged_pr(
+            str(recipe_folder),
+            str(config),
+            repo="bioconda/bioconda-recipes",
+            git_range=["base", "head"],
+            package_platform="linux-aarch64",
+            container_platform=["linux/amd64"],
+        )
 
 
 def test_mulled_image_metadata_records_target_platform():

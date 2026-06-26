@@ -89,13 +89,19 @@ def write_image_record(path: str | Path, record: MulledImageRecord) -> None:
 
 
 def load_image_records(paths: Iterable[str | Path]) -> list[MulledImageRecord]:
-    """Load and de-duplicate JSONL records from files or directories."""
+    """Load and de-duplicate JSONL records from files or directories.
+
+    Directory inputs are treated as record directories written by
+    :func:`write_image_record`, so only ``*.jsonl`` files are read. Explicit
+    file inputs are always read, even if their suffix differs, so callers still
+    get a clear validation error for a mistyped record path.
+    """
     records: set[MulledImageRecord] = set()
     files: list[Path] = []
     for raw_path in paths:
         path = Path(raw_path)
         if path.is_dir():
-            files.extend(sorted(p for p in path.rglob("*") if p.is_file()))
+            files.extend(sorted(p for p in path.rglob("*.jsonl") if p.is_file()))
         elif path.is_file():
             files.append(path)
         else:
@@ -277,6 +283,13 @@ def _publish_manifest(
     *,
     creds: str | None = None,
 ) -> None:
+    """Publish the canonical mulled image ref as an OCI index.
+
+    Even single-platform publishes use an index so canonical mulled refs have a
+    consistent media type. :func:`_current_descriptors` still accepts single
+    image manifests when inspecting existing refs, because registry state may
+    predate this convention or be created manually.
+    """
     sources = [
         f"{descriptor.source_ref}@{descriptor.digest}" for descriptor in descriptors
     ]
@@ -288,8 +301,6 @@ def _publish_manifest(
         "--progress",
         "plain",
     ]
-    if len(descriptors) == 1:
-        command += ["--prefer-index=false"]
     command += ["--tag", canonical_ref, *sources]
     docker_env, redacted_secrets, config_dir = _docker_config_env(canonical_ref, creds)
     try:
