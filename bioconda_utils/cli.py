@@ -784,6 +784,7 @@ def build(
     exclude=None,
     subdag_depth=None,
 ):
+    mulled_upload_target = parse_quay_upload_target(mulled_upload_target)
     mulled_upload_records = _resolve_mulled_upload_records(
         mulled_upload_records, mulled_upload_target
     )
@@ -798,6 +799,13 @@ def build(
 
     if platform and not docker:
         raise ValueError("--platform requires --docker")
+    if docker and platform and container_platform is None:
+        container_platform = [platform]
+    _validate_container_platforms_for_build(
+        docker=docker,
+        platform=platform,
+        container_platform=container_platform,
+    )
     if docker:
         if build_script_template is not None:
             build_script_template = open(build_script_template).read()
@@ -834,19 +842,10 @@ def build(
     else:
         docker_builder = None
 
-    if docker and platform and container_platform is None:
-        container_platform = [platform]
-    _validate_container_platforms_for_build(
-        docker=docker,
-        platform=platform,
-        container_platform=container_platform,
-    )
-
     if lint_exclude and not lint:
         logger.warning("--lint-exclude has no effect unless --lint is specified.")
 
     label = os.getenv("BIOCONDA_LABEL", None) or None
-    mulled_upload_target = parse_quay_upload_target(mulled_upload_target)
 
     success = build_recipes(
         recipe_folder,
@@ -1025,7 +1024,10 @@ def create_mulled_manifests(
             logger.info("No mulled image records found; nothing to reconcile.")
             return
         record_paths = [default_path]
-    records = load_image_records(record_paths)
+    try:
+        records = load_image_records(record_paths)
+    except FileNotFoundError as exc:
+        sys.exit(f"Mulled image record path not found: {exc.args[0]}")
     if not records:
         logger.info("No mulled image records found; nothing to reconcile.")
         return
