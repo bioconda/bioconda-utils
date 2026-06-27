@@ -1014,7 +1014,7 @@ def handle_merged_pr(
 )
 @enable_logging()
 def create_mulled_manifests(
-    record_paths: list[Path] | None = None,
+    record_paths: list[Path],
     platform: list[ContainerPlatform] | None = None,
     use_existing_auth: bool = False,
 ) -> None:
