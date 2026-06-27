@@ -617,7 +617,7 @@ def load_conda_build_config(platform: OsLabel | None = None, trim_skip: bool = T
     bioconda_utils_bin = shutil.which("bioconda-utils")
     if bioconda_utils_bin is None:
         raise FileNotFoundError("Unable to find bioconda-utils on PATH")
-    env_root = PurePath(bioconda_utils_bin).parents[1]
+    env_root = PurePath(os.path.realpath(bioconda_utils_bin)).parents[1]
     # set path to pinnings from conda forge package
     config.exclusive_config_files = [
         os.path.join(env_root, "conda_build_config.yaml"),

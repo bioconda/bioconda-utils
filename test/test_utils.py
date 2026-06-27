@@ -1195,6 +1195,23 @@ def test_variants():
     assert len(utils.load_all_meta(recipe, config)) == 2
 
 
+def test_load_conda_build_config_resolves_symlink(monkeypatch, tmp_path):
+    env_root = tmp_path / "env"
+    executable = env_root / "bin" / "bioconda-utils"
+    executable.parent.mkdir(parents=True)
+    executable.touch()
+    (env_root / "conda_build_config.yaml").write_text("{}\n")
+
+    symlink = tmp_path / "bin" / "bioconda-utils"
+    symlink.parent.mkdir()
+    symlink.symlink_to(executable)
+    monkeypatch.setattr(utils.shutil, "which", lambda _: str(symlink))
+
+    config = utils.load_conda_build_config()
+
+    assert config.exclusive_config_files[0] == str(env_root / "conda_build_config.yaml")
+
+
 @pytest.mark.long_running_2
 def test_cb3_outputs(config_fixture):
     r = Recipes(
