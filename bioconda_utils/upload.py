@@ -172,9 +172,15 @@ def mulled_upload(
     canonical_ref = (
         f"quay.io/{quay_target}/{image.name}:{image.version}--{image.build_string}"
     )
-    local_ref = canonical_ref
+    # mulled-build tags the local image under its hardcoded "biocontainers"
+    # namespace (see pkg_test.mulled_build_and_test), regardless of the upload
+    # target. Source the local image from there; the registry destination
+    # (canonical_ref) keeps the requested target namespace.
+    local_ref = (
+        f"quay.io/biocontainers/{image.name}:{image.version}--{image.build_string}"
+    )
     if suffix := docker_platform_tag_suffix(target_platform):
-        local_ref = f"{canonical_ref}-{suffix}"
+        local_ref = f"{local_ref}-{suffix}"
     return upload_mulled_image_source(
         f"docker-daemon:{local_ref}",
         canonical_ref,
