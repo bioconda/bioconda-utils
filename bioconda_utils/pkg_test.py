@@ -317,6 +317,13 @@ def test_package_in_temporary_container(
 
     live_logs : True | bool
         If True, enable live logging during the build process
+
+    Notes
+    -----
+    Must be run from a real script file, not stdin/REPL/``python -c``: the
+    local-channel indexing in :func:`_test_inputs` uses spawn-based
+    multiprocessing workers that cannot re-import a non-file main, failing with
+    an opaque ``BrokenProcessPool``. See :func:`build_and_test_mulled_image`.
     """
     conda_bld_dir, spec, resolved_channels, tests = _test_inputs(path, channels)
 
@@ -387,6 +394,17 @@ def build_and_test_mulled_image(
 
     target_platform : ContainerPlatform | None
         Docker target platform to pass to mulled-build, e.g. linux/arm64.
+
+    Notes
+    -----
+    Must be invoked from a real script file (e.g. ``python myscript.py`` or via
+    the installed ``bioconda-utils`` CLI), not from stdin, a REPL, or
+    ``python -c``. The local-channel indexing step (:func:`_test_inputs` ->
+    ``conda_index.api.update_index``) uses spawn-based multiprocessing workers,
+    which re-import the main module in each worker; a main program fed via stdin
+    has no file to re-import, so every worker dies and the call fails with an
+    opaque ``concurrent.futures.process.BrokenProcessPool``. The CLI and
+    ``pytest`` are unaffected because they run from real files.
     """
     _conda_bld_dir, spec, resolved_channels, tests = _test_inputs(path, channels)
     channel_args = ["--channels", ",".join(resolved_channels)]
