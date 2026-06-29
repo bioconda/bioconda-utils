@@ -61,7 +61,6 @@ from aiohttp import ClientResponseError
 import networkx as nx
 from bioconda_utils.skiplist import Skiplist
 
-import conda_build.variants
 import conda_build.config
 from conda.exports import MatchSpec, VersionOrder
 
