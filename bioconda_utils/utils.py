@@ -26,7 +26,7 @@ from threading import Event, Thread
 from pathlib import PurePath
 from collections import Counter, defaultdict, namedtuple, deque
 from collections.abc import Iterable
-from itertools import product, chain, groupby, zip_longest
+from itertools import product, chain, zip_longest
 from functools import partial
 from typing import Any, cast
 from collections.abc import Sequence, Collection
@@ -57,7 +57,6 @@ from jinja2 import Environment, PackageLoader
 import conda.gateways.logging
 
 from conda_build import api
-from conda.exports import VersionOrder
 from conda.exports import subdir as conda_subdir
 
 from jsonschema import validate
@@ -606,19 +605,6 @@ def load_first_metadata(recipe, config=None, finalize=True):
         return metas[0]
 
 
-@contextlib.contextmanager
-def temp_os(platform):
-    """
-    Context manager to temporarily set sys.platform.
-    """
-    original = sys.platform
-    sys.platform = platform
-    try:
-        yield
-    finally:
-        sys.platform = original
-
-
 def run(
     cmds: list[str],
     env: dict[str, str] | None = None,
@@ -775,73 +761,11 @@ def run(
         return sp.CompletedProcess(masked_cmds, returncode, stdout=output)
 
 
-def envstr(env):
-    env = dict(env)
-    return ";".join(["=".join([i, str(j)]) for i, j in sorted(env.items())])
-
-
 def flatten_dict(dict):
     for key, values in dict.items():
         if isinstance(values, str) or not isinstance(values, Iterable):
             values = [values]
         yield [(key, value) for value in values]
-
-
-class EnvMatrix:
-    """
-    Intended to be initialized with a YAML file and iterated over to yield all
-    combinations of environments.
-
-    YAML file has the following format::
-
-        CONDA_PY:
-          - "2.7"
-          - "3.5"
-        CONDA_BOOST: "1.60"
-        CONDA_PERL: "5.22.0"
-        CONDA_NPY: "110"
-        CONDA_NCURSES: "5.9"
-        CONDA_GSL: "1.16"
-
-    """
-
-    def __init__(self, env):
-        """
-        Parameters
-        ----------
-
-        env : str or dict
-            If str, assume it's a path to a YAML-format filename and load it
-            into a dict. If a dict is provided, use it directly.
-        """
-        if isinstance(env, str):
-            with open(env) as f:
-                self.env = yaml.safe_load(f)
-        else:
-            self.env = env
-        for key, val in self.env.items():
-            if key != "CONDA_PY" and not isinstance(val, str):
-                raise ValueError("All versions except CONDA_PY must be strings.")
-
-    def __iter__(self):
-        """
-        Given the YAML::
-
-            CONDA_PY:
-              - "2.7"
-              - "3.5"
-            CONDA_BOOST: "1.60"
-            CONDA_NPY: "110"
-
-        We get the following sets of env vars::
-
-          [('CONDA_BOOST', '1.60'), ('CONDA_PY', '2.7'), ('CONDA_NPY', '110')]
-          [('CONDA_BOOST', '1.60'), ('CONDA_PY', '3.5'), ('CONDA_NPY', '110')]
-
-        A copy of the entire os.environ dict is updated and yielded for each of
-        these sets.
-        """
-        yield from product(*flatten_dict(self.env))
 
 
 def get_deps(recipe, build=True):
@@ -934,7 +858,7 @@ def get_recipes(recipe_folder, package="*", exclude=None):
         path = os.path.join(recipe_folder, p)
         for new_dir in glob.glob(path):
             meta_yaml_found_or_excluded = False
-            for dir_path, dir_names, file_names in os.walk(new_dir):
+            for dir_path, _, file_names in os.walk(new_dir):
                 if any(
                     fnmatch.fnmatch(dir_path[len(recipe_folder) :], pat)
                     for pat in exclude
@@ -951,47 +875,6 @@ def get_recipes(recipe_folder, package="*", exclude=None):
                     new_dir,
                 )
                 yield new_dir
-
-
-def get_latest_recipes(recipe_folder, config, package="*"):
-    """
-    Generator of recipes.
-
-    Finds (possibly nested) directories containing a ``meta.yaml`` file and returns
-    the latest version of each recipe.
-
-    Parameters
-    ----------
-    recipe_folder : str
-        Top-level dir of the recipes
-
-    config : dict or filename
-
-    package : str or iterable
-        Pattern or patterns to restrict the results.
-    """
-
-    def toplevel(x):
-        return x.replace(recipe_folder, "").strip(os.path.sep).split(os.path.sep)[0]
-
-    config = load_config(config)
-    recipes = sorted(get_recipes(recipe_folder, package), key=toplevel)
-
-    for package, group in groupby(recipes, key=toplevel):
-        group = list(group)
-        if len(group) == 1:
-            yield group[0]
-        else:
-
-            def get_version(p):
-                meta_path = os.path.join(p, "meta.yaml")
-                meta = load_first_metadata(meta_path, finalize=False)
-                version = meta.get_value("package/version")
-                return VersionOrder(version)
-
-            sorted_versions = sorted(group, key=get_version)
-            if sorted_versions:
-                yield sorted_versions[-1]
 
 
 class DivergentBuildsError(Exception):
@@ -1029,55 +912,6 @@ def built_package_paths(recipe: str) -> list[str]:
     #     these days does not change the package build string, so should be fine.
     paths = api.get_output_file_paths(recipe, config=config, bypass_env_check=True)
     return paths
-
-
-def last_commit_to_master() -> datetime.datetime:
-    """
-    Identifies the day of the last commit to master branch.
-    """
-    if not shutil.which("git"):
-        raise ValueError("git not found")
-    p = sp.run(
-        'git log master --date=iso | grep "^Date:" | head -n1',
-        shell=True,
-        stdout=sp.PIPE,
-        check=True,
-    )
-    date = datetime.datetime.strptime(p.stdout[:-1].decode().split()[1], "%Y-%m-%d")
-    return date
-
-
-def file_from_commit(commit: str, filename: str) -> str:
-    """
-    Returns the contents of a file at a particular commit as a string.
-
-    Parameters
-    ----------
-    commit : commit-like string
-
-    filename : str
-    """
-    if commit == "HEAD":
-        return open(filename).read()
-
-    p = run(["git", "show", f"{commit}:{filename}"], mask=False, loglevel=0)
-    return str(p.stdout)
-
-
-def changed_since_master(recipe_folder):
-    """
-    Return filenames changed since master branch.
-
-    Note that this uses ``origin``, so if you are working on a fork of the main
-    repo and have added the main repo as ``upstream``, then you'll have to do
-    a ``git checkout master && git pull upstream master`` to update your fork.
-    """
-    p = run(["git", "fetch", "origin", "master"], mask=False, loglevel=0)
-    p = run(["git", "diff", "FETCH_HEAD", "--name-only"], mask=False, loglevel=0)
-    return [
-        os.path.dirname(os.path.relpath(i, recipe_folder))
-        for i in p.stdout.splitlines(False)
-    ]
 
 
 # Recipe patterns whose rendered hash depends on solver state (run_exports from
@@ -1535,9 +1369,6 @@ class RepoData:
     """
 
     REPODATA_URL = "https://conda.anaconda.org/{channel}/{subdir}/repodata.json"
-    REPODATA_LABELED_URL = (
-        "https://conda.anaconda.org/{channel}/label/{label}/{subdir}/repodata.json"
-    )
     REPODATA_DEFAULTS_URL = "https://repo.anaconda.com/pkgs/main/{subdir}/repodata.json"
     LOCAL_REPODATA = "{channel}/{subdir}/repodata.json"
 
@@ -1577,10 +1408,6 @@ class RepoData:
             warnings.warn("RepoData cache set after first use", BiocondaUtilsWarning)
         else:
             self.cache_file = cache
-
-    def set_timeout(self, timeout):
-        """Set the timeout after which the repodata should be reloaded"""
-        self.cache_timeout = timeout
 
     @property
     def channels(self):
@@ -1724,17 +1551,6 @@ class RepoData:
             lambda x: list(set(x))
         )
         return versions["platform"].to_dict()
-
-    def get_latest_versions(self, channel):
-        """Get the latest version for each package in **channel**"""
-        # called from pypi module
-        packages = self.df[self.df.channel == channel]["version"]
-
-        def max_vers(x):
-            return max(VersionOrder(v) for v in x)
-
-        vers = packages.groupby("name").agg(max_vers)
-        return vers
 
     def get_package_data(
         self,

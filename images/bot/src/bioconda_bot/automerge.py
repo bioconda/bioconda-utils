@@ -62,19 +62,6 @@ async def get_check_runs(session: ClientSession, sha: str) -> Any:
     return check_runs
 
 
-async def all_checks_completed(session: ClientSession, sha: str) -> bool:
-    check_runs = await get_check_runs(session, sha)
-
-    is_all_completed = all(
-        check_run["status"] == "completed" for check_run in check_runs
-    )
-    if not is_all_completed:
-        log("Some check_runs are not completed yet.")
-        for i, check_run in enumerate(check_runs, 1):
-            log("check_run %d / %d: %s", i, len(check_runs), check_run)
-    return is_all_completed
-
-
 async def all_checks_passed(session: ClientSession, sha: str) -> bool:
     check_runs = await get_check_runs(session, sha)
 

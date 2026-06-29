@@ -1,12 +1,10 @@
 """Wrappers for interacting with ``git``"""
 
 import asyncio
-import atexit
 import logging
 import os
 import re
 import subprocess
-import tempfile
 from typing import BinaryIO, Protocol
 
 import git
@@ -572,147 +570,5 @@ class GitHandler(GitHandlerBase):
         super().close()
 
 
-# Directory for mirrors of remote git repos
-
-
-class TempGitHandler(GitHandlerBase):
-    """GitHandler for working with temporary working directories created on the fly
-
-    Throw-away copies of a git repo as provided by this class are useful when we
-    might be working in multiple threads and want to avoid blocking waits for
-    a single repo. It also improves robustness: If something goes wrong with this
-    repo, it will not break the entire process.
-    """
-
-    _local_mirror_tmpdir: str | tempfile.TemporaryDirectory | None = None
-
-    @classmethod
-    def set_mirror_dir(cls, dirname: str) -> None:
-        """Set directory where repo mirrors are kept for caching
-
-        Use this if you want to preserve a cache across invocations
-        of the Python interpreter.
-
-        Args:
-          dirname: Name of directory in which remote repos will be cached.
-        """
-        cls._local_mirror_tmpdir = dirname
-
-    @classmethod
-    def _get_local_mirror(cls, url: str) -> git.Repo:
-        """Get a (cached) local mirror of a remote repo
-
-        This is used to speed up getting full repo copies. The bioconda-recipes
-        repo has grown to be quite large, and copying it every time a checkout
-        of a branch is needed takes too long. Shallow clones are finicky when
-        checking out by commit SHA (often leads to 'object not advertised' type
-        errors). So instead, we keep a local copy, which is obtained and
-        maintained with this method.
-
-        Args:
-          url: The remote URL. Should include the user/pass.
-        """
-
-        # Create temporary directory with lifetime of python process
-        if cls._local_mirror_tmpdir is None:
-            cls._local_mirror_tmpdir = tempfile.TemporaryDirectory()
-            atexit.register(cls._local_mirror_tmpdir.cleanup)
-
-        # Make location of repo in tmpdir from url
-        _, _, fname = url.rpartition("@")
-        if isinstance(cls._local_mirror_tmpdir, tempfile.TemporaryDirectory):
-            tmpname = cls._local_mirror_tmpdir.name
-        else:
-            tmpname = cls._local_mirror_tmpdir
-        assert tmpname is not None
-        assert isinstance(tmpname, str)
-        mirror_name = os.path.join(tmpname, fname)
-
-        # Re-use or create mirror of remote repo
-        if not os.path.exists(mirror_name):
-            logger.info("Creating Bare Mirror %s", fname)
-            mirror = git.Repo.clone_from(url, mirror_name, bare=True)
-            logger.info("Creating Bare Mirror %s -- DONE", fname)
-        else:
-            mirror = git.Repo(mirror_name)
-
-        # Update the remote url, in case password changed
-        logger.info("Updating Bare Mirror %s", fname)
-        m_origin = mirror.remote("origin")
-        m_origin.set_url(url, next(m_origin.urls))
-        logger.info("Updating Bare Mirror %s -- DONE", fname)
-
-        # Update the remote repo
-        mirror.remote("origin").update()
-        return mirror
-
-    @classmethod
-    def _clone_with_mirror(cls, home_url, todir):
-        """Prepares a clone of **home_url** in **todir** using mirror cache"""
-        repo = cls._get_local_mirror(home_url).clone(todir)
-        r_origin = repo.remote("origin")
-        r_origin.set_url(home_url, next(r_origin.urls))
-        _, _, fname = home_url.rpartition("@")
-        logger.info("Fetching %s", fname)
-        r_origin.fetch()
-        logger.info("Fetching %s - DONE", fname)
-        return repo
-
-    def __init__(
-        self,
-        username: str | None = None,
-        password: str | None = None,
-        url_format="https://{userpass}github.com/{user}/{repo}.git",
-        home_user="bioconda",
-        home_repo="bioconda-recipes",
-        fork_user=None,
-        fork_repo=None,
-        dry_run=False,
-    ) -> None:
-        userpass = ""
-        if password is not None and username is None:
-            username = "x-access-token"
-        if username is not None:
-            userpass = username
-            if password is not None:
-                userpass += ":" + password
-            userpass += "@"
-
-        self.tempdir = tempfile.TemporaryDirectory()
-
-        def censor(string):
-            if password is None:
-                return string
-            return string.replace(password, "******")
-
-        home_url = url_format.format(userpass=userpass, user=home_user, repo=home_repo)
-
-        logger.info("Cloning %s to %s", censor(home_url), self.tempdir.name)
-        repo = self._clone_with_mirror(home_url, self.tempdir.name)
-
-        if fork_repo is not None:
-            fork_url = url_format.format(
-                userpass=userpass, user=fork_user, repo=fork_repo
-            )
-            if fork_url != home_url:
-                logger.warning("Adding remote fork %s", censor(fork_url))
-                fork_remote = repo.create_remote("fork", fork_url)
-                fork_remote.update()
-        else:
-            fork_url = None
-        logger.info("Finished setting up repo in %s", self.tempdir)
-        super().__init__(repo, dry_run, home_url, fork_url)
-
-    def close(self) -> None:
-        """Remove temporary clone and cleanup resources"""
-        super().close()
-        logger.info("Removing repo from %s", self.tempdir.name)
-        self.tempdir.cleanup()
-
-
 class BiocondaRepo(GitHandler, BiocondaRepoMixin):
-    pass
-
-
-class TempBiocondaRepo(TempGitHandler, BiocondaRepoMixin):
     pass
