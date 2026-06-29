@@ -1,5 +1,9 @@
 import zipfile
 from pathlib import Path
+from typing import cast
+
+from github.CheckRun import CheckRun
+from github.Repository import Repository
 
 from bioconda_utils import _types, artifacts
 from bioconda_utils.container_manifests import MulledImageRecord
@@ -51,41 +55,53 @@ def _write_artifact_zip(path: Path, members: dict[str, bytes]) -> None:
 
 
 def test_get_gha_artifact_urls_filters_to_package_platform():
-    repo = type(
-        "Repo",
-        (),
-        {
-            "get_workflow_run": lambda self, _run_id: _Run(
-                [
-                    _Artifact("linux-packages", "linux-url"),
-                    _Artifact("linux-arm64-packages", "linux-arm64-url"),
-                    _Artifact("osx-packages", "osx-url"),
-                ]
-            )
-        },
-    )()
+    repo = cast(
+        Repository,
+        type(
+            "Repo",
+            (),
+            {
+                "get_workflow_run": lambda self, _run_id: _Run(
+                    [
+                        _Artifact("linux-packages", "linux-url"),
+                        _Artifact("linux-arm64-packages", "linux-arm64-url"),
+                        _Artifact("osx-packages", "osx-url"),
+                    ]
+                )
+            },
+        )(),
+    )
 
-    urls = list(artifacts.get_gha_artifact_urls(_CheckRun(), "linux-aarch64", repo))
+    urls = list(
+        artifacts.get_gha_artifact_urls(
+            cast(CheckRun, _CheckRun()), "linux-aarch64", repo
+        )
+    )
 
     assert urls == ["linux-arm64-url"]
 
 
 def test_get_gha_artifact_urls_accepts_legacy_x86_names():
-    repo = type(
-        "Repo",
-        (),
-        {
-            "get_workflow_run": lambda self, _run_id: _Run(
-                [
-                    _Artifact("linux-packages", "linux-url"),
-                    _Artifact("linux-64-packages", "linux-64-url"),
-                    _Artifact("linux-aarch64-packages", "linux-aarch64-url"),
-                ]
-            )
-        },
-    )()
+    repo = cast(
+        Repository,
+        type(
+            "Repo",
+            (),
+            {
+                "get_workflow_run": lambda self, _run_id: _Run(
+                    [
+                        _Artifact("linux-packages", "linux-url"),
+                        _Artifact("linux-64-packages", "linux-64-url"),
+                        _Artifact("linux-aarch64-packages", "linux-aarch64-url"),
+                    ]
+                )
+            },
+        )(),
+    )
 
-    urls = list(artifacts.get_gha_artifact_urls(_CheckRun(), "linux-64", repo))
+    urls = list(
+        artifacts.get_gha_artifact_urls(cast(CheckRun, _CheckRun()), "linux-64", repo)
+    )
 
     assert urls == ["linux-url", "linux-64-url"]
 

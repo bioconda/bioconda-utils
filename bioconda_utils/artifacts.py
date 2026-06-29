@@ -5,13 +5,16 @@ import re
 import tempfile
 import zipfile
 import logging
-from typing import Any, Literal
+from typing import Literal
 from collections.abc import Iterator
 
 import requests
 import backoff
 import json
 from pathlib import Path
+from github.CheckRun import CheckRun
+from github.PullRequest import PullRequest
+from github.Repository import Repository
 from urllib.parse import urlparse
 from bioconda_utils import utils
 from bioconda_utils._types import (
@@ -344,9 +347,9 @@ def download_artifact(url: str, to_path: Path, artifact_source: ArtifactSource) 
 
 
 def fetch_artifacts(
-    pr: Any,
+    pr: PullRequest,
     artifact_source: ArtifactSource,
-    repo: Any,
+    repo: Repository,
     job_platform: str | None = None,
     package_platform: PackageSubdir | None = None,
 ) -> Iterator[str]:
@@ -398,7 +401,7 @@ def fetch_artifacts(
             yield from artifact_url
 
 
-def get_azure_artifact_urls(check_run: Any) -> Iterator[str]:
+def get_azure_artifact_urls(check_run: CheckRun) -> Iterator[str]:
     azure_build_id = parse_azure_build_id(check_run.details_url)
     url = f"https://dev.azure.com/bioconda/bioconda-recipes/_apis/build/builds/{azure_build_id}/artifacts?api-version=4.1"
     res = requests.get(url, json=True).json()
@@ -417,7 +420,7 @@ def parse_azure_build_id(url: str) -> str:
     return match.group(1)
 
 
-def get_circleci_artifact_urls(check_run: Any, platform: str) -> Iterator[str]:
+def get_circleci_artifact_urls(check_run: CheckRun, platform: str) -> Iterator[str]:
     circleci_workflow_id = json.loads(check_run.external_id)["workflow-id"]
     # Must use a Personal token for API v2
     token = os.environ.get("CIRCLECI_TOKEN")
@@ -464,7 +467,7 @@ def parse_gha_build_id(url: str) -> str:
 
 
 def get_gha_artifact_urls(
-    check_run: Any, platform: PackageSubdir, repo: Any
+    check_run: CheckRun, platform: PackageSubdir, repo: Repository
 ) -> Iterator[str]:
     gha_workflow_id = parse_gha_build_id(check_run.details_url)
     if gha_workflow_id:

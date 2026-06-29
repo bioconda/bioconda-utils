@@ -12,12 +12,13 @@ import logging
 import os
 from pathlib import Path
 
-from typing import Any, NamedTuple
+from typing import NamedTuple
 from bioconda_utils.skiplist import Skiplist
 from bioconda_utils.build_failure import BuildFailureRecord
 
 from conda.exports import UnsatisfiableError
 from conda_build.exceptions import DependencyNeedsBuildingError
+from conda_build.metadata import MetaData
 import networkx as nx
 
 from . import utils
@@ -318,7 +319,11 @@ def build(
 
 
 def store_build_failure_record(
-    recipe: str, output: Any, meta: Any, dag: nx.DiGraph, skiplist_leaves: bool
+    recipe: str,
+    output: str | None,
+    meta: MetaData,
+    dag: nx.DiGraph,
+    skiplist_leaves: bool,
 ) -> None:
     """
     Write the exception to a file next to the meta.yaml

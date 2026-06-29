@@ -33,6 +33,7 @@ from re import Pattern
 
 
 import conda_build.api
+from conda_build.api import MetaDataTuple
 
 import jinja2
 
@@ -191,7 +192,7 @@ class Recipe:
         self.data: dict[str, Any] = {}
 
         # for conda_render() and conda_render_cleanup()
-        self._conda_meta: Any = None
+        self._conda_meta: list[MetaDataTuple] | None = None
         self._conda_tempdir = None
 
     @property
@@ -821,7 +822,7 @@ class Recipe:
         finalize=True,
         permit_unsatisfiable_variants=False,
         **kwargs,
-    ) -> Any:
+    ) -> list[MetaDataTuple]:
         """Handles calling conda_build.api.render
 
         ``conda_build.api.render`` is fragile, loud and slow. Avoid using this
