@@ -60,10 +60,6 @@ def _job_platform_from_package_platform(package_platform: PackageSubdir) -> str:
     return package_platform
 
 
-def _default_package_platform() -> PackageSubdir:
-    return utils.RepoData().native_subdir()
-
-
 def _download_artifact_contents(
     artifact_url: str, artifact_source: ArtifactSource, artifact_dir: Path
 ) -> None:
@@ -256,7 +252,7 @@ def upload_pr_artifacts(
     """Upload package and image artifacts from the PR associated with git_sha."""
     _config = utils.load_config(config)
     if package_platform is None:
-        package_platform = _default_package_platform()
+        package_platform = utils.RepoData.native_subdir()
     job_platform = _job_platform_from_package_platform(package_platform)
 
     gh = utils.get_github_client()
