@@ -982,6 +982,11 @@ def test_build_container_no_default_gcc(tmpdir):
     )
     assert build_result.success
 
+    for k, v in r.recipe_dirs.items():
+        for i in utils.built_package_paths(v):
+            assert os.path.exists(i)
+            ensure_missing(i)
+
 
 def test_bioconda_pins(caplog, config_fixture):
     """
