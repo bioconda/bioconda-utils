@@ -748,13 +748,12 @@ def test_rendering_sandboxing():
     # env = {
     #     # None of these should be passed to the recipe
     #     "CONDA_ARBITRARY_VAR": "conda-val-here",
-    #     "TRAVIS_ARBITRARY_VAR": "travis-val-here",
     #     "GITHUB_TOKEN": "asdf",
     #     "BUILDKITE_TOKEN": "asdf",
     # }
 
     # If GITHUB_TOKEN is already set in the bash environment, then we get
-    # a message on stdout+stderr (this is the case on travis-ci).
+    # a message on stdout+stderr.
     #
     # However if GITHUB_TOKEN is not already set in the bash env (e.g., when
     # testing locally), then we get a SystemError.
@@ -788,7 +787,6 @@ def test_sandboxed():
     env = {
         "PATH": "/foo/bar",
         "CONDA_ARBITRARY_VAR": "conda-val-here",
-        "TRAVIS_ARBITRARY_VAR": "travis-val-here",
         "GITHUB_TOKEN": "asdf",
         "BUILDKITE_TOKEN": "asdf",
     }
@@ -796,7 +794,6 @@ def test_sandboxed():
         print(os.environ)
         assert os.environ["PATH"] == "/foo/bar"
         assert "CONDA_ARBITRARY_VAR" not in os.environ
-        assert "TRAVIS_ARBITRARY_VAR" not in os.environ
         assert "GITHUB_TOKEN" not in os.environ
         assert "BUILDKITE_TOKEN" not in os.environ
 

@@ -93,7 +93,9 @@ def test_meta_contents(tmpdir, bioc_fetch):
     # The rendered meta has {{ compiler('c') }} filled in, so we need to check
     # for one of those filled-in values.
     names = [i.split()[0] for i in edger_meta["requirements"]["build"]]
-    assert "libstdcxx-ng" in names or "clang_osx-64" in names
+    assert (
+        "libstdcxx-ng" in names or "clang_osx-64" in names or "clang_osx-arm64" in names
+    )
 
     # bioconductor, bioarchive, and cargoport
     assert len(edger_meta["source"]["url"]) == 3

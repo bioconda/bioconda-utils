@@ -1325,8 +1325,8 @@ class RepoData:
 
     Each **channel** hosted at anaconda cloud comprises a number of
     **subdirs** in which the individual package files reside. The
-    **subdirs** can be one of **noarch**, **osx-64** and **linux-64**
-    for Bioconda. (Technically ``(noarch|(linux|osx|win)-(64|32))``
+    **subdirs** can be one of **noarch**, **osx-arm64**, **linux-64** and **linux-aarch64**
+    for Bioconda. (Technically ``(noarch|(linux|osx)-(64|32|arm64|aarch64))``
     appears to be the schema).
 
     For **channel/subdir** (aka **channel/platform**) combination, a
@@ -1377,7 +1377,7 @@ class RepoData:
     #: Columns available in internal dataframe
     columns = _load_columns + ["channel", "subdir", "platform"]
     #: Platforms loaded
-    platforms = ["linux", "linux-aarch64", "osx", "osx-arm64", "noarch"]
+    platforms = ["linux", "linux-aarch64", "osx-arm64", "noarch"]
     # config object
     config = None
 
@@ -1524,15 +1524,13 @@ class RepoData:
             return "linux-64"
         elif platform == "linux-aarch64":
             return "linux-aarch64"
-        elif platform == "osx":
-            return "osx-64"
         elif platform == "osx-arm64":
             return "osx-arm64"
         elif platform == "noarch":
             return "noarch"
         else:
             raise ValueError(
-                "Unsupported platform: bioconda only supports linux, linux-aarch64, osx, osx-arm64 and noarch."
+                "Unsupported platform: bioconda only supports linux, linux-aarch64, osx-arm64 and noarch."
             )
 
     def get_versions(self, name):
