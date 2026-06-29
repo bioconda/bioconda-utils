@@ -79,8 +79,10 @@ def ensure_env_missing(env_name):
             )
 
     _clean()
-    yield
-    _clean()
+    try:
+        yield
+    finally:
+        _clean()
 
 
 # ----------------------------------------------------------------------------
@@ -219,7 +221,7 @@ def multi_build_exclude(request, recipes_fixture, config_fixture):
 
 
 @pytest.fixture(scope="module")
-def single_upload():
+def single_upload(request):
     """
     Creates a randomly-named recipe and uploads it using a label so that it
     doesn't affect the main bioconda channel. Tests that depend on this fixture
@@ -240,15 +242,19 @@ def single_upload():
     r.pkgs = {}
     r.pkgs[name] = utils.built_package_paths(r.recipe_dirs[name])
 
-    build.build(
+    pkg = r.pkgs[name][0]
+    ensure_missing(pkg)
+    request.addfinalizer(lambda: ensure_missing(pkg))
+
+    build_result = build.build(
         recipe=r.recipe_dirs[name],
         pkg_paths=r.pkgs[name],
         docker_builder=None,
         mulled_test=False,
     )
-    pkg = r.pkgs[name][0]
+    assert build_result.success
 
-    upload.anaconda_upload(pkg, label=TEST_LABEL)
+    assert upload.anaconda_upload(pkg, label=TEST_LABEL)
 
     yield (name, pkg, r.recipe_dirs[name])
 
