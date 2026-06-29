@@ -653,7 +653,6 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
 
         # scan for available versions
         versions = await self.get_version_map(recipe)
-        # (too slow) conflicts = self.check_version_pin_conflict(recipe, versions)
 
         # select apropriate most current version
         latest = self.select_version(recipe.version, versions.keys())

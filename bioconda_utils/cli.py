@@ -390,8 +390,6 @@ def duplicates(
     help="""Exclude this linting function. Can be used
      multiple times.""",
 )
-@arg("--user", help="Github user")
-@arg("--repo", help="Github repo")
 @arg(
     "--git-range",
     nargs="+",
@@ -411,8 +409,6 @@ def do_lint(
     cache=None,
     list_checks=False,
     exclude=None,
-    user="bioconda",
-    repo="bioconda-recipes",
     git_range=None,
     try_fix=False,
 ):
