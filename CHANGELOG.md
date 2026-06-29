@@ -1,5 +1,23 @@
 # Changelog
 
+## [5.0.0](https://github.com/bioconda/bioconda-utils/compare/v4.5.0...v5.0.0) (2026-06-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* adjust linting to new outputs structure ([#1086](https://github.com/bioconda/bioconda-utils/issues/1086))
+
+### Features
+
+* adjust linting to new outputs structure ([#1086](https://github.com/bioconda/bioconda-utils/issues/1086)) ([4bfa874](https://github.com/bioconda/bioconda-utils/commit/4bfa8742e982b40e9c0312517a27c124435f8a32))
+
+
+### Bug Fixes
+
+* leaky tests ([#1123](https://github.com/bioconda/bioconda-utils/issues/1123)) ([6662af4](https://github.com/bioconda/bioconda-utils/commit/6662af4e2d9738c226f09d71b69725d4ce49732d))
+* platform detection ([#1116](https://github.com/bioconda/bioconda-utils/issues/1116)) ([de55635](https://github.com/bioconda/bioconda-utils/commit/de55635ccfaf48f933a431a9a9e8f03ccdf8f2f5))
+* retry on flaky CDN PayloadError ([#1120](https://github.com/bioconda/bioconda-utils/issues/1120)) ([00c8ff0](https://github.com/bioconda/bioconda-utils/commit/00c8ff06cc3e6be809ef1ee07c4cc9019655c8d5))
+
 ## [4.5.0](https://github.com/bioconda/bioconda-utils/compare/v4.4.1...v4.5.0) (2026-05-28)
 
 
