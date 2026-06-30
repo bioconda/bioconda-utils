@@ -54,7 +54,7 @@ import random
 from collections import defaultdict, Counter
 from urllib.parse import urlparse
 from typing import Any, cast
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 
 import aiofiles
 from aiohttp import ClientResponseError
@@ -84,8 +84,7 @@ from .aiopipe import (
 
 from .githandler import GitHandler
 from .githubhandler import GitHubHandler
-
-HosterFactory = Callable[[str, dict[str, str]], Any]
+from .hosters import Hoster
 
 
 def _parse_or_legacy(s: str) -> tuple[Version | str, bool]:
@@ -620,7 +619,6 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
     def __init__(
         self,
         scanner: Scanner,
-        hoster_factory: HosterFactory,
         unparsed_file: Path | None = None,
     ) -> None:
         super().__init__(scanner)
@@ -628,8 +626,6 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
         self.unparsed_urls: list[str] = []
         #: output file name for failed urls
         self.unparsed_file = unparsed_file
-        #: function selecting hoster
-        self.hoster_factory = hoster_factory
         #: conda build config
         self.build_config: conda_build.config.Config = utils.load_conda_build_config()
 
@@ -737,7 +733,7 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
         for url in urls:
             config = self.get_config(recipe)
             override_config = cast(dict[str, str], config.get("override", {}))
-            hoster = self.hoster_factory(url, override_config)
+            hoster = Hoster.select_hoster(url, override_config)
             if not hoster:
                 self.unparsed_urls += [url]
                 continue
