@@ -81,10 +81,10 @@ def container_platform_to_package_subdir(
 
 
 def normalize_container_platform(
-    os_name: Any,
-    architecture: Any,
+    os_name: object,
+    architecture: object,
     *,
-    variant: Any = None,
+    variant: object = None,
     ref: str = "",
 ) -> ContainerPlatform:
     """Return the supported Docker platform, ignoring OCI variant metadata.
