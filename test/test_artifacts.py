@@ -121,7 +121,6 @@ def test_upload_pr_artifacts_filters_packages_and_arm64_images(monkeypatch, tmp_
     uploaded_packages = []
     uploaded_sources = []
 
-    monkeypatch.setattr(artifacts.utils, "load_config", lambda _config: {})
     monkeypatch.setattr(artifacts.utils, "get_github_client", _FakeClient)
     monkeypatch.setattr(
         artifacts,
@@ -163,7 +162,6 @@ def test_upload_pr_artifacts_filters_packages_and_arm64_images(monkeypatch, tmp_
     )
 
     result = artifacts.upload_pr_artifacts(
-        tmp_path / "config.yaml",
         "bioconda/bioconda-recipes",
         "abc123",
         mulled_upload_target=BIOCONTAINERS,
@@ -195,7 +193,6 @@ def test_upload_pr_artifacts_returns_no_artifacts_when_nothing_matches(
         {"packages/linux-64/samtools-1.0-0.conda": b"x86 package"},
     )
 
-    monkeypatch.setattr(artifacts.utils, "load_config", lambda _config: {})
     monkeypatch.setattr(artifacts.utils, "get_github_client", _FakeClient)
     monkeypatch.setattr(
         artifacts,
@@ -209,7 +206,6 @@ def test_upload_pr_artifacts_returns_no_artifacts_when_nothing_matches(
     monkeypatch.setattr(artifacts, "download_artifact", download_artifact)
 
     result = artifacts.upload_pr_artifacts(
-        tmp_path / "config.yaml",
         "bioconda/bioconda-recipes",
         "abc123",
         artifact_source="github-actions",
@@ -226,7 +222,6 @@ def test_upload_pr_artifacts_dryrun_counts_matching_artifacts(monkeypatch, tmp_p
         {"packages/linux-aarch64/samtools-1.0-0.conda": b"arm package"},
     )
 
-    monkeypatch.setattr(artifacts.utils, "load_config", lambda _config: {})
     monkeypatch.setattr(artifacts.utils, "get_github_client", _FakeClient)
     monkeypatch.setattr(
         artifacts,
@@ -240,7 +235,6 @@ def test_upload_pr_artifacts_dryrun_counts_matching_artifacts(monkeypatch, tmp_p
     monkeypatch.setattr(artifacts, "download_artifact", download_artifact)
 
     result = artifacts.upload_pr_artifacts(
-        tmp_path / "config.yaml",
         "bioconda/bioconda-recipes",
         "abc123",
         dryrun=True,
@@ -269,7 +263,6 @@ def test_upload_pr_artifacts_uses_archive_platform_not_filename(monkeypatch, tmp
     )
     uploaded_sources = []
 
-    monkeypatch.setattr(artifacts.utils, "load_config", lambda _config: {})
     monkeypatch.setattr(artifacts.utils, "get_github_client", _FakeClient)
     monkeypatch.setattr(
         artifacts,
@@ -295,7 +288,6 @@ def test_upload_pr_artifacts_uses_archive_platform_not_filename(monkeypatch, tmp
     )
 
     result = artifacts.upload_pr_artifacts(
-        tmp_path / "config.yaml",
         "bioconda/bioconda-recipes",
         "abc123",
         mulled_upload_target=BIOCONTAINERS,

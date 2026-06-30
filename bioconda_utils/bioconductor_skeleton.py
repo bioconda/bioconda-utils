@@ -6,7 +6,6 @@ import itertools
 import json
 import logging
 import os
-from pathlib import Path
 import re
 import shutil
 import sys
@@ -1324,7 +1323,7 @@ def updateDataPackages(bioc_data_packages, pkg, urls, md5, tarball):
 def write_recipe(
     package,
     recipe_dir,
-    config: Path | dict,
+    config: dict[str, Any],
     bioc_data_packages=None,
     force=False,
     bioc_version=None,
@@ -1350,7 +1349,8 @@ def write_recipe(
 
     recipe_dir : str
 
-    config : Path or dict
+    config : dict
+        Parsed Bioconda configuration.
 
     bioc_data_packages : str
         Path to the bioc_data_packages recipe, which stores the URL and MD5 of
@@ -1389,7 +1389,8 @@ def write_recipe(
         If None, we need to determine if this requires X and therefore additional
         build dependencies and test environment variables.
     """
-    config = utils.load_config(config)
+    config = utils.normalize_config(config)
+    utils.RepoData.register_config(config)
     proj = BioCProjectPage(package, bioc_version, pkg_version, packages=packages)
     logger.info(f"Making recipe for: {package}")
 

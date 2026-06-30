@@ -240,7 +240,6 @@ class UploadResult(Enum):
 
 
 def upload_pr_artifacts(
-    config: Path | dict,
     repo_name: str,
     git_sha: str,
     dryrun: bool = False,
@@ -253,7 +252,6 @@ def upload_pr_artifacts(
     use_existing_auth: bool = False,
 ) -> UploadResult:
     """Upload package and image artifacts from the PR associated with git_sha."""
-    _config = utils.load_config(config)
     if package_platform is None:
         package_platform = utils.RepoData.native_subdir()
     job_platform = _job_platform_from_package_platform(package_platform)

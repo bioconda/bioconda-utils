@@ -3,8 +3,34 @@ import pytest
 from bioconda_utils import bioconductor_skeleton
 from bioconda_utils import cran_skeleton
 from bioconda_utils import utils
+from bioconda_utils._types import Config
 
 config = {"channels": ["conda-forge", "bioconda"]}
+
+
+def test_write_recipe_normalizes_raw_config_at_boundary(monkeypatch, tmp_path):
+    class NormalizationObserved(Exception):
+        pass
+
+    captured = {}
+
+    def register_config(config):
+        captured["config"] = config
+
+    def observe_config(*_args, **_kwargs):
+        assert isinstance(captured["config"], Config)
+        assert captured["config"]["requirements"] is None
+        raise NormalizationObserved
+
+    monkeypatch.setattr(utils.RepoData, "register_config", register_config)
+    monkeypatch.setattr(bioconductor_skeleton, "BioCProjectPage", observe_config)
+
+    with pytest.raises(NormalizationObserved):
+        bioconductor_skeleton.write_recipe(
+            "example",
+            str(tmp_path),
+            {"channels": []},
+        )
 
 
 def test_cran_write_recipe(tmpdir):

@@ -64,6 +64,7 @@ from colorlog import ColoredFormatter
 from boltons.funcutils import FunctionBuilder
 
 from bioconda_utils._types import (
+    Config,
     ContainerPlatform,
     OCIImageConfig,
     OsLabel,
@@ -1155,19 +1156,8 @@ def get_package_paths(recipe, check_channels, force=False, finalize=True):
     )
 
 
-def validate_config(config: Path | dict):
-    """
-    Validate config against schema
-
-    Parameters
-    ----------
-    config : Path or dict
-        If Path, assume it's a path to YAML file and load it. If dict, use it
-        directly.
-    """
-    if not isinstance(config, dict):
-        config = yaml.safe_load(open(config))
-
+def validate_config(config: dict[str, Any]) -> None:
+    """Validate a parsed configuration against the packaged schema."""
     # Load packaged schema without pkg_resources (deprecated)
     # files('bioconda_utils') returns a Traversable to the package contents
     with as_file(files("bioconda_utils") / "config.schema.yaml") as schema_path:
@@ -1177,29 +1167,12 @@ def validate_config(config: Path | dict):
     validate(config, schema)
 
 
-def load_config(path: Path | dict):
-    """
-    Parses config file, building paths to relevant blacklists
+def normalize_config(config: dict[str, Any]) -> Config:
+    """Validate and apply defaults without mutating parsed configuration data."""
+    if isinstance(config, Config):
+        return config
 
-    Parameters
-    ----------
-    path : Path or dict
-        Path to YAML config file, or pre-loaded dict.
-    """
-    validate_config(path)
-
-    if isinstance(path, dict):
-
-        def relpath(p):
-            return p
-
-        config = path
-    else:
-
-        def relpath(p):
-            return os.path.join(os.path.dirname(path), p)
-
-        config = yaml.safe_load(open(path))
+    validate_config(config)
 
     def get_list(key):
         # always return empty list, also if NoneType is defined in yaml
@@ -1208,23 +1181,31 @@ def load_config(path: Path | dict):
             return []
         return value
 
-    default_config = {
-        "blacklists": [],
-        "channels": ["conda-forge", "bioconda"],
-        "requirements": None,
-        "upload_channel": "bioconda",
-    }
-    if "blacklists" in config:
-        config["blacklists"] = [relpath(p) for p in get_list("blacklists")]
-    if "channels" in config:
-        config["channels"] = get_list("channels")
-
+    default_config = Config(
+        {
+            "blacklists": [],
+            "channels": ["conda-forge", "bioconda"],
+            "requirements": None,
+            "upload_channel": "bioconda",
+        }
+    )
     default_config.update(config)
-
-    # register config object in RepoData
-    RepoData.register_config(default_config)
+    if "blacklists" in config:
+        default_config["blacklists"] = list(get_list("blacklists"))
+    if "channels" in config:
+        default_config["channels"] = list(get_list("channels"))
 
     return default_config
+
+
+def load_config(path: Path) -> Config:
+    """Load and normalize a YAML configuration file."""
+    with path.open(encoding="utf-8") as fh:
+        config = yaml.safe_load(fh)
+    config = normalize_config(config)
+    config["blacklists"] = [str(path.parent / item) for item in config["blacklists"]]
+    RepoData.register_config(config)
+    return config
 
 
 class BiocondaUtilsWarning(UserWarning):

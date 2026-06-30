@@ -808,7 +808,7 @@ def build(
 
     success = build_recipes(
         recipe_folder,
-        config,
+        cfg,
         recipes,
         testonly=testonly,
         force=force,
@@ -916,7 +916,6 @@ def handle_merged_pr(
         raise ValueError("git_range is required")
 
     res = upload_pr_artifacts(
-        config,
         repo,
         git_range[1],
         dryrun=dryrun,
@@ -1331,6 +1330,7 @@ def bioconductor_skeleton(
         and submit to conda-forge.
 
     """
+    config = utils.load_config(config)
     seen_dependencies = set()
     if bioc_data_packages is None:
         bioc_data_packages = os.path.join(recipe_folder, "bioconductor-data-packages")

@@ -14,6 +14,10 @@ from typing import (
 )
 
 
+class Config(dict[str, Any]):
+    """Validated Bioconda configuration with defaults applied."""
+
+
 #: Docker/OCI platform notation used by Docker, buildx, skopeo, registry
 #: manifests, and mulled-build's ``--target-platform``.
 ContainerPlatform: TypeAlias = Literal["linux/amd64", "linux/arm64", "linux/riscv64"]

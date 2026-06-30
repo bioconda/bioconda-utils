@@ -12,7 +12,7 @@ import logging
 import os
 from pathlib import Path
 
-from typing import NamedTuple
+from typing import Any, NamedTuple
 from bioconda_utils.skiplist import Skiplist
 from bioconda_utils.build_failure import BuildFailureRecord
 
@@ -458,7 +458,7 @@ def should_skip_platform(
 
 def build_recipes(
     recipe_folder: str,
-    config_path: Path,
+    config: dict[str, Any],
     recipes: list[str],
     mulled_build_and_test: bool = True,
     testonly: bool = False,
@@ -490,7 +490,7 @@ def build_recipes(
 
     Arguments:
       recipe_folder: Directory containing possibly many, and possibly nested, recipes.
-      config_path: Path to config file
+      config: Parsed Bioconda configuration, normalized at this boundary.
       packages: Glob indicating which packages should be considered. Note that packages
         matching the glob will still be filtered out by any blacklists
         specified in the config.
@@ -524,7 +524,8 @@ def build_recipes(
         logger.info("Nothing to be done.")
         return True
 
-    config = utils.load_config(config_path)
+    config = utils.normalize_config(config)
+    utils.RepoData.register_config(config)
     blacklist = Skiplist(config, recipe_folder)
 
     # get channels to check

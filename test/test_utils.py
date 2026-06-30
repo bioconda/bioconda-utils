@@ -23,6 +23,7 @@ from bioconda_utils import (
     upload,
     utils,
 )
+from bioconda_utils._types import Config
 from bioconda_utils.utils import validate_config
 
 logger = logging.getLogger(__name__)
@@ -1511,3 +1512,71 @@ def test_validate_config_smoke():
     }
     # Should not raise
     validate_config(cfg)
+
+
+def test_normalize_config_applies_defaults_without_mutating_input():
+    config = {
+        "blacklists": ["blacklists/temporary.txt"],
+    }
+
+    normalized = utils.normalize_config(config)
+
+    assert isinstance(normalized, Config)
+    assert config == {
+        "blacklists": ["blacklists/temporary.txt"],
+    }
+    assert normalized == {
+        "blacklists": ["blacklists/temporary.txt"],
+        "channels": ["conda-forge", "bioconda"],
+        "requirements": None,
+        "upload_channel": "bioconda",
+    }
+
+
+def test_normalize_config_is_idempotent():
+    normalized = utils.normalize_config({"channels": ["bioconda"]})
+
+    assert utils.normalize_config(normalized) is normalized
+
+
+def test_build_recipes_normalizes_raw_config_at_boundary(monkeypatch):
+    class NormalizationObserved(Exception):
+        pass
+
+    registered = []
+
+    def register_config(config):
+        registered.append(config)
+
+    def observe_config(config, _recipe_folder):
+        assert isinstance(config, Config)
+        assert config["requirements"] is None
+        assert registered == [config]
+        raise NormalizationObserved
+
+    monkeypatch.setattr(utils.RepoData, "register_config", register_config)
+    monkeypatch.setattr(build, "Skiplist", observe_config)
+
+    with pytest.raises(NormalizationObserved):
+        build.build_recipes("recipes", {"channels": []}, ["example"])
+
+
+def test_load_config_registers_config_after_resolving_paths(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        "blacklists:\n  - blacklists/temporary.txt\n",
+        encoding="utf-8",
+    )
+
+    registered = []
+    monkeypatch.setattr(
+        utils.RepoData,
+        "register_config",
+        lambda config: registered.append(config.copy()),
+    )
+
+    config = utils.load_config(config_path)
+
+    assert config["blacklists"] == [str(tmp_path / "blacklists/temporary.txt")]
+    assert config["channels"] == ["conda-forge", "bioconda"]
+    assert registered == [config]
