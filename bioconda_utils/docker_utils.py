@@ -164,10 +164,6 @@ class DockerCalledProcessError(sp.CalledProcessError):
     pass
 
 
-class DockerBuildError(Exception):
-    pass
-
-
 class RecipeBuilder:
     def __init__(
         self,

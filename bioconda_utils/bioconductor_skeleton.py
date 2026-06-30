@@ -205,13 +205,6 @@ def latest_bioconductor_release_version():
     return bioconductor_versions()[1]
 
 
-def latest_bioconductor_devel_version():
-    """
-    Latest Bioconductor version in development.
-    """
-    return bioconductor_versions()[0]
-
-
 def bioconductor_tarball_url(package, pkg_version, bioc_version):
     """
     Constructs a url for a package tarball
@@ -478,17 +471,13 @@ class BioCProjectPage:
         self.base_url = base_url
         self.package = package
         self.package_lower = package.lower()
-        self._md5 = None
         self._cached_tarball = None
         self._dependencies = None
         self.build_number = 0
         self.bioc_version = bioc_version or ""
         self._pkg_version = pkg_version
         self._auto = bioc_version is None
-        self._cargoport_url = None
-        self._bioarchive_url = None
         self._tarball_url = None
-        self._bioconductor_tarball_url = None
         self.is_data_package = False
         self.package_lower = package.lower()
         self.version = pkg_version or ""
@@ -518,8 +507,6 @@ class BioCProjectPage:
 
         if not pkg_version:
             self.version = self.packages[package]["Version"]
-        self.depends_on_gcc = False
-
         # Determine the URL
         url = os.path.join(
             base_url,
@@ -728,16 +715,6 @@ class BioCProjectPage:
                 .replace(" ", "")
                 .split(",")
             ]
-        except KeyError:
-            return []
-
-    @property
-    def systemrequirements(self):
-        """
-        List of "SystemRequirements" from the VIEW file
-        """
-        try:
-            return self.packages[self.package]["SystemRequirements"]
         except KeyError:
             return []
 

@@ -163,14 +163,6 @@ class LintMessage(NamedTuple):
     #: Whether the problem can be auto fixed
     canfix: bool = False
 
-    def get_level(self) -> str:
-        """Return level string as required by github"""
-        if self.severity < WARNING:
-            return "notice"
-        if self.severity < ERROR:
-            return "warning"
-        return "failure"
-
 
 class LintCheckMeta(abc.ABCMeta):
     """Meta class for lint checks
@@ -372,7 +364,7 @@ class LintCheck(metaclass=LintCheckMeta):
         title, _, body = doc.partition("\n")
         if section:
             try:
-                sl, sc, el, ec = recipe.get_raw_range(section)
+                sl, _sc, el, ec = recipe.get_raw_range(section)
             except KeyError:
                 sl, _sc, el, ec = 1, 1, 1, 1
             if ec == 0:

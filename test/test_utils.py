@@ -79,8 +79,10 @@ def ensure_env_missing(env_name):
             )
 
     _clean()
-    yield
-    _clean()
+    try:
+        yield
+    finally:
+        _clean()
 
 
 # ----------------------------------------------------------------------------
@@ -219,7 +221,7 @@ def multi_build_exclude(request, recipes_fixture, config_fixture):
 
 
 @pytest.fixture(scope="module")
-def single_upload():
+def single_upload(request):
     """
     Creates a randomly-named recipe and uploads it using a label so that it
     doesn't affect the main bioconda channel. Tests that depend on this fixture
@@ -240,15 +242,19 @@ def single_upload():
     r.pkgs = {}
     r.pkgs[name] = utils.built_package_paths(r.recipe_dirs[name])
 
-    build.build(
+    pkg = r.pkgs[name][0]
+    ensure_missing(pkg)
+    request.addfinalizer(lambda: ensure_missing(pkg))
+
+    build_result = build.build(
         recipe=r.recipe_dirs[name],
         pkg_paths=r.pkgs[name],
         docker_builder=None,
         mulled_build_and_test=False,
     )
-    pkg = r.pkgs[name][0]
+    assert build_result.success
 
-    upload.anaconda_upload(pkg, label=TEST_LABEL)
+    assert upload.anaconda_upload(pkg, label=TEST_LABEL)
 
     yield (name, pkg, r.recipe_dirs[name])
 
@@ -985,43 +991,6 @@ def test_build_container_no_default_gcc(tmpdir):
 
     for k, v in r.recipe_dirs.items():
         for i in utils.built_package_paths(v):
-            assert os.path.exists(i)
-            ensure_missing(i)
-
-
-# FIXME: This test fails erraticaly. Both in built_package_paths
-# and in build_recipes, the generated name can be either
-# one-0.1-h1341992_0.tar.bz2 or one-0.1-0.tar.bz2 - which
-# appears to be mostly random.
-def no_test_conda_forge_pins(caplog, config_fixture):
-    caplog.set_level(logging.DEBUG)
-    r = Recipes(
-        """
-        one:
-          meta.yaml: |
-            package:
-              name: one
-              version: 0.1
-            requirements:
-              run:
-                - zlib {{ zlib }}
-        """,
-        from_string=True,
-    )
-    r.write_recipes()
-    build_result = build.build_recipes(
-        r.basedir,
-        config_fixture,
-        r.recipe_dirnames,
-        testonly=False,
-        force=False,
-        mulled_build_and_test=False,
-    )
-    assert build_result
-
-    for k, v in r.recipe_dirs.items():
-        for i in utils.built_package_paths(v):
-            print(os.listdir(os.path.dirname(i)))
             assert os.path.exists(i)
             ensure_missing(i)
 

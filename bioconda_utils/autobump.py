@@ -62,10 +62,8 @@ from aiohttp import ClientResponseError
 import networkx as nx
 from bioconda_utils.skiplist import Skiplist
 
-import conda_build.variants
 import conda_build.config
 from conda.exports import MatchSpec, VersionOrder
-import conda.exceptions
 
 from packaging.version import parse as _pep440_parse, InvalidVersion, Version
 
@@ -581,12 +579,6 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
 
         template = "builds a meta package (recipe has no sources)"
 
-    class UpToDate(EndProcessingItem):
-        """This recipe appears to be up to date!"""
-
-        template = "is up to date"
-        level = logging.DEBUG
-
     class UpdateVersionFailure(EndProcessingItem):
         """This recipe did not show the expected version number after updating.
 
@@ -661,7 +653,6 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
 
         # scan for available versions
         versions = await self.get_version_map(recipe)
-        # (too slow) conflicts = self.check_version_pin_conflict(recipe, versions)
 
         # select apropriate most current version
         latest = self.select_version(recipe.version, versions.keys())
@@ -801,56 +792,6 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
                 latest = vers
 
         return latest
-
-    def check_version_pin_conflict(
-        self, recipe: Recipe, versions: dict[str, Any]
-    ) -> None:
-        """Find items in **versions** conflicting with pins
-
-        Example:
-          If ggplot 7.0 needs r-base 4.0, but our pin is 3.5.1, it conflicts
-
-        TODO: currently, this only logs an error
-        """
-        variants = conda_build.variants.get_package_variants(
-            recipe.path, self.build_config
-        )
-
-        def check_pins(depends):
-            for pkg, spec in depends:
-                norm_pkg = pkg.replace("-", "_")
-                try:
-                    mspec = MatchSpec(version=spec.replace(" ", ""))
-                except conda.exceptions.InvalidVersionSpec:
-                    logger.error(
-                        "Recipe %s: invalid upstream spec %s %s",
-                        recipe,
-                        pkg,
-                        repr(spec),
-                    )
-                    continue
-                if norm_pkg in variants[0]:
-                    for variant in variants:
-                        if not mspec.match(
-                            {
-                                "name": "",
-                                "build": "",
-                                "build_number": "0",
-                                "version": variant[norm_pkg],
-                            }
-                        ):
-                            logger.error(
-                                "Recipe %s: %s %s conflicts pins",
-                                recipe,
-                                pkg,
-                                spec,
-                            )
-
-        for files in versions.values():
-            for data in files.values():
-                depends = data.get("depends")
-                if depends:
-                    check_pins(depends.items())
 
 
 class FetchUpstreamDependencies(Filter):
