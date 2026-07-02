@@ -567,7 +567,9 @@ class Linter:
         elif os.path.exists(".git"):
             # Obtain commit message from last commit.
             commit_message = utils.run(
-                ["git", "log", "--format=%B", "-n", "1"], mask=False, loglevel=0
+                ["git", "log", "--format=%B", "-n", "1"],
+                redacted_secrets=False,
+                loglevel=0,
             ).stdout
 
         skip_re = re.compile(r"\[\s*lint skip (?P<func>\w+) for (?P<recipe>.*?)\s*\]")

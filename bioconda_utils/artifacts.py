@@ -5,19 +5,231 @@ import re
 import tempfile
 import zipfile
 import logging
-from typing import Any
+from typing import Literal
 from collections.abc import Iterator
 
 import requests
 import backoff
 import json
 from pathlib import Path
+from github.CheckRun import CheckRun
+from github.PullRequest import PullRequest
+from github.Repository import Repository
+from urllib.parse import urlparse
 from bioconda_utils import utils
-from bioconda_utils.upload import anaconda_upload, skopeo_upload
+from bioconda_utils._types import (
+    ContainerPlatform,
+    PackageSubdir,
+    QuayUploadTarget,
+    docker_platform_tag_suffix,
+)
+from bioconda_utils.upload import (
+    anaconda_upload,
+    inspect_image_platform,
+    upload_mulled_image_source,
+)
+from bioconda_utils.container_manifests import (
+    resolve_registry_creds,
+    write_image_record,
+)
 
 logger = logging.getLogger(__name__)
 
+ArtifactSource = Literal["azure", "circleci", "github-actions"]
 IMAGE_RE = re.compile(r"(.+)(?::|%3A|---)(.+)\.tar\.gz$")
+# GitHub Actions artifact names are external workflow labels derived from, but
+# not identical to, conda package subdirs. Most package subdirs use
+# f"{platform}-packages"; these exceptions keep compatibility with historical
+# workflow names.
+GHA_ARTIFACT_NAME_EXCEPTIONS: dict[PackageSubdir, str] = {
+    "linux-64": "linux-packages",
+    "osx-64": "osx-packages",
+    "linux-aarch64": "linux-arm64-packages",
+}
+
+
+def _gha_artifact_names_for_platform(platform: PackageSubdir) -> set[str]:
+    """Return GitHub Actions artifact names that may contain a package subdir."""
+    default_name = f"{platform}-packages"
+    return {default_name, GHA_ARTIFACT_NAME_EXCEPTIONS.get(platform, default_name)}
+
+
+def _job_platform_from_package_platform(package_platform: PackageSubdir) -> str:
+    """Return the legacy CI job platform label for a conda package subdir."""
+    if package_platform == "linux-64":
+        return "linux"
+    if package_platform == "osx-64":
+        return "osx"
+    return package_platform
+
+
+def _download_artifact_contents(
+    artifact_url: str, artifact_source: ArtifactSource, artifact_dir: Path
+) -> None:
+    """Download a CI artifact and normalize its extracted contents under artifact_dir."""
+    match artifact_source:
+        case "azure":
+            artifact_path = artifact_dir / os.path.basename(artifact_url)
+            download_artifact(artifact_url, artifact_path, artifact_source)
+            zipfile.ZipFile(artifact_path).extractall(artifact_dir)
+        case "circleci":
+            url_parts = urlparse(artifact_url)
+            path_parts = url_parts.path.strip("/").split("/")
+            extract_dir = Path(artifact_dir, *path_parts[-4:-1])
+            artifact_path = extract_dir / path_parts[-1]
+            extract_dir.mkdir(parents=True, exist_ok=True)
+            download_artifact(artifact_url, artifact_path, artifact_source)
+        case "github-actions":
+            extract_dir = artifact_dir / "artifacts"
+            artifact_path = extract_dir / os.path.basename(artifact_url)
+            extract_dir.mkdir(parents=True, exist_ok=True)
+            download_artifact(artifact_url, artifact_path, artifact_source)
+            zipfile.ZipFile(artifact_path).extractall(extract_dir)
+        case _:
+            raise ValueError(f"Unsupported artifact source: {artifact_source}")
+
+
+def _package_platform_patterns(package_platform: PackageSubdir) -> list[str]:
+    """Return package subdirs to upload for a platform artifact."""
+    platform_patterns: list[str] = [package_platform]
+    if package_platform.startswith("linux"):
+        # Linux jobs also build noarch packages; non-Linux jobs should not reupload them.
+        platform_patterns.append("noarch")
+    return platform_patterns
+
+
+def _iter_package_paths(
+    artifact_dir: Path, package_platform: PackageSubdir
+) -> Iterator[str]:
+    for platform_pattern in _package_platform_patterns(package_platform):
+        for ext in (".tar.bz2", ".conda"):
+            pattern = f"{artifact_dir!s}/*/packages/{platform_pattern}/*{ext}"
+            logger.info(f"Checking for packages at {pattern}.")
+            yield from glob.glob(pattern)
+
+
+def _upload_packages(
+    artifact_dir: Path,
+    package_platform: PackageSubdir,
+    *,
+    dryrun: bool,
+    label: str | None,
+) -> list[bool]:
+    success = []
+    for pkg in _iter_package_paths(artifact_dir, package_platform):
+        if dryrun:
+            logger.info(f"Would upload {pkg} to anaconda.org.")
+            success.append(True)
+        else:
+            logger.info(f"Uploading {pkg} to anaconda.org.")
+            success.append(anaconda_upload(pkg, label=label))
+    return success
+
+
+def _mulled_artifact_target_platform(
+    container_platforms: list[ContainerPlatform] | None,
+) -> ContainerPlatform:
+    """Validate and return the single container platform represented by an artifact."""
+    selected_container_platforms = (
+        set(container_platforms) if container_platforms is not None else None
+    )
+    if not selected_container_platforms:
+        raise ValueError("container_platforms is required for mulled artifact uploads")
+    if len(selected_container_platforms) != 1:
+        raise ValueError("Artifact upload requires exactly one container platform")
+    return next(iter(selected_container_platforms))
+
+
+def _canonical_image_ref(
+    img: str,
+    target_platform: ContainerPlatform,
+    mulled_upload_target: QuayUploadTarget,
+    label: str | None,
+) -> str:
+    """Build the canonical Quay image ref parsed from an artifact filename."""
+    m = IMAGE_RE.match(os.path.basename(img))
+    assert m, f"Could not parse image name from {img}"
+    name, tag = m.groups()
+    suffix = docker_platform_tag_suffix(target_platform)
+    if suffix and tag.endswith(f"-{suffix}"):
+        tag = tag[: -(len(suffix) + 1)]
+    if label:
+        tag = f"{tag}-{label}"
+    return f"quay.io/{mulled_upload_target}/{name}:{tag}"
+
+
+def _upload_mulled_images(
+    artifact_dir: Path,
+    *,
+    target_platform: ContainerPlatform,
+    mulled_upload_target: QuayUploadTarget,
+    dryrun: bool,
+    label: str | None,
+    mulled_upload_records: Path | None,
+    use_existing_auth: bool,
+) -> list[bool]:
+    """Upload matching mulled image archives and report per-image success."""
+    success = []
+    pattern = f"{artifact_dir!s}/*/images/*.tar.gz"
+    logger.info(f"Checking for images at {pattern}.")
+    image_seen = False
+    image_matched = False
+    for img in glob.glob(pattern):
+        image_seen = True
+        # Skopeo can't handle a : in the file name
+        fixed_img_name = img.replace(":", "_")
+        if ":" in img:
+            os.rename(img, fixed_img_name)
+        source_ref = f"docker-archive:{fixed_img_name}"
+        # Use the archive's manifest, not the filename, as the platform source of truth.
+        source_platform = inspect_image_platform(source_ref)
+        if source_platform != target_platform:
+            logger.info(
+                "Skipping image %s for %s; archive platform is %s.",
+                img,
+                target_platform,
+                source_platform,
+            )
+            continue
+        image_matched = True
+        canonical_ref = _canonical_image_ref(
+            img,
+            target_platform,
+            mulled_upload_target,
+            label,
+        )
+
+        if dryrun:
+            logger.info(
+                "Would upload %s for canonical image ref %s.",
+                img,
+                canonical_ref,
+            )
+            success.append(True)
+        else:
+            logger.info(
+                "Uploading %s for canonical image ref %s.",
+                img,
+                canonical_ref,
+            )
+            # upload_mulled_image_source derives the platform-specific staging ref.
+            record = upload_mulled_image_source(
+                source_ref,
+                canonical_ref,
+                target_platform,
+                validate_platform=False,
+                use_existing_auth=use_existing_auth,
+            )
+            success.append(True)
+            if mulled_upload_records is not None:
+                write_image_record(mulled_upload_records, record)
+    if image_seen and not image_matched:
+        logger.error(
+            "Found mulled image artifacts, but none matched %s.",
+            target_platform,
+        )
+        success.append(False)
+    return success
 
 
 class UploadResult(Enum):
@@ -28,16 +240,21 @@ class UploadResult(Enum):
 
 
 def upload_pr_artifacts(
-    config: str,
     repo_name: str,
     git_sha: str,
     dryrun: bool = False,
-    mulled_upload_target: str | None = None,
+    mulled_upload_target: QuayUploadTarget | None = None,
     label: str | None = None,
-    artifact_source: str = "azure",
+    artifact_source: ArtifactSource = "azure",
+    package_platform: PackageSubdir | None = None,
+    container_platforms: list[ContainerPlatform] | None = None,
+    mulled_upload_records: Path | None = None,
+    use_existing_auth: bool = False,
 ) -> UploadResult:
-    _config = utils.load_config(config)
-    repodata = utils.RepoData()
+    """Upload package and image artifacts from the PR associated with git_sha."""
+    if package_platform is None:
+        package_platform = utils.RepoData.native_subdir()
+    job_platform = _job_platform_from_package_platform(package_platform)
 
     gh = utils.get_github_client()
 
@@ -49,87 +266,66 @@ def upload_pr_artifacts(
         # no PR found for the commit
         return UploadResult.NO_PR
     pr = prs[0]
-    artifacts = set(fetch_artifacts(pr, artifact_source, repo))
+    artifacts = set(
+        fetch_artifacts(
+            pr,
+            artifact_source,
+            repo,
+            job_platform=job_platform,
+            package_platform=package_platform,
+        )
+    )
     if not artifacts:
         # no artifacts found, fail and rebuild packages
         logger.info("No artifacts found.")
         return UploadResult.NO_ARTIFACTS
+
+    target_platform = (
+        _mulled_artifact_target_platform(container_platforms)
+        if mulled_upload_target
+        else None
+    )
+    if mulled_upload_target and not dryrun:
+        resolve_registry_creds(use_existing_auth=use_existing_auth)
+
+    success = []
+    for artifact_url in artifacts:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir)
+            _download_artifact_contents(artifact_url, artifact_source, artifact_dir)
+            success.extend(
+                _upload_packages(
+                    artifact_dir,
+                    package_platform,
+                    dryrun=dryrun,
+                    label=label,
+                )
+            )
+
+            if mulled_upload_target and target_platform is not None:
+                success.extend(
+                    _upload_mulled_images(
+                        artifact_dir,
+                        target_platform=target_platform,
+                        mulled_upload_target=mulled_upload_target,
+                        dryrun=dryrun,
+                        label=label,
+                        mulled_upload_records=mulled_upload_records,
+                        use_existing_auth=use_existing_auth,
+                    )
+                )
+
+    if not success:
+        logger.info("No matching artifacts found to upload.")
+        return UploadResult.NO_ARTIFACTS
+    if all(success):
+        return UploadResult.SUCCESS
     else:
-        success = []
-        for artifact in artifacts:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                # download the artifact
-                if artifact_source == "azure":
-                    artifact_path = os.path.join(tmpdir, os.path.basename(artifact))
-                    download_artifact(artifact, artifact_path, artifact_source)
-                    zipfile.ZipFile(artifact_path).extractall(tmpdir)
-                elif artifact_source == "circleci":
-                    artifact_dir = os.path.join(tmpdir, *(artifact.split("/")[-4:-1]))
-                    artifact_path = os.path.join(
-                        tmpdir, artifact_dir, os.path.basename(artifact)
-                    )
-                    Path(artifact_dir).mkdir(parents=True, exist_ok=True)
-                    download_artifact(artifact, artifact_path, artifact_source)
-                elif artifact_source == "github-actions":
-                    artifact_dir = os.path.join(tmpdir, "artifacts")
-                    artifact_path = os.path.join(
-                        artifact_dir, os.path.basename(artifact)
-                    )
-                    Path(artifact_dir).mkdir(parents=True, exist_ok=True)
-                    download_artifact(artifact, artifact_path, artifact_source)
-                    zipfile.ZipFile(artifact_path).extractall(artifact_dir)
-
-                # get all the contained packages and images and upload them
-                platform_patterns = [
-                    repodata.platform2subdir(repodata.native_platform())
-                ]
-                if repodata.native_platform().startswith("linux"):
-                    platform_patterns.append("noarch")
-
-                for platform_pattern in platform_patterns:
-                    for ext in (".tar.bz2", ".conda"):
-                        pattern = f"{tmpdir}/*/packages/{platform_pattern}/*{ext}"
-                        logger.info(f"Checking for packages at {pattern}.")
-                        for pkg in glob.glob(pattern):
-                            if dryrun:
-                                logger.info(f"Would upload {pkg} to anaconda.org.")
-                            else:
-                                logger.info(f"Uploading {pkg} to anaconda.org.")
-                                # upload the package
-                                success.append(anaconda_upload(pkg, label=label))
-
-                if mulled_upload_target:
-                    quay_login = os.environ["QUAY_LOGIN"]
-
-                    pattern = f"{tmpdir}/*/images/*.tar.gz"
-                    logger.info(f"Checking for images at {pattern}.")
-                    for img in glob.glob(pattern):
-                        m = IMAGE_RE.match(os.path.basename(img))
-                        assert m, f"Could not parse image name from {img}"
-                        name, tag = m.groups()
-                        if label:
-                            # add label to tag
-                            tag = f"{tag}-{label}"
-                        target = f"{mulled_upload_target}/{name}:{tag}"
-                        # Skopeo can't handle a : in the file name
-                        fixed_img_name = img.replace(":", "_")
-                        os.rename(img, fixed_img_name)
-                        if dryrun:
-                            logger.info(f"Would upload {img} to {target}.")
-                        else:
-                            # upload the image
-                            logger.info(f"Uploading {img} to {target}.")
-                            success.append(
-                                skopeo_upload(fixed_img_name, target, creds=quay_login)
-                            )
-        if all(success):
-            return UploadResult.SUCCESS
-        else:
-            return UploadResult.FAILURE
+        return UploadResult.FAILURE
 
 
 @backoff.on_exception(backoff.expo, requests.exceptions.RequestException)
-def download_artifact(url: str, to_path: str, artifact_source: str) -> None:
+def download_artifact(url: str, to_path: Path, artifact_source: ArtifactSource) -> None:
     logger.info(f"Downloading artifact {url}.")
     headers = {}
     if artifact_source == "github-actions":
@@ -148,7 +344,13 @@ def download_artifact(url: str, to_path: str, artifact_source: str) -> None:
                 f.write(chunk)
 
 
-def fetch_artifacts(pr: Any, artifact_source: str, repo: Any) -> Iterator[str]:
+def fetch_artifacts(
+    pr: PullRequest,
+    artifact_source: ArtifactSource,
+    repo: Repository,
+    job_platform: str | None = None,
+    package_platform: PackageSubdir | None = None,
+) -> Iterator[str]:
     """
     Fetch artifacts from a PR.
 
@@ -165,31 +367,39 @@ def fetch_artifacts(pr: Any, artifact_source: str, repo: Any) -> Iterator[str]:
     commit = commits[commits.totalCount - 1]
     # get the artifacts
     check_runs = commit.get_check_runs()
-    repodata = utils.RepoData()
-    platform = repodata.native_platform()
+    if job_platform is None or package_platform is None:
+        repodata = utils.RepoData()
+        package_platform = package_platform or repodata.native_subdir()
+        job_platform = job_platform or _job_platform_from_package_platform(
+            package_platform
+        )
+    assert job_platform is not None
+    assert package_platform is not None
     for check_run in check_runs:
         if (
             artifact_source == "azure"
             and check_run.app.slug == "azure-pipelines"
-            and check_run.name.startswith(f"bioconda.bioconda-recipes (test_{platform}")
+            and check_run.name.startswith(
+                f"bioconda.bioconda-recipes (test_{job_platform}"
+            )
         ):
             # azure builds
-            artifact_url = get_azure_artifacts(check_run)
+            artifact_url = get_azure_artifact_urls(check_run)
             yield from artifact_url
         elif artifact_source == "circleci" and check_run.app.slug == "circleci-checks":
             # Circle CI builds
-            artifact_url = get_circleci_artifacts(check_run, platform)
+            artifact_url = get_circleci_artifact_urls(check_run, job_platform)
             yield from artifact_url
         elif (
             artifact_source == "github-actions"
             and check_run.app.slug == "github-actions"
         ):
             # GitHubActions builds
-            artifact_url = get_gha_artifacts(check_run, platform, repo)
+            artifact_url = get_gha_artifact_urls(check_run, package_platform, repo)
             yield from artifact_url
 
 
-def get_azure_artifacts(check_run: Any) -> Iterator[str]:
+def get_azure_artifact_urls(check_run: CheckRun) -> Iterator[str]:
     azure_build_id = parse_azure_build_id(check_run.details_url)
     url = f"https://dev.azure.com/bioconda/bioconda-recipes/_apis/build/builds/{azure_build_id}/artifacts?api-version=4.1"
     res = requests.get(url, json=True).json()
@@ -208,7 +418,7 @@ def parse_azure_build_id(url: str) -> str:
     return match.group(1)
 
 
-def get_circleci_artifacts(check_run: Any, platform: str) -> Iterator[str]:
+def get_circleci_artifact_urls(check_run: CheckRun, platform: str) -> Iterator[str]:
     circleci_workflow_id = json.loads(check_run.external_id)["workflow-id"]
     # Must use a Personal token for API v2
     token = os.environ.get("CIRCLECI_TOKEN")
@@ -254,13 +464,18 @@ def parse_gha_build_id(url: str) -> str:
     return match.group(1)
 
 
-def get_gha_artifacts(check_run: Any, platform: str, repo: Any) -> Iterator[str]:
+def get_gha_artifact_urls(
+    check_run: CheckRun, platform: PackageSubdir, repo: Repository
+) -> Iterator[str]:
     gha_workflow_id = parse_gha_build_id(check_run.details_url)
     if gha_workflow_id:
         # The workflow run is different from the check run
         run = repo.get_workflow_run(int(gha_workflow_id))
         artifacts = run.get_artifacts()
+        artifact_names = _gha_artifact_names_for_platform(platform)
         for artifact in artifacts:
+            if artifact.name not in artifact_names:
+                continue
             # This URL is valid for 1 min and requires a token
             artifact_url = artifact.archive_download_url
             yield artifact_url

@@ -11,6 +11,7 @@ import logging
 from collections.abc import Sequence
 
 from . import utils
+from ._types import ContainerPlatform, MULLED_LOCAL_NAMESPACE, PkgBuildRef
 
 from conda_build.metadata import MetaData
 from conda_index.index import update_index
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 CREATE_ENV_IMAGE = os.getenv("CREATE_ENV_IMAGE", "quay.io/bioconda/create-env:latest")
 
 
-def get_tests(path: str) -> str:
+def get_test_command(path: str) -> str:
     "Extract tests from a built package"
     tmp = tempfile.mkdtemp()
     for tar, member in stream_conda_info(path):
@@ -63,9 +64,9 @@ def get_tests(path: str) -> str:
     return f"bash -c {shlex.quote(tests)}"
 
 
-def get_image_name(path: str) -> str:
+def get_image_name(path: str) -> PkgBuildRef:
     """
-    Returns name of generated docker image.
+    Returns a package build reference parsed from a built package filename.
 
     Parameters
     ----------
@@ -87,19 +88,18 @@ def get_image_name(path: str) -> str:
     version = toks[-2]
     name = "-".join(toks[:-2])
 
-    spec = f"{name}={version}--{build_string}"
-    return spec
+    return PkgBuildRef(name, version, build_string)
 
 
 def _generate_explicit_spec(
-    spec: str, channels: Sequence[str], conda_bld_dir: str, tmpdir: str
+    spec: PkgBuildRef, channels: Sequence[str], conda_bld_dir: str, tmpdir: str
 ) -> str | None:
     """Generate an @EXPLICIT spec file by dry-running conda create.
 
     Parameters
     ----------
-    spec : str
-        Package spec in name=version--build format
+    spec : PkgBuildRef
+        Package build reference (name, version, build string)
     channels : list
         List of resolved channel URLs (no "local")
     conda_bld_dir : str
@@ -112,8 +112,8 @@ def _generate_explicit_spec(
     str or None
         Path to explicit spec file, or None on failure
     """
-    # Convert spec from mulled format (name=version--build) to conda format (name=version=build)
-    pkg_spec = spec.replace("--", "=")
+    # Convert to conda format (name=version=build)
+    pkg_spec = f"{spec.name}={spec.version}={spec.build_string}"
 
     channel_args = []
     for ch in channels:
@@ -251,11 +251,105 @@ create-env --conda=: /usr/local
 
         logger.debug("Pre-solved mulled test command: %s", cmd)
         with utils.Progress():
-            p = utils.run(cmd, mask=False, live=live_logs)
+            p = utils.run(cmd, redacted_secrets=False, live=live_logs)
         return p
 
 
-def test_package(
+def _test_inputs(
+    path: str,
+    channels: Sequence[str] = ("conda-forge", "local", "bioconda"),
+    update_local_index: bool = True,
+) -> tuple[str, PkgBuildRef, list[str], str]:
+    """Return shared inputs needed for package container tests."""
+    assert path.endswith((".tar.bz2", ".conda")), f"Unrecognized path {path}"
+    # assert os.path.exists(path), '{0} does not exist'.format(path)
+
+    conda_bld_dir = os.path.abspath(os.path.dirname(os.path.dirname(path)))
+
+    if update_local_index:
+        update_index(conda_bld_dir)
+
+    spec = get_image_name(path)
+
+    if "local" not in channels:
+        raise ValueError('"local" must be in channel list')
+
+    resolved_channels = [
+        f"file://{conda_bld_dir}" if channel == "local" else channel
+        for channel in channels
+    ]
+
+    tests = get_test_command(path)
+    logger.debug("Tests to run: %s", tests)
+
+    return conda_bld_dir, spec, resolved_channels, tests
+
+
+def test_package_in_temporary_container(
+    path: str,
+    channels: Sequence[str] = ("conda-forge", "local", "bioconda"),
+    base_image: str | None = None,
+    conda_image: str = CREATE_ENV_IMAGE,
+    live_logs: bool = True,
+) -> sp.CompletedProcess | None:
+    """
+    Test a built package in a temporary container from a pre-solved spec.
+
+    This path does not create the BioContainers production image. It exists as
+    a faster native-platform test path. If the host-side pre-solve cannot
+    produce an explicit spec, return None so callers can fall back to building
+    and testing the production mulled image.
+
+    Parameters
+    ----------
+    path : str
+        Path to a .tar.bz2 or .conda package built by conda-build
+
+    channels : list
+        List of Conda channels to use. Must include an entry "local" for the
+        local build channel.
+
+    base_image : None | str
+        Specify custom base image. Busybox is used in the default case.
+
+    conda_image : None | str
+        Conda Docker image to install the package with during the test.
+
+    live_logs : True | bool
+        If True, enable live logging during the build process
+
+    Notes
+    -----
+    Must be run from a real script file, not stdin/REPL/``python -c``: the
+    local-channel indexing in :func:`_test_inputs` uses spawn-based
+    multiprocessing workers that cannot re-import a non-file main, failing with
+    an opaque ``BrokenProcessPool``. See :func:`build_and_test_mulled_image`.
+    """
+    conda_bld_dir, spec, resolved_channels, tests = _test_inputs(path, channels)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        spec_path = _generate_explicit_spec(
+            spec,
+            resolved_channels,
+            conda_bld_dir,
+            tmpdir,
+        )
+        if spec_path is None:
+            logger.info("Pre-solve failed, falling back to mulled-build")
+            return None
+
+        logger.info("Using pre-solved explicit spec for temporary container test")
+        return _test_with_explicit_spec(
+            spec_path,
+            tests,
+            base_image,
+            conda_image,
+            conda_bld_dir,
+            live_logs,
+        )
+
+
+def build_and_test_mulled_image(
     path: str,
     name_override: str | None = None,
     channels: Sequence[str] = ("conda-forge", "local", "bioconda"),
@@ -263,10 +357,13 @@ def test_package(
     base_image: str | None = None,
     conda_image: str = CREATE_ENV_IMAGE,
     live_logs: bool = True,
-    presolved: bool = True,
+    target_platform: ContainerPlatform | None = None,
 ) -> sp.CompletedProcess:
     """
-    Tests a built package in a minimal docker container.
+    Build the BioContainers production mulled image and run package tests in it.
+
+    This wraps ``mulled-build build-and-test``. The generated local image is
+    the artifact later uploaded by :func:`bioconda_utils.upload.mulled_upload`.
 
     Parameters
     ----------
@@ -290,78 +387,41 @@ def test_package(
 
     conda_image : None | str
         Conda Docker image to install the package with during the mulled based
-        tests.
+        image build.
 
     live_logs : True | bool
         If True, enable live logging during the build process
 
-    presolved : bool
-        If True, attempt to pre-solve the test environment on the host and
-        pass an @EXPLICIT spec file to the container, avoiding a redundant
-        solver run. Falls back to the original mulled-build path on failure.
+    target_platform : ContainerPlatform | None
+        Docker target platform to pass to mulled-build, e.g. linux/arm64.
+
+    Notes
+    -----
+    Must be invoked from a real script file (e.g. ``python myscript.py`` or via
+    the installed ``bioconda-utils`` CLI), not from stdin, a REPL, or
+    ``python -c``. The local-channel indexing step (:func:`_test_inputs` ->
+    ``conda_index.api.update_index``) uses spawn-based multiprocessing workers,
+    which re-import the main module in each worker; a main program fed via stdin
+    has no file to re-import, so every worker dies and the call fails with an
+    opaque ``concurrent.futures.process.BrokenProcessPool``. The CLI and
+    ``pytest`` are unaffected because they run from real files.
     """
-
-    assert path.endswith((".tar.bz2", ".conda")), f"Unrecognized path {path}"
-    # assert os.path.exists(path), '{0} does not exist'.format(path)
-
-    conda_bld_dir = os.path.abspath(os.path.dirname(os.path.dirname(path)))
-
-    update_index(conda_bld_dir)
-
-    spec = get_image_name(path)
-
-    if "local" not in channels:
-        raise ValueError('"local" must be in channel list')
-
-    resolved_channels = [
-        f"file://{conda_bld_dir}" if channel == "local" else channel
-        for channel in channels
-    ]
-
-    tests = get_tests(path)
-    logger.debug("Tests to run: %s", tests)
-
-    # Try the pre-solved path first for faster testing
-    if presolved:
-        try:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                spec_path = _generate_explicit_spec(
-                    spec,
-                    resolved_channels,
-                    conda_bld_dir,
-                    tmpdir,
-                )
-                if spec_path is not None:
-                    logger.info("Using pre-solved explicit spec for mulled test")
-                    return _test_with_explicit_spec(
-                        spec_path,
-                        tests,
-                        base_image,
-                        conda_image,
-                        conda_bld_dir,
-                        live_logs,
-                    )
-                else:
-                    logger.info("Pre-solve failed, falling back to mulled-build")
-        except Exception as exc:
-            logger.info(
-                "Pre-solved test failed (%s), falling back to mulled-build", exc
-            )
-
-    # Original mulled-build path
+    _conda_bld_dir, spec, resolved_channels, tests = _test_inputs(path, channels)
     channel_args = ["--channels", ",".join(resolved_channels)]
 
     cmd = [
         "mulled-build",
         "build-and-test",
-        spec,
+        str(spec),
         "-n",
-        "biocontainers",
+        MULLED_LOCAL_NAMESPACE,
         "--test",
         tests,
     ]
     if name_override:
         cmd += ["--name-override", name_override]
+    if target_platform:
+        cmd += ["--target-platform", target_platform]
     cmd += channel_args
     cmd += shlex.split(mulled_args)
 
@@ -384,6 +444,6 @@ def test_package(
         env["CONDA_IMAGE"] = conda_image
     with tempfile.TemporaryDirectory() as d:
         with utils.Progress():
-            p = utils.run(cmd, env=env, cwd=d, mask=False, live=live_logs)
+            p = utils.run(cmd, env=env, cwd=d, redacted_secrets=False, live=live_logs)
 
     return p

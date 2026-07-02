@@ -48,12 +48,13 @@ import asyncio
 import logging
 import os
 import pickle
+from pathlib import Path
 import random
 
 from collections import defaultdict, Counter
 from urllib.parse import urlparse
 from typing import Any, cast
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 
 import aiofiles
 from aiohttp import ClientResponseError
@@ -83,8 +84,7 @@ from .aiopipe import (
 
 from .githandler import GitHandler
 from .githubhandler import GitHubHandler
-
-HosterFactory = Callable[[str, dict[str, str]], Any]
+from .hosters import Hoster
 
 
 def _parse_or_legacy(s: str) -> tuple[Version | str, bool]:
@@ -231,7 +231,7 @@ class Scanner(AsyncPipeline[Recipe]):
         self,
         recipe_source: RecipeSource,
         cache_fn: str | None = None,
-        status_fn: str | None = None,
+        status_fn: Path | None = None,
     ) -> None:
         super().__init__()
         #: recipe source
@@ -321,10 +321,10 @@ class ExcludeOtherChannel(Filter):
         super().__init__(scanner)
         self.channels = channels
         logger.info("Loading package lists for %s", channels)
-        repo = utils.RepoData()
+        channel_data = utils.RepoData()
         if cache:
-            repo.set_cache(cache)
-        self.other = set(repo.get_package_data("name", channels=channels))
+            channel_data.set_cache(cache)
+        self.other = set(channel_data.get_package_data("name", channels=channels))
 
     def get_info(self) -> str:
         return super().get_info().replace("**channels**", ", ".join(self.channels))
@@ -488,7 +488,7 @@ class CheckPinning(Filter):
             reason = cls.find_reason(recipe, metas)
         else:
             reason = None
-        recipe.conda_release()
+        recipe.conda_render_cleanup()
         return reason
 
     @classmethod
@@ -619,16 +619,13 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
     def __init__(
         self,
         scanner: Scanner,
-        hoster_factory: HosterFactory,
-        unparsed_file: str | None = None,
+        unparsed_file: Path | None = None,
     ) -> None:
         super().__init__(scanner)
         #: output file name for unparsed urls
         self.unparsed_urls: list[str] = []
         #: output file name for failed urls
         self.unparsed_file = unparsed_file
-        #: function selecting hoster
-        self.hoster_factory = hoster_factory
         #: conda build config
         self.build_config: conda_build.config.Config = utils.load_conda_build_config()
 
@@ -736,7 +733,7 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
         for url in urls:
             config = self.get_config(recipe)
             override_config = cast(dict[str, str], config.get("override", {}))
-            hoster = self.hoster_factory(url, override_config)
+            hoster = Hoster.select_hoster(url, override_config)
             if not hoster:
                 self.unparsed_urls += [url]
                 continue
@@ -861,7 +858,7 @@ class UpdateChecksums(Filter):
 
         template = "had no change to checksum after update?!"
 
-    def __init__(self, scanner: Scanner, failed_file: str | None = None) -> None:
+    def __init__(self, scanner: Scanner, failed_file: Path | None = None) -> None:
         super().__init__(scanner)
         #: failed urls - for later inspection
         self.failed_urls: list[str] = []

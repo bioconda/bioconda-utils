@@ -23,7 +23,7 @@ import warnings
 import psutil
 
 from threading import Event, Thread
-from pathlib import PurePath
+from pathlib import Path, PurePath
 from collections import Counter, defaultdict, namedtuple, deque
 from collections.abc import Iterable
 from itertools import product, chain, zip_longest
@@ -62,6 +62,19 @@ from conda.exports import subdir as conda_subdir
 from jsonschema import validate
 from colorlog import ColoredFormatter
 from boltons.funcutils import FunctionBuilder
+
+from bioconda_utils._types import (
+    Config,
+    ContainerPlatform,
+    OCIImageConfig,
+    OsLabel,
+    PACKAGE_SUBDIRS,
+    PackageSubdir,
+    Subdir,
+    container_platform_to_package_subdir,
+    native_container_platform,
+    normalize_container_platform,
+)
 
 cast(Any, conda.gateways.logging).initialize_logging = lambda: None
 
@@ -171,7 +184,7 @@ class LogFuncFilter:
       trunc_msg: The message to emit when logging is truncated, to inform user that
                  messages will from now on be hidden.
       max_lines: Max number of log messages to allow to pass
-      consectuctive: If try, filter applies to consectutive messages and resets
+      consecutive: If true, filter applies to consecutive messages and resets
                      if a message from a different source is encountered.
 
     Fixme:
@@ -228,7 +241,7 @@ class LoggingSourceRenameFilter:
 def setup_logger(
     name: str = "bioconda_utils",
     loglevel: str | int = logging.INFO,
-    logfile: str | None = None,
+    logfile: Path | None = None,
     logfile_level: str | int = logging.DEBUG,
     log_command_max_lines=None,
     prefix: str = "BIOCONDA ",
@@ -421,6 +434,48 @@ def bin_for(name: str = "conda") -> str:
     return name
 
 
+def skopeo_env() -> dict[str, str]:
+    """Return an environment dict with SSL_CERT_DIR set for conda's skopeo."""
+    env = os.environ.copy()
+    skopeo_bin = shutil.which("skopeo")
+    if skopeo_bin is None:
+        raise FileNotFoundError("Unable to find skopeo on PATH")
+    env["SSL_CERT_DIR"] = str(Path(skopeo_bin).parents[1] / "ssl")
+    return env
+
+
+def skopeo_auth_args(creds: str | None, *, option: str) -> tuple[list[str], list[str]]:
+    """Build skopeo credential CLI args and redacted secrets list."""
+    if not creds:
+        return [], []
+    return [option, creds], creds.split(":", 1)
+
+
+def skopeo_inspect_digest(ref: str, creds: str | None) -> str:
+    """Inspect a remote image ref and return its registry digest."""
+    auth_args, redacted_secrets = skopeo_auth_args(creds, option="--creds")
+    digest = run(
+        ["skopeo", "inspect", "--format", "{{.Digest}}", *auth_args, f"docker://{ref}"],
+        redacted_secrets=redacted_secrets,
+        env=skopeo_env(),
+    ).stdout.strip()
+    if not digest.startswith("sha256:"):
+        raise RuntimeError(f"Registry returned an invalid digest for {ref}: {digest}")
+    return digest
+
+
+def parse_oci_config_platform(
+    config: OCIImageConfig, *, ref: str = ""
+) -> ContainerPlatform:
+    """Extract and normalize the Docker platform from a skopeo image config."""
+    return normalize_container_platform(
+        config.get("os"),
+        config.get("architecture"),
+        variant=config.get("variant"),
+        ref=ref,
+    )
+
+
 @contextlib.contextmanager
 def temp_env(env):
     """
@@ -513,7 +568,7 @@ def load_all_meta(recipe, config=None, finalize=True):
 
 def load_meta_fast(recipe: str, env=None):
     """
-    Given a package name, find the current meta.yaml file, parse it, and return
+    Given a recipe path, find the current meta.yaml file, parse it, and return
     the dict.
 
     Args:
@@ -521,7 +576,7 @@ def load_meta_fast(recipe: str, env=None):
       env: Optional variables to expand
 
     Returns:
-      Tuple of original recipe string and rendered dict
+      Tuple of rendered dict and recipe path
     """
     if not env:
         env = {}
@@ -535,9 +590,23 @@ def load_meta_fast(recipe: str, env=None):
         raise ValueError(f"Problem inspecting {recipe}")
 
 
-def load_conda_build_config(platform=None, trim_skip=True):
+def subdir_to_oslabel(subdir: PackageSubdir) -> OsLabel:
+    """Return the two-part OS label conda-build's ``config.platform`` expects.
+
+    conda-build keys :data:`conda_build.variants.DEFAULT_COMPILERS` on the bare
+    OS label (``linux``/``osx``) and joins it with the arch to form the build
+    subdir. Passing a full subdir such as ``"linux-64"`` therefore raises
+    ``KeyError`` at render time. Use this at the ``config.platform`` boundary.
+    """
+    return "linux" if subdir.startswith("linux") else "osx"
+
+
+def load_conda_build_config(platform: OsLabel | None = None, trim_skip: bool = True):
     """
     Load conda build config while considering global pinnings from conda-forge.
+
+    ``platform`` is a two-part OS label (``"linux"``/``"osx"``), *not* a subdir;
+    pass it through :func:`subdir_to_oslabel` first.
     """
     config_kwargs: dict[str, Any] = {"no_download_source": True, "set_build_id": False}
     if RepoData.config is not None:
@@ -548,7 +617,7 @@ def load_conda_build_config(platform=None, trim_skip=True):
     bioconda_utils_bin = shutil.which("bioconda-utils")
     if bioconda_utils_bin is None:
         raise FileNotFoundError("Unable to find bioconda-utils on PATH")
-    env_root = PurePath(bioconda_utils_bin).parents[1]
+    env_root = PurePath(os.path.realpath(bioconda_utils_bin)).parents[1]
     # set path to pinnings from conda forge package
     config.exclusive_config_files = [
         os.path.join(env_root, "conda_build_config.yaml"),
@@ -608,7 +677,7 @@ def load_first_metadata(recipe, config=None, finalize=True):
 def run(
     cmds: list[str],
     env: dict[str, str] | None = None,
-    mask: list[str] | bool | None = None,
+    redacted_secrets: list[str] | bool | None = None,
     mask_envvars: bool = False,
     live: bool = False,
     mylogger: logging.Logger = logger,
@@ -629,8 +698,8 @@ def run(
     Arguments:
       cmd: List of command and arguments
       env: Optional environment for command, if None, use environment of the parent process
-      mask: List of terms to mask (secrets)
-      mask_envvars: Mask all environment variables; used if mask is None.
+      redacted_secrets: List of terms to redact (secrets)
+      mask_envvars: Mask all environment variables; used if redacted_secrets is None.
       live: Whether output should be sent to log
       check: raise CalledProcessError on failure
       kwargs: Additional arguments to `subprocess.Popen`
@@ -643,8 +712,8 @@ def run(
       FileNotFoundError if the command could not be found
     """
     logq = queue.Queue()
-    if mask is None and mask_envvars:
-        mask = [val for val in os.environ.values() if val]
+    if redacted_secrets is None and mask_envvars:
+        redacted_secrets = [val for val in os.environ.values() if val]
 
     def pushqueue(out, pipe):
         """Reads from a pipe and pushes into a queue, pushing "None" to
@@ -653,21 +722,23 @@ def run(
             out.put((pipe, line))
         out.put(None)  # End-of-data-token
 
-    def do_mask(arg: str) -> str:
-        """Masks secrets in **arg**"""
-        if mask is None:
+    def redact_secrets(arg: str) -> str:
+        """Redacts secrets in **arg**"""
+        if redacted_secrets is None:
             # caller has not considered masking, hide the entire command
             # for security reasons
             return "<hidden>"
-        if mask is False:
+        if redacted_secrets is False:
             # masking has been deactivated
             return arg
-        if isinstance(mask, list):
-            for mitem in mask:
+        if isinstance(redacted_secrets, list):
+            for mitem in redacted_secrets:
                 arg = arg.replace(mitem, "<hidden>")
         return arg
 
-    mylogger.log(loglevel, "(COMMAND) %s", " ".join(do_mask(arg) for arg in cmds))
+    mylogger.log(
+        loglevel, "(COMMAND) %s", " ".join(redact_secrets(arg) for arg in cmds)
+    )
 
     # bufsize=4 result of manual experimentation. Changing it can
     # drop performance drastically.
@@ -692,7 +763,7 @@ def run(
             try:
                 for _ in range(2):  # Run until we've got both `None` tokens
                     for pipe, line in iter(logq.get, None):
-                        line = do_mask(line.decode(errors="replace").rstrip())
+                        line = redact_secrets(line.decode(errors="replace").rstrip())
                         output_lines.append(line)
                         # only keep the last 1000 lines to avoid memory issues
                         if len(output_lines) > 1000:
@@ -718,9 +789,9 @@ def run(
 
         output = "\n".join(output_lines)
         if isinstance(cmds, str):
-            masked_cmds = do_mask(cmds)
+            masked_cmds = redact_secrets(cmds)
         else:
-            masked_cmds = [do_mask(c) for c in cmds]
+            masked_cmds = [redact_secrets(c) for c in cmds]
 
         if proc.poll() is None:
             mylogger.log(loglevel, "Command closed STDOUT/STDERR but is still running")
@@ -940,9 +1011,9 @@ def recipe_requires_finalized_render(recipe):
 
 
 def _load_platform_metas(recipe, finalize=True):
-    platform = RepoData.native_platform()
-    config = load_conda_build_config(platform=platform)
-    return platform, load_all_meta(recipe, config=config, finalize=finalize)
+    subdir = RepoData.native_subdir()
+    config = load_conda_build_config(platform=subdir_to_oslabel(subdir))
+    return subdir, load_all_meta(recipe, config=config, finalize=finalize)
 
 
 def _meta_subdir(meta):
@@ -955,7 +1026,7 @@ def check_recipe_skippable(recipe, check_channels):
     Return True if the same number of builds (per subdir) defined by the recipe
     are already in channel_packages.
     """
-    platform, metas = _load_platform_metas(recipe, finalize=False)
+    subdir, metas = _load_platform_metas(recipe, finalize=False)
     # The recipe likely defined skip: True
     if not metas:
         return True
@@ -963,7 +1034,7 @@ def check_recipe_skippable(recipe, check_channels):
     if os.environ.get("CI", None) == "true":
         first_meta = metas[0]
         if first_meta.get_value("build/noarch"):
-            if not platform.startswith("linux"):
+            if not subdir.startswith("linux"):
                 logger.info(
                     "FILTER: only building %s on linux because it defines noarch.",
                     recipe,
@@ -1057,7 +1128,7 @@ def get_package_paths(recipe, check_channels, force=False, finalize=True):
             return []
     if not finalize:
         logger.debug("Using non-finalized render for %s (fast resolve)", recipe)
-    platform, metas = _load_platform_metas(recipe, finalize=finalize)
+    _, metas = _load_platform_metas(recipe, finalize=finalize)
 
     # The recipe likely defined skip: True
     if not metas:
@@ -1085,19 +1156,8 @@ def get_package_paths(recipe, check_channels, force=False, finalize=True):
     )
 
 
-def validate_config(config):
-    """
-    Validate config against schema
-
-    Parameters
-    ----------
-    config : str or dict
-        If str, assume it's a path to YAML file and load it. If dict, use it
-        directly.
-    """
-    if not isinstance(config, dict):
-        config = yaml.safe_load(open(config))
-
+def validate_config(config: dict[str, Any]) -> None:
+    """Validate a parsed configuration against the packaged schema."""
     # Load packaged schema without pkg_resources (deprecated)
     # files('bioconda_utils') returns a Traversable to the package contents
     with as_file(files("bioconda_utils") / "config.schema.yaml") as schema_path:
@@ -1107,29 +1167,12 @@ def validate_config(config):
     validate(config, schema)
 
 
-def load_config(path):
-    """
-    Parses config file, building paths to relevant blacklists
+def normalize_config(config: dict[str, Any]) -> Config:
+    """Validate and apply defaults without mutating parsed configuration data."""
+    if isinstance(config, Config):
+        return config
 
-    Parameters
-    ----------
-    path : str
-        Path to YAML config file
-    """
-    validate_config(path)
-
-    if isinstance(path, dict):
-
-        def relpath(p):
-            return p
-
-        config = path
-    else:
-
-        def relpath(p):
-            return os.path.join(os.path.dirname(path), p)
-
-        config = yaml.safe_load(open(path))
+    validate_config(config)
 
     def get_list(key):
         # always return empty list, also if NoneType is defined in yaml
@@ -1138,23 +1181,31 @@ def load_config(path):
             return []
         return value
 
-    default_config = {
-        "blacklists": [],
-        "channels": ["conda-forge", "bioconda"],
-        "requirements": None,
-        "upload_channel": "bioconda",
-    }
-    if "blacklists" in config:
-        config["blacklists"] = [relpath(p) for p in get_list("blacklists")]
-    if "channels" in config:
-        config["channels"] = get_list("channels")
-
+    default_config = Config(
+        {
+            "blacklists": [],
+            "channels": ["conda-forge", "bioconda"],
+            "requirements": None,
+            "upload_channel": "bioconda",
+        }
+    )
     default_config.update(config)
-
-    # register config object in RepoData
-    RepoData.register_config(default_config)
+    if "blacklists" in config:
+        default_config["blacklists"] = list(get_list("blacklists"))
+    if "channels" in config:
+        default_config["channels"] = list(get_list("channels"))
 
     return default_config
+
+
+def load_config(path: Path) -> Config:
+    """Load and normalize a YAML configuration file."""
+    with path.open(encoding="utf-8") as fh:
+        config = yaml.safe_load(fh)
+    config = normalize_config(config)
+    config["blacklists"] = [str(path.parent / item) for item in config["blacklists"]]
+    RepoData.register_config(config)
+    return config
 
 
 class BiocondaUtilsWarning(UserWarning):
@@ -1376,8 +1427,9 @@ class RepoData:
 
     #: Columns available in internal dataframe
     columns = _load_columns + ["channel", "subdir", "platform"]
-    #: Platforms loaded
-    platforms = ["linux", "linux-aarch64", "osx", "osx-arm64", "noarch"]
+    #: Conda repodata subdirs loaded by default. The dataframe ``platform``
+    #: column stores these subdir strings directly for historical reasons.
+    platforms: list[Subdir] = [*PACKAGE_SUBDIRS, "noarch"]
     # config object
     config = None
 
@@ -1432,7 +1484,7 @@ class RepoData:
             self._df_ts = datetime.datetime.now()
         return self._df
 
-    def _make_repodata_url(self, channel, platform):
+    def _make_repodata_url(self, channel, subdir: Subdir):
         if channel == "defaults":
             # caveat: this only gets defaults main, not 'free', 'r' or 'pro'
             url_template = self.REPODATA_DEFAULTS_URL
@@ -1441,13 +1493,9 @@ class RepoData:
         local_url_template = self.LOCAL_REPODATA
 
         if channel.startswith("file://"):  # Allow local channels
-            url = local_url_template.format(
-                channel=channel, subdir=self.platform2subdir(platform)
-            )
+            url = local_url_template.format(channel=channel, subdir=subdir)
         else:
-            url = url_template.format(
-                channel=channel, subdir=self.platform2subdir(platform)
-            )
+            url = url_template.format(channel=channel, subdir=subdir)
         return url
 
     def _load_channel_dataframe_cached(self):
@@ -1473,10 +1521,10 @@ class RepoData:
 
         def to_dataframe(json_data, meta_data):
             channel, platform = meta_data
-            repo = json.loads(json_data)
-            subdir = repo["info"]["subdir"]
-            packages = repo["packages"]
-            packages.update(repo.get("packages.conda", {}))
+            raw = json.loads(json_data)
+            subdir = raw["info"]["subdir"]
+            packages = raw["packages"]
+            packages.update(raw.get("packages.conda", {}))
 
             df = pd.DataFrame.from_dict(packages, "index", columns=self._load_columns)
             # Ensure that version is always a string.
@@ -1506,34 +1554,14 @@ class RepoData:
         return res
 
     @staticmethod
-    def native_platform():
-        arch = platform.machine()
-        if sys.platform.startswith("linux") and arch == "aarch64":
-            return "linux-aarch64"
+    def native_subdir() -> PackageSubdir:
+        """Return the conda package subdir notation for this host."""
         if sys.platform.startswith("linux"):
-            return "linux"
-        if sys.platform.startswith("darwin") and arch == "arm64":
-            return "osx-arm64"
+            return container_platform_to_package_subdir(native_container_platform())
         if sys.platform.startswith("darwin"):
-            return "osx"
+            arch = platform.machine().lower()
+            return "osx-arm64" if arch == "arm64" else "osx-64"
         raise ValueError("Running on unsupported platform")
-
-    @staticmethod
-    def platform2subdir(platform):
-        if platform == "linux":
-            return "linux-64"
-        elif platform == "linux-aarch64":
-            return "linux-aarch64"
-        elif platform == "osx":
-            return "osx-64"
-        elif platform == "osx-arm64":
-            return "osx-arm64"
-        elif platform == "noarch":
-            return "noarch"
-        else:
-            raise ValueError(
-                "Unsupported platform: bioconda only supports linux, linux-aarch64, osx, osx-arm64 and noarch."
-            )
 
     def get_versions(self, name):
         """Get versions available for package
@@ -1542,8 +1570,8 @@ class RepoData:
           name: package name
 
         Returns:
-          Dictionary mapping version numbers to list of architectures
-          e.g. {'0.1': ['linux'], '0.2': ['linux', 'osx'], '0.3': ['noarch']}
+          Dictionary mapping version numbers to list of subdirs
+          e.g. {'0.1': ['linux-64'], '0.2': ['linux-64', 'osx-64'], '0.3': ['noarch']}
         """
         # called from doc generator
         packages = self.df[self.df.name == name][["version", "platform"]]
@@ -1570,7 +1598,7 @@ class RepoData:
         If **key** is a list of string, returns tuple iterator.
         """
         if native:
-            platform = ["noarch", self.native_platform()]
+            platform = ["noarch", self.native_subdir()]
 
         if version is not None:
             version = str(version)

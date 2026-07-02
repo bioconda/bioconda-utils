@@ -33,6 +33,7 @@ from re import Pattern
 
 
 import conda_build.api
+from conda_build.api import MetaDataTuple
 
 import jinja2
 
@@ -190,8 +191,8 @@ class Recipe:
         #: For passing data around
         self.data: dict[str, Any] = {}
 
-        # for conda_render() and conda_release()
-        self._conda_meta: Any = None
+        # for conda_render() and conda_render_cleanup()
+        self._conda_meta: list[MetaDataTuple] | None = None
         self._conda_tempdir = None
 
     @property
@@ -442,8 +443,8 @@ class Recipe:
         return []
 
     @property
-    def extra_additional_platforms(self) -> list:
-        """The extra additional-platforms list"""
+    def additional_platforms(self) -> list:
+        """The extra.additional-platforms list"""
         if (
             "extra" in self.meta
             and self.meta["extra"]
@@ -821,7 +822,7 @@ class Recipe:
         finalize=True,
         permit_unsatisfiable_variants=False,
         **kwargs,
-    ) -> Any:
+    ) -> list[MetaDataTuple]:
         """Handles calling conda_build.api.render
 
         ``conda_build.api.render`` is fragile, loud and slow. Avoid using this
@@ -835,7 +836,7 @@ class Recipe:
 
         Since the ``MetaData`` objects returned expect the on-disk ``meta.yaml``
         to persist (it can get reloaded later on), clients of this function
-        must **make sure to call `conda_release` once you are done** with those
+        must **make sure to call `conda_render_cleanup` once you are done** with those
         objects.
 
         Args:
@@ -869,7 +870,7 @@ class Recipe:
         """
         if self._conda_meta:
             return self._conda_meta
-        self.conda_release()
+        self.conda_render_cleanup()
 
         self._conda_tempdir = tempfile.TemporaryDirectory()
 
@@ -923,7 +924,7 @@ class Recipe:
             cast(Any, sys).exit = old_exit
         return self._conda_meta
 
-    def conda_release(self):
+    def conda_render_cleanup(self):
         """Releases resources acquired in `conda_render`"""
         if self._conda_meta:
             self._conda_meta = None

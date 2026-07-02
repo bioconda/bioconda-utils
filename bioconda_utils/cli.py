@@ -9,17 +9,19 @@ Bioconda Utils Command Line Interface
 import warnings
 from bioconda_utils import bulk
 
-from bioconda_utils.artifacts import UploadResult, upload_pr_artifacts
+from bioconda_utils.artifacts import ArtifactSource, UploadResult, upload_pr_artifacts
 from bioconda_utils.skiplist import Skiplist
 from bioconda_utils.build_failure import (
     BuildFailureRecord,
     collect_build_failure_dataframe,
 )
 
+import argparse
 import sys
 import os
 import shlex
 import logging
+from pathlib import Path
 from collections import defaultdict, Counter
 from functools import partial
 import inspect
@@ -33,6 +35,16 @@ from networkx.drawing.nx_pydot import write_dot
 import pandas
 
 from . import __version__ as VERSION
+from ._types import (
+    CONTAINER_PLATFORMS,
+    PACKAGE_SUBDIRS,
+    ContainerPlatform,
+    PackageSubdir,
+    QuayUploadTarget,
+    container_platform_to_package_subdir,
+    package_subdir_to_container_platform,
+    parse_quay_upload_target,
+)
 from . import utils
 from .build import build_recipes
 from . import docker_utils
@@ -43,10 +55,68 @@ from . import update_pinnings
 from . import graph
 from . import pkg_test
 from .githandler import BiocondaRepo, install_gpg_key
+from .container_manifests import (
+    DEFAULT_MULLED_RECORDS_DIR,
+    load_image_records,
+    reconcile_manifests,
+    resolve_registry_creds,
+)
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 
 logger = logging.getLogger(__name__)
+
+ARTIFACT_SOURCES = ["azure", "circleci", "github-actions"]
+
+
+def _resolve_mulled_upload_records(
+    records: Path | None, upload_target: str | QuayUploadTarget | None
+) -> Path | None:
+    """Resolve ``--mulled-upload-records``, defaulting when uploading."""
+    if records:
+        return records
+    if upload_target:
+        return DEFAULT_MULLED_RECORDS_DIR
+    return None
+
+
+def _build_package_platform(
+    docker: bool | None, platform: ContainerPlatform | None
+) -> PackageSubdir:
+    """Return the conda package subdir produced by this build invocation."""
+    if docker and platform:
+        return container_platform_to_package_subdir(platform)
+    return utils.RepoData.native_subdir()
+
+
+def _validate_container_platforms_for_build(
+    *,
+    docker: bool | None,
+    platform: ContainerPlatform | None,
+    container_platform: list[ContainerPlatform] | None,
+) -> None:
+    """Reject mulled container platforms that cannot install built packages."""
+    if not container_platform:
+        return
+
+    package_platform = _build_package_platform(docker, platform)
+    requested_platforms = set(container_platform)
+    try:
+        expected_container_platform = package_subdir_to_container_platform(
+            package_platform
+        )
+    except ValueError as exc:
+        raise ValueError(
+            "--container-platform cannot be used with package platform "
+            f"{package_platform}; mulled containers are Linux-only"
+        ) from exc
+    if requested_platforms != {expected_container_platform}:
+        requested = ", ".join(container_platform)
+        raise ValueError(
+            "--container-platform must match the package build platform: "
+            f"{package_platform} packages require {expected_container_platform}, "
+            f"not {requested}"
+        )
 
 
 def enable_logging(default_loglevel="info", default_file_loglevel="debug"):
@@ -61,7 +131,7 @@ def enable_logging(default_loglevel="info", default_file_loglevel="debug"):
             "--loglevel",
             help="Set logging level (debug, info, warning, error, critical)",
         )
-        @arg("--logfile", help="Write log to file")
+        @arg("--logfile", type=Path, help="Write log to file")
         @arg("--logfile-level", help="Log level for log file")
         @arg(
             "--log-command-max-lines",
@@ -71,7 +141,7 @@ def enable_logging(default_loglevel="info", default_file_loglevel="debug"):
         def wrapper(
             *args,
             loglevel=default_loglevel,
-            logfile=None,
+            logfile: Path | None = None,
             logfile_level=default_file_loglevel,
             log_command_max_lines=None,
             **kwargs,
@@ -160,6 +230,7 @@ def recipe_folder_and_config(allow_missing_for=None):
         @arg(
             "config",
             nargs="?",
+            type=Path,
             help="Path to Bioconda config (default: config.yml)",
         )
         @utils.wraps(func)
@@ -168,7 +239,7 @@ def recipe_folder_and_config(allow_missing_for=None):
             args = check_arg(
                 args, recipe_folder_idx, "recipe_folder", "recipes/", allow
             )
-            args = check_arg(args, config_idx, "config", "config.yml", allow)
+            args = check_arg(args, config_idx, "config", Path("config.yml"), allow)
             func(*args, **kwargs)
 
         return wrapper
@@ -251,7 +322,7 @@ def get_recipes(
 # `recipes/bowtie` or `recipes/bowtie/1.0.1`.
 
 
-@arg("config", help="Path to yaml file specifying the configuration")
+@arg("config", type=Path, help="Path to yaml file specifying the configuration")
 @arg(
     "--strict-version",
     action="store_true",
@@ -322,7 +393,8 @@ def duplicates(
                     token = ["-t", token]
                 logger.info(
                     utils.run(
-                        [utils.bin_for("anaconda")] + token + subcmd, mask=token
+                        [utils.bin_for("anaconda")] + token + subcmd,
+                        redacted_secrets=token,
                     ).stdout
                 )
 
@@ -470,9 +542,15 @@ def do_lint(
 )
 @arg("--docker", action="store_true", help="Build packages in docker container.")
 @arg(
-    "--mulled-test",
+    "--platform",
+    choices=CONTAINER_PLATFORMS,
+    help="Docker platform to build for (e.g. linux/arm64). Requires --docker.",
+)
+@arg(
+    "--mulled-build-and-test",
     action="store_true",
-    help="Run a mulled-build test on the built package",
+    help="Build a mulled Docker container for the package and run the "
+    "recipe's tests inside it (wraps `mulled-build build-and-test`).",
 )
 @arg(
     "--mulled-upload-target",
@@ -580,6 +658,12 @@ from environment, even after successful build and test.""",
 )
 @arg(
     "--skiplist-leafs",
+    dest="skiplist_leaves",
+    action="store_true",
+    help=argparse.SUPPRESS,
+)
+@arg(
+    "--skiplist-leaves",
     action="store_true",
     help="Skiplist leaf recipes (i.e. ones that are not depended on by any other recipes) that fail to build.",
 )
@@ -589,16 +673,33 @@ from environment, even after successful build and test.""",
     help="Disable live logging during the build process",
 )
 @arg(
-    "--no-presolved-mulled-test",
+    "--no-presolved-mulled-build-and-test",
     action="store_true",
-    help="Disable pre-solved mulled tests: always use mulled-build to solve and install "
-    "the test environment from scratch.",
+    help="Disable the pre-solved mulled-build-and-test fast path: always use "
+    "mulled-build to solve and install the test environment from scratch.",
 )
 @arg(
     "--no-fast-resolve",
     action="store_true",
     help="Disable fast resolve: always run the full finalized conda solver on the host, "
     "even when building with Docker. Useful for debugging build string mismatches.",
+)
+@arg(
+    "--container-platform",
+    action="append",
+    choices=CONTAINER_PLATFORMS,
+    help="Docker platform to build/test/push for mulled containers. May be repeated.",
+)
+@arg(
+    "--mulled-upload-records",
+    type=Path,
+    help="Append uploaded mulled image records as JSONL for manifest publication.",
+)
+@arg(
+    "--use-existing-auth",
+    action="store_true",
+    help="Use existing Docker/skopeo registry authentication when QUAY_LOGIN "
+    "and QUAY_OAUTH_TOKEN are unset.",
 )
 @arg("--exclude", nargs="+", help="Packages to exclude during this run")
 @arg(
@@ -615,7 +716,8 @@ def build(
     testonly=False,
     force=False,
     docker=None,
-    mulled_test=False,
+    platform=None,
+    mulled_build_and_test=False,
     build_script_template=None,
     pkg_dir=None,
     anaconda_upload=False,
@@ -631,22 +733,38 @@ def build(
     mulled_conda_image=pkg_test.CREATE_ENV_IMAGE,
     docker_base_image=None,
     record_build_failures=False,
-    skiplist_leafs=False,
+    skiplist_leaves=False,
     disable_live_logs=False,
-    no_presolved_mulled_test=False,
+    no_presolved_mulled_build_and_test=False,
     no_fast_resolve=False,
+    container_platform: list[ContainerPlatform] | None = None,
+    mulled_upload_records: Path | None = None,
+    use_existing_auth: bool = False,
     exclude=None,
     subdag_depth=None,
 ):
+    mulled_upload_target = parse_quay_upload_target(mulled_upload_target)
+    mulled_upload_records = _resolve_mulled_upload_records(
+        mulled_upload_records, mulled_upload_target
+    )
     cfg = utils.load_config(config)
     setup = cfg.get("setup", None)
     if setup:
         logger.debug("Running setup: %s", setup)
         for cmd in setup:
-            utils.run(shlex.split(cmd), mask=False)
+            utils.run(shlex.split(cmd), redacted_secrets=False)
 
     recipes = get_recipes(cfg, recipe_folder, packages, git_range)
 
+    if platform and not docker:
+        raise ValueError("--platform requires --docker")
+    if docker and platform and container_platform is None:
+        container_platform = [platform]
+    _validate_container_platforms_for_build(
+        docker=docker,
+        platform=platform,
+        container_platform=container_platform,
+    )
     if docker:
         if build_script_template is not None:
             build_script_template = open(build_script_template).read()
@@ -678,6 +796,7 @@ def build(
             keep_image=keep_image,
             build_image=build_image,
             docker_base_image=docker_base_image,
+            target_platform=platform,
         )
     else:
         docker_builder = None
@@ -689,11 +808,11 @@ def build(
 
     success = build_recipes(
         recipe_folder,
-        config,
+        cfg,
         recipes,
         testonly=testonly,
         force=force,
-        mulled_test=mulled_test,
+        mulled_build_and_test=mulled_build_and_test,
         docker_builder=docker_builder,
         anaconda_upload=anaconda_upload,
         mulled_upload_target=mulled_upload_target,
@@ -706,12 +825,15 @@ def build(
         keep_old_work=keep_old_work,
         mulled_conda_image=mulled_conda_image,
         record_build_failures=record_build_failures,
-        skiplist_leafs=skiplist_leafs,
+        skiplist_leaves=skiplist_leaves,
         live_logs=(not disable_live_logs),
         exclude=exclude,
         subdag_depth=subdag_depth,
-        presolved_mulled_test=not no_presolved_mulled_test,
+        presolved_mulled_build_and_test=not no_presolved_mulled_build_and_test,
         fast_resolve=not no_fast_resolve,
+        container_platforms=container_platform,
+        mulled_upload_records=mulled_upload_records,
+        use_existing_auth=use_existing_auth,
     )
     exit(0 if success else 1)
 
@@ -742,9 +864,31 @@ def build(
 )
 @arg(
     "--artifact-source",
-    choices=["azure", "circleci", "github-actions"],
+    choices=ARTIFACT_SOURCES,
     default="azure",
     help="Application hosting build artifacts (e.g., Azure, Circle CI, or GitHub Actions).",
+)
+@arg(
+    "--container-platform",
+    action="append",
+    choices=CONTAINER_PLATFORMS,
+    help="Docker platform to build/test/push for mulled containers. May be repeated.",
+)
+@arg(
+    "--package-platform",
+    choices=PACKAGE_SUBDIRS,
+    help="Conda package platform to upload from PR artifacts. Defaults to native platform.",
+)
+@arg(
+    "--mulled-upload-records",
+    type=Path,
+    help="Append uploaded mulled image records as JSONL for manifest publication.",
+)
+@arg(
+    "--use-existing-auth",
+    action="store_true",
+    help="Use existing Docker/skopeo registry authentication when QUAY_LOGIN "
+    "and QUAY_OAUTH_TOKEN are unset.",
 )
 @enable_logging()
 def handle_merged_pr(
@@ -755,8 +899,16 @@ def handle_merged_pr(
     dryrun=False,
     fallback="build",
     quay_upload_target=None,
-    artifact_source="azure",
+    artifact_source: ArtifactSource = "azure",
+    container_platform: list[ContainerPlatform] | None = None,
+    package_platform: PackageSubdir | None = None,
+    mulled_upload_records: Path | None = None,
+    use_existing_auth: bool = False,
 ):
+    quay_upload_target = parse_quay_upload_target(quay_upload_target)
+    mulled_upload_records = _resolve_mulled_upload_records(
+        mulled_upload_records, quay_upload_target
+    )
     label = os.getenv("BIOCONDA_LABEL", None) or None
     if repo is None:
         raise ValueError("repo is required")
@@ -764,26 +916,85 @@ def handle_merged_pr(
         raise ValueError("git_range is required")
 
     res = upload_pr_artifacts(
-        config,
         repo,
         git_range[1],
         dryrun=dryrun,
         mulled_upload_target=quay_upload_target,
         label=label,
         artifact_source=artifact_source,
+        package_platform=package_platform,
+        container_platforms=container_platform,
+        mulled_upload_records=mulled_upload_records,
+        use_existing_auth=use_existing_auth,
     )
     if res == UploadResult.NO_ARTIFACTS and fallback == "build":
+        if package_platform is not None:
+            native_package_platform = utils.RepoData.native_subdir()
+            if package_platform != native_package_platform:
+                raise ValueError(
+                    "--fallback build cannot build non-native package platform "
+                    f"{package_platform} from {native_package_platform}"
+                )
         success = build(
             recipe_folder,
             config,
             git_range=git_range,
             anaconda_upload=not dryrun,
             mulled_upload_target=quay_upload_target if not dryrun else None,
-            mulled_test=True,
+            mulled_build_and_test=True,
+            container_platform=container_platform,
+            mulled_upload_records=mulled_upload_records,
+            use_existing_auth=use_existing_auth,
         )
     else:
         success = res != UploadResult.FAILURE
     exit(0 if success else 1)
+
+
+@arg(
+    "record_paths",
+    nargs="*",
+    type=Path,
+    help="Mulled image record files (JSONL) or directories containing them.",
+)
+@arg(
+    "--platform",
+    action="append",
+    choices=CONTAINER_PLATFORMS,
+    help="Platforms to include. Defaults to all supported platforms.",
+)
+@arg(
+    "--use-existing-auth",
+    action="store_true",
+    help="Use existing Docker/skopeo registry authentication when QUAY_LOGIN "
+    "and QUAY_OAUTH_TOKEN are unset.",
+)
+@enable_logging()
+def create_mulled_manifests(
+    record_paths: list[Path],
+    platform: list[ContainerPlatform] | None = None,
+    use_existing_auth: bool = False,
+) -> None:
+    """Create or update canonical manifests for uploaded mulled images."""
+    if not record_paths:
+        default_path = DEFAULT_MULLED_RECORDS_DIR
+        if not default_path.exists():
+            logger.info("No mulled image records found; nothing to reconcile.")
+            return
+        record_paths = [default_path]
+    try:
+        records = load_image_records(record_paths)
+    except FileNotFoundError as exc:
+        sys.exit(f"Mulled image record path not found: {exc.args[0]}")
+    if not records:
+        logger.info("No mulled image records found; nothing to reconcile.")
+        return
+    changed, total = reconcile_manifests(
+        records,
+        platform or list(CONTAINER_PLATFORMS),
+        creds=resolve_registry_creds(use_existing_auth=use_existing_auth),
+    )
+    logger.info("Manifest summary: %d changed, %d checked", changed, total)
 
 
 @recipe_folder_and_config()
@@ -1119,6 +1330,7 @@ def bioconductor_skeleton(
         and submit to conda-forge.
 
     """
+    config = utils.load_config(config)
     seen_dependencies = set()
     if bioc_data_packages is None:
         bioc_data_packages = os.path.join(recipe_folder, "bioconductor-data-packages")
@@ -1232,9 +1444,13 @@ def clean_cran_skeleton(recipe, no_windows=False):
      the first time. Caution: The cache will not be updated if
      exclude-channels is changed""",
 )
-@arg("--unparsed-urls", help="""Write unrecognized urls to this file""")
-@arg("--failed-urls", help="""Write urls with permanent failure to this file""")
-@arg("--recipe-status", help="""Write status for each recipe to this file""")
+@arg("--unparsed-urls", type=Path, help="""Write unrecognized urls to this file""")
+@arg(
+    "--failed-urls",
+    type=Path,
+    help="""Write urls with permanent failure to this file""",
+)
+@arg("--recipe-status", type=Path, help="""Write status for each recipe to this file""")
 @arg("--check-branch", help="""Check if recipe has active branch""")
 @arg(
     "--only-active",
@@ -1287,9 +1503,9 @@ def autobump(
     packages="*",
     exclude=None,
     cache=None,
-    failed_urls=None,
-    unparsed_urls=None,
-    recipe_status=None,
+    failed_urls: Path | None = None,
+    unparsed_urls: Path | None = None,
+    recipe_status: Path | None = None,
     exclude_subrecipes=None,
     exclude_channels="conda-forge",
     ignore_skiplists=False,
@@ -1315,7 +1531,6 @@ def autobump(
     config_dict = utils.load_config(config)
     from . import autobump
     from . import githubhandler
-    from . import hosters
 
     if no_follow_graph:
         recipe_source = autobump.RecipeSource(
@@ -1401,7 +1616,7 @@ def autobump(
 
     # Check for new versions and update the SHA afterwards
     if not no_check_version_update:
-        scanner.add(autobump.UpdateVersion, hosters.Hoster.select_hoster, unparsed_urls)
+        scanner.add(autobump.UpdateVersion, unparsed_urls)
         if fetch_requirements:
             # This attempts to determine dependencies exported by PyPi packages,
             # requires running setup.py, so only enabled on request.
@@ -1483,11 +1698,7 @@ def annotate_build_failures(
 ):
     valid_platform_names = set(conda.base.constants.PLATFORM_DIRECTORIES)
     if platforms is None:
-        platforms = [
-            utils.RepoData.platform2subdir(p)
-            for p in utils.RepoData.platforms
-            if p != "noarch"
-        ]
+        platforms = [p for p in utils.RepoData.platforms if p != "noarch"]
     for recipe in recipes:
         if existing_only:
             platforms = [
@@ -1588,6 +1799,7 @@ def main():
             clean_cran_skeleton,
             autobump,
             handle_merged_pr,
+            create_mulled_manifests,
             annotate_build_failures,
             list_build_failures,
             bulk_trigger_ci,

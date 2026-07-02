@@ -2,11 +2,15 @@
 Package Builder
 """
 
+from __future__ import annotations
+
 import subprocess as sp
+from collections.abc import Sequence
 from collections import defaultdict
 import itertools
 import logging
 import os
+from pathlib import Path
 
 from typing import Any, NamedTuple
 from bioconda_utils.skiplist import Skiplist
@@ -14,6 +18,7 @@ from bioconda_utils.build_failure import BuildFailureRecord
 
 from conda.exports import UnsatisfiableError
 from conda_build.exceptions import DependencyNeedsBuildingError
+from conda_build.metadata import MetaData
 import networkx as nx
 
 from . import utils
@@ -23,6 +28,16 @@ from . import upload
 from . import lint
 from . import graph
 from . import recipe as _recipe
+from ._types import (
+    ContainerPlatform,
+    PACKAGE_SUBDIRS,
+    PackageSubdir,
+    PkgBuildRef,
+    QuayUploadTarget,
+    container_platform_is_native,
+    native_container_platform,
+)
+from .container_manifests import write_image_record
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +46,25 @@ class BuildResult(NamedTuple):
     """Result tuple for builds comprising success status and docker images."""
 
     success: bool
-    mulled_images: list[str] | None
+    mulled_images: list[MulledImage] | None
+
+
+class MulledImage(NamedTuple):
+    """Mulled image metadata for one built package and target platform."""
+
+    pkg_ref: PkgBuildRef
+    target_platform: ContainerPlatform | None
+
+
+def mulled_image_metadata(
+    pkg_ref: PkgBuildRef,
+    target_platform: ContainerPlatform | None = None,
+) -> MulledImage:
+    """Return mulled image metadata for a built package."""
+    return MulledImage(
+        pkg_ref=pkg_ref,
+        target_platform=target_platform or native_container_platform(),
+    )
 
 
 def conda_build_purge() -> None:
@@ -40,12 +73,12 @@ def conda_build_purge() -> None:
     ``conda clean --all`` is called if we haveless than 300 MB free space
     on the current disk.
     """
-    utils.run(["conda", "build", "purge"], mask=False)
+    utils.run(["conda", "build", "purge"], redacted_secrets=False)
 
     free_mb = utils.get_free_space()
     if free_mb < 300:
         logger.info("CLEANING UP PACKAGE CACHE (free space: %iMB).", free_mb)
-        utils.run(["conda", "clean", "--all"], mask=False)
+        utils.run(["conda", "clean", "--all"], redacted_secrets=False)
         logger.info(
             "CLEANED UP PACKAGE CACHE (free space: %iMB).",
             utils.get_free_space(),
@@ -56,7 +89,7 @@ def build(
     recipe: str,
     pkg_paths: list[str] | None = None,
     testonly: bool = False,
-    mulled_test: bool = True,
+    mulled_build_and_test: bool = True,
     channels: list[str] | None = None,
     docker_builder: docker_utils.RecipeBuilder | None = None,
     raise_error: bool = False,
@@ -64,10 +97,12 @@ def build(
     mulled_conda_image: str = pkg_test.CREATE_ENV_IMAGE,
     record_build_failure: bool = False,
     dag: nx.DiGraph | None = None,
-    skiplist_leafs: bool = False,
+    skiplist_leaves: bool = False,
     live_logs: bool = True,
-    presolved_mulled_test: bool = True,
-    mulled_upload_target: str | None = None,
+    presolved_mulled_build_and_test: bool = True,
+    mulled_upload_target: QuayUploadTarget | None = None,
+    container_platforms: Sequence[ContainerPlatform] | None = None,
+    use_existing_auth: bool = False,
 ) -> BuildResult:
     """
     Build a single recipe for a single env
@@ -76,7 +111,8 @@ def build(
       recipe: Path to recipe
       pkg_paths: List of paths to expected packages
       testonly: Only run the tests described in the meta.yaml
-      mulled_test: Run tests in minimal docker container
+      mulled_build_and_test: Build the mulled container and run the recipe's
+        tests inside it (wraps `mulled-build build-and-test`).
       channels: Channels to include via the ``--channel`` argument to
         conda-build. Higher priority channels should come first.
       docker_builder : docker_utils.RecipeBuilder object
@@ -87,8 +123,10 @@ def build(
       linter: Linter to use for checking recipes
       record_build_failure: If True, record build failures in a file next to the meta.yaml
       dag: optional nx.DiGraph with dependency information
-      skiplist_leafs: If True, blacklist leaf packages that fail to build
+      skiplist_leaves: If True, blacklist leaf packages that fail to build
       live_logs: If True, enable live logging during the build process
+      use_existing_auth: Use existing Docker/skopeo registry auth when no
+        QUAY_LOGIN or QUAY_OAUTH_TOKEN is configured.
     """
     if record_build_failure and not dag:
         raise ValueError("record_build_failure requires dag to be set")
@@ -159,9 +197,7 @@ def build(
             )
             # Use presence of expected packages to check for success
             if docker_builder.pkg_dir is not None:
-                platform = utils.RepoData.native_platform()
-                subfolder = utils.RepoData.platform2subdir(platform)
-                conda_build_config = utils.load_conda_build_config(platform=subfolder)
+                conda_build_config = utils.load_conda_build_config()
                 pkg_paths = [
                     p.replace(conda_build_config.output_folder, docker_builder.pkg_dir)
                     for p in pkg_paths
@@ -185,7 +221,7 @@ def build(
                     cmd += [config_file.arg, config_file.path]
                 cmd += [os.path.join(recipe, "meta.yaml")]
                 with utils.Progress():
-                    utils.run(cmd, mask=False, live=live_logs)
+                    utils.run(cmd, redacted_secrets=False, live=live_logs)
 
         logger.info(
             "BUILD SUCCESS %s", " ".join(os.path.basename(p) for p in pkg_paths)
@@ -205,42 +241,89 @@ def build(
             logger.error("Build output:\n%s", exc.output)
         if record_build_failure:
             assert dag is not None
-            store_build_failure_record(recipe, exc.output, meta, dag, skiplist_leafs)
+            store_build_failure_record(recipe, exc.output, meta, dag, skiplist_leaves)
         if raise_error:
             raise exc
         return BuildResult(False, None)
     finally:
         report_resources(f"Finished build for {recipe}", docker_builder is not None)
 
-    if mulled_test:
-        logger.info("TEST START via mulled-build %s", recipe)
-        mulled_images = []
+    if mulled_build_and_test:
+        logger.info("BUILD AND TEST START via mulled-build %s", recipe)
+        mulled_images: list[MulledImage] = []
         # Use pre-solved test env unless we need the mulled-build image for upload
-        use_presolved = presolved_mulled_test and not mulled_upload_target
+        requested_platforms: list[ContainerPlatform | None] = (
+            list(container_platforms) if container_platforms else [None]
+        )
         for pkg_path in pkg_paths:
-            try:
-                report_resources(f"Starting mulled build for {pkg_path}")
-                pkg_test.test_package(
-                    pkg_path,
-                    base_image=base_image,
-                    conda_image=mulled_conda_image,
-                    live_logs=live_logs,
-                    presolved=use_presolved,
+            for target_platform in requested_platforms:
+                use_temporary_test_container = (
+                    presolved_mulled_build_and_test
+                    and not mulled_upload_target
+                    and container_platform_is_native(target_platform)
                 )
-            except sp.CalledProcessError:
-                logger.error("TEST FAILED: %s", recipe)
-                return BuildResult(False, None)
-            finally:
-                report_resources(f"Finished mulled build for {pkg_path}")
-            logger.info("TEST SUCCESS %s", recipe)
-            mulled_images.append(pkg_test.get_image_name(pkg_path))
+                built_mulled_image = False
+                try:
+                    report_resources(
+                        f"Starting mulled build for {pkg_path} on {target_platform or 'native'}"
+                    )
+                    if use_temporary_test_container:
+                        try:
+                            result = pkg_test.test_package_in_temporary_container(
+                                pkg_path,
+                                base_image=base_image,
+                                conda_image=mulled_conda_image,
+                                live_logs=live_logs,
+                            )
+                        except Exception as exc:
+                            logger.info(
+                                "Pre-solved test failed (%s), falling back to "
+                                "mulled-build",
+                                exc,
+                            )
+                            result = None
+                        if result is None:
+                            pkg_test.build_and_test_mulled_image(
+                                pkg_path,
+                                base_image=base_image,
+                                conda_image=mulled_conda_image,
+                                live_logs=live_logs,
+                                target_platform=target_platform,
+                            )
+                            built_mulled_image = True
+                    else:
+                        pkg_test.build_and_test_mulled_image(
+                            pkg_path,
+                            base_image=base_image,
+                            conda_image=mulled_conda_image,
+                            live_logs=live_logs,
+                            target_platform=target_platform,
+                        )
+                        built_mulled_image = True
+                except sp.CalledProcessError:
+                    logger.error("TEST FAILED: %s", recipe)
+                    return BuildResult(False, None)
+                finally:
+                    report_resources(
+                        f"Finished mulled build for {pkg_path} on {target_platform or 'native'}"
+                    )
+                logger.info("TEST SUCCESS %s", recipe)
+                if built_mulled_image:
+                    image_spec = pkg_test.get_image_name(pkg_path)
+                    mulled_images.append(
+                        mulled_image_metadata(image_spec, target_platform)
+                    )
         return BuildResult(True, mulled_images)
 
     return BuildResult(True, None)
 
 
 def store_build_failure_record(
-    recipe: str, output: Any, meta: Any, dag: nx.DiGraph, skiplist_leafs: bool
+    recipe: str,
+    output: str | None,
+    meta: MetaData,
+    dag: nx.DiGraph,
+    skiplist_leaves: bool,
 ) -> None:
     """
     Write the exception to a file next to the meta.yaml
@@ -251,7 +334,7 @@ def store_build_failure_record(
     build_failure_record = BuildFailureRecord(recipe)
     # if recipe is a leaf (i.e. not used by others as dependency)
     # we can automatically blacklist it if desired
-    build_failure_record.fill(log=output, skiplist=skiplist_leafs and is_leaf)
+    build_failure_record.fill(log=output, skiplist=skiplist_leaves and is_leaf)
 
     build_failure_record.write()
     build_failure_record.commit_and_push_changes()
@@ -284,7 +367,7 @@ def remove_cycles(
     return dag.subgraph(name for name in dag if name not in nodes_in_cycles)
 
 
-def get_subdags(
+def get_worker_subdag(
     dag: nx.DiGraph,
     n_workers: int,
     worker_offset: int,
@@ -350,42 +433,40 @@ def get_subdags(
     return subdags
 
 
-def do_not_consider_for_additional_platform(
-    recipe_folder: str, recipe: str, platform: str
+def should_skip_platform(
+    recipe_folder: str, recipe: str, platform: PackageSubdir
 ) -> bool:
     """
-    Given a recipe, check this recipe should skip in current platform or not.
+    Return True if *platform* is a non-primary subdir (``linux-aarch64``,
+    ``osx-arm64``, ``linux-riscv64``) and the recipe does not list it in
+    ``extra.additional-platforms``.
 
-    Arguments:
-      recipe_folder: Directory containing possibly many, and possibly nested, recipes.
-      recipe: Relative path to recipe
-      platform: current native platform
-
-    Returns:
-      Return True if current native platform are not included in recipe's additional platforms (no need to build).
+    The ``linux-64`` and ``osx-64`` subdirs are always built — they are assumed
+    to be universally compatible.  Any other subdir requires explicit opt-in
+    via ``extra.additional-platforms`` in ``meta.yaml``.  Without this gate,
+    every recipe would be attempted on every non-x86_64 builder, wasting time
+    on recipes that have not been verified for that platform.
     """
     recipe_obj = _recipe.Recipe.from_file(recipe_folder, recipe)
-    # On linux-aarch64 or osx-arm64 env, only build recipe with matching extra_additional_platforms
-    if platform == "linux-aarch64":
-        if "linux-aarch64" not in recipe_obj.extra_additional_platforms:
-            return True
-    if platform == "osx-arm64":
-        if "osx-arm64" not in recipe_obj.extra_additional_platforms:
-            return True
-    return False
+    primary_platforms: set[PackageSubdir] = {"linux-64", "osx-64"}
+    additional_platforms = set(PACKAGE_SUBDIRS) - primary_platforms
+    return (
+        platform in additional_platforms
+        and platform not in recipe_obj.additional_platforms
+    )
 
 
 def build_recipes(
     recipe_folder: str,
-    config_path: str,
+    config: dict[str, Any],
     recipes: list[str],
-    mulled_test: bool = True,
+    mulled_build_and_test: bool = True,
     testonly: bool = False,
     force: bool = False,
     docker_builder: docker_utils.RecipeBuilder | None = None,
     label: str | None = None,
     anaconda_upload: bool = False,
-    mulled_upload_target: str | None = None,
+    mulled_upload_target: QuayUploadTarget | None = None,
     check_channels: list[str] | None = None,
     do_lint: bool | None = None,
     lint_exclude: list[str] | None = None,
@@ -394,23 +475,27 @@ def build_recipes(
     keep_old_work: bool = False,
     mulled_conda_image: str = pkg_test.CREATE_ENV_IMAGE,
     record_build_failures: bool = False,
-    skiplist_leafs: bool = False,
+    skiplist_leaves: bool = False,
     live_logs: bool = True,
     exclude: list[str] | None = None,
     subdag_depth: int | None = None,
-    presolved_mulled_test: bool = True,
+    presolved_mulled_build_and_test: bool = True,
     fast_resolve: bool = True,
+    container_platforms: Sequence[ContainerPlatform] | None = None,
+    mulled_upload_records: Path | None = None,
+    use_existing_auth: bool = False,
 ) -> bool:
     """
     Build one or many bioconda packages.
 
     Arguments:
       recipe_folder: Directory containing possibly many, and possibly nested, recipes.
-      config_path: Path to config file
+      config: Parsed Bioconda configuration, normalized at this boundary.
       packages: Glob indicating which packages should be considered. Note that packages
         matching the glob will still be filtered out by any blacklists
         specified in the config.
-      mulled_test: If true, test the package in a minimal container.
+      mulled_build_and_test: If true, build the mulled container and run the
+        recipe's tests inside it.
       testonly: If true, only run test.
       force: If true, build the recipe even though it would otherwise be filtered out.
       docker_builder: If specified, use to build all recipes
@@ -427,7 +512,9 @@ def build_recipes(
       worker_offset: If n_workers is >1, then every worker_offset within a given group of
         sub-DAGs will be processed.
       keep_old_work: Do not remove anything from environment, even after successful build and test.
-      skiplist_leafs: If True, blacklist leaf packages that fail to build
+      use_existing_auth: Use existing Docker/skopeo registry auth when no
+        QUAY_LOGIN or QUAY_OAUTH_TOKEN is configured.
+      skiplist_leaves: If True, blacklist leaf packages that fail to build
       live_logs: If True, enable live logging during the build process
       exclude: list of recipes to exclude. Typically used for
         temporary exclusion; otherwise consider adding recipe to skiplist.
@@ -437,7 +524,8 @@ def build_recipes(
         logger.info("Nothing to be done.")
         return True
 
-    config = utils.load_config(config_path)
+    config = utils.normalize_config(config)
+    utils.RepoData.register_config(config)
     blacklist = Skiplist(config, recipe_folder)
 
     # get channels to check
@@ -471,7 +559,7 @@ def build_recipes(
 
     skip_dependent = defaultdict(list)
     dag = remove_cycles(dag, name2recipes, failed, skip_dependent)
-    subdag = get_subdags(dag, n_workers, worker_offset, subdag_depth)
+    subdag = get_worker_subdag(dag, n_workers, worker_offset, subdag_depth)
     if not subdag:
         logger.info("Nothing to be done.")
         return True
@@ -497,10 +585,8 @@ def build_recipes(
     failed_uploads = []
 
     for recipe, name in recipe_jobs:
-        platform = utils.RepoData().native_platform()
-        if not force and do_not_consider_for_additional_platform(
-            recipe_folder, recipe, platform
-        ):
+        platform = utils.RepoData().native_subdir()
+        if not force and should_skip_platform(recipe_folder, recipe, platform):
             logger.info(
                 "BUILD SKIP: skipping %s for additional platform %s",
                 recipe,
@@ -532,7 +618,10 @@ def build_recipes(
             #   2. linux-64 hosts — sysroot run_exports inject __glibc here
             #      regardless of the recipe's text form.
             finalize = docker_builder is None or not fast_resolve
-            if not finalize and utils.RepoData.native_platform() == "linux":
+            if (
+                not finalize
+                and utils.subdir_to_oslabel(utils.RepoData.native_subdir()) == "linux"
+            ):
                 finalize = True
             if not finalize and utils.recipe_requires_finalized_render(recipe):
                 finalize = True
@@ -571,17 +660,19 @@ def build_recipes(
             recipe=recipe,
             pkg_paths=pkg_paths,
             testonly=testonly,
-            mulled_test=mulled_test,
+            mulled_build_and_test=mulled_build_and_test,
             channels=config["channels"],
             docker_builder=docker_builder,
             linter=linter,
             mulled_conda_image=mulled_conda_image,
             dag=dag,
             record_build_failure=record_build_failures,
-            skiplist_leafs=skiplist_leafs,
+            skiplist_leaves=skiplist_leaves,
             live_logs=live_logs,
-            presolved_mulled_test=presolved_mulled_test,
+            presolved_mulled_build_and_test=presolved_mulled_build_and_test,
             mulled_upload_target=mulled_upload_target,
+            container_platforms=container_platforms,
+            use_existing_auth=use_existing_auth,
         )
 
         if not res.success:
@@ -597,8 +688,15 @@ def build_recipes(
                             failed_uploads.append(pkg)
                 if mulled_upload_target:
                     for img in res.mulled_images or []:
-                        upload.mulled_upload(img, mulled_upload_target)
-                        docker_utils.purgeImage(mulled_upload_target, img)
+                        record = upload.mulled_upload(
+                            img.pkg_ref,
+                            mulled_upload_target,
+                            img.target_platform,
+                            use_existing_auth=use_existing_auth,
+                        )
+                        if mulled_upload_records is not None:
+                            write_image_record(mulled_upload_records, record)
+                        docker_utils.purgeImage(img.pkg_ref, img.target_platform)
 
         # remove traces of the build
         if not keep_old_work:
@@ -654,6 +752,6 @@ def report_resources(message: str, show_docker: bool = True) -> None:
     )
     if show_docker:
         cmd = ["docker", "system", "df"]
-        utils.run(cmd, mask=False, live=True)
+        utils.run(cmd, redacted_secrets=False, live=True)
         cmd = ["docker", "ps", "-a"]
-        utils.run(cmd, mask=False, live=True)
+        utils.run(cmd, redacted_secrets=False, live=True)

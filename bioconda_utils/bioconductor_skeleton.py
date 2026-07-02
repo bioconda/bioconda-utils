@@ -8,7 +8,6 @@ import logging
 import os
 import re
 import shutil
-import sys
 import tarfile
 import tempfile
 from collections import OrderedDict
@@ -181,13 +180,14 @@ class PageNotFoundError(Exception):
     pass
 
 
+@utils.disk_cache.memoize(expire=86400)
 def bioconductor_versions():
     """
     Returns a list of available Bioconductor versions scraped from the
     Bioconductor site.
     """
     url = "https://bioconductor.org/config.yaml"
-    response = requests.get(url)
+    response = requests.get(url, timeout=20)
     bioc_config = yaml.safe_load(response.text)
     versions = list(bioc_config["r_ver_for_bioc_ver"].keys())
     # Handle semantic version sorting like 3.10 and 3.9
@@ -333,6 +333,7 @@ def cargoport_url(package, pkg_version, bioc_version=None):
     )
 
 
+@utils.disk_cache.memoize(expire=604800)
 def find_best_bioc_version(package, version):
     """
     Given a package version number, identifies which BioC version[s] it is in
@@ -361,24 +362,28 @@ def find_best_bioc_version(package, version):
             ),
         ):
             url = func(package, version, bioc_version)
-            if requests.head(url, allow_redirects=True).status_code == 200:
-                logger.debug("success: %s", url)
-                logger.info(
-                    "A working URL for %s==%s was identified for Bioconductor version %s: %s",
-                    package,
-                    version,
-                    bioc_version,
-                    url,
-                )
-                found_version = bioc_version
-                return found_version
-            else:
-                logger.debug("missing: %s", url)
+            try:
+                response = requests.head(url, allow_redirects=True, timeout=20)
+                if response.status_code == 200:
+                    logger.debug("success: %s", url)
+                    logger.info(
+                        "A working URL for %s==%s was identified for Bioconductor version %s: %s",
+                        package,
+                        version,
+                        bioc_version,
+                        url,
+                    )
+                    found_version = bioc_version
+                    return found_version
+            except requests.RequestException:
+                pass
+            logger.debug("missing: %s", url)
     raise PackageNotFoundError(
         f"Cannot find any Bioconductor versions for {package}=={version}"
     )
 
 
+@utils.disk_cache.memoize(expire=86400)
 def fetchPackages(bioc_version):
     """
     Return a dictionary of all bioconductor packages in a given release::
@@ -406,10 +411,22 @@ def fetchPackages(bioc_version):
         ),
     ]
     for url, prefix in packages_urls:
-        req = requests.get(url)
-        if not req.ok:
-            sys.exit(f"ERROR: Could not fetch {url}!\n")
+        try:
+            req = requests.get(url, timeout=20)
+            if not req.ok:
+                logger.warning(
+                    "Could not fetch %s (status %s): %s",
+                    url,
+                    req.status_code,
+                    req.reason,
+                )
+                continue
+        except requests.RequestException as e:
+            logger.warning("Could not fetch %s: %s", url, e)
+            continue
         for pkg in req.text.strip().split("\n\n"):
+            if not pkg.strip():
+                continue
             pkgDict = dict()
             lastKey = None
             for line in pkg.split("\n"):
@@ -424,6 +441,10 @@ def fetchPackages(bioc_version):
                     pkgDict[lastKey] = line[idx + 2 :].strip()
             pkgDict["URLprefix"] = prefix.strip()
             d[pkgDict["Package"]] = pkgDict
+    if not d:
+        raise RuntimeError(
+            f"Could not fetch any Bioconductor package metadata files (VIEWS) for version {bioc_version}."
+        )
     return d
 
 
@@ -514,7 +535,7 @@ class BioCProjectPage:
             "html",
             package + ".html",
         )
-        request = requests.get(url)
+        request = requests.get(url, timeout=20)
 
         if not request:
             raise PageNotFoundError(
@@ -537,7 +558,7 @@ class BioCProjectPage:
         """
         url = bioarchive_url(self.package, self.version, self.bioc_version)
         try:
-            response = requests.head(url)
+            response = requests.head(url, timeout=20)
             if response.status_code == 200:
                 return url
         except requests.exceptions.SSLError:
@@ -551,7 +572,7 @@ class BioCProjectPage:
         """
         url = cargoport_url(self.package, self.version, self.bioc_version)
         try:
-            response = requests.head(url)
+            response = requests.head(url, timeout=20)
             if response.status_code == 404:
                 # This is expected if this is a new package or an updated version.
                 # Cargo Port will archive a working URL upon merging
@@ -576,7 +597,7 @@ class BioCProjectPage:
             str(self.packages[self.package]["URLprefix"]),
             str(self.packages[self.package]["source.ver"]),
         )
-        response = requests.head(url, allow_redirects=True)
+        response = requests.head(url, allow_redirects=True, timeout=20)
         if response.status_code == 200:
             return url
 
@@ -590,7 +611,7 @@ class BioCProjectPage:
             ]
             for url in urls:
                 if url is not None:
-                    response = requests.head(url, allow_redirects=True)
+                    response = requests.head(url, allow_redirects=True, timeout=20)
                     if response.status_code == 200:
                         self._tarball_url = url
                         return url
@@ -637,7 +658,7 @@ class BioCProjectPage:
         tmp = tempfile.NamedTemporaryFile(delete=False).name
         with open(tmp, "wb") as fout:
             logger.info(f"Downloading {self.tarball_url} to {fn}")
-            response = requests.get(self.tarball_url)
+            response = requests.get(self.tarball_url, timeout=30)
             if response.status_code == 200:
                 fout.write(response.content)
             else:
@@ -1323,7 +1344,7 @@ def updateDataPackages(bioc_data_packages, pkg, urls, md5, tarball):
 def write_recipe(
     package,
     recipe_dir,
-    config,
+    config: dict[str, Any],
     bioc_data_packages=None,
     force=False,
     bioc_version=None,
@@ -1349,7 +1370,8 @@ def write_recipe(
 
     recipe_dir : str
 
-    config : str or dict
+    config : dict
+        Parsed Bioconda configuration.
 
     bioc_data_packages : str
         Path to the bioc_data_packages recipe, which stores the URL and MD5 of
@@ -1388,7 +1410,8 @@ def write_recipe(
         If None, we need to determine if this requires X and therefore additional
         build dependencies and test environment variables.
     """
-    config = utils.load_config(config)
+    config = utils.normalize_config(config)
+    utils.RepoData.register_config(config)
     proj = BioCProjectPage(package, bioc_version, pkg_version, packages=packages)
     logger.info(f"Making recipe for: {package}")
 

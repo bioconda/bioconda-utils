@@ -60,10 +60,23 @@ from typing import Protocol
 from conda import exports as conda_exports
 
 from . import utils
+from ._types import (
+    ContainerPlatform,
+    PACKAGE_SUBDIRS,
+    PkgBuildRef,
+    local_mulled_image_ref,
+)
 
 import logging
 
 logger = logging.getLogger(__name__)
+
+LOCAL_CHANNEL_SUBDIRS = tuple(
+    subdir for subdir in PACKAGE_SUBDIRS if subdir.startswith("linux-")
+) + ("noarch",)
+LOCAL_CHANNEL_MKDIRS = "\n  ".join(
+    f'mkdir -p "${{local_channel}}"/{subdir}' for subdir in LOCAL_CHANNEL_SUBDIRS
+)
 
 
 class CondaBuildConfigFile(Protocol):
@@ -93,13 +106,11 @@ set -eo pipefail
 #
 # Note that if the directory didn't exist on the host, then the staging area
 # will exist in the container but will be empty.  Channels expect at least
-# a linux-64/linux-aarch64 and noarch directory within that directory, so we
-# make sure it exists before adding the channel.
+# Linux and noarch channel subdirectories within that directory, so we make
+# sure they exist before adding the channel.
 # Also ensure conda-build's local channel directory exists the same way.
 for local_channel in '/opt/conda/conda-bld' '{self.container_staging}'; do
-  mkdir -p "${{local_channel}}"/linux-64
-  mkdir -p "${{local_channel}}"/linux-aarch64
-  mkdir -p "${{local_channel}}"/noarch
+  {local_channel_mkdirs}
   conda index "${{local_channel}}"
 done
 conda config --add channels file://{self.container_staging} 2> >(
@@ -125,7 +136,7 @@ conda index {self.container_staging}
 # Ensure permissions are correct on the host.
 HOST_USER={self.user_info[uid]}
 chown $HOST_USER:$HOST_USER {self.container_staging}/{arch}/*
-"""  # noqa: E501,E122: line too long, continuation line missing indentation or outdented
+"""  # noqa: E501
 
 # ----------------------------------------------------------------------------
 # DOCKERFILE_TEMPLATE
@@ -167,6 +178,7 @@ class RecipeBuilder:
         build_image: bool = False,
         image_build_dir: str | None = None,
         docker_base_image: str | None = None,
+        target_platform: ContainerPlatform | None = None,
     ) -> None:
         """
         Class to handle building a custom docker container that can be used for
@@ -251,6 +263,7 @@ class RecipeBuilder:
         """
         self.requirements = requirements
         self.conda_build_args = ""
+        self.target_platform: ContainerPlatform | None = target_platform
         self.build_script_template: str = build_script_template
         self.dockerfile_template = dockerfile_template
         self.keep_image = keep_image
@@ -398,10 +411,12 @@ class RecipeBuilder:
         else:
             # Network flag was added in 1.13.0, do not add it for lower versions. xref #5387
             cmd = ["docker", "build", "-t", self.docker_temp_image, build_dir]
+        if self.target_platform:
+            cmd[2:2] = ["--platform", self.target_platform]
 
         try:
             with utils.Progress():
-                p = utils.run(cmd, mask=False)
+                p = utils.run(cmd, redacted_secrets=False)
         except sp.CalledProcessError as e:
             logger.error(
                 "DOCKER FAILED: Error building docker container %s. ",
@@ -460,7 +475,11 @@ class RecipeBuilder:
         build_dir = os.path.realpath(tempfile.mkdtemp())
         # conda_exports.subdir is {platform}-{arch} like: 'linux-64' 'linux-aarch64'
         script = self.build_script_template.format_map(
-            {"self": self, "arch": "noarch" if noarch else conda_exports.subdir}
+            {
+                "self": self,
+                "arch": "noarch" if noarch else conda_exports.subdir,
+                "local_channel_mkdirs": LOCAL_CHANNEL_MKDIRS,
+            }
         )
         with open(os.path.join(build_dir, "build_script.bash"), "w") as fout:
             fout.write(script)
@@ -484,6 +503,10 @@ class RecipeBuilder:
             "--net",
             "host",
             "--rm",
+        ]
+        if self.target_platform:
+            cmd += ["--platform", self.target_platform]
+        cmd += [
             "-v",
             f"{build_script}:/opt/build_script.bash",
             "-v",
@@ -500,25 +523,31 @@ class RecipeBuilder:
 
         logger.debug("DOCKER: cmd: %s", cmd)
         with utils.Progress():
-            p = utils.run(cmd, mask=False, live=live_logs)
+            p = utils.run(cmd, redacted_secrets=False, live=live_logs)
         return p
 
     def cleanup(self) -> None:
         if self.build_image and not self.keep_image:
             cmd = ["docker", "rmi", self.docker_temp_image]
-            utils.run(cmd, mask=False)
+            utils.run(cmd, redacted_secrets=False)
 
 
-def purgeImage(mulled_upload_target: str, img: str) -> None:
-    pkg_name_and_version, pkg_build_string = img.rsplit("--", 1)
-    pkg_name, pkg_version = pkg_name_and_version.rsplit("=", 1)
-    pkg_container_image = (
-        f"quay.io/{mulled_upload_target}/{pkg_name}:{pkg_version}--{pkg_build_string}"
-    )
-    cmd = ["docker", "rmi", pkg_container_image]
-    utils.run(cmd, mask=False)
+def purgeImage(
+    img: PkgBuildRef,
+    target_platform: ContainerPlatform | None = None,
+) -> None:
+    """Remove the local mulled image ``mulled-build`` produced for *img*.
+
+    The local image is tagged under the canonical ``biocontainers`` namespace
+    by ``pkg_test.build_and_test_mulled_image`` (not the upload target), so the
+    ref is derived via :func:`local_mulled_image_ref` -- the same source
+    :func:`bioconda_utils.upload.mulled_upload` reads from when copying to the
+    registry.
+    """
+    cmd = ["docker", "rmi", local_mulled_image_ref(img, target_platform)]
+    utils.run(cmd, redacted_secrets=False)
 
 
 def pruneStoppedContainers() -> None:
     cmd = ["docker", "container", "prune", "-f"]
-    utils.run(cmd, mask=False)
+    utils.run(cmd, redacted_secrets=False)

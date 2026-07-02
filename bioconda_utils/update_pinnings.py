@@ -57,7 +57,7 @@ def will_build_variant(meta: MetaData) -> bool:
         "build_number",
         name=meta.name(),
         version=meta.version(),
-        platform=["linux", "noarch"],
+        native=True,
     )
     current_num = int(meta.build_number())
     res = all(num < current_num for num in build_numbers)
@@ -96,7 +96,7 @@ def _have_partially_matching_build_id(meta: MetaData) -> bool:
         name=meta.name(),
         version=meta.version(),
         build_number=meta.build_number(),
-        platform=["linux", "noarch"],
+        native=True,
     )
     is_noarch = bool(meta.noarch)
     current_build_id = meta.build_id()
@@ -209,7 +209,7 @@ def have_variant(meta: MetaData) -> bool:
         name=meta.name(),
         version=meta.version(),
         build=meta.build_id(),
-        platform=["linux", "noarch"],
+        native=True,
     )
     if res:
         logger.debug(
@@ -269,7 +269,7 @@ def will_build_only_missing(metas: list[MetaData]) -> bool:
                     name=name,
                     version=version,
                     build_number=build_number,
-                    platform=["linux", "noarch"],
+                    native=True,
                 ),
             ),
         )
@@ -326,7 +326,7 @@ def check(
     Args:
       recipe: The recipe to check
       build_config: conda build config object
-      keep_metas: If true, `Recipe.conda_release` is not called
+      keep_metas: If true, `Recipe.conda_render_cleanup` is not called
       skip_variant_keys: Variant keys to skip a recipe for if they are used
 
     Returns:
@@ -387,5 +387,5 @@ def check(
         else:
             flags |= State.BUMP
     if not keep_metas:
-        recipe.conda_release()
+        recipe.conda_render_cleanup()
     return flags, recipe

@@ -136,7 +136,7 @@ def build_from_recipes(recipes: Iterable[Recipe]) -> nx.DiGraph:
 def filter_recipe_dag(
     dag: nx.DiGraph, include: Sequence[str], exclude: Sequence[str]
 ) -> nx.DiGraph:
-    """Reduces **dag** to packages in **names** and their requirements"""
+    """Reduces **dag** to packages in **include** and their requirements"""
     nodes = set()
     for recipe in dag:
         if (
