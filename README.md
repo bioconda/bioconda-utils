@@ -14,10 +14,24 @@ ensure that your local setup matches that used to build recipes on travis-ci as
 closely as possible.
 
 However, if you would like to test in a standalone manner or help develop
-bioconda-utils, you can use the Just wrappers around the Pixi tasks:
+bioconda-utils, you can use the respective Pixi tasks defined in
+[`pixi.toml`](pixi.toml). You will need
+[an installation of `pixi`](https://pixi.prefix.dev/latest/installation/).
+Then, you can install the current `bioconda-utils` version in your local folder
+into the `dev` environment, by
+[running](https://pixi.prefix.dev/latest/reference/cli/pixi/run/) the `install`
+task:
 
 ```bash
-just install
+pixi run install
+```
+
+To then run `bioconda-utils` from anywhere, start a
+[`pixi` shell](https://pixi.prefix.dev/latest/reference/cli/pixi/shell/) with
+that environment activated:
+
+```bash
+pixi shell -e dev
 ```
 
 See the help for the `bioconda-utils` command-line interface for details:
@@ -25,3 +39,17 @@ See the help for the `bioconda-utils` command-line interface for details:
 ```bash
 bioconda-utils -h
 ```
+
+Alternatively, you can also globally install `bioconda-utils`, adding it to
+your user's `$PATH`, with the `global-install` task:
+
+```bash
+pixi run global-install
+```
+
+Or use the Just wrappers around the Pixi tasks:
+
+```bash
+just global-install
+```
+
