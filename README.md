@@ -18,14 +18,17 @@ bioconda-utils, you can use the respective Pixi tasks defined in
 [`pixi.toml`](pixi.toml). You will need
 [an installation of `pixi`](https://pixi.prefix.dev/latest/installation/).
 Then, you can install the current `bioconda-utils` version in your local folder
-into the `dev` environment, by running the `install` task:
+into the `dev` environment, by
+[running](https://pixi.prefix.dev/latest/reference/cli/pixi/run/) the `install`
+task:
 
 ```bash
 pixi run install
 ```
 
-To then run `bioconda-utils` from anywhere, start a shell with that environment
-activated:
+To then run `bioconda-utils` from anywhere, start a
+[`pixi` shell](https://pixi.prefix.dev/latest/reference/cli/pixi/shell/) with
+that environment activated:
 
 ```bash
 pixi shell -e dev
