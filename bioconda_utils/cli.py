@@ -1,5 +1,9 @@
 """Bioconda Utils command-line interface built with Typer."""
 
+# Workaround for spurious numpy warning message
+# ".../importlib/_bootstrap.py:219: RuntimeWarning: numpy.dtype size \
+# changed, may indicate binary incompatibility. Expected 96, got 88"
+import warnings
 import logging
 from typing import Annotated, Any, Literal
 
@@ -32,7 +36,10 @@ from . import bioconductor_skeleton as _bioconductor_skeleton
 from . import cran_skeleton
 from . import update_pinnings
 from . import graph
+from . import pkg_test
 from .githandler import BiocondaRepo, install_gpg_key
+
+warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 
 app = typer.Typer(
     help="Utilities for building and maintaining Bioconda recipes.",
@@ -41,6 +48,12 @@ app = typer.Typer(
     rich_markup_mode=None,
 )
 logger = logging.getLogger(__name__)
+
+# A package is the name of the software package, like `bowtie`.
+#
+# A recipe is the path to the recipe of one version of a package, like
+# `recipes/bowtie` or `recipes/bowtie/1.0.1`.
+
 LogLevel = Literal["debug", "info", "warning", "error", "critical"]
 PackagePatterns = str | list[str]
 
@@ -88,6 +101,15 @@ ConfigArg = Annotated[
         help="Path to Bioconda config (default: config.yml)",
         callback=_validate_path_exists,
     ),
+]
+# Lint defers path validation so --list-checks can run without a recipe checkout.
+LintRecipeFolderArg = Annotated[
+    str | None,
+    typer.Argument(help="Path to folder containing recipes (default: recipes/)"),
+]
+LintConfigArg = Annotated[
+    str | None,
+    typer.Argument(help="Path to Bioconda config (default: config.yml)"),
 ]
 ThreadsOpt = Annotated[
     int,
@@ -340,7 +362,7 @@ def build(
             "--mulled-conda-image",
             help="Conda Docker image to install the package with during\n     the mulled based tests.",
         ),
-    ] = "quay.io/bioconda/create-env:latest",
+    ] = pkg_test.CREATE_ENV_IMAGE,
     docker_base_image: Annotated[
         str | None,
         typer.Option(
@@ -604,8 +626,8 @@ def dependent(
 
 @app.command("lint")
 def lint(
-    recipe_folder: RecipeFolderArg = None,
-    config: ConfigArg = None,
+    recipe_folder: LintRecipeFolderArg = None,
+    config: LintConfigArg = None,
     packages: Annotated[
         list[str] | None,
         typer.Option(
@@ -661,6 +683,8 @@ def lint(
         if list_checks:
             print("\n".join((str(check) for check in _lint.get_checks())))
             sys.exit(0)
+        _validate_path_exists(recipe_folder)
+        _validate_path_exists(config)
         config_data = utils.load_config(config)
         if cache is not None:
             utils.RepoData().set_cache(cache)
@@ -684,10 +708,10 @@ def lint(
         else:
             sys.exit("Errors were found")
     except Exception:
+        logger.exception("Lint command failed")
         if pdb:
             import pdb as debugger
 
-            logger.exception("Dropping into debugger")
             debugger.post_mortem()
             return None
         raise
@@ -924,10 +948,10 @@ def update_pinning(
                 f"The build numbers in the following recipes could not be incremented: {list(bumpErrors)}"
             )
     except Exception:
+        logger.exception("Update-pinning command failed")
         if pdb:
             import pdb as debugger
 
-            logger.exception("Dropping into debugger")
             debugger.post_mortem()
             return None
         raise
@@ -1243,6 +1267,7 @@ def autobump(
     excluded_channels = exclude_channels or ["conda-forge"]
     use_default_signing_key = sign and sign_key is None
     try:
+        # load and register config
         config_dict = utils.load_config(config)
         from . import autobump
         from . import githubhandler
@@ -1261,24 +1286,37 @@ def autobump(
                 config_dict,
                 cache_fn=cache and cache + "_dag.pkl",
             )
+        # Setup scanning pipeline
         scanner = autobump.Scanner(
             recipe_source,
             cache_fn=cache and cache + "_scan.pkl",
             status_fn=recipe_status,
         )
+
+        # Always exclude recipes that were explicitly disabled
         scanner.add(autobump.ExcludeDisabled)
+
+        # Exclude packages that are on the blacklist
         if not ignore_skiplists:
             scanner.add(autobump.ExcludeBlacklisted, recipe_folder, config_dict)
+
+        # Exclude sub-recipes
         if exclude_subrecipes != "never":
             scanner.add(
                 autobump.ExcludeSubrecipe, always=exclude_subrecipes == "always"
             )
+
+        # Exclude recipes with dependencies pending an update
         if not no_check_pending_deps and isinstance(
             recipe_source, autobump.RecipeGraphSource
         ):
             scanner.add(autobump.ExcludeDependencyPending, recipe_source.dag)
+
+        # Load recipe
         git_handler = None
         if check_branch or create_branch or create_pr or only_active:
+            # We need to take the recipe from the git repo. This
+            # loads the bump/<recipe> branch if available
             git_handler = BiocondaRepo(recipe_folder, dry_run)
             git_handler.checkout_master()
             if only_active:
@@ -1299,24 +1337,36 @@ def autobump(
             if commit_as:
                 git_handler.set_user(*commit_as)
         else:
+            # Just load from local file system
             scanner.add(autobump.LoadRecipe)
             if sign or sign_key is not None:
                 logger.warning("Not using git. --sign has no effect")
+
+        # Exclude recipes that are present in "other channels"
         if excluded_channels != ["none"]:
             scanner.add(
                 autobump.ExcludeOtherChannel,
                 excluded_channels,
                 cache and cache + "_repodata.txt",
             )
+        # Test if due to pinnings, the package hash would change and a rebuild
+        # has become necessary. If so, bump the buildnumber.
         if not no_check_pinnings:
             scanner.add(autobump.CheckPinning)
+
+        # Check for new versions and update the SHA afterwards
         if not no_check_version_update:
             scanner.add(
                 autobump.UpdateVersion, hosters.Hoster.select_hoster, unparsed_urls
             )
             if fetch_requirements:
+                # This attempts to determine dependencies exported by PyPi packages,
+                # requires running setup.py, so only enabled on request.
                 scanner.add(autobump.FetchUpstreamDependencies)
             scanner.add(autobump.UpdateChecksums, failed_urls)
+
+        # Write the recipe. For making PRs, the recipe should be written to a branch
+        # of its own.
         if create_branch or create_pr:
             scanner.add(autobump.GitWriteRecipe, git_handler)
         else:
@@ -1330,16 +1380,22 @@ def autobump(
                 token, dry_run, "bioconda", "bioconda-recipes"
             )
             scanner.add(autobump.CreatePullRequest, git_handler, github_handler)
+
+        # Terminate the scanning pipeline after x recipes have reached this point.
         if max_updates:
             scanner.add(autobump.MaxUpdates, max_updates)
+
+        # And go.
         scanner.run()
+
+        # Cleanup
         if git_handler:
             git_handler.close()
     except Exception:
+        logger.exception("Autobump command failed")
         if pdb:
             import pdb as debugger
 
-            logger.exception("Dropping into debugger")
             debugger.post_mortem()
             return None
         raise
@@ -1400,10 +1456,12 @@ def handle_merged_pr(
         raise ValueError("repo is required")
     if git_range is None:
         raise ValueError("git_range is required")
+    if not 1 <= len(git_range) <= 2:
+        raise ValueError("git_range requires one or two git references")
     res = upload_pr_artifacts(
         config,
         repo,
-        git_range[1],
+        git_range[-1],
         dryrun=dry_run,
         mulled_upload_target=quay_upload_target,
         label=label,
@@ -1501,6 +1559,9 @@ def annotate_build_failures(
             failure_record.write()
 
 
+# TODO add subcommand to list recipes with build failure records descendingly sorted by downloads
+# in case of version subdirs, only list if the latest version also has the build failure record.
+# list how many recipes depend on this and sort by it primarily if inner
 @app.command("list-build-failures")
 def list_build_failures(
     recipe_folder: RecipeFolderArg = None,
