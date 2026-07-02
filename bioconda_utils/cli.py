@@ -60,8 +60,8 @@ PackagePatterns = str | list[str]
 # Shared CLI parameter type aliases
 
 
-def _validate_path_exists(value: str | None) -> str | None:
-    if value is not None and not os.path.exists(value):
+def _validate_path_exists(value: str) -> str:
+    if not os.path.exists(value):
         raise typer.BadParameter(f"path '{value}' does not exist")
     return value
 
@@ -89,14 +89,14 @@ LogCommandMaxLinesOpt = Annotated[
     ),
 ]
 RecipeFolderArg = Annotated[
-    str | None,
+    str,
     typer.Argument(
         help="Path to folder containing recipes (default: recipes/)",
         callback=_validate_path_exists,
     ),
 ]
 ConfigArg = Annotated[
-    str | None,
+    str,
     typer.Argument(
         help="Path to Bioconda config (default: config.yml)",
         callback=_validate_path_exists,
@@ -104,11 +104,11 @@ ConfigArg = Annotated[
 ]
 # Lint defers path validation so --list-checks can run without a recipe checkout.
 LintRecipeFolderArg = Annotated[
-    str | None,
+    str,
     typer.Argument(help="Path to folder containing recipes (default: recipes/)"),
 ]
 LintConfigArg = Annotated[
-    str | None,
+    str,
     typer.Argument(help="Path to Bioconda config (default: config.yml)"),
 ]
 ThreadsOpt = Annotated[
@@ -233,12 +233,12 @@ def root(
 @app.command("build")
 def build(
     recipe_folder: Annotated[
-        str | None,
+        str,
         typer.Argument(help="Path to folder containing recipes (default: recipes/)"),
-    ] = None,
+    ] = "recipes/",
     config: Annotated[
-        str | None, typer.Argument(help="Path to Bioconda config (default: config.yml)")
-    ] = None,
+        str, typer.Argument(help="Path to Bioconda config (default: config.yml)")
+    ] = "config.yml",
     packages: Annotated[
         list[str] | None,
         typer.Option(
@@ -421,8 +421,6 @@ def build(
     log_command_max_lines: LogCommandMaxLinesOpt = None,
 ) -> None:
     """Build and test Bioconda recipes."""
-    recipe_folder = recipe_folder or "recipes/"
-    config = config or "config.yml"
     _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines)
     package_patterns: PackagePatterns = packages or "*"
     cfg = utils.load_config(config)
@@ -498,8 +496,8 @@ def build(
 
 @app.command("dag")
 def dag(
-    recipe_folder: RecipeFolderArg = None,
-    config: ConfigArg = None,
+    recipe_folder: RecipeFolderArg = "recipes/",
+    config: ConfigArg = "config.yml",
     packages: Annotated[
         list[str] | None,
         typer.Option(
@@ -524,8 +522,6 @@ def dag(
     log_command_max_lines: LogCommandMaxLinesOpt = None,
 ) -> None:
     """Export the DAG of packages to a graph format file for visualization"""
-    recipe_folder = recipe_folder or "recipes/"
-    config = config or "config.yml"
     _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines)
     package_patterns: PackagePatterns = packages or "*"
     config_data = utils.load_config(config)
@@ -568,8 +564,8 @@ def dag(
 
 @app.command("dependent")
 def dependent(
-    recipe_folder: RecipeFolderArg = None,
-    config: ConfigArg = None,
+    recipe_folder: RecipeFolderArg = "recipes/",
+    config: ConfigArg = "config.yml",
     restrict: Annotated[
         bool,
         typer.Option(
@@ -597,8 +593,6 @@ def dependent(
     log_command_max_lines: LogCommandMaxLinesOpt = None,
 ) -> None:
     """Print recipes dependent on a package"""
-    recipe_folder = recipe_folder or "recipes/"
-    config = config or "config.yml"
     _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines)
     if dependencies and reverse_dependencies:
         raise ValueError(
@@ -626,8 +620,8 @@ def dependent(
 
 @app.command("lint")
 def lint(
-    recipe_folder: LintRecipeFolderArg = None,
-    config: LintConfigArg = None,
+    recipe_folder: LintRecipeFolderArg = "recipes/",
+    config: LintConfigArg = "config.yml",
     packages: Annotated[
         list[str] | None,
         typer.Option(
@@ -675,8 +669,6 @@ def lint(
     """Lint recipes
 
     Reports a TSV of linting results to stdout."""
-    recipe_folder = recipe_folder or "recipes/"
-    config = config or "config.yml"
     _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines)
     package_patterns: PackagePatterns = packages or "*"
     try:
@@ -821,8 +813,8 @@ def duplicates(
 
 @app.command("update-pinning")
 def update_pinning(
-    recipe_folder: RecipeFolderArg = None,
-    config: ConfigArg = None,
+    recipe_folder: RecipeFolderArg = "recipes/",
+    config: ConfigArg = "config.yml",
     packages: Annotated[
         list[str] | None,
         typer.Option(
@@ -872,8 +864,6 @@ def update_pinning(
 ) -> None:
     """Bump a package build number and all dependencies as required due
     to a change in pinnings"""
-    recipe_folder = recipe_folder or "recipes/"
-    config = config or "config.yml"
     _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines, threads)
     package_patterns: PackagePatterns = packages or "*"
     try:
@@ -965,8 +955,8 @@ def bioconductor_skeleton(
             help='Bioconductor package name. This is case-sensitive, and\n     must match the package name on the Bioconductor site. If "update-all-packages"\n     is specified, then all packages in a given bioconductor release will be\n     created/updated (--force is then implied).'
         ),
     ],
-    recipe_folder: RecipeFolderArg = None,
-    config: ConfigArg = None,
+    recipe_folder: RecipeFolderArg = "recipes/",
+    config: ConfigArg = "config.yml",
     bioc_data_packages: Annotated[
         str | None,
         typer.Argument(
@@ -1035,8 +1025,6 @@ def bioconductor_skeleton(
     Not bio-related:
         'bioconda-utils clean-cran-skeleton <recipe>'
         and submit to conda-forge."""
-    recipe_folder = recipe_folder or "recipes/"
-    config = config or "config.yml"
     _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines)
     skip_if_in_channels = (
         skip_if_in_channels
@@ -1122,8 +1110,8 @@ def clean_cran_skeleton(
 
 @app.command("autobump")
 def autobump(
-    recipe_folder: RecipeFolderArg = None,
-    config: ConfigArg = None,
+    recipe_folder: RecipeFolderArg = "recipes/",
+    config: ConfigArg = "config.yml",
     packages: Annotated[
         list[str] | None,
         typer.Option(
@@ -1260,8 +1248,6 @@ def autobump(
     log_command_max_lines: LogCommandMaxLinesOpt = None,
 ) -> None:
     """Updates recipes in recipe_folder"""
-    recipe_folder = recipe_folder or "recipes/"
-    config = config or "config.yml"
     _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines, threads)
     package_patterns: PackagePatterns = packages or "*"
     excluded_channels = exclude_channels or ["conda-forge"]
@@ -1403,8 +1389,8 @@ def autobump(
 
 @app.command("handle-merged-pr")
 def handle_merged_pr(
-    recipe_folder: RecipeFolderArg = None,
-    config: ConfigArg = None,
+    recipe_folder: RecipeFolderArg = "recipes/",
+    config: ConfigArg = "config.yml",
     repo: Annotated[
         str | None,
         typer.Option(
@@ -1448,8 +1434,6 @@ def handle_merged_pr(
     log_command_max_lines: LogCommandMaxLinesOpt = None,
 ) -> None:
     """Upload artifacts from a merged pull request."""
-    recipe_folder = recipe_folder or "recipes/"
-    config = config or "config.yml"
     _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines)
     label = os.getenv("BIOCONDA_LABEL", None) or None
     if repo is None:
@@ -1564,8 +1548,8 @@ def annotate_build_failures(
 # list how many recipes depend on this and sort by it primarily if inner
 @app.command("list-build-failures")
 def list_build_failures(
-    recipe_folder: RecipeFolderArg = None,
-    config: ConfigArg = None,
+    recipe_folder: RecipeFolderArg = "recipes/",
+    config: ConfigArg = "config.yml",
     channel: Annotated[
         str, typer.Option("--channel", help="Channel with packages to check")
     ] = "bioconda",
@@ -1585,8 +1569,6 @@ def list_build_failures(
     ] = None,
 ) -> None:
     """List recipes with build failure records"""
-    recipe_folder = recipe_folder or "recipes/"
-    config = config or "config.yml"
     config_data = utils.load_config(config)
     df = collect_build_failure_dataframe(
         recipe_folder,
