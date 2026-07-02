@@ -11,7 +11,7 @@ import logging
 from collections.abc import Sequence
 
 from . import utils
-from ._types import ContainerPlatform, PkgBuildRef
+from ._types import ContainerPlatform, MULLED_LOCAL_NAMESPACE, PkgBuildRef
 
 from conda_build.metadata import MetaData
 from conda_index.index import update_index
@@ -414,7 +414,7 @@ def build_and_test_mulled_image(
         "build-and-test",
         str(spec),
         "-n",
-        "biocontainers",
+        MULLED_LOCAL_NAMESPACE,
         "--test",
         tests,
     ]

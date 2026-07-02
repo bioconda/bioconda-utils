@@ -380,7 +380,7 @@ def test_ensure_quay_repository_makes_private_repository_public(monkeypatch):
     assert post.call_args.kwargs["json"] == {"visibility": "public"}
 
 
-def test_purge_image_uses_platform_suffix(monkeypatch):
+def test_purge_image_removes_biocontainers_local_image(monkeypatch):
     commands = []
     monkeypatch.setattr(
         docker_utils.utils,
@@ -388,7 +388,46 @@ def test_purge_image_uses_platform_suffix(monkeypatch):
         lambda cmd, **_kwargs: commands.append(cmd),
     )
 
-    docker_utils.purgeImage(BIOCONTAINERS, SAMTOOLS_1_3_0, "linux/arm64")
+    # purgeImage must target the canonical biocontainers local image that
+    # mulled-build produced -- NOT the upload target namespace. Regression test
+    # for a crash where it ran `docker rmi quay.io/<upload-target>/...` against
+    # an image that was never tagged locally, raising CalledProcessError and
+    # aborting the build after a successful upload.
+    docker_utils.purgeImage(SAMTOOLS_1_3_0, "linux/arm64")
+    docker_utils.purgeImage(SAMTOOLS_1_3_0, "linux/amd64")
 
-    assert commands
-    assert "quay.io/biocontainers/samtools:1.3--0-arm64" in " ".join(commands[0])
+    assert commands == [
+        ["docker", "rmi", "quay.io/biocontainers/samtools:1.3--0-arm64"],
+        ["docker", "rmi", "quay.io/biocontainers/samtools:1.3--0"],
+    ]
+
+
+def test_mulled_upload_sources_local_image_from_biocontainers(monkeypatch):
+    """mulled_upload must copy from the biocontainers local image regardless of
+    the upload target namespace, because mulled-build always tags the local
+    image as biocontainers. Guards the same namespace split that broke
+    purgeImage: the destination is target-namespaced, but the source is not."""
+    monkeypatch.setenv("QUAY_LOGIN", "user:token")
+    monkeypatch.setattr(upload, "ensure_quay_repository", lambda *_args: None)
+    monkeypatch.setattr(upload.utils, "skopeo_env", lambda: {})
+
+    sources = []
+
+    def run(cmd, **_kwargs):
+        if "copy" in cmd:
+            sources.append(cmd[cmd.index("copy") + 1])
+        if "--config" in cmd:
+            return type(
+                "R",
+                (),
+                {"stdout": json.dumps({"os": "linux", "architecture": "amd64"})},
+            )()
+        return type("R", (), {"stdout": "sha256:" + "a" * 64})()
+
+    monkeypatch.setattr(upload.utils, "run", run)
+
+    # Upload to a NON-biocontainers target: the destination is quay0-namespaced,
+    # but the skopeo copy source must still be the biocontainers local image.
+    upload.mulled_upload(SAMTOOLS_1_3_0, _types.QuayUploadTarget("quay0"), "linux/amd64")
+
+    assert sources == ["docker-daemon:quay.io/biocontainers/samtools:1.3--0"]

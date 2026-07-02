@@ -64,8 +64,7 @@ from ._types import (
     ContainerPlatform,
     PACKAGE_SUBDIRS,
     PkgBuildRef,
-    QuayUploadTarget,
-    docker_platform_tag_suffix,
+    local_mulled_image_ref,
 )
 
 import logging
@@ -534,17 +533,18 @@ class RecipeBuilder:
 
 
 def purgeImage(
-    mulled_upload_target: QuayUploadTarget,
     img: PkgBuildRef,
     target_platform: ContainerPlatform | None = None,
 ) -> None:
-    suffix = docker_platform_tag_suffix(target_platform)
-    suffix = f"-{suffix}" if suffix else ""
-    pkg_container_image = (
-        f"quay.io/{mulled_upload_target}/{img.name}:"
-        f"{img.version}--{img.build_string}{suffix}"
-    )
-    cmd = ["docker", "rmi", pkg_container_image]
+    """Remove the local mulled image ``mulled-build`` produced for *img*.
+
+    The local image is tagged under the canonical ``biocontainers`` namespace
+    by ``pkg_test.build_and_test_mulled_image`` (not the upload target), so the
+    ref is derived via :func:`local_mulled_image_ref` -- the same source
+    :func:`bioconda_utils.upload.mulled_upload` reads from when copying to the
+    registry.
+    """
+    cmd = ["docker", "rmi", local_mulled_image_ref(img, target_platform)]
     utils.run(cmd, redacted_secrets=False)
 
 

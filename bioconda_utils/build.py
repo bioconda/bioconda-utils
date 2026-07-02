@@ -697,7 +697,7 @@ def build_recipes(
                         if mulled_upload_records is not None:
                             write_image_record(mulled_upload_records, record)
                         docker_utils.purgeImage(
-                            mulled_upload_target, img.pkg_ref, img.target_platform
+                            img.pkg_ref, img.target_platform
                         )
 
         # remove traces of the build

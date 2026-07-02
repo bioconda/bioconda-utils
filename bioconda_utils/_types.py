@@ -147,6 +147,35 @@ def docker_platform_staging_suffix(target_platform: ContainerPlatform) -> str:
     return target_platform.removeprefix("linux/").replace("/", "-")
 
 
+#: Namespace under which bioconda-utils tells ``mulled-build`` to tag local
+#: images (the ``-n`` argument). Local mulled images are always built under
+#: this canonical namespace regardless of the upload target, so they match
+#: production naming; :func:`bioconda_utils.upload.mulled_upload` re-namespaces
+#: them on push. Every consumer of the local image ref -- ``pkg_test``'s
+#: ``-n`` value, :func:`local_mulled_image_ref`, and the cleanup in
+#: :func:`bioconda_utils.docker_utils.purgeImage` -- must agree on this.
+MULLED_LOCAL_NAMESPACE = "biocontainers"
+
+
+def local_mulled_image_ref(
+    image: PkgBuildRef, target_platform: ContainerPlatform | None = None
+) -> str:
+    """Return the local Docker ref ``mulled-build`` produces for *image*.
+
+    ``mulled-build build-and-test -n biocontainers`` tags the local image as
+    ``quay.io/biocontainers/<name>:<version>--<build>`` for the native arch and
+    appends ``-<arch>`` for every other target platform (see
+    :func:`docker_platform_tag_suffix`). This is the single source of truth for
+    that ref: the upload source (:func:`bioconda_utils.upload.mulled_upload`)
+    and the post-upload cleanup (:func:`bioconda_utils.docker_utils.purgeImage`)
+    both build it here so they can never disagree on the namespace.
+    """
+    tag = f"{image.version}--{image.build_string}"
+    if suffix := docker_platform_tag_suffix(target_platform):
+        tag = f"{tag}-{suffix}"
+    return f"quay.io/{MULLED_LOCAL_NAMESPACE}/{image.name}:{tag}"
+
+
 def native_container_platform() -> ContainerPlatform:
     """Return the supported Linux container platform matching this host."""
     arch = platform.machine().lower()
