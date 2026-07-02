@@ -20,7 +20,7 @@ conda-package-streaming = "0.12.*"
 mamba = "2.5.*"
 
 # CLI
-argh = "0.31.*"
+typer = "0.26.*"
 # Logging
 colorlog = "6.*"
 tqdm = "4.67.*"  # Progress monitor
