@@ -25,7 +25,7 @@ import psutil
 from threading import Event, Thread
 from pathlib import PurePath
 from collections import Counter, defaultdict, namedtuple, deque
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from itertools import product, chain, zip_longest
 from functools import partial
 from typing import Any, cast
@@ -66,6 +66,7 @@ from boltons.funcutils import FunctionBuilder
 cast(Any, conda.gateways.logging).initialize_logging = lambda: None
 
 logger = logging.getLogger(__name__)
+ConfigSource = str | os.PathLike[str] | dict[str, Any]
 
 disk_cache = diskcache.Cache(platformdirs.user_cache_dir("bioconda-utils"))
 
@@ -833,7 +834,11 @@ def format_link(uri, fmt: str, prefix: str = "", label: str = ""):
         raise ValueError(f"Invalid link format: {fmt}")
 
 
-def get_recipes(recipe_folder, package="*", exclude=None):
+def get_recipes(
+    recipe_folder: str,
+    package: str | Iterable[str] = "*",
+    exclude: str | Iterable[str] | None = None,
+) -> Iterator[str]:
     """
     Generator of recipes.
 
@@ -1085,7 +1090,7 @@ def get_package_paths(recipe, check_channels, force=False, finalize=True):
     )
 
 
-def validate_config(config):
+def validate_config(config: ConfigSource) -> None:
     """
     Validate config against schema
 
@@ -1107,7 +1112,7 @@ def validate_config(config):
     validate(config, schema)
 
 
-def load_config(path):
+def load_config(path: ConfigSource) -> dict[str, Any]:
     """
     Parses config file, building paths to relevant blacklists
 
@@ -1116,6 +1121,9 @@ def load_config(path):
     path : str
         Path to YAML config file
     """
+    if isinstance(path, os.PathLike):
+        path = os.fspath(path)
+
     validate_config(path)
 
     if isinstance(path, dict):
@@ -1123,13 +1131,17 @@ def load_config(path):
         def relpath(p):
             return p
 
-        config = path
+        config: dict[str, Any] = path.copy()
     else:
 
         def relpath(p):
             return os.path.join(os.path.dirname(path), p)
 
-        config = yaml.safe_load(open(path))
+        with open(path) as config_file:
+            loaded_config = yaml.safe_load(config_file)
+        if not isinstance(loaded_config, dict):
+            raise ValueError("Bioconda configuration must be a mapping")
+        config = loaded_config
 
     def get_list(key):
         # always return empty list, also if NoneType is defined in yaml
