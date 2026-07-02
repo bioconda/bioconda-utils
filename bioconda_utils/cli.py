@@ -44,6 +44,20 @@ LogLevel = Literal["debug", "info", "warning", "error", "critical"]
 PackagePatterns = str | list[str]
 
 # Shared CLI parameter type aliases
+
+
+def _validate_path_exists(value: str | None) -> str | None:
+    if value is not None and not os.path.exists(value):
+        raise typer.BadParameter(f"path '{value}' does not exist")
+    return value
+
+
+def _validate_positive_int(value: int) -> int:
+    if value < 1:
+        raise typer.BadParameter("must be a positive integer")
+    return value
+
+
 LoglevelOpt = Annotated[
     LogLevel,
     typer.Option(
@@ -62,14 +76,26 @@ LogCommandMaxLinesOpt = Annotated[
 ]
 RecipeFolderArg = Annotated[
     str | None,
-    typer.Argument(help="Path to folder containing recipes (default: recipes/)"),
+    typer.Argument(
+        help="Path to folder containing recipes (default: recipes/)",
+        callback=_validate_path_exists,
+    ),
 ]
 ConfigArg = Annotated[
-    str | None, typer.Argument(help="Path to Bioconda config (default: config.yml)")
+    str | None,
+    typer.Argument(
+        help="Path to Bioconda config (default: config.yml)",
+        callback=_validate_path_exists,
+    ),
 ]
 ThreadsOpt = Annotated[
     int,
-    typer.Option("-t", "--threads", help="Limit maximum number of processes used."),
+    typer.Option(
+        "-t",
+        "--threads",
+        help="Limit maximum number of processes used.",
+        callback=_validate_positive_int,
+    ),
 ]
 PdbOpt = Annotated[
     bool, typer.Option("-P", "--pdb", help="Drop into debugger on exception")
