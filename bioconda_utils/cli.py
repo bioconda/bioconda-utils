@@ -239,7 +239,7 @@ def recipe_folder_and_config(allow_missing_for=None):
             args = check_arg(
                 args, recipe_folder_idx, "recipe_folder", "recipes/", allow
             )
-            args = check_arg(args, config_idx, "config", "config.yml", allow)
+            args = check_arg(args, config_idx, "config", Path("config.yml"), allow)
             func(*args, **kwargs)
 
         return wrapper
