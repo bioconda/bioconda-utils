@@ -273,3 +273,11 @@ def test_overwrite(tmpdir, bioc_fetch):
         force=True,
         packages=bioc_fetch,
     )
+
+
+def test_fetch_packages_invalid_version():
+    with pytest.raises(RuntimeError) as excinfo:
+        bioconductor_skeleton.fetchPackages("99.99")
+    assert "Could not fetch any Bioconductor package metadata files" in str(
+        excinfo.value
+    )

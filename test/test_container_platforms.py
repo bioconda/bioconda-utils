@@ -428,6 +428,8 @@ def test_mulled_upload_sources_local_image_from_biocontainers(monkeypatch):
 
     # Upload to a NON-biocontainers target: the destination is quay0-namespaced,
     # but the skopeo copy source must still be the biocontainers local image.
-    upload.mulled_upload(SAMTOOLS_1_3_0, _types.QuayUploadTarget("quay0"), "linux/amd64")
+    upload.mulled_upload(
+        SAMTOOLS_1_3_0, _types.QuayUploadTarget("quay0"), "linux/amd64"
+    )
 
     assert sources == ["docker-daemon:quay.io/biocontainers/samtools:1.3--0"]
