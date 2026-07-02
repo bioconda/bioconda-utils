@@ -16,6 +16,7 @@ from bioconda_utils.build_failure import (
 )
 import sys
 import os
+from pathlib import Path
 import shlex
 from collections import defaultdict, Counter
 from functools import partial
@@ -250,7 +251,7 @@ def build(
         ),
     ] = False,
     build_script_template: Annotated[
-        str | None,
+        Path | None,
         typer.Option(
             "--build-script-template",
             help="Filename to optionally replace build\n     script template used by the Docker container. By default use\n     docker_utils.BUILD_SCRIPT_TEMPLATE. Only used if --docker is True.",
@@ -411,9 +412,9 @@ def build(
     recipes = get_recipes(cfg, recipe_folder, package_patterns, git_range)
     if docker:
         if build_script_template is not None:
-            build_script_template = open(build_script_template).read()
+            build_script_content = build_script_template.read_text()
         else:
-            build_script_template = docker_utils.BUILD_SCRIPT_TEMPLATE
+            build_script_content = docker_utils.BUILD_SCRIPT_TEMPLATE
         if package_dir is None:
             use_host_conda_bld = True
         else:
@@ -432,7 +433,7 @@ def build(
         )
         logger.info(f"Using docker image {docker_base_image} for building.")
         docker_builder = docker_utils.RecipeBuilder(
-            build_script_template=build_script_template,
+            build_script_template=build_script_content,
             pkg_dir=package_dir,
             use_host_conda_bld=use_host_conda_bld,
             keep_image=keep_image,
@@ -1137,7 +1138,7 @@ def autobump(
         ),
     ] = None,
     exclude_subrecipes: Annotated[
-        str | None,
+        Literal["always", "never"] | None,
         typer.Option(
             "--exclude-subrecipes",
             help="By default, only subrecipes explicitly\n     enabled for watch in meta.yaml are considered. Set to 'always' to\n     exclude all subrecipes.  Set to 'never' to include all subrecipes",
