@@ -1,5 +1,4 @@
 import os
-import sys
 import time
 from typing import Any
 from collections.abc import Iterator
@@ -16,7 +15,7 @@ import conda.base.constants
 import pandas as pd
 import networkx as nx
 
-from .githandler import BiocondaRepo
+from .githandler import BiocondaRepo, GitRange
 
 from bioconda_utils.recipe import Recipe
 from bioconda_utils import graph, utils
@@ -236,7 +235,7 @@ def collect_build_failure_dataframe(
     channel: str,
     link_fmt: str = "txt",
     link_prefix: str = "",
-    git_range: list[str] | None = None,
+    git_range: GitRange | None = None,
 ) -> pd.DataFrame:
     def get_build_failure_records(recipe: str) -> Iterator[BuildFailureRecord]:
         return filter(
@@ -253,12 +252,8 @@ def collect_build_failure_dataframe(
     recipes = list(utils.get_recipes(recipe_folder))
 
     if git_range:
-        if not git_range or len(git_range) > 2:
-            sys.exit("--git-range may have only one or two arguments")
-        other = git_range[0]
-        ref = "HEAD" if len(git_range) == 1 else git_range[1]
         repo = BiocondaRepo(recipe_folder)
-        changed_recipes = repo.get_recipes_to_build(ref, other)
+        changed_recipes = repo.get_recipes_to_build(git_range.ref, git_range.base)
         logger.info(
             "Constraining to %s git modified recipes%s.",
             len(changed_recipes),

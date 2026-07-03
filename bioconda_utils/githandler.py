@@ -5,12 +5,51 @@ import logging
 import os
 import re
 import subprocess
+from dataclasses import dataclass
 from typing import BinaryIO, Protocol
 
 import git
 import yaml
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+
+
+@dataclass(frozen=True)
+class GitRange:
+    """Changes on ``ref`` since it diverged from ``base``.
+
+    This matches the directional merge-base behavior of ``git diff A...B``.
+    """
+
+    base: str
+    ref: str = "HEAD"
+
+    @classmethod
+    def parse(cls, spec: str) -> "GitRange":
+        spec = spec.strip()
+        if not spec:
+            raise ValueError("git range cannot be empty")
+
+        if "..." in spec:
+            if spec.count("...") != 1:
+                raise ValueError("git range must contain exactly one '...' separator")
+            base, ref = spec.split("...", maxsplit=1)
+            if not base or not ref or base.endswith(".") or ref.startswith("."):
+                raise ValueError("git range must have the form BASE...REF")
+            if ".." in base or ".." in ref:
+                raise ValueError("git refs cannot contain '..'")
+            return cls(base, ref)
+
+        if ".." in spec:
+            raise ValueError(
+                "two-dot ranges are not supported; use BASE...REF to select "
+                "changes on REF since its merge base with BASE"
+            )
+
+        return cls(spec)
+
+    def __str__(self) -> str:
+        return f"{self.base}...{self.ref}"
 
 
 def install_gpg_key(key) -> str:

@@ -37,7 +37,7 @@ from . import cran_skeleton
 from . import update_pinnings
 from . import graph
 from . import pkg_test
-from .githandler import BiocondaRepo, install_gpg_key
+from .githandler import BiocondaRepo, GitRange, install_gpg_key
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 
@@ -69,6 +69,15 @@ def _validate_path_exists(value: str) -> str:
 def _validate_positive_int(value: int) -> int:
     if value < 1:
         raise typer.BadParameter("must be a positive integer")
+    return value
+
+
+def _validate_git_range(value: str | None) -> str | None:
+    if value is not None:
+        try:
+            GitRange.parse(value)
+        except ValueError as exc:
+            raise typer.BadParameter(str(exc)) from exc
     return value
 
 
@@ -123,35 +132,40 @@ ThreadsOpt = Annotated[
 PdbOpt = Annotated[
     bool, typer.Option("-P", "--pdb", help="Drop into debugger on exception")
 ]
+GitRangeOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--git-range",
+        metavar="BASE[...REF]",
+        callback=_validate_git_range,
+        help=(
+            "Select changes on REF since its merge base with BASE. "
+            "BASE alone means BASE...HEAD."
+        ),
+    ),
+]
 
 
-def get_recipes_to_build(
-    git_range: tuple[str, ...] | list[str], recipe_folder: str
-) -> list[str]:
+def get_recipes_to_build(git_range: GitRange, recipe_folder: str) -> list[str]:
     """Gets list of modified recipes according to git_range and blacklist
 
     See `BiocondaRepoMixin.get_recipes_to_build()`.
 
     Arguments:
-      git_range: one or two-tuple containing "from" and "to" git refs,
-                 with "to" defaulting to "HEAD"
+      git_range: Base and ref whose merge-base-to-ref changes are selected.
     Returns:
       List of recipes for which meta.yaml or build.sh was modified or
       which were unblacklisted.
     """
-    if not git_range or len(git_range) > 2:
-        sys.exit("--git-range may have only one or two arguments")
-    other = git_range[0]
-    ref = "HEAD" if len(git_range) == 1 else git_range[1]
     repo = BiocondaRepo(recipe_folder)
-    return repo.get_recipes_to_build(ref, other)
+    return repo.get_recipes_to_build(git_range.ref, git_range.base)
 
 
 def get_recipes(
     config: dict[str, Any],
     recipe_folder: str,
     packages: PackagePatterns,
-    git_range: list[str] | None,
+    git_range: GitRange | None,
     include_blacklisted: bool = False,
 ) -> list[str]:
     """Gets list of paths to recipe folders to be built
@@ -246,13 +260,7 @@ def build(
             help="Glob for package[s] to build. Default is to build all packages. Can be specified more than once",
         ),
     ] = None,
-    git_range: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--git-range",
-            help='Git range (e.g. commits or something like\n     "master HEAD" to check commits in HEAD vs master, or just "HEAD" to\n     include uncommitted changes). All recipes modified within this range will\n     be built if not present in the channel.',
-        ),
-    ] = None,
+    git_range: GitRangeOpt = None,
     test_only: Annotated[
         bool, typer.Option("--test-only", help="Test packages instead of building")
     ] = False,
@@ -423,13 +431,14 @@ def build(
     """Build and test Bioconda recipes."""
     _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines)
     package_patterns: PackagePatterns = packages or "*"
+    parsed_git_range = GitRange.parse(git_range) if git_range is not None else None
     cfg = utils.load_config(config)
     setup = cfg.get("setup", None)
     if setup:
         logger.debug("Running setup: %s", setup)
         for cmd in setup:
             utils.run(shlex.split(cmd), mask=False)
-    recipes = get_recipes(cfg, recipe_folder, package_patterns, git_range)
+    recipes = get_recipes(cfg, recipe_folder, package_patterns, parsed_git_range)
     if docker:
         if build_script_template is not None:
             build_script_content = build_script_template.read_text()
@@ -650,13 +659,7 @@ def lint(
             help="Exclude this linting function. Can be used\n     multiple times.",
         ),
     ] = None,
-    git_range: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--git-range",
-            help='Git range (e.g. commits or something like\n     "master HEAD" to check commits in HEAD vs master, or just "HEAD" to\n     include uncommitted changes). All recipes modified within this range will\n     be built if not present in the channel.',
-        ),
-    ] = None,
+    git_range: GitRangeOpt = None,
     try_fix: Annotated[
         bool, typer.Option("--try-fix", help="Attempt to fix problems where found")
     ] = False,
@@ -677,6 +680,7 @@ def lint(
             sys.exit(0)
         _validate_path_exists(recipe_folder)
         _validate_path_exists(config)
+        parsed_git_range = GitRange.parse(git_range) if git_range is not None else None
         config_data = utils.load_config(config)
         if cache is not None:
             utils.RepoData().set_cache(cache)
@@ -684,7 +688,7 @@ def lint(
             config_data,
             recipe_folder,
             package_patterns,
-            git_range,
+            parsed_git_range,
             include_blacklisted=True,
         )
         linter = _lint.Linter(config_data, recipe_folder, exclude)
@@ -1398,13 +1402,7 @@ def handle_merged_pr(
             help="Name of the github repository to check (e.g. bioconda/bioconda-recipes).",
         ),
     ] = None,
-    git_range: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--git-range",
-            help='Git range (e.g. commits or something like\n     "master HEAD" to check commits in HEAD vs master, or just "HEAD" to\n     include uncommitted changes). All recipes modified within this range will\n     be built if not present in the channel.',
-        ),
-    ] = None,
+    git_range: GitRangeOpt = None,
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Do not actually upload anything.")
     ] = False,
@@ -1440,12 +1438,11 @@ def handle_merged_pr(
         raise ValueError("repo is required")
     if git_range is None:
         raise ValueError("git_range is required")
-    if not 1 <= len(git_range) <= 2:
-        raise ValueError("git_range requires one or two git references")
+    parsed_git_range = GitRange.parse(git_range)
     res = upload_pr_artifacts(
         config,
         repo,
-        git_range[-1],
+        parsed_git_range.ref,
         dryrun=dry_run,
         mulled_upload_target=quay_upload_target,
         label=label,
@@ -1560,23 +1557,18 @@ def list_build_failures(
     link_prefix: Annotated[
         str, typer.Option("--link-prefix", help="Prefix for links to build failures")
     ] = "",
-    git_range: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--git-range",
-            help='Git range (e.g. commits or something like\n     "master HEAD" to check commits in HEAD vs master, or just "HEAD" to\n     include uncommitted changes).',
-        ),
-    ] = None,
+    git_range: GitRangeOpt = None,
 ) -> None:
     """List recipes with build failure records"""
     config_data = utils.load_config(config)
+    parsed_git_range = GitRange.parse(git_range) if git_range is not None else None
     df = collect_build_failure_dataframe(
         recipe_folder,
         config_data,
         channel,
         link_fmt=output_format,
         link_prefix=link_prefix,
-        git_range=git_range,
+        git_range=parsed_git_range,
     )
     if output_format == "markdown":
         fmt_writer = pandas.DataFrame.to_markdown
