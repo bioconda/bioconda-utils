@@ -8,6 +8,7 @@ import logging
 from typing import Annotated, Any, Literal
 
 import typer
+import click
 
 from . import __version__ as VERSION
 from . import utils
@@ -127,6 +128,13 @@ ThreadsOpt = Annotated[
         "--threads",
         help="Limit maximum number of processes used.",
         callback=_validate_positive_int,
+    ),
+]
+PackagesOpt = Annotated[
+    list[str] | None,
+    typer.Option(
+        "--packages",
+        help="Package name(s) or glob pattern(s). Can be specified more than once.",
     ),
 ]
 PdbOpt = Annotated[
@@ -507,13 +515,7 @@ def build(
 def dag(
     recipe_folder: RecipeFolderArg = "recipes/",
     config: ConfigArg = "config.yml",
-    packages: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--packages",
-            help="Glob for package[s] to show in DAG. Default is to show all packages. Can be specified more than once",
-        ),
-    ] = None,
+    packages: PackagesOpt = None,
     format: Annotated[
         Literal["gml", "dot", "txt"],
         typer.Option(
@@ -604,11 +606,11 @@ def dependent(
     """Print recipes dependent on a package"""
     _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines)
     if dependencies and reverse_dependencies:
-        raise ValueError(
+        raise click.UsageError(
             "`dependencies` and `reverse_dependencies` are mutually exclusive"
         )
     if not any([dependencies, reverse_dependencies]):
-        raise ValueError(
+        raise click.UsageError(
             "One of `--dependencies` or `--reverse-dependencies` is required."
         )
     config_data = utils.load_config(config)
@@ -631,13 +633,7 @@ def dependent(
 def lint(
     recipe_folder: LintRecipeFolderArg = "recipes/",
     config: LintConfigArg = "config.yml",
-    packages: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--packages",
-            help="Glob for package[s] to build. Default is to build all packages. Can be specified more than once",
-        ),
-    ] = None,
+    packages: PackagesOpt = None,
     cache: Annotated[
         str | None,
         typer.Option(
@@ -819,13 +815,7 @@ def duplicates(
 def update_pinning(
     recipe_folder: RecipeFolderArg = "recipes/",
     config: ConfigArg = "config.yml",
-    packages: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--packages",
-            help="Glob for package[s] to update, as needed due to a change in pinnings",
-        ),
-    ] = None,
+    packages: PackagesOpt = None,
     skip_additional_channels: Annotated[
         list[str] | None,
         typer.Option(
@@ -953,18 +943,20 @@ def update_pinning(
 
 @app.command("bioconductor-skeleton")
 def bioconductor_skeleton(
-    package: Annotated[
-        str,
-        typer.Argument(
-            help='Bioconductor package name. This is case-sensitive, and\n     must match the package name on the Bioconductor site. If "update-all-packages"\n     is specified, then all packages in a given bioconductor release will be\n     created/updated (--force is then implied).'
-        ),
-    ],
     recipe_folder: RecipeFolderArg = "recipes/",
     config: ConfigArg = "config.yml",
+    packages: PackagesOpt = None,
+    update_all: Annotated[
+        bool,
+        typer.Option(
+            "--update-all", help="Update all packages in a given Bioconductor release."
+        ),
+    ] = False,
     bioc_data_packages: Annotated[
         str | None,
-        typer.Argument(
-            help="Path to folder containing the recipe for the bioconductor-data-packages\n     (default: recipes/bioconductor-data-packages)"
+        typer.Option(
+            "--bioc-data-packages",
+            help="Path to folder containing the recipe for the bioconductor-data-packages\n     (default: recipes/bioconductor-data-packages)",
         ),
     ] = None,
     versioned: Annotated[
@@ -1006,7 +998,7 @@ def bioconductor_skeleton(
         list[str] | None,
         typer.Option(
             "--skip-if-in-channels",
-            help="When --recursive is used, it will build\n     *all* recipes. Use this argument to skip recursive building for packages\n     that already exist in the packages listed here.",
+            help="When --recursive is used, it will build\n     *all* recipes. Use this argument to skip recipes for packages\n     that already exist in the packages listed here.",
         ),
     ] = None,
     loglevel: LoglevelOpt = "debug",
@@ -1014,7 +1006,7 @@ def bioconductor_skeleton(
     logfile_level: LogfileLevelOpt = "debug",
     log_command_max_lines: LogCommandMaxLinesOpt = None,
 ) -> None:
-    """Build a Bioconductor recipe. The recipe will be created in the 'recipes'
+    """Build Bioconductor recipes. Recipes will be created in the 'recipes'
     directory and will be prefixed by "bioconductor-". If --recursive is set,
     then any R dependency recipes will be prefixed by "r-".
 
@@ -1028,7 +1020,12 @@ def bioconductor_skeleton(
 
     Not bio-related:
         'bioconda-utils clean-cran-skeleton <recipe>'
-        and submit to conda-forge."""
+        and submit to conda-forge.
+
+    Examples:
+        bioconda-utils bioconductor-skeleton --packages DESeq2
+        bioconda-utils bioconductor-skeleton --packages DESeq2 --packages edgeR --recursive
+        bioconda-utils bioconductor-skeleton --update-all"""
     _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines)
     skip_if_in_channels = (
         skip_if_in_channels
@@ -1038,13 +1035,13 @@ def bioconductor_skeleton(
     seen_dependencies = set()
     if bioc_data_packages is None:
         bioc_data_packages = os.path.join(recipe_folder, "bioconductor-data-packages")
-    if package == "update-all-packages":
+    if update_all:
         if not bioc_version:
             bioc_version = _bioconductor_skeleton.latest_bioconductor_release_version()
-        packages = _bioconductor_skeleton.fetchPackages(bioc_version)
-        needs_x = _bioconductor_skeleton.packagesNeedingX(packages)
+        all_packages = _bioconductor_skeleton.fetchPackages(bioc_version)
+        needs_x = _bioconductor_skeleton.packagesNeedingX(all_packages)
         problems = []
-        for k, v in packages.items():
+        for k, v in all_packages.items():
             try:
                 _bioconductor_skeleton.write_recipe(
                     k,
@@ -1055,7 +1052,7 @@ def bioconductor_skeleton(
                     bioc_version=bioc_version,
                     pkg_version=v["Version"],
                     versioned=versioned,
-                    packages=packages,
+                    packages=all_packages,
                     skip_if_in_channels=skip_if_in_channels,
                     needs_x=k in needs_x,
                 )
@@ -1067,20 +1064,23 @@ def bioconductor_skeleton(
                     ", ".join(problems)
                 )
             )
+    elif packages:
+        for pkg in packages:
+            _bioconductor_skeleton.write_recipe(
+                pkg,
+                recipe_folder,
+                config,
+                bioc_data_packages,
+                force=force,
+                bioc_version=bioc_version,
+                pkg_version=pkg_version,
+                versioned=versioned,
+                recursive=recursive,
+                seen_dependencies=seen_dependencies,
+                skip_if_in_channels=skip_if_in_channels,
+            )
     else:
-        _bioconductor_skeleton.write_recipe(
-            package,
-            recipe_folder,
-            config,
-            bioc_data_packages,
-            force=force,
-            bioc_version=bioc_version,
-            pkg_version=pkg_version,
-            versioned=versioned,
-            recursive=recursive,
-            seen_dependencies=seen_dependencies,
-            skip_if_in_channels=skip_if_in_channels,
-        )
+        raise click.UsageError("Either --packages or --update-all must be specified.")
     sys.stderr.write(
         "Warning! Make sure to bump bioconductor-data-packages if needed!\n"
     )
@@ -1116,13 +1116,7 @@ def clean_cran_skeleton(
 def autobump(
     recipe_folder: RecipeFolderArg = "recipes/",
     config: ConfigArg = "config.yml",
-    packages: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--packages",
-            help="Glob(s) for package[s] to scan. Can be specified more than once",
-        ),
-    ] = None,
+    packages: PackagesOpt = None,
     exclude: Annotated[
         list[str] | None,
         typer.Option(
