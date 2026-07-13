@@ -6,7 +6,7 @@
 # bioconda-common/common.sh (via the installation script), rather than the
 # latest commit on the branch where this is running.
 
-version: 2
+version: 2.1
 
 jobs:
   autobump:
@@ -82,7 +82,6 @@ jobs:
           path: /tmp/artifacts
 
 workflows:
-  version: 2
   bioconda-utils-autobump:
     triggers:
       - schedule:
