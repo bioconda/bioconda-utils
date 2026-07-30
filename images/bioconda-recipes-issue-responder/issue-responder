@@ -141,10 +141,6 @@ async def make_artifact_comment(session: ClientSession, pr: int, sha: str) -> No
     if nPackages > 0:
         comment = "Package(s) built on Azure are ready for inspection:\n\n"
         comment += "Arch | Package | Zip File\n-----|---------|---------\n"
-        install_noarch = ""
-        install_linux = ""
-        install_osx = ""
-
         # Table of packages and repodata.json
         for URL, artifact in artifacts:
             if not (package_match := re.match(r"^((.+)\/(.+)\/(.+)\/(.+\.tar\.bz2))$", artifact)):
@@ -153,17 +149,17 @@ async def make_artifact_comment(session: ClientSession, pr: int, sha: str) -> No
             urlBase = URL[:-3]  # trim off zip from format=
             urlBase += "file&subPath=%2F{}".format("%2F".join([basedir, subdir]))
             conda_install_url = urlBase
-            # N.B., the zip file URL is nearly identical to the URL for the individual member files. It's unclear if there's an API for getting the correct URL to the files themselves
-            #pkgUrl = "%2F".join([urlBase, packageName])
-            #repoUrl = "%2F".join([urlBase, "current_repodata.json"])
-            #resp = await session.get(repoUrl)
 
             if subdir == "noarch":
                 comment += "noarch |"
             elif subdir == "linux-64":
                 comment += "linux-64 |"
+            elif subdir == "linux-aarch64":
+                comment += "linux-aarch64 |"
+            elif subdir == "osx-arm64":
+                comment += "osx-arm64 |"
             else:
-                comment += "osx-64 |"
+                comment += f"{subdir} |"
             comment += f" {packageName} | [{archdir}]({URL})\n"
 
         # Conda install examples
