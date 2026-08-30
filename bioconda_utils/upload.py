@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 def anaconda_upload(
-    package: str, token: str | None = None, label: str | None = None
+    package: str | Path, token: str | None = None, label: str | None = None
 ) -> bool:
     """
     Upload a package to anaconda.
@@ -31,10 +31,11 @@ def anaconda_upload(
       ValueError
     """
     label_arg = []
+    package = Path(package)
     if label is not None:
         label_arg = ["--label", label]
 
-    if not os.path.exists(package):
+    if not package.exists():
         logger.error("UPLOAD ERROR: package %s cannot be found.", package)
         return False
 
@@ -45,7 +46,7 @@ def anaconda_upload(
 
     logger.info("UPLOAD uploading package %s", package)
     try:
-        cmds = ["anaconda", "-t", token, "upload", package] + label_arg
+        cmds = ["anaconda", "-t", token, "upload", package.as_posix()] + label_arg
         utils.run(cmds, mask=[token])
         logger.info("UPLOAD SUCCESS: uploaded package %s", package)
         return True

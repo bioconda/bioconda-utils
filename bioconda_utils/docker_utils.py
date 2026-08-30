@@ -46,6 +46,7 @@ Other notes:
 
 import os
 import os.path
+from pathlib import Path
 from shlex import quote
 import shutil
 import subprocess as sp
@@ -55,9 +56,10 @@ import grp
 from importlib.resources import files, as_file
 import re
 from packaging.version import Version
-from typing import Protocol
+from typing import Literal, Protocol
 
 from conda import exports as conda_exports
+from rattler_build import VariantConfig
 
 from . import utils
 
@@ -127,6 +129,51 @@ HOST_USER={self.user_info[uid]}
 chown $HOST_USER:$HOST_USER {self.container_staging}/{arch}/*
 """  # noqa: E501,E122: line too long, continuation line missing indentation or outdented
 
+
+# ----------------------------------------------------------------------------
+# RATTLER_BUILD_SCRIPT_TEMPLATE
+# ----------------------------------------------------------------------------
+#
+# This is the equivalent of the BUILD_SCRIPT_TEMPLATE but defined for rattler-build
+# recipes instead of conda-build recipes.
+#
+RATTLER_BUILD_SCRIPT_TEMPLATE = r"""
+#!/bin/bash
+set -eo pipefail
+
+# Add the host's mounted conda-bld dir so that we can use its contents as
+# dependencies for building this recipe.
+#
+# Note that if the directory didn't exist on the host, then the staging area
+# will exist in the container but will be empty.  Channels expect at least
+# a linux-64/linux-aarch64 and noarch directory within that directory, so we
+# make sure it exists before adding the channel.
+# Also ensure conda-build's local channel directory exists the same way.
+for local_channel in '/opt/conda/conda-bld' '{self.container_staging}'; do
+  mkdir -p "${{local_channel}}"/linux-64
+  mkdir -p "${{local_channel}}"/linux-aarch64
+  mkdir -p "${{local_channel}}"/noarch
+  conda index "${{local_channel}}"
+done
+
+# The actual building...
+# we explicitly point to the meta.yaml, in order to keep
+# conda-build from building all subdirectories
+rattler-build build -c file://{self.container_staging} {self.rattler_build_args} --recipe {self.container_recipe}/recipe.yaml --output-dir {self.container_staging} 2>&1
+
+# copy all built packages to the staging area
+find /opt/conda/conda-bld \
+  -name src_cache -prune -o \
+  -type f \( -name '*.tar.bz2' -o -name '*.conda' \) -print0 |
+  xargs -0 -- cp -t '{self.container_staging}/{arch}' --
+#While technically better, this is slower and more prone to breaking
+#cp `conda-build {self.conda_build_args} {self.container_recipe}/meta.yaml --output | grep -e '\.tar\.bz2$' -e '\.conda$')` {self.container_staging}/{arch}
+conda index {self.container_staging}
+# Ensure permissions are correct on the host.
+HOST_USER={self.user_info[uid]}
+chown $HOST_USER:$HOST_USER {self.container_staging}/{arch}/*
+"""  # noqa: E501,E122: line too long, continuation line missing indentation or outdented
+
 # ----------------------------------------------------------------------------
 # DOCKERFILE_TEMPLATE
 # ----------------------------------------------------------------------------
@@ -160,6 +207,7 @@ class RecipeBuilder:
         container_staging: str = "/opt/host-conda-bld",
         requirements: str | None = None,
         build_script_template: str = BUILD_SCRIPT_TEMPLATE,
+        rattler_build_script_template: str = RATTLER_BUILD_SCRIPT_TEMPLATE,
         dockerfile_template: str = DOCKERFILE_TEMPLATE,
         use_host_conda_bld: bool = False,
         pkg_dir: str | None = None,
@@ -250,8 +298,10 @@ class RecipeBuilder:
             Name of base image that can be used in **dockerfile_template**.
         """
         self.requirements = requirements
-        self.conda_build_args = ""
+        self.conda_build_args: str = ""
+        self.rattler_build_args: str = ""
         self.build_script_template: str = build_script_template
+        self.rattler_build_script_template: str = rattler_build_script_template
         self.dockerfile_template = dockerfile_template
         self.keep_image = keep_image
         self.build_image = build_image
@@ -418,7 +468,9 @@ class RecipeBuilder:
         self,
         recipe_dir: str,
         build_args: str,
+        rattler_args: str,
         env: dict[str, str],
+        build_system: Literal["conda", "rattler"],
         noarch: bool = False,
         live_logs: bool = True,
     ) -> sp.CompletedProcess:
@@ -450,18 +502,40 @@ class RecipeBuilder:
         # template.
         if not isinstance(build_args, str):
             raise ValueError("build_args must be str")
-        build_args_list = [build_args]
-        for i, config_file in enumerate(utils.get_conda_build_config_files()):
-            dst_file = self._get_config_path(self.container_staging, i, config_file)
-            build_args_list.extend([config_file.arg, quote(dst_file)])
-        self.conda_build_args = " ".join(build_args_list)
+        if build_system == "conda":
+            build_args_list = [build_args]
+            for i, config_file in enumerate(utils.get_conda_build_config_files()):
+                dst_file = self._get_config_path(self.container_staging, i, config_file)
+                build_args_list.extend([config_file.arg, quote(dst_file)])
+            self.conda_build_args = " ".join(build_args_list)
+        if build_system == "rattler":
+            build_args_list = [rattler_args]
+            global_variants: list[Path] = (
+                utils.get_rattler_build_global_variants_paths()
+            )
+
+            # TODO (rb) should we also allow `conda_build_config.yaml` as per rattler-build docs?
+            local_variant: Path = Path(recipe_dir) / "variants.yaml"
+            global_variants.append(local_variant)
+
+            for variant in global_variants:
+                if variant.exists():
+                    build_args_list.append(
+                        f"--variant-config {quote(variant.as_posix())}"
+                    )
+            self.rattler_build_args = " ".join(build_args_list)
 
         # Write build script to tempfile
         build_dir = os.path.realpath(tempfile.mkdtemp())
         # conda_exports.subdir is {platform}-{arch} like: 'linux-64' 'linux-aarch64'
-        script = self.build_script_template.format_map(
-            {"self": self, "arch": "noarch" if noarch else conda_exports.subdir}
-        )
+        if build_system == "conda":
+            script = self.build_script_template.format_map(
+                {"self": self, "arch": "noarch" if noarch else conda_exports.subdir}
+            )
+        else:  # i.e. build_system == "rattler"
+            script = self.rattler_build_script_template.format_map(
+                {"self": self, "arch": "noarch" if noarch else conda_exports.subdir}
+            )
         with open(os.path.join(build_dir, "build_script.bash"), "w") as fout:
             fout.write(script)
         build_script = fout.name

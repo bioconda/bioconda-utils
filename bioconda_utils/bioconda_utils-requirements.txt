@@ -49,3 +49,4 @@ diskcache=5.*
 platformdirs=4.*
 tabulate=0.10.*
 psutil
+rattler-build=0.69.*

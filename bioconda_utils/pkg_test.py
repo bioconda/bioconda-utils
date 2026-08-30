@@ -3,6 +3,7 @@ Mulled Tests
 """
 
 import json
+from pathlib import Path
 import subprocess as sp
 import tempfile
 import os
@@ -63,7 +64,7 @@ def get_tests(path: str) -> str:
     return f"bash -c {shlex.quote(tests)}"
 
 
-def get_image_name(path: str) -> str:
+def get_image_name(path: Path | str) -> str:
     """
     Returns name of generated docker image.
 
@@ -74,6 +75,10 @@ def get_image_name(path: str) -> str:
         Path to .tar.bz2 or .conda package build by conda-build
 
     """
+    # convert paths to strings to keep current logic for now
+    # TODO: convert function to work with pathlib.Path object instead of strings
+    path: str = Path(path).as_posix()
+
     if path.endswith(".tar.bz2"):
         ext = ".tar.bz2"
     elif path.endswith(".conda"):
@@ -256,7 +261,7 @@ create-env --conda=: /usr/local
 
 
 def test_package(
-    path: str,
+    path: str | Path,
     name_override: str | None = None,
     channels: Sequence[str] = ("conda-forge", "local", "bioconda"),
     mulled_args: str = "",
@@ -301,6 +306,9 @@ def test_package(
         solver run. Falls back to the original mulled-build path on failure.
     """
 
+    # convert paths to strings to keep current logic for now
+    # TODO: convert function to work with pathlib.Path object instead of strings
+    path: str = Path(path).as_posix()
     assert path.endswith((".tar.bz2", ".conda")), f"Unrecognized path {path}"
     # assert os.path.exists(path), '{0} does not exist'.format(path)
 

@@ -47,6 +47,7 @@ import abc
 import asyncio
 import logging
 import os
+from pathlib import Path
 import pickle
 import random
 
@@ -124,14 +125,16 @@ class RecipeSource:
 
     def __init__(
         self,
-        recipe_base: str,
+        recipe_base: Path | str,
         packages: str | list[str],
         exclude: list[str],
         shuffle: bool = True,
     ) -> None:
-        self.recipe_base = recipe_base
+        self.recipe_base: Path = Path(recipe_base)
         self.packages = [packages] if isinstance(packages, str) else packages
-        self.recipe_dirs = list(utils.get_recipes(recipe_base, self.packages, exclude))
+        self.recipe_dirs: list[utils.RecipePath] = list(
+            utils.get_recipes(self.recipe_base, self.packages, exclude)
+        )
         if shuffle:
             random.shuffle(self.recipe_dirs)
         logger.warning("Selected %i packages", len(self.recipe_dirs))
@@ -141,7 +144,7 @@ class RecipeSource:
     ) -> None:
         n_items = 0
         for recipe_dir in self.recipe_dirs:
-            await send_q.put(Recipe(recipe_dir, self.recipe_base))
+            await send_q.put(Recipe(recipe_dir.path, self.recipe_base))
             n_items += 1
             while return_q.qsize():
                 try:

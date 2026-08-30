@@ -1,10 +1,11 @@
+from pathlib import Path
 import sys
 from textwrap import dedent
 import subprocess as sp
 
 import pytest
 
-from helpers import Recipes, ensure_missing
+from helpers import Recipes, ensure_missing, get_rattler_params
 from bioconda_utils import pkg_test
 from bioconda_utils import utils
 from bioconda_utils import build
@@ -52,13 +53,24 @@ def build_pkg(request):
         r = Recipes(recipe, from_string=True)
         r.write_recipes()
         recipe_dir = r.recipe_dirs["one"]
-        built_packages = utils.built_package_paths(recipe_dir)
+        built_packages = utils.built_package_paths_conda_build(recipe_dir)
         registered_packages.update(built_packages)
         for pkg in built_packages:
             ensure_missing(pkg)
+
+        recipe_path, global_variants, tool_config, render_config, rattler_output_dir = (
+            get_rattler_params(Path(recipe_dir), "conda", docker_builder)
+        )
+
+        pkg_paths = [Path(p) for p in built_packages]
+
         build.build(
-            recipe=recipe_dir,
-            pkg_paths=built_packages,
+            recipe=recipe_path,
+            global_variants=global_variants,
+            tool_config=tool_config,
+            render_config=render_config,
+            rattler_output_dir=rattler_output_dir,
+            pkg_paths=pkg_paths,
             mulled_test=mulled_test,
             docker_builder=docker_builder,
         )

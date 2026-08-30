@@ -2,19 +2,22 @@
 Package Builder
 """
 
+from pathlib import Path
 import subprocess as sp
 from collections import defaultdict
 import itertools
 import logging
 import os
+import shutil
 
 from typing import Any, NamedTuple
 from bioconda_utils.skiplist import Skiplist
 from bioconda_utils.build_failure import BuildFailureRecord
 
-from conda.exports import UnsatisfiableError
+from conda.exceptions import UnsatisfiableError
 from conda_build.exceptions import DependencyNeedsBuildingError
 import networkx as nx
+import rattler_build as rb
 
 from . import utils
 from . import docker_utils
@@ -23,6 +26,8 @@ from . import upload
 from . import lint
 from . import graph
 from . import recipe as _recipe
+
+from conda_build import api
 
 logger = logging.getLogger(__name__)
 
@@ -52,10 +57,27 @@ def conda_build_purge() -> None:
         )
 
 
+def rattler_build_purge(rattler_cache: Path, rattler_output_dir: Path) -> None:
+    """
+    Empties rattler's cache directories.
+    This includes only downloaded packages.
+    """
+    output_cache: Path = rattler_output_dir / "bld"
+    shutil.rmtree(output_cache)
+    output_cache.mkdir()
+    shutil.rmtree(rattler_cache)
+    rattler_cache.mkdir()
+    pass
+
+
 def build(
-    recipe: str,
-    pkg_paths: list[str] | None = None,
-    testonly: bool = False,
+    recipe: utils.RecipePath,
+    global_variants: rb.VariantConfig,
+    tool_config: rb.ToolConfiguration,
+    render_config: rb.RenderConfig,
+    rattler_output_dir: Path,
+    force: bool,
+    pkg_paths: list[Path] | None = None,
     mulled_test: bool = True,
     channels: list[str] | None = None,
     docker_builder: docker_utils.RecipeBuilder | None = None,
@@ -74,8 +96,11 @@ def build(
 
     Arguments:
       recipe: Path to recipe
+      tool_config: ToolConfiguration for rattler recipes
+      render_config: RenderConfig for rattler recipes
+      rattler_output_dir: Path to directory rattler recipes will be built to
+      force: Whether to force building packages even if they already exist
       pkg_paths: List of paths to expected packages
-      testonly: Only run the tests described in the meta.yaml
       mulled_test: Run tests in minimal docker container
       channels: Channels to include via the ``--channel`` argument to
         conda-build. Higher priority channels should come first.
@@ -96,18 +121,23 @@ def build(
     if pkg_paths is None:
         pkg_paths = []
 
-    if linter:
-        logger.info("Linting recipe %s", recipe)
+    if linter and recipe.build_system == "conda":
+        logger.info("Linting recipe %s", recipe.path.as_posix())
         linter.clear_messages()
-        if linter.lint([recipe]):
+        if linter.lint([recipe.path]):
             logger.error(
                 "\n\nThe recipe %s failed linting. See "
                 "https://bioconda.github.io/contributor/linting.html for details:\n\n%s\n",
-                recipe,
+                recipe.path.as_posix(),
                 linter.get_report(),
             )
             return BuildResult(False, None)
         logger.info("Lint checks passed")
+    elif linter and recipe.build_system == "rattler":
+        logger.warning(
+            "Linting is currently only implemented for conda-build recipes. Skipping rattler-build recipe: %s",
+            recipe.path.as_posix(),
+        )
 
     # Copy env allowing only whitelisted vars
     whitelisted_env = {
@@ -116,44 +146,79 @@ def build(
         if utils.allowed_env_var(k, docker_builder is not None)
     }
 
-    logger.info("BUILD START %s", recipe)
+    logger.info("BUILD START %s", recipe.path.as_posix())
 
-    args = ["--override-channels"]
-    if testonly:
-        args += ["--test"]
-    else:
-        args += ["--no-anaconda-upload"]
+    use_base_image = None
 
-    channels_to_use = ["local"] + [c for c in (channels or []) if c != "local"]
-    for channel in channels_to_use:
-        args += ["-c", channel]
+    args: list[str] = []
+    rattler_args: list[str] = []
 
-    logger.debug("Build and Channel Args: %s", args)
+    if recipe.build_system == "conda":
+        args = ["--override-channels", "--no-anaconda-upload"]
 
-    # Even though there may be variants of the recipe that will be built, we
-    # will only be checking attributes that are independent of variants (pkg
-    # name, version, noarch, whether or not an extended container was used)
-    meta = utils.load_first_metadata(recipe, finalize=False)
-    is_noarch = bool(meta.get_value("build/noarch", default=False))
-    use_base_image = meta.get_value("extra/container", {}).get("extended-base", False)
+        channels_to_use = ["local"] + [c for c in (channels or []) if c != "local"]
+        for channel in channels_to_use:
+            args += ["-c", channel]
+
+        logger.debug("Build and Channel Args: %s", args)
+
+        # Even though there may be variants of the recipe that will be built, we
+        # will only be checking attributes that are independent of variants (pkg
+        # name, version, noarch, whether or not an extended container was used)
+        meta: api.MetaData | None = utils.load_first_metadata(
+            recipe.path, finalize=False
+        )
+        package_name: str = meta.meta["package"]["name"] if meta is not None else ""
+
+        is_noarch = bool(meta.get_value("build/noarch", default=False))
+        use_base_image = meta.get_value("extra/container", {}).get(
+            "extended-base", False
+        )
+    elif recipe.build_system == "rattler" and docker_builder is not None:
+        # We only need the rattler_args when building with docker_builder. When building without
+        # docker we use py-rattler-build's bindings directly in the code.
+
+        # TODO (rb): is there a more elegant way to do this?
+        rendered_recipe: rb.RenderedVariant = utils.render_rattler_recipe(
+            recipe.path, utils.load_rattler_build_global_variants()
+        )[0]
+
+        is_noarch: bool = bool(rendered_recipe.recipe.build.noarch)
+        package_name: str = rendered_recipe.recipe.package.name
+
+        rattler_args = []
+        if force:
+            rattler_args += ['--skip-existing "none"']
+        else:
+            rattler_args += ['--skip-existing "all"']
+        channels_to_use = ["local"] + [c for c in (channels or []) if c != "local"]
+        for channel in channels_to_use:
+            rattler_args += ["-c", channel]
+
+        logger.debug("Build and Channel Args: %s", rattler_args)
     if use_base_image:
         base_image = "quay.io/bioconda/base-glibc-debian-bash:3.1"
     else:
         base_image = "quay.io/bioconda/base-glibc-busybox-bash:3.1"
 
-    build_failure_record = BuildFailureRecord(recipe)
+    build_failure_record = BuildFailureRecord(recipe.path.as_posix())
     build_failure_record_existed_before_build = build_failure_record.exists()
     if build_failure_record_existed_before_build:
         # remove record to avoid that it is leaked into the package
         build_failure_record.remove()
 
     try:
-        report_resources(f"Starting build for {recipe}", docker_builder is not None)
         if docker_builder is not None:
+            if recipe.build_system == "none":
+                raise ValueError(f"No recipe found at {recipe.path.as_posix()}")
+
+            report_resources(f"Starting build for {recipe}", docker_builder is not None)
             docker_builder.build_recipe(
-                recipe_dir=os.path.abspath(recipe),
+                recipe_dir=recipe.path.resolve().as_posix(),
                 build_args=" ".join(args),
+                rattler_args=" ".join(rattler_args),
                 env=whitelisted_env,
+                build_system=recipe.build_system,
                 noarch=is_noarch,
                 live_logs=live_logs,
             )
@@ -162,30 +227,56 @@ def build(
                 platform = utils.RepoData.native_platform()
                 subfolder = utils.RepoData.platform2subdir(platform)
                 conda_build_config = utils.load_conda_build_config(platform=subfolder)
+
+                conda_build_root: Path = Path(conda_build_config.output_folder)
+                docker_build_root: Path = Path(docker_builder.pkg_dir)
+
                 pkg_paths = [
-                    p.replace(conda_build_config.output_folder, docker_builder.pkg_dir)
+                    docker_build_root / p.relative_to(conda_build_root)
                     for p in pkg_paths
                 ]
 
             for pkg_path in pkg_paths:
-                if not os.path.exists(pkg_path):
+                if not pkg_path.exists():
                     logger.error(
                         "BUILD FAILED: the built package %s cannot be found",
                         pkg_path,
                     )
                     return BuildResult(False, None)
         else:
-            conda_build_cmd = [utils.bin_for("conda-build")]
-            # - Temporarily reset os.environ to avoid leaking env vars
-            # - Also pass filtered env to run()
-            # - Point conda-build to meta.yaml, to avoid building subdirs
-            with utils.sandboxed_env(whitelisted_env):
-                cmd = conda_build_cmd + args
-                for config_file in utils.get_conda_build_config_files():
-                    cmd += [config_file.arg, config_file.path]
-                cmd += [os.path.join(recipe, "meta.yaml")]
-                with utils.Progress():
-                    utils.run(cmd, mask=False, live=live_logs)
+            if recipe.build_system == "conda":
+                conda_build_cmd = [utils.bin_for("conda-build")]
+                # - Temporarily reset os.environ to avoid leaking env vars
+                # - Also pass filtered env to run()
+                # - Point conda-build to meta.yaml, to avoid building subdirs
+                with utils.sandboxed_env(whitelisted_env):
+                    cmd = conda_build_cmd + args
+                    for config_file in utils.get_conda_build_config_files():
+                        cmd += [config_file.arg, config_file.path]
+                    cmd += [str(recipe.path / "meta.yaml")]
+                    with utils.Progress():
+                        utils.run(cmd, mask=False, live=live_logs)
+            elif recipe.build_system == "rattler":
+                recipe_file: Path = recipe.path / "recipe.yaml"
+                local_variants_path: Path = recipe.path / "variants.yaml"
+
+                recipe_s0 = rb.Stage0Recipe.from_file(recipe_file)
+
+                # merging variants
+
+                variants: rb.VariantConfig = global_variants
+
+                if local_variants_path.exists():
+                    local_variants = rb.VariantConfig.from_file(local_variants_path)
+                    variants = global_variants.merge(local_variants)
+
+                # rendering recipe
+                rendered_variants = recipe_s0.render(variants, render_config)
+
+                for variant in rendered_variants:
+                    result = variant.run_build(
+                        tool_config, channels=channels, output_dir=rattler_output_dir
+                    )
 
         logger.info(
             "BUILD SUCCESS %s", " ".join(os.path.basename(p) for p in pkg_paths)
@@ -205,7 +296,9 @@ def build(
             logger.error("Build output:\n%s", exc.output)
         if record_build_failure:
             assert dag is not None
-            store_build_failure_record(recipe, exc.output, meta, dag, skiplist_leafs)
+            store_build_failure_record(
+                recipe.path.as_posix(), exc.output, package_name, dag, skiplist_leafs
+            )
         if raise_error:
             raise exc
         return BuildResult(False, None)
@@ -240,13 +333,12 @@ def build(
 
 
 def store_build_failure_record(
-    recipe: str, output: Any, meta: Any, dag: nx.DiGraph, skiplist_leafs: bool
+    recipe: str, output: Any, package_name: str, dag: nx.DiGraph, skiplist_leafs: bool
 ) -> None:
     """
     Write the exception to a file next to the meta.yaml
     """
-    pkg_name = meta.meta["package"]["name"]
-    is_leaf = graph.is_leaf(dag, pkg_name)
+    is_leaf = graph.is_leaf(dag, package_name)
 
     build_failure_record = BuildFailureRecord(recipe)
     # if recipe is a leaf (i.e. not used by others as dependency)
@@ -259,23 +351,23 @@ def store_build_failure_record(
 
 def remove_cycles(
     dag: nx.DiGraph,
-    name2recipes: dict[str, set[str]],
-    failed: list[str],
-    skip_dependent: defaultdict[str, list[str]],
+    name2recipes: dict[str, set[utils.RecipePath]],
+    failed: list[utils.RecipePath],
+    skip_dependent: defaultdict[str, list[utils.RecipePath]],
 ) -> nx.DiGraph:
-    nodes_in_cycles = set()
+    nodes_in_cycles: set[str] = set()
     for cycle in list(nx.simple_cycles(dag)):
         logger.error("BUILD ERROR: dependency cycle found: %s", cycle)
         nodes_in_cycles.update(cycle)
 
     for name in sorted(nodes_in_cycles):
-        cycle_fail_recipes = sorted(name2recipes[name])
+        cycle_fail_recipes: list[utils.RecipePath] = sorted(name2recipes[name])
         logger.error(
             "BUILD ERROR: cannot build recipes for %s since "
             "it cyclically depends on other packages in the "
             "current build job. Failed recipes: %s",
             name,
-            cycle_fail_recipes,
+            [r.path.as_posix() for r in cycle_fail_recipes],
         )
         failed.extend(cycle_fail_recipes)
         for node in nx.algorithms.descendants(dag, name):
@@ -303,12 +395,12 @@ def get_subdags(
     #   1: only nodes with parents that are root nodes, etc.). They are assigned evenly across workers.
     if n_workers > 1:
         root_nodes = sorted([k for (k, v) in dag.in_degree() if v == 0])
-        nodes = set()
-        found = set()
-        children = []
+        nodes: set[str] = set()
+        found: set[str] = set()
+        children: itertools.chain[str] = itertools.chain()
 
         if subdag_depth is not None:
-            working_dag = nx.DiGraph(dag)
+            working_dag: nx.DiGraph = nx.DiGraph(dag)
             # Only build the current "root" nodes after removing
             for i in range(0, subdag_depth + 1):
                 print(f"{len(root_nodes)} recipes at depth {i}")
@@ -351,7 +443,7 @@ def get_subdags(
 
 
 def do_not_consider_for_additional_platform(
-    recipe_folder: str, recipe: str, platform: str
+    recipe_folder: Path, recipe: utils.RecipePath, platform: str
 ) -> bool:
     """
     Given a recipe, check this recipe should skip in current platform or not.
@@ -364,7 +456,7 @@ def do_not_consider_for_additional_platform(
     Returns:
       Return True if current native platform are not included in recipe's additional platforms (no need to build).
     """
-    recipe_obj = _recipe.Recipe.from_file(recipe_folder, recipe)
+    recipe_obj = _recipe.Recipe.from_file(recipe_folder, recipe.path)
     # On linux-aarch64 or osx-arm64 env, only build recipe with matching extra_additional_platforms
     if platform == "linux-aarch64":
         if "linux-aarch64" not in recipe_obj.extra_additional_platforms:
@@ -376,11 +468,10 @@ def do_not_consider_for_additional_platform(
 
 
 def build_recipes(
-    recipe_folder: str,
-    config_path: str,
-    recipes: list[str],
+    recipe_folder: Path,
+    config_path: Path | dict[str, Any],
+    recipes: list[utils.RecipePath],
     mulled_test: bool = True,
-    testonly: bool = False,
     force: bool = False,
     docker_builder: docker_utils.RecipeBuilder | None = None,
     label: str | None = None,
@@ -411,7 +502,6 @@ def build_recipes(
         matching the glob will still be filtered out by any blacklists
         specified in the config.
       mulled_test: If true, test the package in a minimal container.
-      testonly: If true, only run test.
       force: If true, build the recipe even though it would otherwise be filtered out.
       docker_builder: If specified, use to build all recipes
       label: If specified, use to label uploaded packages on anaconda. Default is "main" label.
@@ -439,6 +529,10 @@ def build_recipes(
 
     config = utils.load_config(config_path)
     blacklist = Skiplist(config, recipe_folder)
+    global_variants: rb.VariantConfig = utils.load_rattler_build_global_variants()
+    # TODO (rb): make platform_config and render_config customisable
+    platform_config: rb.PlatformConfig = rb.PlatformConfig()
+    render_config: rb.RenderConfig = rb.RenderConfig(platform=platform_config)
 
     # get channels to check
     if check_channels is None:
@@ -458,7 +552,7 @@ def build_recipes(
     else:
         linter = None
 
-    failed = []
+    failed: list[utils.RecipePath] = []
 
     dag, name2recipes = graph.build(recipes, config=config, blacklist=blacklist)
     if exclude:
@@ -469,9 +563,9 @@ def build_recipes(
         logger.info("Nothing to be done.")
         return True
 
-    skip_dependent = defaultdict(list)
+    skip_dependent: defaultdict[str, list[utils.RecipePath]] = defaultdict(list)
     dag = remove_cycles(dag, name2recipes, failed, skip_dependent)
-    subdag = get_subdags(dag, n_workers, worker_offset, subdag_depth)
+    subdag: nx.DiGraph = get_subdags(dag, n_workers, worker_offset, subdag_depth)
     if not subdag:
         logger.info("Nothing to be done.")
         return True
@@ -481,29 +575,32 @@ def build_recipes(
         "\n".join(subdag.nodes()),
     )
 
-    recipe2name = {}
+    recipe2name: defaultdict[utils.RecipePath, str] = defaultdict()
     for name, recipe_list in name2recipes.items():
         for recipe in recipe_list:
             recipe2name[recipe] = name
 
-    recipe_jobs: list[tuple[str, str]] = [
+    recipe_jobs: list[tuple[utils.RecipePath, str]] = [
         (recipe, recipe2name[recipe])
         for package in nx.topological_sort(subdag)
         for recipe in name2recipes[package]
     ]
 
-    built_recipes = []
-    skipped_recipes = []
-    failed_uploads = []
+    built_recipes: list[utils.RecipePath] = []
+    skipped_recipes: list[utils.RecipePath] = []
+    failed_uploads: list[Path] = []
 
     for recipe, name in recipe_jobs:
         platform = utils.RepoData().native_platform()
-        if not force and do_not_consider_for_additional_platform(
-            recipe_folder, recipe, platform
+        # TODO (rb): implement this for rattler_build as well
+        if (
+            recipe.build_system != "rattler"
+            and not force
+            and do_not_consider_for_additional_platform(recipe_folder, recipe, platform)
         ):
             logger.info(
                 "BUILD SKIP: skipping %s for additional platform %s",
-                recipe,
+                recipe.path.as_posix(),
                 platform,
             )
             continue
@@ -511,13 +608,21 @@ def build_recipes(
         if name in skip_dependent:
             logger.info(
                 "BUILD SKIP: skipping %s because it depends on %s which had a failed build.",
-                recipe,
+                recipe.path.as_posix(),
                 skip_dependent[name],
             )
             skipped_recipes.append(recipe)
             continue
 
-        logger.info("Determining expected packages for %s", recipe)
+        logger.info("Determining expected packages for %s", recipe.path.as_posix())
+
+        if docker_builder is not None:
+            rattler_output_dir: Path = Path(docker_builder.pkg_dir)
+        else:
+            subfolder: str = utils.RepoData.platform2subdir(platform)
+            conda_build_config = utils.load_conda_build_config(platform=subfolder)
+            rattler_output_dir: Path = Path(conda_build_config.output_folder)
+
         try:
             # When building with Docker, skip the expensive finalized render
             # on the host since Docker's conda-build will re-solve anyway.
@@ -534,13 +639,15 @@ def build_recipes(
             finalize = docker_builder is None or not fast_resolve
             if not finalize and utils.RepoData.native_platform() == "linux":
                 finalize = True
-            if not finalize and utils.recipe_requires_finalized_render(recipe):
+            if not finalize and utils.recipe_requires_finalized_render(recipe.path):
                 finalize = True
-            pkg_paths = utils.get_package_paths(
+            pkg_paths: list[Path] = utils.get_package_paths(
                 recipe,
                 check_channels,
                 force=force,
                 finalize=finalize,
+                rattler_output_dir=rattler_output_dir,
+                global_variants=global_variants,
             )
         except utils.DivergentBuildsError as exc:
             logger.error(
@@ -563,14 +670,24 @@ def build_recipes(
             for pkg in nx.algorithms.descendants(subdag, name):
                 skip_dependent[pkg].append(recipe)
             continue
-        if not pkg_paths:
+        if not pkg_paths and recipe.build_system == "conda":
+            # for now, the package paths for rattler build are determined after the build
             logger.info("Nothing to be done for recipe %s", recipe)
             continue
 
+        skip_rattler: str = "all" if not force else "none"
+        tool_config: rb.ToolConfiguration = rb.ToolConfiguration(
+            skip_existing=skip_rattler, test_strategy="native", keep_build=False
+        )
+
         res = build(
             recipe=recipe,
+            global_variants=global_variants,
+            tool_config=tool_config,
+            render_config=render_config,
+            rattler_output_dir=rattler_output_dir,
+            force=force,
             pkg_paths=pkg_paths,
-            testonly=testonly,
             mulled_test=mulled_test,
             channels=config["channels"],
             docker_builder=docker_builder,
@@ -590,19 +707,20 @@ def build_recipes(
                 skip_dependent[pkg].append(recipe)
         else:
             built_recipes.append(recipe)
-            if not testonly:
-                if anaconda_upload:
-                    for pkg in pkg_paths:
-                        if not upload.anaconda_upload(pkg, label=label):
-                            failed_uploads.append(pkg)
-                if mulled_upload_target:
-                    for img in res.mulled_images or []:
-                        upload.mulled_upload(img, mulled_upload_target)
-                        docker_utils.purgeImage(mulled_upload_target, img)
+            if anaconda_upload:
+                for pkg in pkg_paths:
+                    if not upload.anaconda_upload(pkg, label=label):
+                        failed_uploads.append(pkg)
+            if mulled_upload_target:
+                for img in res.mulled_images or []:
+                    upload.mulled_upload(img, mulled_upload_target)
+                    docker_utils.purgeImage(mulled_upload_target, img)
 
         # remove traces of the build
         if not keep_old_work:
             conda_build_purge()
+            rattler_cache: Path = utils.get_current_rattler_cache_dir_path()
+            rattler_build_purge(rattler_cache, rattler_output_dir)
             # prune stopped containers
             if docker_builder is not None:
                 docker_utils.pruneStoppedContainers()
@@ -620,7 +738,7 @@ def build_recipes(
             logger.error(
                 "BUILD SUMMARY: while the entire build failed, "
                 "the following recipes were built successfully:\n%s",
-                "\n".join(built_recipes),
+                "\n".join([r.path.as_posix() for r in built_recipes]),
             )
         for recipe in failed:
             logger.error("BUILD SUMMARY: FAILED recipe %s", recipe)
@@ -633,7 +751,7 @@ def build_recipes(
         if failed_uploads:
             logger.error(
                 "UPLOAD SUMMARY: the following packages failed to upload:\n%s",
-                "\n".join(failed_uploads),
+                "\n".join([u.as_posix() for u in failed_uploads]),
             )
         return False
 

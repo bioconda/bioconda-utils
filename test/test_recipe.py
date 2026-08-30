@@ -1,5 +1,6 @@
 import os.path as op
 import os
+from pathlib import Path
 
 import pytest
 
@@ -76,15 +77,15 @@ def with_recipes(func):
 
 
 def test_stub():
-    r = Recipe("recipes/sina", "recipes/")
-    assert r.path == "recipes/sina/meta.yaml"
-    assert r.relpath == "sina/meta.yaml"
-    assert r.reldir == "sina"
+    r = Recipe(Path("recipes/sina"), Path("recipes/"))
+    assert r.path == Path("recipes/sina/meta.yaml")
+    assert r.relpath == Path("sina/meta.yaml")
+    assert r.reldir == Path("sina")
     assert str(r) == "sina"
 
 
 def test_empty_recipe(tmpdir):
-    r = Recipe("recipes/sina", "recipes/")
+    r = Recipe(Path("recipes/sina"), Path("recipes/"))
     with pytest.raises(EmptyRecipe):
         r.load_from_string("")
     with open(op.join(tmpdir, "meta.yaml"), "w"):

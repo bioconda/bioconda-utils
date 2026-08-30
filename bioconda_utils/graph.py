@@ -3,16 +3,20 @@ Construction and Manipulation of Package/Recipe Graphs
 """
 
 import logging
-
 from collections import defaultdict
+from collections.abc import Iterable, Sequence
 from fnmatch import fnmatch
 from itertools import chain
+from token import ISTERMINAL
 from typing import (
     Any,
+    Literal,
 )
-from collections.abc import Iterable, Iterator, Sequence
 
 import networkx as nx
+import rattler_build as rb
+from conda_build.build import render_recipe
+from regex import R
 
 from bioconda_utils.recipe import Recipe
 from bioconda_utils.skiplist import Skiplist
@@ -23,11 +27,11 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
 def build(
-    recipes: Iterable[str],
+    recipes: Iterable[utils.RecipePath],
     config: dict[str, Any],
     blacklist: Skiplist | None = None,
     restrict: bool = True,
-) -> tuple[nx.DiGraph, defaultdict[str, set[str]]]:
+) -> tuple[nx.DiGraph, defaultdict[str, set[utils.RecipePath]]]:
     """
     Returns the DAG of recipe paths and a dictionary that maps package names to
     lists of recipe paths to all defined versions of the package.  defined
@@ -57,52 +61,55 @@ def build(
         values are lists and contain paths to all defined versions.
     """
     logger.info("Generating DAG")
-    recipes = list(recipes)
-    metadata = list(
-        utils.parallel_iter(utils.load_meta_fast, recipes, "Loading Recipes")
+    recipes: list[utils.RecipePath] = list(recipes)
+    # TODO (rb): is it possible to load global variants here and pass them on?
+    # it seems that it doesn't work because utils.parallel_iter wants to pickle them
+    # which fails
+    #
+    # global_variants: rb.VariantConfig = utils.load_rattler_build_global_variants()
+
+    meta_rattler_data: list[utils.MetaOrRattler] = list(
+        utils.parallel_iter(
+            utils.load_meta_and_recipe_fast,
+            recipes,
+            "Loading Recipes",
+        )
     )
 
-    # name2recipe is meta.yaml's package:name mapped to the recipe path.
+    # name2recipe is meta.yaml's / recipe.yaml's package:name mapped to the recipe path.
     #
     # A name should map to exactly one recipe. It is possible for multiple
     # names to map to the same recipe, if the package name somehow depends on
     # the environment.
-    name2recipe = defaultdict(set)
-    for meta, recipe in metadata:
-        name = meta["package"]["name"]
-        if blacklist is None or not blacklist.is_skiplisted(recipe):
-            name2recipe[name].update([recipe])
+    name2recipe: defaultdict[str, set[utils.RecipePath]] = defaultdict(set)
 
-    def get_deps(meta: dict[str, Any], sec: str) -> list[str]:
-        reqs = meta.get("requirements")
-        if not reqs:
-            return []
-        deps = reqs.get(sec)
-        if not deps:
-            return []
-        return [dep.split()[0] for dep in deps if dep]
+    for rendered_recipe in meta_rattler_data:
+        name: str = rendered_recipe.get_package_name()
 
-    def get_inner_deps(dependencies: Iterable[str]) -> Iterator[str]:
+        if blacklist is None or not blacklist.is_skiplisted(rendered_recipe.path.path):
+            name2recipe[name].update([rendered_recipe.path])
+
+    def get_inner_deps(dependencies: Iterable[str]) -> Iterable[str]:
         dependencies = list(dependencies)
         for dep in dependencies:
             if dep in name2recipe or not restrict:
                 yield dep
 
-    dag = nx.DiGraph()
-    dag.add_nodes_from(meta["package"]["name"] for meta, recipe in metadata)
-    for meta, recipe in metadata:
-        name = meta["package"]["name"]
+    # TODO (rb): is it more efficient to merge this with the loop above?
+    dag: nx.DiGraph = nx.DiGraph()
+    dag.add_nodes_from(name2recipe.keys())
+    for rendered_recipe in meta_rattler_data:
+        name: str = rendered_recipe.get_package_name()
         dag.add_edges_from(
             (dep, name)
             for dep in set(
                 chain(
-                    get_inner_deps(get_deps(meta, "build")),
-                    get_inner_deps(get_deps(meta, "host")),
-                    get_inner_deps(get_deps(meta, "run")),
+                    get_inner_deps(rendered_recipe.get_dependencies("build")),
+                    get_inner_deps(rendered_recipe.get_dependencies("host")),
+                    get_inner_deps(rendered_recipe.get_dependencies("run")),
                 )
             )
         )
-
     return dag, name2recipe
 
 

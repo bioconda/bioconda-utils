@@ -3,10 +3,11 @@
 import asyncio
 import logging
 import os
+from pathlib import Path
 import re
 import subprocess
+from typing import BinaryIO, Iterable, Protocol
 from dataclasses import dataclass
-from typing import BinaryIO, Protocol
 
 import git
 import yaml
@@ -120,9 +121,9 @@ class GitHandlerBase:
         self,
         repo: git.Repo,
         dry_run: bool,
-        home="bioconda/bioconda-recipes",
-        fork=None,
-        allow_dirty=False,
+        home: str = "bioconda/bioconda-recipes",
+        fork: str | None = None,
+        allow_dirty: bool = False,
     ) -> None:
         #: GitPython Repo object representing our repository
         self.repo: git.Repo = repo
@@ -283,13 +284,15 @@ class GitHandlerBase:
     def get_latest_master(self):
         return self.home_remote.fetch("master")[0].commit
 
-    def read_from_branch(self, branch, file_name: str) -> str:
+    def read_from_branch(self, branch, file_name: str | Path) -> str:
         """Reads contents of file **file_name** from git branch **branch**"""
-        abs_file_name = os.path.abspath(file_name)
-        abs_repo_root = os.path.abspath(self.repo.working_dir)
-        if not abs_file_name.startswith(abs_repo_root):
+        abs_file_name = Path(file_name).resolve()
+        abs_repo_root = Path(self.repo.working_dir).resolve()
+
+        if not abs_file_name.is_relative_to(abs_repo_root):
             raise RuntimeError(f"File {abs_file_name} not inside {abs_repo_root}")
-        rel_file_name = abs_file_name[len(abs_repo_root) :].lstrip("/")
+
+        rel_file_name: str = abs_file_name.relative_to(abs_repo_root).as_posix()
         commit = getattr(branch, "commit", branch)
         blob = commit.tree / rel_file_name
         if blob:
@@ -400,7 +403,11 @@ class GitHandlerBase:
         branch.checkout()
 
     def commit_and_push_changes(
-        self, files: list[str], branch_name: str, msg: str, sign=False
+        self,
+        files: list[str] | list[Path],
+        branch_name: str | None,
+        msg: str,
+        sign=False,
     ) -> bool:
         """Create recipe commit and pushes to upstream remote
 
@@ -411,7 +418,10 @@ class GitHandlerBase:
             branch_name = self.repo.active_branch.name
         if not files:
             files = list(self.list_modified_files())
-        self.repo.index.add(files)
+
+        files_str = [str(file) for file in files]
+
+        self.repo.index.add(files_str)
         if not self.repo.index.diff("HEAD"):
             return False
 
@@ -466,7 +476,12 @@ class BiocondaRepoMixin(GitHandlerBase):
     #: location of configuration file within repo
     config_file = "config.yml"
 
-    def get_changed_recipes(self, ref=None, other=None, files=None):
+    def get_changed_recipes(
+        self,
+        ref: str | None = None,
+        other: str | None = None,
+        files: Iterable[str] | None = None,
+    ) -> list[Path]:
         """Returns list of modified recipes
 
         Args:
@@ -480,14 +495,18 @@ class BiocondaRepoMixin(GitHandlerBase):
           ``recipes_folder`` are ignored.
         """
         if files is None:
-            files = ["meta.yaml", "build.sh"]
-        changed = set()
-        for path in self.list_changed_files(ref, other):
-            if not path.startswith(self.recipes_folder):
+            files = ["meta.yaml", "recipe.yaml", "build.sh"]
+
+        changed: set[Path] = set()
+
+        for path_str in self.list_changed_files(ref, other):
+            path: Path = Path(path_str)
+
+            if not path.is_relative_to(self.recipes_folder):
                 continue  # skip things outside the recipes folder
-            for fname in files:
-                if os.path.basename(path) == fname:
-                    changed.add(os.path.dirname(path))
+
+            if path.name in files:
+                changed.add(path.parent)
         return list(changed)
 
     def get_blacklisted(self, ref=None):
@@ -535,7 +554,9 @@ class BiocondaRepoMixin(GitHandlerBase):
         cur_blacklist = self.get_blacklisted(ref)
         return orig_blacklist.difference(cur_blacklist)
 
-    def get_recipes_to_build(self, ref=None, other=None):
+    def get_recipes_to_build(
+        self, ref: str | None = None, other: str | None = None
+    ) -> list[Path]:
         """Returns `list` of recipes to build for merge of **ref** into **other**
 
         This includes all recipes returned by `get_changed_recipes` and
@@ -544,14 +565,15 @@ class BiocondaRepoMixin(GitHandlerBase):
         Returns:
           `list` of recipes that should be built
         """
-        tobuild = set(self.get_changed_recipes(ref, other))
-        tobuild.update(
-            [
-                recipe
-                for recipe in self.get_unblacklisted(ref, other)
-                if recipe.startswith(self.recipes_folder) and os.path.exists(recipe)
-            ]
-        )
+        tobuild: set[Path] = set(self.get_changed_recipes(ref, other))
+
+        for recipe_str in self.get_unblacklisted(ref, other):
+            recipe_path = Path(recipe_str)
+
+            if recipe_path.is_relative_to(self.recipes_folder) and recipe_path.exists():
+                tobuild.add(recipe_path)
+            pass
+
         return list(tobuild)
 
 

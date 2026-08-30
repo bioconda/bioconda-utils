@@ -3,6 +3,9 @@
 # Workaround for spurious numpy warning message
 # ".../importlib/_bootstrap.py:219: RuntimeWarning: numpy.dtype size \
 # changed, may indicate binary incompatibility. Expected 96, got 88"
+from collections.abc import Sequence
+from pathlib import Path
+from typing import Any, Iterable
 import warnings
 import logging
 from typing import Annotated, Any, Literal
@@ -154,7 +157,7 @@ GitRangeOpt = Annotated[
 ]
 
 
-def get_recipes_to_build(git_range: GitRange, recipe_folder: str) -> list[str]:
+def get_recipes_to_build(git_range: GitRange, recipe_folder: Path) -> list[Path]:
     """Gets list of modified recipes according to git_range and blacklist
 
     See `BiocondaRepoMixin.get_recipes_to_build()`.
@@ -165,17 +168,17 @@ def get_recipes_to_build(git_range: GitRange, recipe_folder: str) -> list[str]:
       List of recipes for which meta.yaml or build.sh was modified or
       which were unblacklisted.
     """
-    repo = BiocondaRepo(recipe_folder)
+    repo = BiocondaRepo(recipe_folder.as_posix())
     return repo.get_recipes_to_build(git_range.ref, git_range.base)
 
 
 def get_recipes(
     config: dict[str, Any],
-    recipe_folder: str,
+    recipe_folder: Path,
     packages: PackagePatterns,
     git_range: GitRange | None,
     include_blacklisted: bool = False,
-) -> list[str]:
+) -> list[utils.RecipePath]:
     """Gets list of paths to recipe folders to be built
 
     Considers all recipes matching globs in packages, constrains to
@@ -183,36 +186,44 @@ def get_recipes(
     removes blacklisted recipes (unless include_blacklisted=True).
 
     """
-    recipes = list(utils.get_recipes(recipe_folder, packages))
+    recipes: list[utils.RecipePath] = list(utils.get_recipes(recipe_folder, packages))
     logger.info(
         "Considering total of %s recipes%s.",
         len(recipes),
-        utils.ellipsize_recipes(recipes, recipe_folder),
+        utils.ellipsize_recipes(list(recipe.path for recipe in recipes), recipe_folder),
     )
     if git_range:
-        changed_recipes = get_recipes_to_build(git_range, recipe_folder)
+        changed_recipes_paths: list[Path] = get_recipes_to_build(
+            git_range, recipe_folder
+        )
         logger.info(
             "Constraining to %s git modified recipes%s.",
-            len(changed_recipes),
-            utils.ellipsize_recipes(changed_recipes, recipe_folder),
+            len(changed_recipes_paths),
+            utils.ellipsize_recipes(changed_recipes_paths, recipe_folder),
         )
-        recipes = [recipe for recipe in recipes if recipe in set(changed_recipes)]
-        if len(recipes) != len(changed_recipes):
+        recipes = [
+            recipe for recipe in recipes if recipe.path in set(changed_recipes_paths)
+        ]
+        if len(recipes) != len(changed_recipes_paths):
             logger.info(
                 "Overlap was %s recipes%s.",
                 len(recipes),
-                utils.ellipsize_recipes(recipes, recipe_folder),
+                utils.ellipsize_recipes(
+                    list(recipe.path for recipe in recipes), recipe_folder
+                ),
             )
     if not include_blacklisted:
         skiplist = Skiplist(config, recipe_folder)
         all_len = len(recipes)
-        recipes = [recipe for recipe in recipes if not skiplist.is_skiplisted(recipe)]
+        recipes = [
+            recipe for recipe in recipes if not skiplist.is_skiplisted(recipe.path)
+        ]
         if all_len > len(recipes):
             logger.info(f"Ignoring {all_len - len(recipes)} skiplisted recipes.")
     logger.info(
         "Processing %s recipes%s.",
         len(recipes),
-        utils.ellipsize_recipes(recipes, recipe_folder),
+        utils.ellipsize_recipes(list(recipe.path for recipe in recipes), recipe_folder),
     )
     return recipes
 
@@ -270,7 +281,10 @@ def build(
     ] = None,
     git_range: GitRangeOpt = None,
     test_only: Annotated[
-        bool, typer.Option("--test-only", help="Test packages instead of building")
+        bool,
+        typer.Option(
+            "--test-only", help="Test packages instead of building. (Deprecated.)"
+        ),
     ] = False,
     force: Annotated[
         bool,
@@ -437,16 +451,40 @@ def build(
     log_command_max_lines: LogCommandMaxLinesOpt = None,
 ) -> None:
     """Build and test Bioconda recipes."""
+    if test_only:
+        # testonly calls `conda-build --test` but expects it to work when pointing
+        # to a recipe with a `meta.yaml`. However, according to the output of `conda-build --test` in version 26.3.0:
+        # "RECIPE_PATH argument must be a path to built package file".
+        # `rattler-build test` also expects an already built package.
+        logger.error("--testonly is deprecated. Rerun without this flag.")
+        sys.exit(1)
+
     _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines)
     package_patterns: PackagePatterns = packages or "*"
     parsed_git_range = GitRange.parse(git_range) if git_range is not None else None
-    cfg = utils.load_config(config)
+    config_path = Path(config)
+    cfg = utils.load_config(config_path)
+
+    # setting the rattler cache to custom path
+    # TODO (rb): should this be exposed to the user?
+    # how should this be handled for docker containers?
+    rattler_cache_dir: Path = utils.get_default_rattler_cache_dir_path()
+    utils.set_rattler_cache_to_dir(rattler_cache_dir)
+
+    # TODO: should we also load the rattler variants config here?
+    # currently it is loaded by utils.load_rattler_build_global_variants
+    # using a semi-hardcoded path
     setup = cfg.get("setup", None)
     if setup:
         logger.debug("Running setup: %s", setup)
         for cmd in setup:
             utils.run(shlex.split(cmd), mask=False)
-    recipes = get_recipes(cfg, recipe_folder, package_patterns, parsed_git_range)
+
+    recipe_folder_path = Path(recipe_folder)
+    recipes: list[utils.RecipePath] = get_recipes(
+        cfg, recipe_folder_path, package_patterns, parsed_git_range
+    )
+
     if docker:
         if build_script_template is not None:
             build_script_content = build_script_template.read_text()
@@ -483,10 +521,9 @@ def build(
         logger.warning("--lint-exclude has no effect unless --lint is specified.")
     label = os.getenv("BIOCONDA_LABEL", None) or None
     success = build_recipes(
-        recipe_folder,
-        config,
+        recipe_folder_path,
+        config_path,
         recipes,
-        testonly=test_only,
         force=force,
         mulled_test=mulled_test,
         docker_builder=docker_builder,
@@ -537,7 +574,7 @@ def dag(
     package_patterns: PackagePatterns = packages or "*"
     config_data = utils.load_config(config)
     dag, name2recipes = graph.build(
-        utils.get_recipes(recipe_folder, package_patterns), config_data
+        utils.get_recipes(Path(recipe_folder), package_patterns), config_data
     )
     if hide_singletons:
         for node in nx.nodes(dag):
@@ -559,16 +596,18 @@ def dag(
                 continue
             print(f"# subdag {i}")
             subdag = dag.subgraph(s)
-            recipes = [
-                recipe
+            recipes: list[str] = [
+                recipe.path.as_posix()
                 for package in nx.topological_sort(subdag)
                 for recipe in name2recipes[package]
             ]
             print("\n".join(recipes) + "\n")
         if not hide_singletons:
             print("# singletons")
-            recipes = [
-                recipe for package in singletons for recipe in name2recipes[package]
+            recipes: list[str] = [
+                recipe.path.as_posix()
+                for package in singletons
+                for recipe in name2recipes[package]
             ]
             print("\n".join(recipes) + "\n")
 
@@ -615,7 +654,7 @@ def dependent(
         )
     config_data = utils.load_config(config)
     d, _ = graph.build(
-        utils.get_recipes(recipe_folder, "*"), config_data, restrict=restrict
+        utils.get_recipes(Path(recipe_folder), "*"), config_data, restrict=restrict
     )
     if reverse_dependencies is not None:
         dependency_func = nx.algorithms.descendants
@@ -680,15 +719,27 @@ def lint(
         config_data = utils.load_config(config)
         if cache is not None:
             utils.RepoData().set_cache(cache)
-        recipes = get_recipes(
+        recipes: list[utils.RecipePath] = get_recipes(
             config_data,
-            recipe_folder,
+            Path(recipe_folder),
             package_patterns,
             parsed_git_range,
             include_blacklisted=True,
         )
         linter = _lint.Linter(config_data, recipe_folder, exclude)
-        result = linter.lint(recipes, fix=try_fix)
+
+        # TODO (rb): Filtering out all rattler recipes. As linting is not
+        # currently implemented for rattler recipes. This has to
+        # be improved
+        filtered_recipes: list[Path] = []
+        rattler_recipes: list[Path] = []
+        for path, build_sys in recipes:
+            if build_sys == "conda":
+                filtered_recipes.append(path)
+            else:
+                rattler_recipes.append(path)
+
+        result = linter.lint(filtered_recipes, fix=try_fix)
         messages = linter.get_messages()
         if messages:
             print(
@@ -869,7 +920,7 @@ def update_pinning(
             utils.RepoData().set_cache(cache)
         utils.RepoData().df
         build_config = utils.load_conda_build_config()
-        skiplist = Skiplist(config_data, recipe_folder)
+        skiplist = Skiplist(config_data, Path(recipe_folder))
         from . import recipe
 
         dag = graph.build_from_recipes(

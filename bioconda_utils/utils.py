@@ -5,63 +5,65 @@ This module collects small pieces of code used throughout :py:mod:`bioconda_util
 """
 
 import asyncio
-import aiofiles
 import contextlib
 import datetime
 import fnmatch
 import glob
+import json
 import logging
 import os
 import platform
+import queue
 import re
+import shutil
 import subprocess as sp
 import sys
-import shutil
-import json
-import queue
 import warnings
 import psutil
 
 from threading import Event, Thread
 from pathlib import PurePath
-from collections import Counter, defaultdict, namedtuple, deque
-from collections.abc import Iterable, Iterator
-from itertools import product, chain, zip_longest
+from collections import Counter, defaultdict, deque, namedtuple
+from collections.abc import Collection, Generator, Iterable, Sequence, Iterator
+from dataclasses import dataclass
 from functools import partial
-from typing import Any, cast
-from collections.abc import Sequence, Collection
+from importlib.resources import as_file, files
+from itertools import chain, product, zip_longest
 from multiprocessing import Pool
 from multiprocessing.pool import ThreadPool
+from pathlib import Path, PurePath
+from threading import Event, Thread
+from typing import Any, Literal, NamedTuple, cast
 
-import requests
-from yaspin import yaspin, Spinner
-from yaspin.spinners import Spinners
-from urllib3 import Retry
-import platformdirs
-import diskcache
-
-from github import Github
-
-from importlib.resources import files, as_file
-import pandas as pd
-import tqdm as _tqdm
+import aiofiles
 import aiohttp
 import backoff
-import yaml
-import jinja2
-from jinja2 import Environment, PackageLoader
 
 # FIXME(upstream): For conda>=4.7.0 initialize_logging is (erroneously) called
 #                  by conda.core.index.get_index which messes up our logging.
 # => Prevent custom conda logging init before importing anything conda-related.
 import conda.gateways.logging
-
-from conda_build import api
-from conda.exports import subdir as conda_subdir
-
-from jsonschema import validate
-from colorlog import ColoredFormatter
+import conda_build.config
+import conda_build.metadata as metadata
+import diskcache
+import jinja2
+import pandas as pd
+import platformdirs
+import psutil
+import rattler_build as rb
+import requests
+import tqdm as _tqdm
+import yaml
 from boltons.funcutils import FunctionBuilder
+from colorlog import ColoredFormatter
+from conda.exports import subdir as conda_subdir
+from conda_build import api
+from github import Github
+from jinja2 import Environment, PackageLoader
+from jsonschema import validate
+from urllib3 import Retry
+from yaspin import Spinner, yaspin
+from yaspin.spinners import Spinners
 
 cast(Any, conda.gateways.logging).initialize_logging = lambda: None
 
@@ -69,6 +71,23 @@ logger = logging.getLogger(__name__)
 ConfigSource = str | os.PathLike[str] | dict[str, Any]
 
 disk_cache = diskcache.Cache(platformdirs.user_cache_dir("bioconda-utils"))
+
+
+class RecipePath(NamedTuple):
+    """
+    Named tuple with the fields:
+
+    path : Path
+
+    build_system : Literal[
+        "conda", "rattler", "none"
+    ]
+    """
+
+    path: Path
+    build_system: Literal[
+        "conda", "rattler", "none"
+    ]  # i.e. conda-build or rattler-build
 
 
 class TqdmHandler(logging.StreamHandler):
@@ -315,7 +334,7 @@ def setup_logger(
 
 
 def ellipsize_recipes(
-    recipes: Collection[str], recipe_folder: str, n: int = 5, m: int = 50
+    recipes: Collection[Path], recipe_folder: Path, n: int = 5, m: int = 50
 ) -> str:
     """Logging helper showing recipe list
 
@@ -335,12 +354,11 @@ def ellipsize_recipes(
         append = ", ..."
     else:
         append = ""
-    return (
-        " ("
-        + ", ".join(recipe.replace(recipe_folder, "").lstrip("/") for recipe in recipes)
-        + append
-        + ")"
-    )
+
+    processed_names: list[str] = [
+        Path(recipe).relative_to(recipe_folder).as_posix() for recipe in recipes
+    ]
+    return " (" + ", ".join(processed_names) + append + ")"
 
 
 class JinjaSilentUndefined(jinja2.Undefined):
@@ -464,7 +482,7 @@ def sandboxed_env(env):
         os_environ.update(orig)
 
 
-def load_all_meta(recipe, config=None, finalize=True):
+def load_all_meta(recipe: Path, config=None, finalize=True):
     """
     For each environment, yield the rendered meta.yaml.
 
@@ -512,7 +530,91 @@ def load_all_meta(recipe, config=None, finalize=True):
     return metas
 
 
-def load_meta_fast(recipe: str, env=None):
+@dataclass(slots=True)
+class RattlerDictList:
+    recipes: list[dict[str, Any]]
+    is_multi: bool
+
+
+@dataclass(slots=True)
+class MetaOrRattler:
+    path: RecipePath
+    meta: dict[str, Any] | None
+    rattler: RattlerDictList | None
+
+    def __init__(
+        self,
+        path: RecipePath,
+        meta: dict[str, Any] | None,
+        rattler: RattlerDictList | None,
+    ) -> None:
+        if meta is None and rattler is None:
+            raise ValueError(
+                f"Either meta or rattler must be set but both are None for recipe: {path.path.as_posix()}"
+            )
+        self.path = path
+        self.meta = meta
+        self.rattler = rattler
+
+    def get_package_name(self) -> str:
+        if self.meta is not None:
+            # TODO: what actually happens if this is a multi output recipe?
+            return self.meta["package"]["name"]
+        elif self.rattler is not None:
+            # if rattler recipe is a multi-output recipe, return the name of its directory
+            # if it is a single output directory (i.e. the list contains just the variants of the same
+            # recipe), return the name of the package
+            if self.rattler.is_multi:
+                return self.path.path.name
+            else:
+                return self.rattler.recipes[0]["package"]["name"]
+        else:
+            raise ValueError(
+                f"No meta or rattler-recipe found for: {self.path.path.as_posix()}"
+            )
+
+    def get_dependencies(self, section: Literal["build", "host", "run"]) -> list[str]:
+        if self.meta is not None:
+            requirements = self.meta.get("requirements")
+            if not requirements:
+                return []
+
+            deps = requirements.get(section)
+
+            if not deps:
+                return []
+            return [dep.split()[0] for dep in deps if dep]
+        elif self.rattler is not None:
+            result: list[str] = []
+
+            # return the dependencies of all variants as dependencies of this
+            # package. If this should be able to be split by variants, that behaviour
+            # needs to be implemented separately
+            for variant in self.rattler:
+                requirements = variant.get("requirements")
+                if not requirements:
+                    return []
+                deps = requirements.get(section)
+                if not deps:
+                    return []
+
+                for dep in deps:
+                    if isinstance(dep, str):
+                        result.append(dep)
+                    elif isinstance(dep, dict) and "pin_subpackage" in dep:
+                        result.append(dep["pin_subpackage"]["name"])
+                    else:
+                        raise ValueError(f"Failed to parse dependency: {dep}")
+
+            return result
+        else:
+            # this is just to appease linters. Due to __init__ this will never be called
+            raise ValueError(
+                f"Either meta or rattler must be set but both are None for recipe: {self.path.path.as_posix()}"
+            )
+
+
+def load_meta_fast(recipe: Path | str, env=None) -> tuple[dict[str, Any], Path]:
     """
     Given a package name, find the current meta.yaml file, parse it, and return
     the dict.
@@ -524,16 +626,151 @@ def load_meta_fast(recipe: str, env=None):
     Returns:
       Tuple of original recipe string and rendered dict
     """
+    recipe = Path(recipe)
     if not env:
         env = {}
 
     try:
-        pth = os.path.join(recipe, "meta.yaml")
+        pth: Path = recipe / "meta.yaml"
         template = jinja_silent_undef.from_string(open(pth, encoding="utf-8").read())
-        meta = yaml.safe_load(template.render(env))
+        meta: dict[str, Any] = yaml.safe_load(template.render(env))
         return (meta, recipe)
     except Exception:
         raise ValueError(f"Problem inspecting {recipe}")
+
+
+def render_rattler_recipe(
+    recipe: Path, global_variants: rb.VariantConfig
+) -> list[rb.RenderedVariant]:
+    """
+    Given a package name, find the current recipe.yaml file, render it, and return
+    the rendered variants.
+    """
+    try:
+        # Parse YAML into Stage0Recipe
+        recipe_file: Path = Path(recipe) / "recipe.yaml"
+        local_variants_path: Path = Path(recipe) / "variants.yaml"
+
+        recipe_s0: rb.Stage0Recipe = rb.Stage0Recipe.from_file(recipe_file)
+
+        # merging variants
+
+        variants: rb.VariantConfig = global_variants
+
+        if local_variants_path.exists():
+            local_variants = rb.VariantConfig.from_file(local_variants_path)
+            variants = global_variants.merge(local_variants)
+
+        # rendering recipe
+        rendered_variants: list[rb.RenderedVariant] = recipe_s0.render(variants)
+
+        return rendered_variants
+    except Exception:
+        raise ValueError("Problem inspecting rattler recipe {0}".format(recipe))
+
+
+def render_rattler_recipe_to_dicts(
+    recipe: Path, global_variants: rb.VariantConfig
+) -> RattlerDictList:
+    """
+    Given a package name, find the current recipe.yaml file, render it, and return
+    the rendered variants.
+    """
+    try:
+        # Parse YAML into Stage0Recipe
+        recipe_file: Path = Path(recipe) / "recipe.yaml"
+        local_variants_path: Path = Path(recipe) / "variants.yaml"
+
+        recipe_s0: rb.Stage0Recipe = rb.Stage0Recipe.from_file(recipe_file)
+        is_multi: bool = isinstance(recipe_s0, rb.MultiOutputRecipe)
+
+        # merging variants
+
+        variants: rb.VariantConfig = global_variants
+
+        if local_variants_path.exists():
+            local_variants = rb.VariantConfig.from_file(local_variants_path)
+            variants = global_variants.merge(local_variants)
+
+        # rendering recipe
+        rendered_variants: list[rb.RenderedVariant] = recipe_s0.render(variants)
+
+        return RattlerDictList(
+            recipes=[r.recipe.to_dict() for r in rendered_variants], is_multi=is_multi
+        )
+    except Exception:
+        raise ValueError("Problem rendering rattler recipe to dict {0}".format(recipe))
+
+
+def load_meta_and_recipe_fast(recipe: RecipePath, env=None) -> MetaOrRattler:
+    """
+    Given a RecipePath, check whether the given package should be build with conda build
+    or rattler. Returns a MetaOrRattler object containing the original RecipePath and either
+    the contents of the recipe's meta.yaml (for conda build recipes) or a rattler build
+    RenderedVariant (for rattler build recipes). The other field will be set to None.
+    """
+    if recipe.build_system == "conda":
+        meta, _ = load_meta_fast(recipe.path, env)
+        return MetaOrRattler(path=recipe, meta=meta, rattler=None)
+    elif recipe.build_system == "rattler":
+        # TODO (rb): is it possible to pass the global variants to the function
+        # so we don't have to reload it constantly?
+        # as far as I know we have to reload it, otherwise the parallelisation calls pickle on it
+        global_variants: rb.VariantConfig = load_rattler_build_global_variants()
+        rattler = render_rattler_recipe_to_dicts(recipe.path, global_variants)
+        return MetaOrRattler(path=recipe, meta=None, rattler=rattler)
+    else:
+        raise ValueError(
+            f"Failed to load meta or rattler recipe. Directory empty for: {recipe.path.as_posix()}"
+        )
+
+
+# TODO (rb): Is it correct to assume the native platform is the target platform?
+def _filter_config(config_path: Path) -> str:
+    target = RepoData.native_platform().split("-")
+    native_platform = target[0]
+    arch = platform.machine()
+    config = conda_build.config.Config(platform=native_platform, arch=arch)
+    namespace = metadata.get_selectors(config)
+
+    with open(config_path, "r") as f:
+        raw = f.read()
+
+    filtered: str = metadata.select_lines(
+        text=raw, namespace=namespace, variants_in_place=False
+    )
+    return filtered
+
+
+def get_rattler_build_global_variants_paths() -> list[Path]:
+    bioconda_utils_bin = shutil.which("bioconda-utils")
+    if bioconda_utils_bin is None:
+        raise FileNotFoundError("Unable to find bioconda-utils on PATH")
+    env_root = PurePath(bioconda_utils_bin).parents[1]
+    return [
+        Path(env_root) / "bioconda_utils-conda_build_config.yaml",
+        Path(__file__).resolve().parent / "bioconda_utils-conda_build_config.yaml",
+    ]
+
+
+def load_rattler_build_global_variants() -> rb.VariantConfig:
+    paths: list[Path] = get_rattler_build_global_variants_paths()
+
+    filtered_yaml: str = ""
+
+    for p in paths:
+        if p.exists():
+            filtered_yaml = _filter_config(p)
+            break
+
+    if not filtered_yaml:
+        path_str: str = ", ".join([str(p) for p in paths])
+        raise FileNotFoundError(
+            f"Failed to load bioconda_utils-variants.yaml from any of these paths: {path_str}"
+        )
+    else:
+        global_variants: rb.VariantConfig = rb.VariantConfig.from_yaml(filtered_yaml)
+        return global_variants
 
 
 def load_conda_build_config(platform=None, trim_skip=True):
@@ -585,7 +822,7 @@ def get_conda_build_config_files(config=None):
         yield CondaBuildConfigFile("-m", file_path)
 
 
-def load_first_metadata(recipe, config=None, finalize=True):
+def load_first_metadata(recipe: Path, config=None, finalize=True):
     """
     Returns just the first of possibly many metadata files. Used for when you
     need to do things like check a package name or version number (which are
@@ -769,7 +1006,7 @@ def flatten_dict(dict):
         yield [(key, value) for value in values]
 
 
-def get_deps(recipe, build=True):
+def get_deps(recipe: Path | str, build=True):
     """
     Generator of dependencies for a single recipe
 
@@ -787,7 +1024,10 @@ def get_deps(recipe, build=True):
     build : bool
         If True yield build dependencies, if False yield run dependencies.
     """
-    assert isinstance(recipe, str)
+    # assert isinstance(recipe, str)
+    # I don't see any instances in the code where this could be called on a MetaData object
+    # In any case if it does, it will fail here:
+    recipe = Path(recipe)
     metadata = load_all_meta(recipe, finalize=False)
 
     all_deps = set()
@@ -834,11 +1074,15 @@ def format_link(uri, fmt: str, prefix: str = "", label: str = ""):
         raise ValueError(f"Invalid link format: {fmt}")
 
 
+def get_recipe_paths(recipes: Iterable[RecipePath]) -> list[Path]:
+    return [recipe for (recipe, _) in recipes]
+
+
 def get_recipes(
-    recipe_folder: str,
+    recipe_folder: Path,
     package: str | Iterable[str] = "*",
     exclude: str | Iterable[str] | None = None,
-) -> Iterator[str]:
+) -> Generator[RecipePath]:
     """
     Generator of recipes.
 
@@ -846,7 +1090,7 @@ def get_recipes(
 
     Parameters
     ----------
-    recipe_folder : str
+    recipe_folder : Path
         Top-level dir of the recipes
 
     package : str or iterable
@@ -858,28 +1102,43 @@ def get_recipes(
         exclude = [exclude]
     if exclude is None:
         exclude = []
+
     for p in package:
-        logger.debug("get_recipes(%s, package='%s'): %s", recipe_folder, package, p)
-        path = os.path.join(recipe_folder, p)
-        for new_dir in glob.glob(path):
-            meta_yaml_found_or_excluded = False
-            for dir_path, _, file_names in os.walk(new_dir):
-                if any(
-                    fnmatch.fnmatch(dir_path[len(recipe_folder) :], pat)
-                    for pat in exclude
-                ):
+        logger.debug(
+            "get_recipes(%s, package='%s'): %s", str(recipe_folder), package, p
+        )
+        for new_dir in recipe_folder.glob(p):
+            # guard for skipping hidden files to reproduce behaviour of glob.glob
+            if new_dir.name.startswith(".") and not p.startswith("."):
+                continue
+
+            meta_yaml_found_or_excluded: bool = False
+            recipe_yaml_found_or_excluded: bool = False
+
+            for dir_path, _, file_names in new_dir.walk():
+                # prepend `/` to replicate behaviour of legacy code
+                relative: str = "/" + dir_path.relative_to(recipe_folder).as_posix()
+
+                if any(fnmatch.fnmatch(relative, pat) for pat in exclude):
                     meta_yaml_found_or_excluded = True
                     continue
                 if "meta.yaml" in file_names:
                     meta_yaml_found_or_excluded = True
-                    yield dir_path
-            if not meta_yaml_found_or_excluded and os.path.isdir(new_dir):
+                    yield RecipePath(path=dir_path, build_system="conda")
+                elif "recipe.yaml" in file_names:
+                    recipe_yaml_found_or_excluded = True
+                    yield RecipePath(path=dir_path, build_system="rattler")
+            if (
+                not meta_yaml_found_or_excluded
+                and not recipe_yaml_found_or_excluded
+                and new_dir.is_dir()
+            ):
                 logger.warning(
-                    "No meta.yaml found in %s."
+                    "No meta.yaml or recipe.yaml found in %s."
                     " If you want to ignore this directory, add it to the blacklist.",
                     new_dir,
                 )
-                yield new_dir
+                yield RecipePath(path=new_dir, build_system="none")
 
 
 class DivergentBuildsError(Exception):
@@ -905,12 +1164,14 @@ def _string_or_float_to_integer_python(s: str | float) -> int:
     return s
 
 
-def built_package_paths(recipe: str) -> list[str]:
+def built_package_paths_conda_build(recipe: str) -> list[str]:
     """
     Returns the path to which a recipe would be built.
 
     Does not necessarily exist; equivalent to ``conda build --output recipename``
     but without the subprocess.
+
+    Not yet implemented for rattler-build recipes.
     """
     config = load_conda_build_config()
     # NB: Setting bypass_env_check disables ``pin_compatible`` parsing, which
@@ -925,7 +1186,7 @@ def built_package_paths(recipe: str) -> list[str]:
 _SOLVER_DEPENDENT_JINJA = re.compile(r"\{\{\s*(stdlib|compiler|pin_compatible)\s*\(")
 
 
-def recipe_requires_finalized_render(recipe):
+def recipe_requires_finalized_render(recipe: Path | str):
     """
     Return True if the recipe's rendered hash can depend on solver state and
     therefore must be rendered with ``finalize=True`` to match what conda-build
@@ -935,7 +1196,7 @@ def recipe_requires_finalized_render(recipe):
     jinja functions, whose run_exports are only applied during a real solve.
     See https://github.com/bioconda/bioconda-utils/issues/1095.
     """
-    meta_path = os.path.join(recipe, "meta.yaml")
+    meta_path: Path = Path(recipe) / "meta.yaml"
     try:
         with open(meta_path, encoding="utf-8") as f:
             text = re.sub(r"#.*", "", f.read())
@@ -944,7 +1205,7 @@ def recipe_requires_finalized_render(recipe):
     return bool(_SOLVER_DEPENDENT_JINJA.search(text))
 
 
-def _load_platform_metas(recipe, finalize=True):
+def _load_platform_metas(recipe: Path, finalize: bool = True):
     platform = RepoData.native_platform()
     config = load_conda_build_config(platform=platform)
     return platform, load_all_meta(recipe, config=config, finalize=finalize)
@@ -955,7 +1216,7 @@ def _meta_subdir(meta):
     return "noarch" if meta.noarch or meta.noarch_python else meta.config.host_subdir
 
 
-def check_recipe_skippable(recipe, check_channels):
+def check_recipe_skippable(recipe: Path, check_channels: list[str]):
     """
     Return True if the same number of builds (per subdir) defined by the recipe
     are already in channel_packages.
@@ -1055,14 +1316,69 @@ def _filter_existing_packages(metas, check_channels):
     return new_metas, existing_metas, divergent_builds
 
 
-def get_package_paths(recipe, check_channels, force=False, finalize=True):
+def get_rattler_package_paths(
+    recipe: RecipePath, rattler_output_dir: Path, global_variants: rb.VariantConfig
+) -> list[Path]:
+    result: list[Path] = []
+    # get rendered recipe
+    variants: list[rb.RenderedVariant] = render_rattler_recipe(
+        recipe.path, global_variants
+    )
+
+    for variant in variants:
+        pass
+        name: str = variant.recipe.package.name
+        version: str = variant.recipe.package.version
+        build_str: str = variant.recipe.build.string
+        noarch: Any | None = variant.recipe.build.noarch
+        target_platform: str | None = variant.recipe.used_variant.get("target_platform")
+        if not target_platform:
+            raise ValueError(
+                f"Couldn't find target platform for a variant of recipe: {recipe.path.as_posix()}"
+            )
+
+        # predict package file names
+        # can it also be tar.gz?
+        ext: str = "conda"
+        file_name: str = f"{name}-{version}-{build_str}.{ext}"
+
+        # predict directory
+        target_dir: Path = Path()
+        if noarch:
+            target_dir = rattler_output_dir / "noarch"
+        else:
+            target_dir = rattler_output_dir / target_platform
+        result.append(target_dir / file_name)
+
+    return result
+
+
+# TODO (rb): can this also be implemented for rattler-build?
+# for now in build.build we simply add the package paths of the packages
+# build with rattler-build **after** they have been built.
+def get_package_paths(
+    recipe: RecipePath,
+    check_channels: list[str],
+    force: bool = False,
+    finalize: bool = True,
+    rattler_output_dir: Path | None = None,
+    global_variants: rb.VariantConfig | None = None,
+) -> list[Path]:
+    if recipe.build_system == "rattler":
+        if rattler_output_dir is None or global_variants is None:
+            raise ValueError(
+                f"Both rattler_output_dir and global_variants must be set when calling get_package_paths on a rattler-recipe: {recipe.path.as_posix()}"
+            )
+        return get_rattler_package_paths(recipe, rattler_output_dir, global_variants)
+
+    # otherwise, buildsystem is conda-build:
     if not force:
-        if check_recipe_skippable(recipe, check_channels):
+        if check_recipe_skippable(recipe.path, check_channels):
             # NB: If we skip early here, we don't detect possible divergent builds.
             return []
     if not finalize:
         logger.debug("Using non-finalized render for %s (fast resolve)", recipe)
-    platform, metas = _load_platform_metas(recipe, finalize=finalize)
+    platform, metas = _load_platform_metas(recipe.path, finalize=finalize)
 
     # The recipe likely defined skip: True
     if not metas:
@@ -1085,9 +1401,10 @@ def get_package_paths(recipe, check_channels, force=False, finalize=True):
         build_metas = new_metas + existing_metas
     else:
         build_metas = new_metas
-    return list(
-        chain.from_iterable(api.get_output_file_paths(meta) for meta in build_metas)
+    package_paths: list[str] = list(
+        chain.from_iterable((api.get_output_file_paths(meta)) for meta in build_metas)
     )
+    return [Path(p) for p in package_paths]
 
 
 def validate_config(config: ConfigSource) -> None:
@@ -1647,6 +1964,35 @@ def yaml_remove_invalid_chars(
     E.g. we do not want them to contain carriage return chars or delete chars.
     """
     return valid_chars_re.sub("", text)
+
+
+def get_default_rattler_cache_dir_path() -> Path:
+    bioconda_utils_cache: Path = Path(platformdirs.user_cache_dir("bioconda-utils"))
+    return bioconda_utils_cache / "rattler_cache"
+
+
+# TODO (rb): this way of setting and getting the current cache dir is very ugly and should be improved
+curr_rattler_cache_dir_path: Path = get_default_rattler_cache_dir_path()
+
+
+def load_v1_recipe_schema() -> dict[Any, Any]:
+    schema_path: Path = Path(__file__).parent / "v1_recipe_schema.json"
+    with open(schema_path, "r") as f:
+        schema = json.load(f)
+    return schema
+
+
+def get_current_rattler_cache_dir_path() -> Path:
+    return curr_rattler_cache_dir_path
+
+
+def set_rattler_cache_to_dir(
+    path: Path, curr_path: Path = curr_rattler_cache_dir_path
+) -> None:
+    if not path.exists():
+        path.mkdir()
+    os.environ["RATTLER_CACHE_DIR"] = str(path)
+    curr_path = path
 
 
 # Cache results to disk for one week.

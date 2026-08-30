@@ -83,6 +83,8 @@ tabulate = "0.10.*"
 
 # resource reporting for builds
 psutil = "*"
+py-rattler-build = ">=0.67.0,<0.68"
+conda-smithy = ">=2026.8.5,<2027"
 
 [feature.test.dependencies]
 pip = "*"
