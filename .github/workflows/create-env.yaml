@@ -60,6 +60,9 @@ jobs:
       shell: bash
       run: |
         set -euo pipefail
+        # Checkout is done by the runner UID, steps run as root inside the
+        # container, so git otherwise refuses with "dubious ownership".
+        git config --global --add safe.directory "${GITHUB_WORKSPACE}"
         version="$(git describe --tags --abbrev=0 | sed 's/^v//')"
         test -n "${version}"
         printf 'version=%s\n' "${version}"
