@@ -27,6 +27,7 @@ jobs:
     steps:
     - uses: actions/checkout@v7
       with:
+        fetch-depth: 0
         fetch-tags: true
 
     - name: Set up QEMU
@@ -56,8 +57,12 @@ jobs:
 
     - name: Prepare
       id: prepare
+      shell: bash
       run: |
+        set -euo pipefail
         version="$(git describe --tags --abbrev=0 | sed 's/^v//')"
+        test -n "${version}"
+        printf 'version=%s\n' "${version}"
         printf 'bioconda_utils_version=%s\n' "${version}" >> "${GITHUB_OUTPUT}"
 
     - name: Build
