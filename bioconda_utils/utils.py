@@ -46,13 +46,14 @@ import platformdirs
 import psutil
 import requests
 import tqdm as _tqdm
-import yaml
 from boltons.funcutils import FunctionBuilder
 from colorlog import ColoredFormatter
 from conda_build import api
 from github import Github
 from jinja2 import Environment, PackageLoader
 from jsonschema import validate
+from ruamel.yaml import YAML
+from ruamel.yaml.error import YAMLError
 from urllib3 import Retry
 from yaspin import Spinner, yaspin
 from yaspin.spinners import Spinners
@@ -587,9 +588,11 @@ def load_meta_fast(recipe: str, env=None):
     try:
         pth = os.path.join(recipe, "meta.yaml")
         template = jinja_silent_undef.from_string(Path(pth).read_text(encoding="utf-8"))
-        meta = yaml.safe_load(template.render(env))
+        yaml_loader = YAML(typ="safe")
+        yaml_loader.allow_duplicate_keys = True
+        meta = yaml_loader.load(template.render(env))
         return (meta, recipe)
-    except (OSError, jinja2.TemplateError, yaml.YAMLError) as exc:
+    except (OSError, jinja2.TemplateError, YAMLError) as exc:
         raise ValueError(f"Problem inspecting {recipe}") from exc
 
 
@@ -1190,7 +1193,7 @@ def validate_config(config: dict[str, Any]) -> None:
         as_file(files("bioconda_utils") / "config.schema.yaml") as schema_path,
         open(schema_path, encoding="utf-8") as fh,
     ):
-        schema = yaml.safe_load(fh)
+        schema = YAML(typ="safe").load(fh)
 
     validate(config, schema)
 
@@ -1234,7 +1237,7 @@ def normalize_config(config: dict[str, Any]) -> Config:
 def load_config(path: Path) -> Config:
     """Load and normalize a YAML configuration file."""
     with path.open(encoding="utf-8") as fh:
-        config = yaml.safe_load(fh)
+        config = YAML(typ="safe").load(fh)
     config = normalize_config(config)
     config["blacklists"] = [str(path.parent / item) for item in config["blacklists"]]
     RepoData.register_config(config)

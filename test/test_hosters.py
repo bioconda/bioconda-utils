@@ -3,12 +3,12 @@ import json
 import os.path as op
 
 import pytest
-import yaml
+from ruamel.yaml import YAML
 
 from bioconda_utils.hosters import Hoster
 
 with open(op.join(op.dirname(__file__), "hoster_cases.yaml")) as data:
-    TEST_CASES = yaml.safe_load(data)
+    TEST_CASES = YAML(typ="safe").load(data)
 
 TEST_CASE_LIST = [
     (hoster, num, case)
