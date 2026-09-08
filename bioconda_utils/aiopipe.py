@@ -25,9 +25,9 @@ from urllib.parse import urlparse
 import aiofiles
 import aioftp
 import aiohttp
-import backoff
 from typing_extensions import Self
 
+from . import http
 from .utils import threads_to_use, tqdm
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -244,7 +244,7 @@ class AsyncRequests:
     """Provides helpers for async access to URLs"""
 
     #: Used as user agent in http requests and as requester in github API requests
-    USER_AGENT = "bioconda/bioconda-utils"
+    USER_AGENT = http.USER_AGENT
 
     def __init__(self, cache_fn: str | None = None) -> None:
         #: aiohttp session (only exists while running)
@@ -254,9 +254,7 @@ class AsyncRequests:
         self.cache: dict[str, dict[str, Any]] | None = None
 
     async def __aenter__(self) -> Self:
-        session = aiohttp.ClientSession(
-            headers={"User-Agent": self.USER_AGENT}, trust_env=True
-        )
+        session = http.make_session(user_agent=self.USER_AGENT)
         await session.__aenter__()
         self.session = session
         if self.cache_fn:
@@ -281,20 +279,12 @@ class AsyncRequests:
             cache_data = pickle.dumps(self.cache)
             await asyncio.to_thread(Path(self.cache_fn).write_bytes, cache_data)
 
-    @backoff.on_exception(
-        backoff.fibo,
-        aiohttp.ClientResponseError,
-        max_tries=20,
-        giveup=lambda ex: (
-            isinstance(ex, aiohttp.ClientResponseError)
-            and ex.status not in [429, 502, 503, 504]
-        ),
-    )
+    @http.retry_on_transient
     async def get_text_from_url(self, url: str) -> str:
         """Fetch content at **url** and return as text
 
-        - On non-permanent errors (429, 502, 503, 504), the GET is retried 10 times with
-          increasing wait times according to fibonacci series.
+        - On non-permanent errors (429, 502, 503, 504), the GET is attempted up to
+          20 times with increasing waits according to the Fibonacci series.
         - Permanent errors raise a ClientResponseError
         """
         if self.cache and url in self.cache["url_text"]:
@@ -330,78 +320,42 @@ class AsyncRequests:
 
         return res
 
-    @backoff.on_exception(
-        backoff.fibo,
-        aiohttp.ClientResponseError,
-        max_tries=20,
-        giveup=lambda ex: (
-            isinstance(ex, aiohttp.ClientResponseError)
-            and ex.status not in [429, 502, 503, 504]
-        ),
-    )
+    @http.retry_on_transient
     async def get_checksum_from_http(self, url: str, desc: str) -> str:
         """Compute sha256 checksum of content at http **url**
 
-        Shows TQDM progress monitor with label **desc**.
+        Shows progress monitor with label **desc**.
         """
         checksum = sha256()
         assert self.session is not None
         async with self.session.get(url) as resp:
             resp.raise_for_status()
-            size = int(resp.headers.get("Content-Length", 0))
-            with tqdm(
-                total=size,
-                unit="B",
-                unit_scale=True,
-                unit_divisor=1024,
-                desc=desc,
-                miniters=1,
+            async for block in http.stream_download(
+                resp,
+                desc,
+                progress_factory=tqdm,
                 leave=False,
-                disable=None,
-            ) as progress:
-                while True:
-                    block = await resp.content.read(1024 * 1024)
-                    if not block:
-                        break
-                    progress.update(len(block))
-                    checksum.update(block)
+            ):
+                checksum.update(block)
         return checksum.hexdigest()
 
-    @backoff.on_exception(
-        backoff.fibo,
-        aiohttp.ClientResponseError,
-        max_tries=20,
-        giveup=lambda ex: (
-            isinstance(ex, aiohttp.ClientResponseError)
-            and ex.status not in [429, 502, 503, 504]
-        ),
-    )
+    @http.retry_on_transient
     async def get_file_from_url(self, fname: str, url: str, desc: str) -> None:
         """Fetch file at **url** into **fname**
 
-        Shows TQDM progress monitor with label **desc**.
+        Shows progress monitor with label **desc**.
         """
         assert self.session is not None
         async with self.session.get(url) as resp:
             resp.raise_for_status()
-            size = int(resp.headers.get("Content-Length", 0))
-            with tqdm(
-                total=size,
-                unit="B",
-                unit_scale=True,
-                unit_divisor=1024,
-                desc=desc,
-                miniters=1,
-                leave=False,
-                disable=None,
-            ) as progress:
-                async with aiofiles.open(fname, "wb") as out:
-                    while True:
-                        block = await resp.content.read(1024 * 1024)
-                        if not block:
-                            break
-                        await out.write(block)
-                        progress.update(len(block))
+            async with aiofiles.open(fname, "wb") as out:
+                async for block in http.stream_download(
+                    resp,
+                    desc,
+                    progress_factory=tqdm,
+                    leave=False,
+                ):
+                    await out.write(block)
 
     async def get_ftp_listing(self, url):
         """Returns list of files at FTP **url**"""
