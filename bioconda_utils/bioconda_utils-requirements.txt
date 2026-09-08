@@ -17,7 +17,6 @@ colorlog=6.*
 tqdm=4.67.*
 yaspin=3.*
 ruamel.yaml=0.18.*
-pyaml=26.2.*
 networkx=3.6.*
 pandas=3.0.*
 libblas=*=*openblas

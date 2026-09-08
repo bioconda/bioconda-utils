@@ -1940,3 +1940,26 @@ def test_load_config_registers_config_after_resolving_paths(monkeypatch, tmp_pat
     assert config["channels"] == ["conda-forge", "bioconda"]
     assert config["primary_platforms"] == [PackageSubdir.LINUX_64, PackageSubdir.OSX_64]
     assert registered == [config]
+
+
+def test_load_meta_fast_allows_duplicate_keys(tmp_path):
+    recipe_dir = tmp_path / "recipe"
+    recipe_dir.mkdir()
+    meta_path = recipe_dir / "meta.yaml"
+    meta_path.write_text(
+        "package:\n"
+        "  name: test-pkg\n"
+        "  version: '1.0'\n"
+        "source:\n"
+        "  url: http://example.com/linux.tar.gz  # [linux]\n"
+        "  url: http://example.com/osx.tar.gz    # [osx]\n"
+        "build:\n"
+        "  number: 0\n"
+        "  skip: true  # [osx]\n"
+        "  skip: true  # [win]\n",
+        encoding="utf-8",
+    )
+    meta, loaded_recipe = utils.load_meta_fast(str(recipe_dir))
+    assert meta["package"]["name"] == "test-pkg"
+    assert meta["build"]["number"] == 0
+    assert loaded_recipe == str(recipe_dir)

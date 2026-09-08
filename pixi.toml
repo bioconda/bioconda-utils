@@ -27,7 +27,6 @@ tqdm = "4.67.*"  # Progress monitor
 yaspin = "3.*"
 # Recipe YAML parsing
 "ruamel.yaml" = "0.18.*"
-pyaml = "26.2.*"  # Faster YAML parser (deprecate?)
 networkx = "3.6.*"  # (networkx>3.3 needs python>=3.10)
 pandas = "3.0.*"
 # Avoid large mkl package (pulled in by pandas)

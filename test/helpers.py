@@ -3,8 +3,8 @@ import tempfile
 from pathlib import Path
 from textwrap import dedent
 
-import yaml
 from conda_index.index import update_index
+from ruamel.yaml import YAML
 
 
 def ensure_missing(package):
@@ -91,12 +91,13 @@ class Recipes:
                    dirs. These are full paths to subdirs in `basedir`.
         """
 
+        yaml = YAML(typ="safe")
         if from_string:
             self.data = dedent(data)
-            self.recipes = yaml.safe_load(data)
+            self.recipes = yaml.load(self.data)
         else:
             self.data = os.path.join(os.path.dirname(__file__), data)
-            self.recipes = yaml.safe_load(Path(self.data).read_text())
+            self.recipes = yaml.load(Path(self.data).read_text())
         self.pkgs: dict[str, list[str]] = {}
 
     def write_recipes(self):
