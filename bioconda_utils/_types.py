@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import platform
+from collections.abc import Sequence
 from enum import StrEnum
 from typing import (
     Any,
@@ -157,7 +158,7 @@ def docker_platform_staging_suffix(target_platform: ContainerPlatform) -> str:
     ``docker buildx imagetools create`` can assemble into a multi-platform
     manifest at the unsuffixed canonical tag. Nothing in ``galaxy-tool-util``
     produces these tags; they are a bioconda-utils convention used only by
-    :func:`bioconda_utils.container_manifests.platform_ref`.
+    :func:`bioconda_utils.containers.container_manifests.platform_ref`.
     """
     return target_platform.removeprefix("linux/").replace("/", "-")
 
@@ -165,10 +166,10 @@ def docker_platform_staging_suffix(target_platform: ContainerPlatform) -> str:
 #: Namespace under which bioconda-utils tells ``mulled-build`` to tag local
 #: images (the ``-n`` argument). Local mulled images are always built under
 #: this canonical namespace regardless of the upload target, so they match
-#: production naming; :func:`bioconda_utils.upload.mulled_upload` re-namespaces
+#: production naming; :func:`bioconda_utils.containers.upload.mulled_upload` re-namespaces
 #: them on push. Every consumer of the local image ref -- ``pkg_test``'s
 #: ``-n`` value, :func:`local_mulled_image_ref`, and the cleanup in
-#: :func:`bioconda_utils.docker_utils.purgeImage` -- must agree on this.
+#: :func:`bioconda_utils.containers.docker_utils.purgeImage` -- must agree on this.
 MULLED_LOCAL_NAMESPACE = "biocontainers"
 
 
@@ -181,8 +182,8 @@ def local_mulled_image_ref(
     ``quay.io/biocontainers/<name>:<version>--<build>`` for the native arch and
     appends ``-<arch>`` for every other target platform (see
     :func:`docker_platform_tag_suffix`). This is the single source of truth for
-    that ref: the upload source (:func:`bioconda_utils.upload.mulled_upload`)
-    and the post-upload cleanup (:func:`bioconda_utils.docker_utils.purgeImage`)
+    that ref: the upload source (:func:`bioconda_utils.containers.upload.mulled_upload`)
+    and the post-upload cleanup (:func:`bioconda_utils.containers.docker_utils.purgeImage`)
     both build it here so they can never disagree on the namespace.
     """
     tag = f"{image.version}--{image.build_string}"
@@ -246,3 +247,16 @@ class PkgBuildRef(NamedTuple):
 
 class RecipeMetaLike(Protocol):
     def get_value(self, key: str, default: Any = None) -> Any: ...
+
+
+def ensure_list(obj):
+    """Wraps **obj** in a list if necessary
+
+    >>> ensure_list("one")
+    ["one"]
+    >>> ensure_list(["one", "two"])
+    ["one", "two"]
+    """
+    if isinstance(obj, Sequence) and not isinstance(obj, str):
+        return obj
+    return [obj]

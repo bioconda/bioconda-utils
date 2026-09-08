@@ -1,4 +1,4 @@
-from bioconda_utils import utils
+from bioconda_utils.conda.repodata import RepoData
 from bioconda_utils.lint import INFO, LintCheck, _recipe
 
 
@@ -11,7 +11,7 @@ class repodata_patches_no_version_bump(LintCheck):
     def check_recipe(self, recipe: _recipe.Recipe) -> None:
         if recipe.get("package/name") != "bioconda-repodata-patches":
             return
-        repodata = utils.RepoData()
+        repodata = RepoData()
         old_versions = repodata.get_versions("bioconda-repodata-patches")
         if recipe.get("package/version") in old_versions:
             self.message()

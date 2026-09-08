@@ -6,7 +6,9 @@ from textwrap import dedent
 import pytest
 from helpers import Recipes, ensure_missing
 
-from bioconda_utils import build, pkg_test, utils
+from bioconda_utils import build
+from bioconda_utils.conda.recipes import built_package_paths
+from bioconda_utils.containers import pkg_test
 
 # TODO:
 # need tests for channel order and extra channels (see
@@ -52,7 +54,7 @@ def build_pkg(request):
         r = Recipes(recipe, from_string=True)
         r.write_recipes()
         recipe_dir = r.recipe_dirs["one"]
-        built_packages = utils.built_package_paths(recipe_dir)
+        built_packages = built_package_paths(recipe_dir)
         registered_packages.update(built_packages)
         for pkg in built_packages:
             ensure_missing(pkg)

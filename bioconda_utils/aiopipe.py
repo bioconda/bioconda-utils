@@ -27,8 +27,9 @@ import aioftp
 import aiohttp
 from typing_extensions import Self
 
-from . import http
-from .utils import threads_to_use, tqdm
+from .support import http
+from .support.logsetup import tqdm
+from .support.parallel import threads_to_use
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 

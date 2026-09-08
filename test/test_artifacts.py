@@ -6,9 +6,10 @@ import pytest
 from github.CheckRun import CheckRun
 from github.Repository import Repository
 
-from bioconda_utils import _types, artifacts
+from bioconda_utils import _types
 from bioconda_utils._types import ContainerPlatform, PackageSubdir
-from bioconda_utils.container_manifests import MulledImageRecord
+from bioconda_utils.containers import artifacts
+from bioconda_utils.containers.container_manifests import MulledImageRecord
 
 BIOCONTAINERS = _types.QuayUploadTarget("biocontainers")
 
@@ -125,7 +126,7 @@ def test_upload_pr_artifacts_filters_packages_and_arm64_images(monkeypatch, tmp_
     uploaded_packages = []
     uploaded_sources = []
 
-    monkeypatch.setattr(artifacts.utils, "get_github_client", _FakeClient)
+    monkeypatch.setattr(artifacts.githubhandler, "get_github_client", _FakeClient)
     monkeypatch.setattr(
         artifacts,
         "fetch_artifacts",
@@ -198,7 +199,7 @@ def test_upload_pr_artifacts_returns_no_artifacts_when_nothing_matches(
         {"packages/linux-64/samtools-1.0-0.conda": b"x86 package"},
     )
 
-    monkeypatch.setattr(artifacts.utils, "get_github_client", _FakeClient)
+    monkeypatch.setattr(artifacts.githubhandler, "get_github_client", _FakeClient)
     monkeypatch.setattr(
         artifacts,
         "fetch_artifacts",
@@ -227,7 +228,7 @@ def test_upload_pr_artifacts_dryrun_counts_matching_artifacts(monkeypatch, tmp_p
         {"packages/linux-aarch64/samtools-1.0-0.conda": b"arm package"},
     )
 
-    monkeypatch.setattr(artifacts.utils, "get_github_client", _FakeClient)
+    monkeypatch.setattr(artifacts.githubhandler, "get_github_client", _FakeClient)
     monkeypatch.setattr(
         artifacts,
         "fetch_artifacts",
@@ -252,7 +253,7 @@ def test_upload_pr_artifacts_dryrun_counts_matching_artifacts(monkeypatch, tmp_p
 
 def test_upload_pr_artifacts_rejects_macos_mulled_upload(monkeypatch):
     monkeypatch.setattr(
-        artifacts.utils.RepoData,
+        artifacts.repodata.RepoData,
         "native_subdir",
         lambda: PackageSubdir.OSX_ARM64,
     )
@@ -276,7 +277,7 @@ def test_upload_pr_artifacts_uses_archive_platform_not_filename(monkeypatch, tmp
     )
     uploaded_sources = []
 
-    monkeypatch.setattr(artifacts.utils, "get_github_client", _FakeClient)
+    monkeypatch.setattr(artifacts.githubhandler, "get_github_client", _FakeClient)
     monkeypatch.setattr(
         artifacts,
         "fetch_artifacts",

@@ -6,7 +6,10 @@ Bioconda Utilities Package
 .. autosummary::
    :toctree:
 
+   bioconda_utils.conda
+   bioconda_utils.containers
    bioconda_utils.lint
+   bioconda_utils.support
 
 .. rubric:: Submodules
 
@@ -14,24 +17,21 @@ Bioconda Utilities Package
    :toctree:
 
    aiopipe
+   autobump
    bioconductor_skeleton
    build
-   circleci
+   build_failure
+   bulk
    cli
+   config
    cran_skeleton
-   docker_utils
    githandler
    githubhandler
-   gitter
    graph
    hosters
-   http
-   pkg_test
    recipe
-   autobump
+   skiplist
    update_pinnings
-   upload
-   utils
 """
 
 from importlib.metadata import PackageNotFoundError, version

@@ -1,7 +1,7 @@
 """Shared helpers for asynchronous HTTP access
 
 This module centralizes the pieces shared between the async download
-helpers in :py:mod:`bioconda_utils.utils` and
+helpers in :py:mod:`bioconda_utils.conda.repodata` and
 :py:mod:`bioconda_utils.aiopipe`: the user agent we identify ourselves
 with, the retry policy applied to transient HTTP errors and the progress
 monitor used while streaming response bodies.
@@ -13,6 +13,8 @@ from collections.abc import AsyncIterator
 
 import aiohttp
 import backoff
+
+from .logsetup import tqdm
 
 # Used as user agent in http requests and as requester in github API requests
 USER_AGENT = "bioconda/bioconda-utils"
@@ -64,10 +66,6 @@ async def stream_download(
       leave: Keep the progress monitor visible after completion
       disable: Disable the progress monitor
     """
-    # Imported here to avoid a circular import:
-    # utils imports this module, but provides the tqdm wrapper.
-    from bioconda_utils.utils import tqdm
-
     size = int(resp.headers.get("Content-Length", 0))
     with tqdm(
         total=size,

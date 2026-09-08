@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 import networkx as nx
+import psutil
 from conda.exports import UnsatisfiableError
 from conda_build.exceptions import DependencyNeedsBuildingError
 from conda_build.metadata import MetaData
@@ -21,7 +22,7 @@ from conda_build.metadata import MetaData
 from bioconda_utils.build_failure import BuildFailureRecord
 from bioconda_utils.skiplist import Skiplist
 
-from . import docker_utils, graph, lint, pkg_test, upload, utils
+from . import graph, lint
 from . import recipe as _recipe
 from ._types import (
     ALL_PACKAGE_SUBDIRS,
@@ -34,7 +35,23 @@ from ._types import (
     container_platform_to_package_subdir,
     native_container_platform,
 )
-from .container_manifests import write_image_record
+from .conda.conda_build_bridge import (
+    get_conda_build_config_files,
+    load_conda_build_config,
+    load_first_metadata,
+    subdir_to_oslabel,
+)
+from .conda.recipes import (
+    DivergentBuildsError,
+    get_package_paths,
+    recipe_requires_finalized_render,
+)
+from .conda.repodata import RepoData
+from .config import normalize_config
+from .containers import docker_utils, pkg_test, upload
+from .containers.container_manifests import write_image_record
+from .support.logsetup import Progress
+from .support.subproc import allowed_env_var, bin_for, run, sandboxed_env
 
 logger = logging.getLogger(__name__)
 
@@ -70,15 +87,15 @@ def conda_build_purge() -> None:
     ``conda clean --all`` is called if we haveless than 300 MB free space
     on the current disk.
     """
-    utils.run(["conda", "build", "purge"])
+    run(["conda", "build", "purge"])
 
-    free_mb = utils.get_free_space()
+    free_mb = get_free_space()
     if free_mb < 300:
         logger.info("CLEANING UP PACKAGE CACHE (free space: %iMB).", free_mb)
-        utils.run(["conda", "clean", "--all"])
+        run(["conda", "clean", "--all"])
         logger.info(
             "CLEANED UP PACKAGE CACHE (free space: %iMB).",
-            utils.get_free_space(),
+            get_free_space(),
         )
 
 
@@ -150,7 +167,7 @@ def build(
     whitelisted_env = {
         k: str(v)
         for k, v in os.environ.items()
-        if utils.allowed_env_var(k, docker_builder is not None)
+        if allowed_env_var(k, docker_builder is not None)
     }
 
     logger.info("BUILD START %s", recipe)
@@ -170,7 +187,7 @@ def build(
     # Even though there may be variants of the recipe that will be built, we
     # will only be checking attributes that are independent of variants (pkg
     # name, version, noarch, whether or not an extended container was used)
-    meta = utils.load_first_metadata(recipe, finalize=False)
+    meta = load_first_metadata(recipe, finalize=False)
     is_noarch = bool(meta.get_value("build/noarch", default=False))
     use_base_image = meta.get_value("extra/container", {}).get("extended-base", False)
     if use_base_image:
@@ -196,7 +213,7 @@ def build(
             )
             # Use presence of expected packages to check for success
             if docker_builder.pkg_dir is not None:
-                conda_build_config = utils.load_conda_build_config()
+                conda_build_config = load_conda_build_config()
                 pkg_paths = [
                     p.replace(conda_build_config.output_folder, docker_builder.pkg_dir)
                     for p in pkg_paths
@@ -210,17 +227,17 @@ def build(
                     )
                     return BuildResult(False, None)
         else:
-            conda_build_cmd = [utils.bin_for("conda-build")]
+            conda_build_cmd = [bin_for("conda-build")]
             # - Temporarily reset os.environ to avoid leaking env vars
             # - Also pass filtered env to run()
             # - Point conda-build to meta.yaml, to avoid building subdirs
-            with utils.sandboxed_env(whitelisted_env):
+            with sandboxed_env(whitelisted_env):
                 cmd = conda_build_cmd + args
-                for config_file in utils.get_conda_build_config_files():
+                for config_file in get_conda_build_config_files():
                     cmd += [config_file.arg, config_file.path]
                 cmd += [os.path.join(recipe, "meta.yaml")]
-                with utils.Progress():
-                    utils.run(cmd, live=live_logs)
+                with Progress():
+                    run(cmd, live=live_logs)
 
         logger.info(
             "BUILD SUCCESS %s", " ".join(os.path.basename(p) for p in pkg_paths)
@@ -530,8 +547,8 @@ def build_recipes(
         logger.info("Nothing to be done.")
         return True
 
-    config = utils.normalize_config(config)
-    utils.RepoData.register_config(config)
+    config = normalize_config(config)
+    RepoData.register_config(config)
     blacklist = Skiplist(config, recipe_folder)
 
     # get channels to check
@@ -594,7 +611,7 @@ def build_recipes(
         platform = (
             container_platform_to_package_subdir(target_platform)
             if target_platform is not None
-            else utils.RepoData().native_subdir()
+            else RepoData().native_subdir()
         )
         if not force and should_skip_platform(
             recipe_folder,
@@ -633,21 +650,18 @@ def build_recipes(
             #   2. linux-64 hosts — sysroot run_exports inject __glibc here
             #      regardless of the recipe's text form.
             finalize = docker_builder is None or not fast_resolve
-            if (
-                not finalize
-                and utils.subdir_to_oslabel(utils.RepoData.native_subdir()) == "linux"
-            ):
+            if not finalize and subdir_to_oslabel(RepoData.native_subdir()) == "linux":
                 finalize = True
-            if not finalize and utils.recipe_requires_finalized_render(recipe):
+            if not finalize and recipe_requires_finalized_render(recipe):
                 finalize = True
-            pkg_paths = utils.get_package_paths(
+            pkg_paths = get_package_paths(
                 recipe,
                 check_channels,
                 force=force,
                 finalize=finalize,
                 target_platform=target_platform,
             )
-        except utils.DivergentBuildsError as exc:
+        except DivergentBuildsError as exc:
             logger.error(
                 "BUILD ERROR: packages with divergent build strings in repository "
                 "for recipe %s. A build number bump is likely needed: %s",
@@ -759,15 +773,31 @@ def build_recipes(
     return True
 
 
+def get_free_space() -> float:
+    """Return free space in MB on disk"""
+    s = os.statvfs(os.getcwd())
+    return s.f_frsize * s.f_bavail / (1024**2)
+
+
+def get_free_memory_percent() -> float:
+    """Return free memory as a percentage of total memory"""
+    return psutil.virtual_memory().available * 100 / psutil.virtual_memory().total
+
+
+def get_free_memory_mb() -> float:
+    """Return free memory as megabytes"""
+    return psutil.virtual_memory().available / (1024**2)
+
+
 def report_resources(message: str, show_docker: bool = True) -> None:
-    free_space_mb = utils.get_free_space()
-    free_mem_mb = utils.get_free_memory_mb()
-    free_mem_percent = utils.get_free_memory_percent()
+    free_space_mb = get_free_space()
+    free_mem_mb = get_free_memory_mb()
+    free_mem_percent = get_free_memory_percent()
     logger.info(
         f"{message} Free disk space: {free_space_mb:.2f} MB. Free memory: {free_mem_mb:.2f} MB ({free_mem_percent:.2f}%)"
     )
     if show_docker:
         cmd = ["docker", "system", "df"]
-        utils.run(cmd, live=True)
+        run(cmd, live=True)
         cmd = ["docker", "ps", "-a"]
-        utils.run(cmd, live=True)
+        run(cmd, live=True)

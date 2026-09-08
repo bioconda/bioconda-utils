@@ -110,7 +110,8 @@ import networkx as nx
 from bioconda_utils.skiplist import Skiplist
 
 from .. import recipe as _recipe
-from .. import utils
+from ..support.logsetup import tqdm
+from ..support.subproc import run
 
 logger = logging.getLogger(__name__)
 
@@ -566,7 +567,7 @@ class Linter:
             commit_message = os.environ["LINT_SKIP"]
         elif os.path.exists(".git"):
             # Obtain commit message from last commit.
-            commit_message = utils.run(
+            commit_message = run(
                 ["git", "log", "--format=%B", "-n", "1"],
                 loglevel=0,
             ).stdout
@@ -592,7 +593,7 @@ class Linter:
           True if issues with errors were found
 
         """
-        for recipe_name in utils.tqdm(sorted(recipe_names)):
+        for recipe_name in tqdm(sorted(recipe_names)):
             self.order_and_load_checks()
             try:
                 msgs = self.lint_one(recipe_name, fix=fix)

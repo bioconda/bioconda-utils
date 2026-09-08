@@ -1,4 +1,5 @@
 import logging
+import re
 import subprocess as sp
 import time
 from collections.abc import Iterator
@@ -13,13 +14,40 @@ import ruamel.yaml.reader
 from ruamel.yaml import YAML, CommentedMap
 from ruamel.yaml.scalarstring import LiteralScalarString
 
-from bioconda_utils import graph, utils
+from bioconda_utils import graph
 from bioconda_utils._types import ALL_PACKAGE_SUBDIRS, PackageSubdir
+from bioconda_utils.conda.conda_build_bridge import load_meta_fast
+from bioconda_utils.conda.recipes import get_recipes
+from bioconda_utils.conda.repodata import RepoData, get_package_downloads
 from bioconda_utils.recipe import Recipe
+from bioconda_utils.support.logsetup import ellipsize_recipes, tqdm
+from bioconda_utils.support.subproc import run
 
 from .githandler import BiocondaRepo, GitRange
 
 logger = logging.getLogger(__name__)
+
+
+def format_link(uri, fmt: str, prefix: str = "", label: str = ""):
+    if prefix:
+        uri = f"{prefix}/{uri}"
+    if fmt == "markdown":
+        return f"[{label}]({uri})"
+    elif fmt == "txt":
+        return uri
+    else:
+        raise ValueError(f"Invalid link format: {fmt}")
+
+
+def yaml_remove_invalid_chars(
+    text: str,
+    valid_chars_re=re.compile(r"[^ \t\n\w\d:\{\}\[\]\(\);&|\$§\"'\?\!%#\\~*\.,-\^°]+"),
+) -> str:
+    """Remove chars that are invalid in yaml literal strings.
+
+    E.g. we do not want them to contain carriage return chars or delete chars.
+    """
+    return valid_chars_re.sub("", text)
 
 
 class BuildFailureRecord:
@@ -33,7 +61,7 @@ class BuildFailureRecord:
         else:
             self.recipe_path = Path(recipe)
         if platform is None:
-            self.platform = utils.RepoData.native_subdir()
+            self.platform = RepoData.native_subdir()
         else:
             self.platform = PackageSubdir(platform)
         self.path = self.recipe_path / f"build_failure.{self.platform}.yaml"
@@ -123,9 +151,7 @@ class BuildFailureRecord:
                     "log",
                     # remove invalid chars and keep only the last 100 lines
                     LiteralScalarString(
-                        "\n".join(
-                            utils.yaml_remove_invalid_chars(_log).splitlines()[-100:]
-                        )
+                        "\n".join(yaml_remove_invalid_chars(_log).splitlines()[-100:])
                     ),
                     comment="Last 100 lines of the build log.",
                 )
@@ -144,14 +170,14 @@ class BuildFailureRecord:
 
     def commit_and_push_changes(self) -> None:
         """Commit and push any changes, including removal of the record."""
-        utils.run(["git", "add", str(self.path)])
-        if utils.run(
+        run(["git", "add", str(self.path)])
+        if run(
             ["git", "diff", "--quiet", "--exit-code", "HEAD", "--", str(self.path)],
             check=False,
             quiet_failure=True,
         ).returncode:
             operation = "add" if self.path.exists() else "remove"
-            utils.run(
+            run(
                 [
                     "git",
                     "commit",
@@ -167,8 +193,8 @@ class BuildFailureRecord:
                     # We don't want to use merge commits here because they would all trigger subsequent CI runs
                     # since they lack the [ci skip] part. Further, they would pollute the git history.
                     # If the rebase fails, we simply get an error.
-                    utils.run(["git", "pull", "--rebase"])
-                    utils.run(["git", "push"])
+                    run(["git", "pull", "--rebase"])
+                    run(["git", "push"])
                     return
                 except sp.CalledProcessError:
                     time.sleep(1)
@@ -261,7 +287,7 @@ def collect_build_failure_dataframe(
     def has_build_failure(recipe: Path) -> bool:
         return any(get_build_failure_records(recipe))
 
-    recipes = list(utils.get_recipes(recipe_folder))
+    recipes = list(get_recipes(recipe_folder))
 
     if git_range:
         repo = BiocondaRepo(recipe_folder)
@@ -272,20 +298,20 @@ def collect_build_failure_dataframe(
         logger.info(
             "Constraining to %s git modified recipes%s.",
             len(changed_recipes),
-            utils.ellipsize_recipes(changed_recipes, recipe_folder),
+            ellipsize_recipes(changed_recipes, recipe_folder),
         )
         recipes = [recipe for recipe in recipes if recipe in set(changed_recipes)]
         if len(recipes) != len(changed_recipes):
             logger.info(
                 "Overlap was %s recipes%s.",
                 len(recipes),
-                utils.ellipsize_recipes(recipes, recipe_folder),
+                ellipsize_recipes(recipes, recipe_folder),
             )
 
     dag, _ = graph.build(recipes, config)
 
     def get_data() -> Iterator[dict[str, Any]]:
-        for recipe in utils.tqdm(recipes, desc="Checking recipes"):
+        for recipe in tqdm(recipes, desc="Checking recipes"):
             if not has_build_failure(recipe):
                 continue
 
@@ -298,16 +324,16 @@ def collect_build_failure_dataframe(
                 continue
 
             package = components[0]
-            meta = utils.load_meta_fast(str(recipe))[0]
+            meta = load_meta_fast(str(recipe))[0]
             package_name = meta["package"]["name"]
             descendants = len(nx.descendants(dag, package_name))
 
-            downloads = utils.get_package_downloads(channel, package_name)
+            downloads = get_package_downloads(channel, package_name)
             recs = list(get_build_failure_records(recipe))
 
             limit = 80  # characters in last column to show before putting the rest in "<details>"
             for rec in recs:
-                failures = utils.format_link(
+                failures = format_link(
                     str(rec.path), link_fmt, prefix=link_prefix, label=str(rec.platform)
                 )
                 categories = rec.category
@@ -322,7 +348,7 @@ def collect_build_failure_dataframe(
                         + "</details>"
                     )
                 skiplisted = rec.skiplist
-                prs = utils.format_link(
+                prs = format_link(
                     f"https://github.com/bioconda/bioconda-recipes/pulls?q=is%3Apr+is%3Aopen+{package}",
                     link_fmt,
                     label="show",

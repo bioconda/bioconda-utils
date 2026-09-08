@@ -9,7 +9,7 @@ import py
 import pytest
 from ruamel.yaml import YAML
 
-from bioconda_utils import utils
+from bioconda_utils.conda import repodata
 
 yaml = YAML(typ="rt")  # pylint: disable=invalid-name
 
@@ -71,16 +71,16 @@ def mock_repodata(case):
                 for name, versions in packages.items()
                 for item in versions
             ),
-            columns=utils.RepoData.columns,
+            columns=repodata.RepoData.columns,
         )
     else:
-        dataframe = pd.DataFrame({}, columns=utils.RepoData.columns)
+        dataframe = pd.DataFrame({}, columns=repodata.RepoData.columns)
 
-    backup = utils.RepoData()._df, utils.RepoData()._df_ts
-    utils.RepoData()._df = dataframe
-    utils.RepoData()._df_ts = datetime.datetime.now(datetime.UTC)
+    backup = repodata.RepoData()._df, repodata.RepoData()._df_ts
+    repodata.RepoData()._df = dataframe
+    repodata.RepoData()._df_ts = datetime.datetime.now(datetime.UTC)
     yield
-    utils.RepoData()._df, utils.RepoData()._df_ts = backup
+    repodata.RepoData()._df, repodata.RepoData()._df_ts = backup
 
 
 @pytest.fixture

@@ -21,7 +21,10 @@ import pyaml
 import requests
 import yaml
 
-from . import utils
+from .conda.conda_build_bridge import load_first_metadata
+from .conda.repodata import RepoData
+from .config import normalize_config
+from .support.caching import disk_cache
 
 logger = logging.getLogger(__name__)
 
@@ -181,7 +184,7 @@ class PageNotFoundError(Exception):
     pass
 
 
-@utils.disk_cache.memoize(expire=86400)
+@disk_cache.memoize(expire=86400)
 def bioconductor_versions():
     """
     Returns a list of available Bioconductor versions scraped from the
@@ -334,7 +337,7 @@ def cargoport_url(package, pkg_version, bioc_version=None):
     )
 
 
-@utils.disk_cache.memoize(expire=604800)
+@disk_cache.memoize(expire=604800)
 def find_best_bioc_version(package, version):
     """
     Given a package version number, identifies which BioC version[s] it is in
@@ -384,7 +387,7 @@ def find_best_bioc_version(package, version):
     )
 
 
-@utils.disk_cache.memoize(expire=86400)
+@disk_cache.memoize(expire=86400)
 def fetchPackages(bioc_version):
     """
     Return a dictionary of all bioconductor packages in a given release::
@@ -1406,8 +1409,8 @@ def write_recipe(
         If None, we need to determine if this requires X and therefore additional
         build dependencies and test environment variables.
     """
-    config = utils.normalize_config(config)
-    utils.RepoData.register_config(config)
+    config = normalize_config(config)
+    RepoData.register_config(config)
     proj = BioCProjectPage(package, bioc_version, pkg_version, packages=packages)
     logger.info(f"Making recipe for: {package}")
 
@@ -1426,7 +1429,7 @@ def write_recipe(
         # get a list of existing packages in channels
         if skip_if_in_channels is not None:
             for name in set(
-                utils.RepoData().get_package_data("name", channels=skip_if_in_channels)
+                RepoData().get_package_data("name", channels=skip_if_in_channels)
             ):
                 if name.startswith(("r-", "bioconductor-")):
                     seen_dependencies.add(name)
@@ -1463,8 +1466,8 @@ def write_recipe(
     # *has* changed, then bump the version number.
     meta_file = os.path.join(recipe_dir, "meta.yaml")
     if os.path.exists(meta_file):
-        updated_meta = utils.load_first_metadata(proj.meta_yaml, finalize=False).meta
-        current_meta = utils.load_first_metadata(meta_file, finalize=False).meta
+        updated_meta = load_first_metadata(proj.meta_yaml, finalize=False).meta
+        current_meta = load_first_metadata(meta_file, finalize=False).meta
 
         # pop off the version and build numbers so we can compare the rest of
         # the dicts
@@ -1478,7 +1481,7 @@ def write_recipe(
             # Sometimes when updating all packages, the updating process fails
             # partway. Re-running the updating process should not bump the
             # build number if no builds for this version exist yet in the repo.
-            existing_bldnos = utils.RepoData().get_package_data(
+            existing_bldnos = RepoData().get_package_data(
                 key="build_number",
                 name="bioconductor-" + proj.package.lower(),
                 version=updated_version,

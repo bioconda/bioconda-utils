@@ -13,8 +13,8 @@ from collections.abc import Set as AbstractSet
 from conda_build.metadata import MetaData, trim_build_only_deps
 
 from ._types import PkgBuildRef
+from .conda.repodata import RepoData
 from .recipe import Recipe, RecipeError
-from .utils import RepoData
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 

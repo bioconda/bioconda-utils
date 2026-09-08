@@ -58,8 +58,7 @@ from typing import Protocol
 
 from packaging.version import Version
 
-from . import utils
-from ._types import (
+from .._types import (
     ALL_PACKAGE_SUBDIRS,
     ContainerPlatform,
     PkgBuildRef,
@@ -68,6 +67,12 @@ from ._types import (
     local_mulled_image_ref,
     native_container_platform,
 )
+from ..conda.conda_build_bridge import (
+    get_conda_build_config_files,
+    load_conda_build_config,
+)
+from ..support.logsetup import Progress
+from ..support.subproc import run
 
 logger = logging.getLogger(__name__)
 
@@ -305,7 +310,7 @@ class RecipeBuilder:
         self.container_recipe = container_recipe
         self.container_staging = container_staging
 
-        conda_build_config = utils.load_conda_build_config()
+        conda_build_config = load_conda_build_config()
         # Identify conda-bld directory on the host.
         self.host_conda_bld = conda_build_config.croot
         # Pass on config to choose wheter to build .tar.bz2 or .conda format.
@@ -323,7 +328,7 @@ class RecipeBuilder:
 
         # Copy the conda build config files to the staging directory that is
         # visible in the container
-        for i, config_file in enumerate(utils.get_conda_build_config_files()):
+        for i, config_file in enumerate(get_conda_build_config_files()):
             dst_file = self._get_config_path(self.pkg_dir, i, config_file)
             if not os.path.exists(self.pkg_dir):
                 os.makedirs(self.pkg_dir)
@@ -361,7 +366,7 @@ class RecipeBuilder:
         if self.target_platform is not None:
             command += ["--platform", self.target_platform]
         command.append(image)
-        utils.run(command, live=True)
+        run(command, live=True)
 
     def _get_config_path(
         self, staging_prefix: str, i: int, config_file: CondaBuildConfigFile
@@ -481,8 +486,8 @@ class RecipeBuilder:
             cmd[2:2] = ["--platform", self.target_platform]
 
         try:
-            with utils.Progress():
-                p = utils.run(cmd)
+            with Progress():
+                p = run(cmd)
         except sp.CalledProcessError:
             logger.error(
                 "DOCKER FAILED: Error building docker container %s. ",
@@ -534,7 +539,7 @@ class RecipeBuilder:
         if not isinstance(build_args, str):
             raise TypeError("build_args must be str")
         build_args_list = [build_args]
-        for i, config_file in enumerate(utils.get_conda_build_config_files()):
+        for i, config_file in enumerate(get_conda_build_config_files()):
             dst_file = self._get_config_path(self.container_staging, i, config_file)
             build_args_list.extend([config_file.arg, quote(dst_file)])
         self.conda_build_args = " ".join(build_args_list)
@@ -598,14 +603,14 @@ class RecipeBuilder:
         cmd += ["/bin/bash", "/opt/build_script.bash"]
 
         logger.debug("DOCKER: cmd: %s", cmd)
-        with utils.Progress():
-            p = utils.run(cmd, live=live_logs)
+        with Progress():
+            p = run(cmd, live=live_logs)
         return p
 
     def cleanup(self) -> None:
         if self.build_image and not self.keep_image:
             cmd = ["docker", "rmi", self.docker_temp_image]
-            utils.run(cmd)
+            run(cmd)
 
 
 def purgeImage(
@@ -621,9 +626,9 @@ def purgeImage(
     registry.
     """
     cmd = ["docker", "rmi", local_mulled_image_ref(img, target_platform)]
-    utils.run(cmd)
+    run(cmd)
 
 
 def pruneStoppedContainers() -> None:
     cmd = ["docker", "container", "prune", "-f"]
-    utils.run(cmd)
+    run(cmd)
