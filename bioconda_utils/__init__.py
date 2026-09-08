@@ -25,6 +25,7 @@ Bioconda Utilities Package
    gitter
    graph
    hosters
+   http
    pkg_test
    recipe
    autobump

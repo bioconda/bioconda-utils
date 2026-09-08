@@ -33,7 +33,6 @@ from typing import Any, ClassVar, TypeAlias, cast
 
 import aiofiles
 import aiohttp
-import backoff
 
 # FIXME(upstream): For conda>=4.7.0 initialize_logging is (erroneously) called
 #                  by conda.core.index.get_index which messes up our logging.
@@ -57,6 +56,7 @@ from urllib3 import Retry
 from yaspin import Spinner, yaspin
 from yaspin.spinners import Spinners
 
+from bioconda_utils import http
 from bioconda_utils._types import (
     ALL_PACKAGE_SUBDIRS,
     DEFAULT_PRIMARY_PLATFORMS,
@@ -1272,7 +1272,7 @@ class AsyncRequests:
     """
 
     #: Identify ourselves
-    USER_AGENT = "bioconda/bioconda-utils"
+    USER_AGENT = http.USER_AGENT
     #: Max connections to each server
     CONNECTIONS_PER_HOST = 4
 
@@ -1325,11 +1325,7 @@ class AsyncRequests:
         if fds is None:
             fds = []
         conn = aiohttp.TCPConnector(limit_per_host=cls.CONNECTIONS_PER_HOST)
-        async with aiohttp.ClientSession(
-            connector=conn,
-            headers={"User-Agent": cls.USER_AGENT},
-            trust_env=True,
-        ) as session:
+        async with http.make_session(connector=conn) as session:
             coros = [
                 asyncio.ensure_future(
                     cls._async_fetch_one(session, url, desc, cb, data, fd)
@@ -1346,15 +1342,7 @@ class AsyncRequests:
         return result
 
     @staticmethod
-    @backoff.on_exception(
-        backoff.fibo,
-        (aiohttp.ClientResponseError, aiohttp.ClientPayloadError),
-        max_tries=20,
-        giveup=lambda ex: (
-            isinstance(ex, aiohttp.ClientResponseError)
-            and ex.status not in [429, 502, 503, 504]
-        ),
-    )
+    @http.retry_on_transient
     async def _async_fetch_one(session, url, desc, cb=None, data=None, fd=None):
         result = []
         if url.startswith("file://"):
@@ -1374,25 +1362,16 @@ class AsyncRequests:
         else:
             async with session.get(url, timeout=None) as resp:
                 resp.raise_for_status()
-                size = int(resp.headers.get("Content-Length", 0))
-                with tqdm(
-                    total=size,
-                    unit="B",
-                    unit_scale=True,
-                    unit_divisor=1024,
-                    desc=desc,
-                    miniters=1,
+                async for block in http.stream_download(
+                    resp,
+                    desc,
+                    block_size=1024 * 16,
                     disable=logger.getEffectiveLevel() > logging.INFO,
-                ) as progress:
-                    while True:
-                        block = await resp.content.read(1024 * 16)
-                        if not block:
-                            break
-                        progress.update(len(block))
-                        if fd:
-                            fd.write(block)
-                        else:
-                            result.append(block)
+                ):
+                    if fd:
+                        fd.write(block)
+                    else:
+                        result.append(block)
         if cb:
             return cb(b"".join(result), data)
         else:
