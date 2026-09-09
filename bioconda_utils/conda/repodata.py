@@ -114,7 +114,10 @@ class AsyncRequests:
         if fds is None:
             fds = []
         conn = aiohttp.TCPConnector(limit_per_host=cls.CONNECTIONS_PER_HOST)
-        async with http.make_session(connector=conn) as session:
+        async with http.make_session(
+            user_agent=cls.USER_AGENT,
+            connector=conn,
+        ) as session:
             coros = [
                 asyncio.ensure_future(
                     cls._async_fetch_one(session, url, desc, cb, data, fd)
@@ -486,13 +489,17 @@ class RepoData:
         # most specific columns. Filtering this way on a large data frame
         # is much faster than executing the comparisons for all values
         # every time, in particular if we are looking at a specific package.
+        # NB: cheap, high-selectivity filters come first so that later,
+        #     expensive filters (e.g. high-cardinality categoricals such as
+        #     "build", or int comparisons that box every value) only run on
+        #     an already tiny frame. The result is identical either way.
         for col, val in (
             ("name", name),  # thousands of different values
-            ("build", build),  # build string should vary a lot
             ("version", version),  # still pretty good variety
             ("channel", channel_filter),  # 3 values
             ("platform", platform_filter),  # 3 values
             ("build_number", build_number),  # most values 0
+            ("build", build),  # build string should vary a lot
         ):
             if val is None:
                 continue

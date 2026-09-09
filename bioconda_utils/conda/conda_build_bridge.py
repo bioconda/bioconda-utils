@@ -23,9 +23,10 @@ from typing import Any, cast
 # => Prevent custom conda logging init before importing anything conda-related.
 import conda.gateways.logging
 import jinja2
-import yaml
 from conda_build import api
 from jinja2 import Environment
+from ruamel.yaml import YAML
+from ruamel.yaml.error import YAMLError
 
 from .._types import OsLabel, PackageSubdir
 from .repodata import RepoData
@@ -117,9 +118,11 @@ def load_meta_fast(recipe: str, env=None):
     try:
         pth = os.path.join(recipe, "meta.yaml")
         template = jinja_silent_undef.from_string(Path(pth).read_text(encoding="utf-8"))
-        meta = yaml.safe_load(template.render(env))
+        yaml_loader = YAML(typ="safe")
+        yaml_loader.allow_duplicate_keys = True
+        meta = yaml_loader.load(template.render(env))
         return (meta, recipe)
-    except (OSError, jinja2.TemplateError, yaml.YAMLError) as exc:
+    except (OSError, jinja2.TemplateError, YAMLError) as exc:
         raise ValueError(f"Problem inspecting {recipe}") from exc
 
 

@@ -22,6 +22,15 @@ USER_AGENT = "bioconda/bioconda-utils"
 # HTTP status codes indicating transient errors (retried with backoff)
 TRANSIENT_STATUS_CODES = (429, 502, 503, 504)
 
+
+def _give_up_on_http_error(ex: Exception) -> bool:
+    """Return whether retrying **ex** cannot resolve the HTTP failure."""
+    return (
+        isinstance(ex, aiohttp.ClientResponseError)
+        and ex.status not in TRANSIENT_STATUS_CODES
+    )
+
+
 # Retry requests on transient errors (429, 502, 503, 504), waiting according
 # to the fibonacci series, at most 20 times. Truncated transfers
 # (ClientPayloadError) are retried as well.
@@ -29,23 +38,23 @@ retry_on_transient = backoff.on_exception(
     backoff.fibo,
     (aiohttp.ClientResponseError, aiohttp.ClientPayloadError),
     max_tries=20,
-    giveup=lambda ex: (
-        isinstance(ex, aiohttp.ClientResponseError)
-        and ex.status not in TRANSIENT_STATUS_CODES
-    ),
+    giveup=_give_up_on_http_error,
 )
 
 
 def make_session(
+    *,
+    user_agent: str = USER_AGENT,
     connector: aiohttp.BaseConnector | None = None,
 ) -> aiohttp.ClientSession:
     """Create an :py:class:`aiohttp.ClientSession` identifying ourselves
 
+    ``user_agent`` is configurable so callers can retain their own identity.
     Proxy settings from the environment are honored (``trust_env=True``).
     """
     return aiohttp.ClientSession(
         connector=connector,
-        headers={"User-Agent": USER_AGENT},
+        headers={"User-Agent": user_agent},
         trust_env=True,
     )
 

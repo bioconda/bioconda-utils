@@ -61,7 +61,7 @@ def tqdm(*args, **kwargs):
     loglevel_ok = kwargs.get("logger", logger).getEffectiveLevel() <= kwargs.get(
         "loglevel", logging.INFO
     )
-    kwargs["disable"] = not (term_ok and loglevel_ok)
+    kwargs["disable"] = bool(kwargs.get("disable")) or not (term_ok and loglevel_ok)
     return _tqdm.tqdm(*args, **kwargs)
 
 

@@ -8,8 +8,8 @@ from importlib.resources import as_file, files
 from pathlib import Path
 from typing import Any
 
-import yaml
 from jsonschema import validate
+from ruamel.yaml import YAML
 
 from bioconda_utils._types import DEFAULT_PRIMARY_PLATFORMS, Config, PackageSubdir
 from bioconda_utils.conda.repodata import RepoData
@@ -23,7 +23,7 @@ def validate_config(config: dict[str, Any]) -> None:
         as_file(files("bioconda_utils") / "config.schema.yaml") as schema_path,
         open(schema_path, encoding="utf-8") as fh,
     ):
-        schema = yaml.safe_load(fh)
+        schema = YAML(typ="safe").load(fh)
 
     validate(config, schema)
 
@@ -67,7 +67,7 @@ def normalize_config(config: dict[str, Any]) -> Config:
 def load_config(path: Path) -> Config:
     """Load and normalize a YAML configuration file."""
     with path.open(encoding="utf-8") as fh:
-        config = yaml.safe_load(fh)
+        config = YAML(typ="safe").load(fh)
     config = normalize_config(config)
     config["blacklists"] = [str(path.parent / item) for item in config["blacklists"]]
     RepoData.register_config(config)

@@ -255,7 +255,7 @@ class AsyncRequests:
         self.cache: dict[str, dict[str, Any]] | None = None
 
     async def __aenter__(self) -> Self:
-        session = http.make_session()
+        session = http.make_session(user_agent=self.USER_AGENT)
         await session.__aenter__()
         self.session = session
         if self.cache_fn:
@@ -284,8 +284,8 @@ class AsyncRequests:
     async def get_text_from_url(self, url: str) -> str:
         """Fetch content at **url** and return as text
 
-        - On non-permanent errors (429, 502, 503, 504), the GET is retried 10 times with
-          increasing wait times according to fibonacci series.
+        - On non-permanent errors (429, 502, 503, 504), the GET is attempted up to
+          20 times with increasing waits according to the Fibonacci series.
         - Permanent errors raise a ClientResponseError
         """
         if self.cache and url in self.cache["url_text"]:

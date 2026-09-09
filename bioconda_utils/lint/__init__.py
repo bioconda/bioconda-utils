@@ -489,7 +489,7 @@ class Linter:
     """Lint executor
 
     Arguments:
-      config: Configuration dict as provided by `utils.load_config()`.
+      config: Configuration dict as provided by `config.load_config()`.
       recipe_folder: Folder which recipes are located.
       exclude: List of function names in ``registry`` to skip globally.
                When running on CI, this will be merged with anything
