@@ -72,7 +72,7 @@ from .aiopipe import (
     EndProcessing,
     EndProcessingItem,
 )
-from .githandler import GitHandler
+from .githandler import BranchName, GitHandler
 from .githubhandler import GitHubHandler
 from .hosters import Hoster
 from .recipe import Recipe
@@ -961,16 +961,16 @@ class GitFilter(Filter):
         self.git = git_handler
 
     @classmethod
-    def branch_name(cls, recipe: Recipe) -> str:
+    def branch_name(cls, recipe: Recipe) -> BranchName:
         """Render branch name from recipe
 
-        - Replace dashes with underscores (GitPython does not like dash)
+        - Replace dashes with underscores
         - Replace slashes with ``.d/`` slash as Git will use directories when separating
           parts with slashes, so ``bump/toolx`` cannot be a branch at the same time as
           ``bump/toolx/1.2.x``.
           Note: this will break if we have ``recipe/x`` and ``recipe/x.d`` in the repo.
         """
-        return (
+        return BranchName(
             f"{cls.branch_prefix}{recipe.reldir.replace('-', '_').replace('/', '.d/')}"
         )
 
@@ -1038,7 +1038,9 @@ class GitLoadRecipe(GitFilter):
         branch_name = self.branch_name(recipe)
         remote_branch = self.git.get_remote_branch(branch_name)
         local_branch = self.git.get_local_branch(branch_name)
-        master_branch = self.git.get_local_branch("master")
+        master_branch = self.git.get_local_branch(BranchName("master")) or BranchName(
+            "master"
+        )
 
         if local_branch:
             logger.debug("Recipe %s: removing local branch %s", recipe, branch_name)

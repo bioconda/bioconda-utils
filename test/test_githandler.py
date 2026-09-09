@@ -8,6 +8,7 @@ import yaml
 
 from bioconda_utils.githandler import (
     BiocondaRepoMixin,
+    BranchName,
     GitActor,
     GitHandler,
     GitHandlerFailure,
@@ -119,7 +120,7 @@ def test_githandler_branches_and_read(sample_git_repo: Path):
 
     # Active branch
     active = handler.get_active_branch()
-    assert active.name == "master"
+    assert active == "master"
 
     # Read from branch
     content = handler.read_from_branch("master", sample_git_repo / "config.yml")
@@ -207,23 +208,22 @@ def test_commit_and_push_changes(sample_git_repo: Path):
 
 def test_branch_lifecycle_and_restore(sample_git_repo: Path):
     handler = GitHandler(sample_git_repo, dry_run=True, allow_dirty=True)
-    assert handler.prev_active_branch is not None
-    assert handler.prev_active_branch.name == "master"
+    assert handler.prev_active_branch == BranchName("master")
 
     # Create and checkout a new branch
     run_git(["checkout", "-b", "temp_branch"], cwd=sample_git_repo)
-    assert handler.get_active_branch().name == "temp_branch"
+    assert handler.get_active_branch() == BranchName("temp_branch")
 
     # close() should restore previous branch (master)
     handler.close()
-    assert handler.get_active_branch().name == "master"
+    assert handler.get_active_branch() == BranchName("master")
 
     # Delete the temporary branch
-    handler.delete_local_branch("temp_branch")
+    handler.delete_local_branch(BranchName("temp_branch"))
     assert handler.get_local_branch("temp_branch") is None
 
     # Delete remote branch dry run
-    handler.delete_remote_branch("temp_branch")
+    handler.delete_remote_branch(BranchName("temp_branch"))
 
 
 def test_bioconda_repo_unblacklisted(sample_git_repo: Path):
