@@ -196,6 +196,7 @@ class RecipeBuilder:
         image_build_dir: str | None = None,
         docker_base_image: str | None = None,
         target_platform: ContainerPlatform | None = None,
+        container_pkgs_cache: str | None = None,
     ) -> None:
         """
         Class to handle building a custom docker container that can be used for
@@ -277,8 +278,26 @@ class RecipeBuilder:
 
         docker_base_image : str or None
             Name of base image that can be used in **dockerfile_template**.
+
+        container_pkgs_cache : str or None
+            Host directory bind-mounted at /opt/conda/pkgs in build
+            containers, so repodata, shards indexes and downloaded build/host
+            env packages persist across the containers of one build run.
+            Falls back to the BIOCONDA_UTILS_CONTAINER_PKGS_CACHE
+            environment variable when not given.
         """
         self.requirements = requirements
+        # Host directory bind-mounted at /opt/conda/pkgs in build containers
+        # so repodata/shards and downloaded build/host env packages persist
+        # across the containers of one build run. Falls back to the
+        self.container_pkgs_cache = container_pkgs_cache or os.environ.get(
+            "BIOCONDA_UTILS_CONTAINER_PKGS_CACHE"
+        )
+        if self.container_pkgs_cache:
+            os.makedirs(self.container_pkgs_cache, exist_ok=True)
+            # build containers run as a different user (uid 9001 "conda") and
+            # conda writes cache state even on cache hits
+            os.chmod(self.container_pkgs_cache, 0o777)
         self.conda_build_args = ""
         self.target_platform: ContainerPlatform | None = target_platform
         self.build_script_template: str = build_script_template
@@ -590,6 +609,17 @@ class RecipeBuilder:
             "-v",
             f"{recipe_dir}:{self.container_recipe}",
         ]
+        # Optionally persist the container's conda package cache (repodata,
+        # shards indexes, downloaded packages) across the containers of one
+        # build run. Containers are ephemeral (--rm); without this, every
+        # recipe re-downloads repodata and its build/host env packages.
+        # Enabled via --container-pkgs-cache (or the
+        # BIOCONDA_UTILS_CONTAINER_PKGS_CACHE environment variable).
+        if self.container_pkgs_cache:
+            cmd += [
+                "-v",
+                f"{self.container_pkgs_cache}:/opt/conda/pkgs",
+            ]
         cmd += env_list
         image = self.docker_temp_image if self.build_image else self.docker_base_image
         if image is None:

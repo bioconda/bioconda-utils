@@ -2,9 +2,8 @@
 # GitHub Actions) so that we avoid additional workload on those other services
 # which currently take care of PRs and bulk branch, respectively.
 #
-# Note that this runs the version of bioconda-utils configured in
-# bioconda-common/common.sh (via the installation script), rather than the
-# latest commit on the branch where this is running.
+# Note that this provisions its environment with pixi from the checkout's own
+# pixi.toml/pixi.lock, so it always runs the utils code under test.
 
 version: 2.1
 
@@ -20,53 +19,36 @@ jobs:
       - checkout
 
       - run:
-          name: Download bioconda install script
-          command: wget https://raw.githubusercontent.com/bioconda/bioconda-common/master/{install-and-set-up-conda,configure-conda,common}.sh
-
-      - run:
-          name: set up env vars
-          command: echo "export PATH=/opt/mambaforge/bin:$PATH" >> "$BASH_ENV"
-
-      - run:
-          name: Ensure cache has path to restore to
+          name: Install pixi
           command: |
-            sudo mkdir -p /opt
-            sudo chown -R $USER /opt
+            curl -fsSL https://pixi.sh/install.sh | bash
+            echo 'export PATH="$HOME/.pixi/bin:$PATH"' >> "$BASH_ENV"
 
       - restore_cache:
-          key: bioconda-utils-{{ checksum "install-and-set-up-conda.sh" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "common.sh" }}
+          key: pixi-{{ checksum "pixi.toml" }}-{{ checksum "pixi.lock" }}
 
       - run:
-          name: Install bioconda-utils
+          name: Provision pixi environment
           command: |
-            source $BASH_ENV
-            if [ ! -e /opt/mambaforge ]; then
-              bash install-and-set-up-conda.sh
-            fi
+            source "$BASH_ENV"
+            pixi install
+            pixi run install
 
       - save_cache:
-          key: bioconda-utils-{{ checksum "install-and-set-up-conda.sh" }}-{{ checksum ".circleci/config.yml" }}-{{ checksum "common.sh" }}
+          key: pixi-{{ checksum "pixi.toml" }}-{{ checksum "pixi.lock" }}
           paths:
-            - /opt/mambaforge
-
-      - run:
-          name: Configure conda
-          command: |
-            source $BASH_ENV
-            bash configure-conda.sh
+            - .pixi
 
       - run:
           name: Check recipes for new upstream releases
           command: |
-            source $BASH_ENV
+            source "$BASH_ENV"
             git clone git@github.com:bioconda/bioconda-recipes
             cd bioconda-recipes
             git config user.name "Autobump"
             git config user.email "bioconda@users.noreply.github.com"
             mkdir -p /tmp/artifacts
-            eval "$(conda shell.bash hook)"
-            conda activate bioconda
-            bioconda-utils autobump \
+            pixi run --manifest-path "$CIRCLE_WORKING_DIRECTORY/pixi.toml" bioconda-utils autobump \
               --unparsed-urls /tmp/artifacts/unparsed_urls.txt \
               --failed-urls /tmp/artifacts/failed_urls.txt \
               --recipe-status /tmp/artifacts/status.txt \

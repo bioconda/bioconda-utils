@@ -1,7 +1,7 @@
 [workspace]
 name = "bioconda-utils"
 version = "0.0.0"
-platforms = ["linux-64", "osx-64"]
+platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64"]
 channels = ["conda-forge", "bioconda"]
 
 [dependencies]
@@ -12,11 +12,11 @@ conda-forge-pinning = "==2026.01.07.13.16.30"
 python = "3.13.*"
 setuptools = "81.*"
 setuptools-scm = ">=8"
-conda = "26.3.*"
-conda-libmamba-solver = "26.3.*"
-conda-build = "26.3.*"
-conda-index = "0.10.*"
-conda-package-streaming = "0.12.*"
+conda = "26.7.*"
+conda-libmamba-solver = "26.7.*"
+conda-build = "26.7.*"
+conda-index = "0.12.*"
+conda-package-streaming = "0.13.*"
 mamba = "2.5.*"
 
 # CLI
@@ -82,6 +82,13 @@ tabulate = "0.10.*"
 
 # resource reporting for builds
 psutil = "*"
+
+# macOS-only: provides run_conda_forge_build_setup (SDK/compiler setup
+# for Darwin CI runners)
+[target.osx-64.dependencies]
+conda-forge-ci-setup = "*"
+[target.osx-arm64.dependencies]
+conda-forge-ci-setup = "*"
 
 [feature.test.dependencies]
 pip = "*"

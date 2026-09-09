@@ -1704,13 +1704,17 @@ class RepoData:
         # most specific columns. Filtering this way on a large data frame
         # is much faster than executing the comparisons for all values
         # every time, in particular if we are looking at a specific package.
+        # NB: cheap, high-selectivity filters come first so that later,
+        #     expensive filters (e.g. high-cardinality categoricals such as
+        #     "build", or int comparisons that box every value) only run on
+        #     an already tiny frame. The result is identical either way.
         for col, val in (
             ("name", name),  # thousands of different values
-            ("build", build),  # build string should vary a lot
             ("version", version),  # still pretty good variety
             ("channel", channel_filter),  # 3 values
             ("platform", platform_filter),  # 3 values
             ("build_number", build_number),  # most values 0
+            ("build", build),  # build string should vary a lot
         ):
             if val is None:
                 continue

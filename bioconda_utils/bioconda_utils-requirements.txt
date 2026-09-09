@@ -6,11 +6,11 @@ conda-forge-pinning==2026.01.07.13.16.30
 python=3.13.*
 setuptools=81.*
 setuptools-scm>=8
-conda=26.3.*
-conda-libmamba-solver=26.3.*
-conda-build=26.3.*
-conda-index=0.10.*
-conda-package-streaming=0.12.*
+conda=26.7.*
+conda-libmamba-solver=26.7.*
+conda-build=26.7.*
+conda-index=0.12.*
+conda-package-streaming=0.13.*
 mamba=2.5.*
 typer=0.26.*
 colorlog=6.*

@@ -28,6 +28,7 @@ def test_all_commands_render_help():
         "create-mulled-manifests",
         "dag",
         "dependent",
+        "diagnostics",
         "duplicates",
         "handle-merged-pr",
         "lint",
@@ -44,6 +45,32 @@ def test_version_option():
 
     assert result.exit_code == 0
     assert result.output == f"This is bioconda-utils version {cli.VERSION}\n"
+
+
+def test_diagnostics(monkeypatch, tmp_path):
+    first = tmp_path / "first.yaml"
+    second = tmp_path / "second.yaml"
+    first.write_text("python:\n  - 3.13\n")
+    second.write_text("zlib:\n  - 1.3\n")
+    config = type(
+        "BuildConfig",
+        (),
+        {
+            "subdir": "linux-64",
+            "croot": tmp_path / "conda-bld",
+            "exclusive_config_files": [first, second],
+        },
+    )()
+    monkeypatch.setattr(cli.utils, "load_conda_build_config", lambda: config)
+
+    result = runner.invoke(cli.app, ["diagnostics"])
+
+    assert result.exit_code == 0, result.output
+    assert f"bioconda-utils version: {cli.VERSION}" in result.output
+    assert "package subdir: linux-64" in result.output
+    assert f"conda-build root: {tmp_path / 'conda-bld'}" in result.output
+    assert f"{first}:\npython:\n  - 3.13" in result.output
+    assert f"{second}:\nzlib:\n  - 1.3" in result.output
 
 
 def test_recipe_and_config_are_optional():
