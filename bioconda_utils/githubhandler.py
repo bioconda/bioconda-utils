@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import abc
 import logging
-
+from collections.abc import AsyncIterator
 from copy import copy
 from enum import Enum
-from typing import Any, TYPE_CHECKING
-from collections.abc import AsyncIterator
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import backoff
 import cachetools
@@ -83,7 +83,7 @@ class GitHubHandler:
     def create_api_object(self, *args, **kwargs):
         """Create API object"""
 
-    def get_file_relurl(self, path: str, branch_name: str = "master") -> str:
+    def get_file_relurl(self, path: Path, branch_name: str = "master") -> str:
         """Format domain relative url for **path** on **branch_name**"""
         return "/{user}/{repo}/tree/{branch_name}/{path}".format(
             branch_name=branch_name, path=path, **self.var_default

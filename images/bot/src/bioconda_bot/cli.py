@@ -1,7 +1,6 @@
-from logging import INFO, basicConfig
-
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 from asyncio import run
+from logging import INFO, basicConfig
 
 
 def build_parser_comment(parser: ArgumentParser) -> None:
@@ -40,9 +39,9 @@ def build_parser_automerge(parser: ArgumentParser) -> None:
     parser.set_defaults(run_command=run_command)
 
 
-def build_parser_changeVisibility(parser: ArgumentParser) -> None:
+def build_parser_change_visibility(parser: ArgumentParser) -> None:
     def run_command() -> None:
-        from .changeVisibility import main as main_
+        from .change_visibility import main as main_
 
         run(main_())
 
@@ -63,7 +62,7 @@ def get_argument_parser() -> ArgumentParser:
         ("merge", build_parser_merge),
         ("update", build_parser_update),
         ("automerge", build_parser_automerge),
-        ("change", build_parser_changeVisibility),
+        ("change", build_parser_change_visibility),
     ):
         sub_parser = sub_parsers.add_parser(
             command_name,

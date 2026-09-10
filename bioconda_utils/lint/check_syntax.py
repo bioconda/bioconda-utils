@@ -6,7 +6,9 @@ section that is otherwise free-form.
 """
 
 import re
-from typing import Any
+from typing import Any, ClassVar
+
+from bioconda_utils._types import ALL_PACKAGE_SUBDIRS
 
 from . import LintCheck, _recipe
 
@@ -83,7 +85,7 @@ class extra_identifiers_not_string(LintCheck):
 
     """
 
-    requires = [extra_identifiers_not_list]
+    requires: ClassVar = [extra_identifiers_not_list]
 
     def check_recipe(self, recipe: _recipe.Recipe) -> None:
         identifiers_sections = recipe.get_all_section_occurrences("extra/identifiers")
@@ -104,7 +106,7 @@ class extra_identifiers_missing_colon(LintCheck):
 
     """
 
-    requires = [extra_identifiers_not_string]
+    requires: ClassVar = [extra_identifiers_not_string]
 
     def check_recipe(self, recipe: _recipe.Recipe) -> None:
         identifiers_sections = recipe.get_all_section_occurrences("extra/identifiers")
@@ -130,3 +132,47 @@ class extra_skip_lints_not_list(LintCheck):
         for identifiers in identifiers_sections:
             if not isinstance(identifiers_sections[identifiers], list):
                 self.message(section=identifiers)
+
+
+class extra_additional_platforms_not_list(LintCheck):
+    """The extra/additional-platforms section must contain a list
+
+    Example::
+
+        extra:
+           additional-platforms:
+              - linux-aarch64
+              - osx-arm64
+
+    """
+
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+        sections = recipe.get_all_section_occurrences("extra/additional-platforms")
+        for section in sections:
+            if not isinstance(sections[section], list):
+                self.message(section=section)
+
+
+class extra_additional_platforms_invalid(LintCheck):
+    """Each item in extra/additional-platforms must be a valid package subdir
+
+    Valid package subdirs are defined by ``ALL_PACKAGE_SUBDIRS``.
+
+    Example::
+
+        extra:
+           additional-platforms:
+              - linux-aarch64
+              - osx-arm64
+
+    """
+
+    requires: ClassVar = [extra_additional_platforms_not_list]
+
+    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+        valid_subdirs = set(ALL_PACKAGE_SUBDIRS)
+        sections = recipe.get_all_section_occurrences("extra/additional-platforms")
+        for section in sections:
+            for n, platform in enumerate(sections[section]):
+                if platform not in valid_subdirs:
+                    self.message(section=f"{section}/{n}")

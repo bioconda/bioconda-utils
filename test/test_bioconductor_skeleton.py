@@ -1,10 +1,34 @@
 import pytest
 
-from bioconda_utils import bioconductor_skeleton
-from bioconda_utils import cran_skeleton
-from bioconda_utils import utils
+from bioconda_utils import bioconductor_skeleton, cran_skeleton, utils
+from bioconda_utils._types import Config
 
 config = {"channels": ["conda-forge", "bioconda"]}
+
+
+def test_write_recipe_normalizes_raw_config_at_boundary(monkeypatch, tmp_path):
+    class NormalizationObserved(Exception):
+        pass
+
+    captured = {}
+
+    def register_config(config):
+        captured["config"] = config
+
+    def observe_config(*_args, **_kwargs):
+        assert isinstance(captured["config"], Config)
+        assert captured["config"]["requirements"] is None
+        raise NormalizationObserved
+
+    monkeypatch.setattr(utils.RepoData, "register_config", register_config)
+    monkeypatch.setattr(bioconductor_skeleton, "BioCProjectPage", observe_config)
+
+    with pytest.raises(NormalizationObserved):
+        bioconductor_skeleton.write_recipe(
+            "example",
+            str(tmp_path),
+            {"channels": []},
+        )
 
 
 def test_cran_write_recipe(tmpdir):
@@ -126,7 +150,7 @@ def test_pkg_version():
     assert b.bioarchive_url is None
     assert b.cargoport_url == (
         "https://depot.galaxyproject.org/software/bioconductor-deseq2/bioconductor-deseq2_1.14.1_src_all.tar.gz"
-    )  # noqa: E501
+    )
 
     # bioc version specified, but not package version
     b = bioconductor_skeleton.BioCProjectPage("edgeR", bioc_version="3.5")
@@ -138,7 +162,7 @@ def test_pkg_version():
     assert b.bioarchive_url is None
     assert b.cargoport_url == (
         "https://depot.galaxyproject.org/software/bioconductor-edger/bioconductor-edger_3.18.1_src_all.tar.gz"
-    )  # noqa: E501
+    )
 
 
 def test_bioarchive_exists_but_not_bioconductor():
@@ -246,4 +270,12 @@ def test_overwrite(tmpdir, bioc_fetch):
         recursive=False,
         force=True,
         packages=bioc_fetch,
+    )
+
+
+def test_fetch_packages_invalid_version():
+    with pytest.raises(RuntimeError) as excinfo:
+        bioconductor_skeleton.fetchPackages("99.99")
+    assert "Could not fetch any Bioconductor package metadata files" in str(
+        excinfo.value
     )

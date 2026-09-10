@@ -1,7 +1,7 @@
 import logging
 import os
 
-from aiohttp import ClientSession
+from aiohttp import ClientError, ClientSession
 
 from .common import (
     get_job_context,
@@ -27,9 +27,10 @@ async def toggle_visibility(session: ClientSession, container_repo: str) -> None
     try:
         async with session.post(url, headers=headers, json=body) as response:
             rc = response.status
-    except Exception:
-        # Do nothing
-        pass
+    except ClientError:
+        logger.warning(
+            "Unable to toggle visibility for %s", container_repo, exc_info=True
+        )
     log("Trying to toggle visibility (%s) returned %d", url, rc)
 
 
@@ -41,9 +42,11 @@ async def main() -> None:
         return
 
     comment = original_comment.lower()
-    if comment.startswith(("@bioconda-bot", "@biocondabot")):
-        if " please toggle visibility" in comment:
-            pkg = comment.split("please change visibility")[1].strip().split()[0]
-            async with ClientSession() as session:
-                await toggle_visibility(session, pkg)
-                await send_comment(session, issue_number, "Visibility changed.")
+    if (
+        comment.startswith(("@bioconda-bot", "@biocondabot"))
+        and " please toggle visibility" in comment
+    ):
+        pkg = comment.split("please toggle visibility", 1)[1].strip().split()[0]
+        async with ClientSession() as session:
+            await toggle_visibility(session, pkg)
+            await send_comment(session, issue_number, "Visibility changed.")

@@ -10,3 +10,15 @@ properties:
         type: array
     conda_build_version:
         type: string
+    primary_platforms:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items:
+            type: string
+            enum:
+                - linux-64
+                - linux-aarch64
+                - linux-riscv64
+                - osx-64
+                - osx-arm64

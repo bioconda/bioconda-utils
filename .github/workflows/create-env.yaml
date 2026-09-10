@@ -25,7 +25,7 @@ jobs:
       IMAGE_NAME: create-env
 
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
 
     - name: Set up QEMU
       run: |
@@ -61,11 +61,11 @@ jobs:
             | grep BIOCONDA_UTILS_TAG \
             | grep -oE '[0-9]+\.[0-9]+\.[0-9]+'
         )"
-        printf 'bioconda_utils_version=%s\n' "${version}" >> $GITHUB_OUTPUT
+        printf 'bioconda_utils_version=%s\n' "${version}" >> "${GITHUB_OUTPUT}"
 
     - name: Build
       id: build
-      uses: redhat-actions/buildah-build@v2
+      uses: redhat-actions/buildah-build@v3
       with:
         image: ${{ env.IMAGE_NAME }}
         tags: >-
@@ -80,84 +80,34 @@ jobs:
           bioconda_utils_version=${{ steps.prepare.outputs.bioconda_utils_version }}
 
     - name: Test
+      shell: bash
+      env:
+        LOCAL_IMAGE: ${{ steps.build.outputs.image }}
+        LOCAL_TAGS: ${{ steps.build.outputs.tags }}
       run: |
-        set -x
-        image='${{ steps.build.outputs.image }}'
-        for tag in ${{ steps.build.outputs.tags }} ; do
-          buildah manifest inspect \
-            "${image}:${tag}" \
-            | jq '.manifests|{([.[].digest]|sort|join("+")): [.[]|["'"${tag}"'", .platform.architecture, .digest]|join(" ")]}'
-          done \
-          | jq -rs 'add|add[]' \
-          | while read tag arch digest ; do
-              podman images --format='{{.ID}}|{{.Digest}}|{{.RepoDigests}}' \
-                | sed -n "/${digest}/{s/|.*//p;q}" \
-                | xargs -n1 -- \
-                  sh -xc \
-                  'podman history "${1}" ; podman inspect "${1}"' --
-              buildah bud \
-                --arch="${arch}" \
-                --build-arg=base="${image}:${tag}" \
-                --file=Dockerfile.test \
-                "images/${image}"
-            done
-        buildah rmi --prune || true
+        .github/scripts/test-local-container \
+          'images/${{ env.IMAGE_NAME }}/Dockerfile.test' \
+          'images/${{ env.IMAGE_NAME }}'
 
     - if: ${{ github.ref == 'refs/heads/master' }}
-      name: Check Tags
-      run: |
-        # Quay.io does not support immutable images.
-        # => Check for duplicate tags to avoid overwriting existing images.
-        existing_tags="$(
-          skopeo list-tags docker://quay.io/bioconda/${{ steps.build.outputs.image }} \
-            | jq -r '.Tags[]'
-        )" \
-        || {
-          echo 'Could not list tags via skopeo.'
-          exit 1
-        }
-        for tag in ${{ steps.build.outputs.tags }} ; do
-          case "${tag}" in
-            latest | '${{ env.MAJOR_VERSION }}' ) ;;
-            * )
-              if printf %s "${existing_tags}" | grep -qxF "${tag}" ; then
-                printf 'Tag %s already exists!\n' "${tag}"
-                exit 1
-              fi
-          esac
-        done
-
-    - if: ${{ github.ref == 'refs/heads/master' }}
-      name: Push
-      uses: redhat-actions/push-to-registry@v2
+      id: publish
+      name: Publish
+      uses: ./.github/actions/publish-container
       with:
         image: ${{ steps.build.outputs.image }}
         tags: ${{ steps.build.outputs.tags }}
-        registry: ${{ secrets.QUAY_BIOCONDA_REPO }}
+        mutable-tags: >-
+          latest
+          ${{ env.MAJOR_VERSION }}
+        registry: ${{ vars.QUAY_BIOCONDA_REPO }}
         username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
         password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
 
     - if: ${{ github.ref == 'refs/heads/master' }}
       name: Test Pushed
+      env:
+        TEST_IMAGE: ${{ steps.publish.outputs.test-image }}
       run: |
-        set -x
-        image='${{ steps.build.outputs.image }}'
-        for tag in ${{ steps.build.outputs.tags }} ; do
-          buildah manifest inspect \
-            "${image}:${tag}" \
-            | jq '.manifests|{([.[].digest]|sort|join("+")): [.[]|["'"${tag}"'", .platform.architecture, .digest]|join(" ")]}'
-          done \
-          | jq -rs 'add|add[]' \
-          | while read tag arch digest ; do
-              podman images --format='{{.ID}}|{{.Digest}}|{{.RepoDigests}}' \
-                | sed -n "/${digest}/{s/|.*//p;q}" \
-                | xargs -n1 -- \
-                  sh -xc \
-                  'podman history "${1}" ; podman inspect "${1}"' --
-              buildah bud \
-                --arch="${arch}" \
-                --build-arg=base="${image}:${tag}" \
-                --file=Dockerfile.test \
-                "images/${image}"
-            done
-        buildah rmi --prune || true
+        .github/scripts/test-pushed-container \
+          'images/${{ env.IMAGE_NAME }}/Dockerfile.test' \
+          'images/${{ env.IMAGE_NAME }}'

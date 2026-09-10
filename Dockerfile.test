@@ -1,4 +1,5 @@
-FROM quay.io/bioconda/bioconda-utils-build-env-cos7
+ARG base=quay.io/bioconda/bioconda-utils-build-env-cos7
+FROM "${base}"
 # Retrieve index and set TTL to make it last over the duration of the test.
 RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda search bioconda-utils > /dev/null && \

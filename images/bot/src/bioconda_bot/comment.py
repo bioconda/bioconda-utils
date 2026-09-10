@@ -92,7 +92,7 @@ def compose_azure_comment(artifacts: list[tuple[str, str]]) -> str:
             )
         ):
             continue
-        url, archdir, basedir, subdir, packageName = package_match.groups()
+        _url, archdir, _basedir, subdir, packageName = package_match.groups()
 
         comment += f"{subdir} | {packageName} | [{archdir}.zip]({URL}) | Azure | "
         comment += "<details><summary>show</summary>"
@@ -117,8 +117,8 @@ def compose_circlci_comment(artifacts: list[tuple[str, str]]) -> str:
             package_match := re.match(r"^((.+)\/(.+)\/(.+\.conda|.+\.tar\.bz2))$", URL)
         ):
             continue
-        url, basedir, subdir, packageName = package_match.groups()
-        repo_url = "/".join([basedir, subdir, "repodata.json"])
+        _url, basedir, subdir, packageName = package_match.groups()
+        repo_url = f"{basedir}/{subdir}/repodata.json"
         conda_install_url = basedir
 
         comment += f"{subdir} | [{packageName}]({URL}) | [repodata.json]({repo_url}) | CircleCI | "
@@ -146,7 +146,7 @@ def compose_gha_comment(artifacts: list[tuple[str, str]]) -> str:
             )
         ):
             continue
-        url, basedir, subdir, packageName = package_match.groups()
+        _url, _basedir, subdir, packageName = package_match.groups()
         comment += (
             f"{subdir} | {packageName} | [{subdir}.zip]({URL}) | GitHub Actions | "
         )
@@ -224,7 +224,7 @@ async def notify_ready(session: ClientSession, pr: int) -> None:
             f"PR ready for review: https://github.com/bioconda/bioconda-recipes/pull/{pr}",
         )
     except Exception:
-        logger.exception("Posting to Gitter failed", exc_info=True)
+        logger.exception("Posting to Gitter failed")
         # Do not die if we can't post to gitter!
 
 

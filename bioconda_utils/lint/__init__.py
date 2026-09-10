@@ -93,31 +93,29 @@ Module Autodocs
 
 from __future__ import annotations
 
-
 import abc
 from collections.abc import Iterable
+import importlib
+import inspect
+import logging
 import os
 from pathlib import Path
 import pkgutil
 import re
-import logging
-import inspect
-import importlib
 from collections import defaultdict
 from enum import IntEnum
-from typing import Any, NamedTuple, Protocol, cast, runtime_checkable
+from typing import Any, ClassVar, NamedTuple, Protocol, cast, runtime_checkable
 
 from jsonschema.exceptions import ValidationError
-from jsonschema.validators import Draft7Validator
 import yaml
-
 from conda_smithy.lint_recipe import lintify_meta_yaml
-from bioconda_utils.skiplist import Skiplist
+
 import networkx as nx
 
-from .. import utils
-from .. import recipe as _recipe
+from bioconda_utils.skiplist import Skiplist
 
+from .. import recipe as _recipe
+from .. import utils
 
 logger = logging.getLogger(__name__)
 
@@ -153,8 +151,6 @@ class CondaLintMessage(NamedTuple):
     """Message issued by LintChecks for conda build recipes"""
 
     #: The recipe this message refers to
-    # _recipe.Recipe for conda recipes, utils.RecipePath for
-    # rattler recipes
     recipe: _recipe.Recipe
 
     #: The check issuing the message
@@ -235,7 +231,7 @@ def get_checks() -> list[type[LintCheck]]:
 class LintCheck(metaclass=LintCheckMeta):
     """Base class for lint checks"""
 
-    registry: list[type[LintCheck]] = []
+    registry: ClassVar[list[type[LintCheck]]] = []
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -246,7 +242,7 @@ class LintCheck(metaclass=LintCheckMeta):
     severity: Severity = ERROR
 
     #: Checks that must have passed for this check to be executed.
-    requires: list[LintCheck] = []
+    requires: ClassVar[list[LintCheck]] = []
 
     def __init__(self, _linter: Linter) -> None:
         #: Messages collected running tests
@@ -294,13 +290,13 @@ class LintCheck(metaclass=LintCheckMeta):
                     self.check_source(cast(dict[str, Any], src), f"source/{num}")
 
         # Run depends checks, per outputs: package if necessary
-        outputs = recipe.get("outputs", dict())
+        outputs = recipe.get("outputs", {})
         deps = recipe.get_deps_dict()
         if outputs:
             for i in range(len(outputs)):
                 output_location = f"outputs/{i}/"
                 # filter down to dependencies for this outputs: package
-                output_deps = dict()
+                output_deps = {}
                 for dep in deps:
                     if any(output_location in d for d in deps[dep]):
                         output_deps[dep] = deps[dep]
@@ -422,7 +418,7 @@ class LintCheck(metaclass=LintCheckMeta):
             start_line = end_line = line or 0
 
         if not fname:
-            fname = recipe.path
+            fname = os.fspath(recipe.path)
 
         return CondaLintMessage(
             recipe=recipe,
@@ -611,7 +607,8 @@ class Linter:
         elif os.path.exists(".git"):
             # Obtain commit message from last commit.
             commit_message = utils.run(
-                ["git", "log", "--format=%B", "-n", "1"], mask=False, loglevel=0
+                ["git", "log", "--format=%B", "-n", "1"],
+                loglevel=0,
             ).stdout
 
         skip_re = re.compile(r"\[\s*lint skip (?P<func>\w+) for (?P<recipe>.*?)\s*\]")
@@ -669,7 +666,7 @@ class Linter:
         """Run the linter on a single recipe
 
         Args:
-          recipe_name: Names of recipe to lint
+          recipe_name: Name of recipe to lint
           fix: Whether checks should attempt to fix detected issues
 
         Returns:
@@ -681,9 +678,7 @@ class Linter:
         except _recipe.RecipeError as exc:
             recipe = _recipe.Recipe(recipe_name, self.recipe_folder)
             check_cls = recipe_error_to_lint_check.get(exc.__class__, linter_failure)
-            return [
-                check_cls.make_conda_message(recipe=recipe, line=getattr(exc, "line"))
-            ]
+            return [check_cls.make_conda_message(recipe=recipe, line=exc.line)]
 
         # collect checks to skip
         checks_to_skip = set(self.skip[recipe_name.as_posix()])

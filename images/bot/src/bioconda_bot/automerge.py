@@ -1,6 +1,5 @@
 import logging
 import os
-
 from typing import Any
 
 from aiohttp import ClientSession

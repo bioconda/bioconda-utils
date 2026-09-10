@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+
+# Functionally test both architectures of a local multi-architecture manifest.
+
+set -euo pipefail
+
+cleanup() {
+    buildah rmi --prune || true
+}
+trap cleanup EXIT
+
+if [[ "$#" -ne 2 ]]; then
+    echo 'Usage: test-local-container TEST_CONTAINERFILE CONTEXT' >&2
+    exit 2
+fi
+: "${LOCAL_IMAGE:?Set LOCAL_IMAGE to the local manifest name.}"
+: "${LOCAL_TAGS:?Set LOCAL_TAGS to its whitespace-separated tags.}"
+
+test_containerfile="$1"
+context="$2"
+test -f "${test_containerfile}"
+test -d "${context}"
+
+tags="$(xargs <<<"${LOCAL_TAGS}")"
+read -r -a tag_list <<<"${tags}"
+test "${#tag_list[@]}" -gt 0
+
+for tag in "${tag_list[@]}"; do
+    actual="$(
+        buildah manifest inspect "${LOCAL_IMAGE}:${tag}" |
+            jq -r \
+                '.manifests[] | select(.platform.os == "linux") | .platform.architecture' |
+            sort -u |
+            xargs
+    )"
+    if [[ "${actual}" != 'amd64 arm64' ]]; then
+        printf 'Unexpected architectures for %s:%s: expected "amd64 arm64", found "%s".\n' \
+            "${LOCAL_IMAGE}" "${tag}" "${actual}" >&2
+        exit 1
+    fi
+done
+
+base="${LOCAL_IMAGE}:${tag_list[0]}"
+for architecture in amd64 arm64; do
+    printf 'Testing local %s image %s\n' "${architecture}" "${base}"
+    # The manifest under test is known to exist locally, but the test
+    # Containerfile may use additional base images in later stages.
+    buildah build \
+        --pull=missing \
+        --arch="${architecture}" \
+        --build-arg=base="${base}" \
+        --file="${test_containerfile}" \
+        "${context}"
+done

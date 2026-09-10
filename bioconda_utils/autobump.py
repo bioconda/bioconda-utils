@@ -42,7 +42,6 @@ Overview:
 
 from __future__ import annotations
 
-
 import abc
 import asyncio
 import logging
@@ -50,42 +49,36 @@ import os
 from pathlib import Path
 import pickle
 import random
-
-from collections import defaultdict, Counter
-from urllib.parse import urlparse
+from collections import Counter, defaultdict
+from collections.abc import Iterable, Mapping, Sequence
+from pathlib import Path
 from typing import Any, cast
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from urllib.parse import urlparse
 
 import aiofiles
-from aiohttp import ClientResponseError
-
+import conda_build.config
 import networkx as nx
+from aiohttp import ClientResponseError
+from conda.exports import MatchSpec, VersionOrder
+from packaging.version import InvalidVersion, Version
+from packaging.version import parse as _pep440_parse
+
 from bioconda_utils.skiplist import Skiplist
 
-import conda_build.config
-from conda.exports import MatchSpec, VersionOrder
-
-from packaging.version import parse as _pep440_parse, InvalidVersion, Version
-
-from . import __version__
-from . import utils
-from . import update_pinnings
-from . import graph
-from .utils import ensure_list, RepoData
-from .recipe import Recipe
-from .recipe import load_parallel_iter as recipes_load_parallel_iter
+from . import __version__, graph, update_pinnings, utils
 from .aiopipe import (
     AsyncFilter,
     AsyncPipeline,
     AsyncRequests,
-    EndProcessingItem,
     EndProcessing,
+    EndProcessingItem,
 )
-
 from .githandler import GitHandler
 from .githubhandler import GitHubHandler
-
-HosterFactory = Callable[[str, dict[str, str]], Any]
+from .hosters import Hoster
+from .recipe import Recipe
+from .recipe import load_parallel_iter as recipes_load_parallel_iter
+from .utils import RepoData, ensure_list
 
 
 def _parse_or_legacy(s: str) -> tuple[Version | str, bool]:
@@ -125,16 +118,14 @@ class RecipeSource:
 
     def __init__(
         self,
-        recipe_base: Path | str,
-        packages: str | list[str],
+        recipe_base: Path,
+        packages: list[str],
         exclude: list[str],
         shuffle: bool = True,
     ) -> None:
-        self.recipe_base: Path = Path(recipe_base)
-        self.packages = [packages] if isinstance(packages, str) else packages
-        self.recipe_dirs: list[utils.RecipePath] = list(
-            utils.get_recipes(self.recipe_base, self.packages, exclude)
-        )
+        self.recipe_base = recipe_base
+        self.packages = packages
+        self.recipe_dirs = list(utils.get_recipes(recipe_base, self.packages, exclude))
         if shuffle:
             random.shuffle(self.recipe_dirs)
         logger.warning("Selected %i packages", len(self.recipe_dirs))
@@ -164,8 +155,8 @@ class RecipeSource:
 class RecipeGraphSource(RecipeSource):
     def __init__(
         self,
-        recipe_base: str,
-        packages: str | list[str],
+        recipe_base: Path,
+        packages: list[str],
         exclude: list[str],
         shuffle: bool,
         config: dict[str, str],
@@ -212,7 +203,7 @@ class RecipeGraphSource(RecipeSource):
             blacklist = Skiplist(self.config, self.recipe_base)
             dag = graph.build_from_recipes(
                 recipe
-                for recipe in recipes_load_parallel_iter(self.recipe_base, "*")
+                for recipe in recipes_load_parallel_iter(self.recipe_base, ["*"])
                 if not blacklist.is_skiplisted(recipe)
             )
             if self.cache_fn:
@@ -234,7 +225,7 @@ class Scanner(AsyncPipeline[Recipe]):
         self,
         recipe_source: RecipeSource,
         cache_fn: str | None = None,
-        status_fn: str | None = None,
+        status_fn: Path | None = None,
     ) -> None:
         super().__init__()
         #: recipe source
@@ -261,8 +252,9 @@ class Scanner(AsyncPipeline[Recipe]):
         logger.info("SUM: %i", sum(self.stats.values()))
         if self.status_fn:
             with open(self.status_fn, "w") as out:
-                for rname, result in self.status:
-                    out.write(f"{rname}\t{result.name}\n")
+                out.writelines(
+                    f"{rname}\t{result.name}\n" for rname, result in self.status
+                )
         return res
 
     async def queue_items(
@@ -324,10 +316,10 @@ class ExcludeOtherChannel(Filter):
         super().__init__(scanner)
         self.channels = channels
         logger.info("Loading package lists for %s", channels)
-        repo = utils.RepoData()
+        channel_data = utils.RepoData()
         if cache:
-            repo.set_cache(cache)
-        self.other = set(repo.get_package_data("name", channels=channels))
+            channel_data.set_cache(cache)
+        self.other = set(channel_data.get_package_data("name", channels=channels))
 
     def get_info(self) -> str:
         return super().get_info().replace("**channels**", ", ".join(self.channels))
@@ -409,7 +401,7 @@ class ExcludeBlacklisted(Filter):
         level = logging.DEBUG
 
     def __init__(
-        self, scanner: Scanner, recipe_base: str, config: dict[str, Any]
+        self, scanner: Scanner, recipe_base: Path, config: dict[str, Any]
     ) -> None:
         super().__init__(scanner)
         self.blacklists = config.get("blacklists")
@@ -491,7 +483,7 @@ class CheckPinning(Filter):
             reason = cls.find_reason(recipe, metas)
         else:
             reason = None
-        recipe.conda_release()
+        recipe.conda_render_cleanup()
         return reason
 
     @classmethod
@@ -622,16 +614,13 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
     def __init__(
         self,
         scanner: Scanner,
-        hoster_factory: HosterFactory,
-        unparsed_file: str | None = None,
+        unparsed_file: Path | None = None,
     ) -> None:
         super().__init__(scanner)
         #: output file name for unparsed urls
         self.unparsed_urls: list[str] = []
         #: output file name for failed urls
         self.unparsed_file = unparsed_file
-        #: function selecting hoster
-        self.hoster_factory = hoster_factory
         #: conda build config
         self.build_config: conda_build.config.Config = utils.load_conda_build_config()
 
@@ -676,12 +665,13 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
 
         # Update the version number itself. This will also usually update
         # `url:`s expressed with `{{version}}` tags.
-        if not recipe.replace(recipe.version, latest, within=["package"]):
-            # allow changes between dash/dot/underscore
-            if recipe.replace(
-                recipe.version, latest, within=["package"], with_fuzz=True
-            ):
-                logger.warning("Recipe %s: replaced version with fuzz", recipe)
+        if not recipe.replace(
+            recipe.version, latest, within=["package"]
+        ) and recipe.replace(
+            recipe.version, latest, within=["package"], with_fuzz=True
+        ):
+            # Allow changes between dash/dot/underscore.
+            logger.warning("Recipe %s: replaced version with fuzz", recipe)
 
         recipe.reset_buildnumber()
         recipe.render()
@@ -739,7 +729,7 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
         for url in urls:
             config = self.get_config(recipe)
             override_config = cast(dict[str, str], config.get("override", {}))
-            hoster = self.hoster_factory(url, override_config)
+            hoster = Hoster.select_hoster(url, override_config)
             if not hoster:
                 self.unparsed_urls += [url]
                 continue
@@ -864,7 +854,7 @@ class UpdateChecksums(Filter):
 
         template = "had no change to checksum after update?!"
 
-    def __init__(self, scanner: Scanner, failed_file: str | None = None) -> None:
+    def __init__(self, scanner: Scanner, failed_file: Path | None = None) -> None:
         super().__init__(scanner)
         #: failed urls - for later inspection
         self.failed_urls: list[str] = []

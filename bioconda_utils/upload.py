@@ -2,12 +2,31 @@
 Deploy Artifacts to Anaconda and Quay
 """
 
+import json
+import logging
 import os
 from pathlib import Path
-import shutil
 import subprocess as sp
-import logging
+
 from . import utils
+from ._types import (
+    ContainerPlatform,
+    PkgBuildRef,
+    QuayUploadTarget,
+    local_mulled_image_ref,
+    native_container_platform,
+)
+from .container_manifests import (
+    MulledImageRecord,
+    platform_ref,
+    resolve_registry_creds,
+)
+from .utils import (
+    parse_oci_config_platform,
+    skopeo_auth_args,
+    skopeo_env,
+    skopeo_inspect_digest,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +66,7 @@ def anaconda_upload(
     logger.info("UPLOAD uploading package %s", package)
     try:
         cmds = ["anaconda", "-t", token, "upload", package.as_posix()] + label_arg
-        utils.run(cmds, mask=[token])
+        utils.run(cmds, secrets=[token])
         logger.info("UPLOAD SUCCESS: uploaded package %s", package)
         return True
 
@@ -68,77 +87,96 @@ def anaconda_upload(
             return False
 
 
-def mulled_upload(image: str, quay_target: str) -> sp.CompletedProcess:
+def mulled_upload(
+    image: PkgBuildRef,
+    quay_target: QuayUploadTarget,
+    target_platform: ContainerPlatform | None = None,
+    *,
+    use_existing_auth: bool = False,
+) -> MulledImageRecord:
     """
     Upload the build Docker images to quay.io with ``mulled-build push``.
 
     Calls ``mulled-build push <image> -n <quay_target>``
 
     Args:
-      image: name of image to push
+      image: package build reference (name, version, build string)
       quary_target: name of image on quay
+      target_platform: Docker target platform to pass to mulled-build
+      use_existing_auth: Use existing Docker/skopeo registry auth when no
+        QUAY_LOGIN or QUAY_OAUTH_TOKEN is configured.
+
+    Returns:
+      A manifest publication record for the image uploaded to quay.io.
     """
-    cmd = ["mulled-build", "push", image, "-n", quay_target]
-
-    # galaxy-lib always downloads involucro, unless it's in cwd or its path is
-    # explicitly given.
-    involucro_path = os.path.join(os.path.dirname(__file__), "involucro")
-    if not os.path.exists(involucro_path):
-        raise RuntimeError("internal involucro wrapper missing")
-    cmd += ["--involucro-path", involucro_path]
-
-    env = os.environ.copy()
-
-    mask = []
-    if os.environ.get("QUAY_OAUTH_TOKEN", False):
-        token = os.environ["QUAY_OAUTH_TOKEN"]
-        cmd.extend(["--oauth-token", token])
-        mask = [token]
-    return utils.run(cmd, mask=mask, env=env)
+    target_platform = target_platform or native_container_platform()
+    canonical_ref = (
+        f"quay.io/{quay_target}/{image.name}:{image.version}--{image.build_string}"
+    )
+    # mulled-build tags the local image under the canonical biocontainers
+    # namespace (see pkg_test.mulled_build_and_test), regardless of the upload
+    # target. local_mulled_image_ref is the shared source of truth for that ref;
+    # the registry destination (canonical_ref) keeps the requested target namespace.
+    local_ref = local_mulled_image_ref(image, target_platform)
+    return upload_mulled_image_source(
+        f"docker-daemon:{local_ref}",
+        canonical_ref,
+        target_platform,
+        use_existing_auth=use_existing_auth,
+    )
 
 
-def skopeo_upload(
-    image_file: str,
-    target: str,
-    creds: str,
-    registry: str = "quay.io",
+def inspect_image_platform(source_ref: str) -> ContainerPlatform:
+    """Return the Docker platform recorded in an image source config."""
+    raw = utils.run(
+        ["skopeo", "inspect", "--config", source_ref],
+        env=skopeo_env(),
+    ).stdout
+    config = json.loads(raw)
+    return parse_oci_config_platform(config, ref=source_ref)
+
+
+def upload_mulled_image_source(
+    source_ref: str,
+    canonical_ref: str,
+    target_platform: ContainerPlatform,
+    *,
     timeout: int = 600,
-) -> bool:
+    validate_platform: bool = True,
+    use_existing_auth: bool = False,
+) -> MulledImageRecord:
+    """Upload one mulled image source to its platform staging ref.
+
+    The returned digest is inspected from the destination registry ref after
+    upload, so manifest records reflect what Quay actually stores.
     """
-    Upload an image to docker registy
-
-    Uses ``skopeo`` to upload tar archives of docker images as created
-    with e.g.``docker save`` to a docker registry.
-
-    The image name and tag are read from the archive.
-
-    Args:
-      image_file: path to the file to be uploaded (may be gzip'ed). NOTE: may not contain a colon!
-      target: namespace/repo for the image
-      creds: login credentials (``USER:PASS``)
-      registry: url of the registry. defaults to "quay.io"
-      timeout: timeout in seconds
-    """
-    cmd = [
-        "skopeo",
-        "--command-timeout",
-        f"{timeout}s",
-        "copy",
-        f"docker-archive:{image_file}",
-        f"docker://{registry}/{target}",
-        "--dest-creds",
-        creds,
-    ]
-    env = os.environ.copy()
-    skopeo_bin = shutil.which("skopeo")
-    if skopeo_bin is None:
-        raise FileNotFoundError("Unable to find skopeo on PATH")
-    env["SSL_CERT_DIR"] = str(Path(skopeo_bin).parents[1] / "ssl")
-    try:
-        utils.run(cmd, mask=creds.split(":"), env=env)
-        return True
-    except sp.CalledProcessError as exc:
-        logger.error("Failed to upload %s to %s", image_file, target)
-        for line in exc.stdout.splitlines():
-            logger.error("> %s", line)
-        return False
+    creds = resolve_registry_creds(use_existing_auth=use_existing_auth)
+    if validate_platform:
+        source_platform = inspect_image_platform(source_ref)
+        if source_platform != target_platform:
+            raise RuntimeError(
+                f"Image platform mismatch for {source_ref}: "
+                f"expected {target_platform}, found {source_platform}"
+            )
+    destination_ref = platform_ref(canonical_ref, target_platform)
+    dest_auth_args, secrets = skopeo_auth_args(creds, option="--dest-creds")
+    utils.run(
+        [
+            "skopeo",
+            "--command-timeout",
+            f"{timeout}s",
+            "copy",
+            source_ref,
+            f"docker://{destination_ref}",
+            *dest_auth_args,
+        ],
+        secrets=secrets,
+        env=skopeo_env(),
+    )
+    digest = skopeo_inspect_digest(destination_ref, creds)
+    return MulledImageRecord(
+        canonical_ref=canonical_ref,
+        platform=target_platform,
+        platform_ref=destination_ref,
+        digest=digest,
+    )

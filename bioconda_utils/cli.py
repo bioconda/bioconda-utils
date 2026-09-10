@@ -3,43 +3,52 @@
 # Workaround for spurious numpy warning message
 # ".../importlib/_bootstrap.py:219: RuntimeWarning: numpy.dtype size \
 # changed, may indicate binary incompatibility. Expected 96, got 88"
-from collections.abc import Sequence
-from pathlib import Path
-from typing import Any, Iterable
-import warnings
+import importlib
 import logging
+import os
+import shlex
+import sys
+import warnings
+from collections import Counter, defaultdict
+from functools import partial
+from pathlib import Path
 from typing import Annotated, Any, Literal
 
-import typer
 import click
+import networkx as nx
+import pandas
+import requests
+import typer
+from networkx.drawing.nx_pydot import write_dot
 
-from . import __version__ as VERSION
-from . import utils
 from bioconda_utils import bulk
-from bioconda_utils.artifacts import UploadResult, upload_pr_artifacts
-from bioconda_utils.skiplist import Skiplist
+from bioconda_utils.artifacts import ArtifactSource, UploadResult, upload_pr_artifacts
 from bioconda_utils.build_failure import (
     BuildFailureRecord,
     collect_build_failure_dataframe,
 )
-import sys
-import os
-import shlex
-from collections import defaultdict, Counter
-from functools import partial
-import conda
-import conda.base.constants
-import networkx as nx
-from networkx.drawing.nx_pydot import write_dot
-import pandas
-from .build import build_recipes
-from . import docker_utils
-from . import lint as _lint
+from bioconda_utils.skiplist import Skiplist
+
+from . import __version__ as VERSION
 from . import bioconductor_skeleton as _bioconductor_skeleton
-from . import cran_skeleton
-from . import update_pinnings
-from . import graph
-from . import pkg_test
+from . import cran_skeleton, docker_utils, graph, pkg_test, update_pinnings, utils
+from . import lint as _lint
+from ._types import (
+    ALL_CONTAINER_PLATFORMS,
+    ALL_PACKAGE_SUBDIRS,
+    ContainerPlatform,
+    PackageSubdir,
+    QuayUploadTarget,
+    package_subdir_to_container_platform,
+    parse_quay_upload_target,
+)
+from .build import build_recipes
+from .container_manifests import (
+    DEFAULT_MULLED_RECORDS_DIR,
+    load_image_records,
+    reconcile_manifests,
+    resolve_registry_creds,
+)
 from .githandler import BiocondaRepo, GitRange, install_gpg_key
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
@@ -58,15 +67,32 @@ logger = logging.getLogger(__name__)
 # `recipes/bowtie` or `recipes/bowtie/1.0.1`.
 
 LogLevel = Literal["debug", "info", "warning", "error", "critical"]
-PackagePatterns = str | list[str]
+PackagePatterns = list[str]
 
 # Shared CLI parameter type aliases
 
 
-def _validate_path_exists(value: str) -> str:
-    if not os.path.exists(value):
+def _validate_path_exists(value: Path) -> Path:
+    if not value.exists():
         raise typer.BadParameter(f"path '{value}' does not exist")
     return value
+
+
+def _parse_quay_upload_target(value: str | None) -> QuayUploadTarget | None:
+    try:
+        return parse_quay_upload_target(value)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+def _resolve_image_records_dir(
+    records: Path | None, upload_target: QuayUploadTarget | None
+) -> Path | None:
+    if records:
+        return records
+    if upload_target:
+        return DEFAULT_MULLED_RECORDS_DIR
+    return None
 
 
 def _validate_positive_int(value: int) -> int:
@@ -75,13 +101,43 @@ def _validate_positive_int(value: int) -> int:
     return value
 
 
-def _validate_git_range(value: str | None) -> str | None:
-    if value is not None:
-        try:
-            GitRange.parse(value)
-        except ValueError as exc:
-            raise typer.BadParameter(str(exc)) from exc
-    return value
+def _parse_git_range(value: str) -> GitRange:
+    try:
+        return GitRange.parse(value)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+def _parse_git_range_if_needed(git_range: str | None) -> GitRange | None:
+    if git_range is None:
+        return None
+    return _parse_git_range(git_range)
+
+
+def _container_platform_for_build(
+    platform: PackageSubdir | None, docker: bool
+) -> ContainerPlatform | None:
+    if platform is None:
+        return None
+    if not docker:
+        raise typer.BadParameter("requires --docker", param_hint="--platform")
+    try:
+        return package_subdir_to_container_platform(platform)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--platform") from exc
+
+
+def _handle_pdb_exception(command_name: str, pdb: bool) -> bool:
+    """Log exception and optionally enter debugger.
+
+    Returns True if pdb was entered (caller should return),
+    False if caller should re-raise.
+    """
+    logger.exception(f"{command_name} command failed")
+    if pdb:
+        importlib.import_module("pdb").post_mortem()
+        return True
+    return False
 
 
 LoglevelOpt = Annotated[
@@ -90,7 +146,7 @@ LoglevelOpt = Annotated[
         "--loglevel", help="Set logging level (debug, info, warning, error, critical)"
     ),
 ]
-LogfileOpt = Annotated[str | None, typer.Option("--logfile", help="Write log to file")]
+LogfileOpt = Annotated[Path | None, typer.Option("--logfile", help="Write log to file")]
 LogfileLevelOpt = Annotated[
     LogLevel, typer.Option("--logfile-level", help="Log level for log file")
 ]
@@ -101,14 +157,14 @@ LogCommandMaxLinesOpt = Annotated[
     ),
 ]
 RecipeFolderArg = Annotated[
-    str,
+    Path,
     typer.Argument(
         help="Path to folder containing recipes (default: recipes/)",
         callback=_validate_path_exists,
     ),
 ]
 ConfigArg = Annotated[
-    str,
+    Path,
     typer.Argument(
         help="Path to Bioconda config (default: config.yml)",
         callback=_validate_path_exists,
@@ -116,11 +172,11 @@ ConfigArg = Annotated[
 ]
 # Lint defers path validation so --list-checks can run without a recipe checkout.
 LintRecipeFolderArg = Annotated[
-    str,
+    Path,
     typer.Argument(help="Path to folder containing recipes (default: recipes/)"),
 ]
 LintConfigArg = Annotated[
-    str,
+    Path,
     typer.Argument(help="Path to Bioconda config (default: config.yml)"),
 ]
 ThreadsOpt = Annotated[
@@ -147,10 +203,29 @@ GitRangeOpt = Annotated[
     typer.Option(
         "--git-range",
         metavar="BASE[...REF]",
-        callback=_validate_git_range,
         help=(
             "Select changes on REF since its merge base with BASE. "
             "BASE alone means BASE...HEAD."
+        ),
+    ),
+]
+UseExistingAuthOpt = Annotated[
+    bool,
+    typer.Option(
+        "--use-existing-auth",
+        help="Use existing Docker or skopeo registry authentication when Quay credentials are unset.",
+    ),
+]
+ImageRecordsDirOpt = Annotated[
+    Path | None,
+    typer.Option(
+        "--image-records-dir",
+        metavar="DIR",
+        help=(
+            "DIR for one JSONL image record per uploaded image; consumed by "
+            "the create-mulled-manifests command. Defaults to "
+            "~/.local/share/bioconda-utils/mulled-records/ when "
+            "--container-upload-target is set."
         ),
     ),
 ]
@@ -167,8 +242,11 @@ def get_recipes_to_build(git_range: GitRange, recipe_folder: Path) -> list[Path]
       List of recipes for which meta.yaml or build.sh was modified or
       which were unblacklisted.
     """
-    repo = BiocondaRepo(recipe_folder.as_posix())
-    return repo.get_recipes_to_build(git_range.ref, git_range.base)
+    repo = BiocondaRepo(recipe_folder)
+    return [
+        Path(recipe)
+        for recipe in repo.get_recipes_to_build(git_range.ref, git_range.base)
+    ]
 
 
 def get_recipes(
@@ -265,12 +343,12 @@ def root(
 @app.command("build")
 def build(
     recipe_folder: Annotated[
-        str,
+        Path,
         typer.Argument(help="Path to folder containing recipes (default: recipes/)"),
-    ] = "recipes/",
+    ] = Path("recipes/"),
     config: Annotated[
-        str, typer.Argument(help="Path to Bioconda config (default: config.yml)")
-    ] = "config.yml",
+        Path, typer.Argument(help="Path to Bioconda config (default: config.yml)")
+    ] = Path("config.yml"),
     packages: Annotated[
         list[str] | None,
         typer.Option(
@@ -295,10 +373,18 @@ def build(
     docker: Annotated[
         bool, typer.Option("--docker", help="Build packages in docker container.")
     ] = False,
-    mulled_test: Annotated[
+    platform: Annotated[
+        PackageSubdir | None,
+        typer.Option(
+            "--platform",
+            help="Conda package subdirectory to build. Requires --docker.",
+        ),
+    ] = None,
+    mulled_build_and_test: Annotated[
         bool,
         typer.Option(
-            "--mulled-test", help="Run a mulled-build test on the built package"
+            "--mulled-build-and-test",
+            help="Build a mulled container for the package and run the recipe's tests inside it.",
         ),
     ] = False,
     build_script_template: Annotated[
@@ -322,11 +408,11 @@ def build(
             help="After building recipes, upload\n     them to Anaconda. This requires $ANACONDA_TOKEN to be set.",
         ),
     ] = False,
-    mulled_upload_target: Annotated[
+    container_upload_target: Annotated[
         str | None,
         typer.Option(
-            "--mulled-upload-target",
-            help="Provide a quay.io target to push mulled docker images to.",
+            "--container-upload-target",
+            help="Provide a quay.io target to push container images to.",
         ),
     ] = None,
     build_image: Annotated[
@@ -419,11 +505,11 @@ def build(
             "--disable-live-logs", help="Disable live logging during the build process"
         ),
     ] = False,
-    presolved_mulled_test: Annotated[
+    presolved_mulled_build_and_test: Annotated[
         bool,
         typer.Option(
-            "--presolved-mulled-test/--no-presolved-mulled-test",
-            help="Use the pre-solved mulled test path.",
+            "--presolved-mulled-build-and-test/--no-presolved-mulled-build-and-test",
+            help="Use the pre-solved mulled build-and-test path.",
         ),
     ] = True,
     no_fast_resolve: Annotated[
@@ -433,6 +519,8 @@ def build(
             help="Disable fast resolve: always run the full finalized conda solver on the host, even when building with Docker. Useful for debugging build string mismatches.",
         ),
     ] = False,
+    image_records_dir: ImageRecordsDirOpt = None,
+    use_existing_auth: UseExistingAuthOpt = False,
     exclude: Annotated[
         list[str] | None,
         typer.Option("--exclude", help="Packages to exclude during this run"),
@@ -459,10 +547,14 @@ def build(
         sys.exit(1)
 
     _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines)
-    package_patterns: PackagePatterns = packages or "*"
-    parsed_git_range = GitRange.parse(git_range) if git_range is not None else None
-    config_path = Path(config)
-    cfg = utils.load_config(config_path)
+    target_platform = _container_platform_for_build(platform, docker)
+    parsed_upload_target = _parse_quay_upload_target(container_upload_target)
+    image_records_dir = _resolve_image_records_dir(
+        image_records_dir, parsed_upload_target
+    )
+    package_patterns: PackagePatterns = packages or ["*"]
+    parsed_git_range = _parse_git_range_if_needed(git_range)
+    cfg = utils.load_config(config)
 
     # setting the rattler cache to custom path
     # TODO (rb): should this be exposed to the user?
@@ -477,9 +569,8 @@ def build(
     if setup:
         logger.debug("Running setup: %s", setup)
         for cmd in setup:
-            utils.run(shlex.split(cmd), mask=False)
+            utils.run(shlex.split(cmd))
 
-    recipe_folder_path = Path(recipe_folder)
     recipes: list[utils.RecipePath] = get_recipes(
         cfg, recipe_folder_path, package_patterns, parsed_git_range
     )
@@ -513,6 +604,7 @@ def build(
             keep_image=keep_image,
             build_image=build_image,
             docker_base_image=docker_base_image,
+            target_platform=target_platform,
         )
     else:
         docker_builder = None
@@ -520,14 +612,14 @@ def build(
         logger.warning("--lint-exclude has no effect unless --lint is specified.")
     label = os.getenv("BIOCONDA_LABEL", None) or None
     success = build_recipes(
-        recipe_folder_path,
-        config_path,
+        recipe_folder,
+        cfg,
         recipes,
         force=force,
-        mulled_test=mulled_test,
+        mulled_build_and_test=mulled_build_and_test,
         docker_builder=docker_builder,
         anaconda_upload=anaconda_upload,
-        mulled_upload_target=mulled_upload_target,
+        mulled_upload_target=parsed_upload_target,
         do_lint=lint,
         lint_exclude=lint_exclude,
         check_channels=check_channels,
@@ -537,53 +629,61 @@ def build(
         keep_old_work=keep_old_work,
         mulled_conda_image=mulled_conda_image,
         record_build_failures=record_build_failures,
-        skiplist_leafs=skiplist_leaves,
+        skiplist_leaves=skiplist_leaves,
         live_logs=not disable_live_logs,
         exclude=exclude,
         subdag_depth=subdag_depth,
-        presolved_mulled_test=presolved_mulled_test,
+        presolved_mulled_build_and_test=presolved_mulled_build_and_test,
         fast_resolve=not no_fast_resolve,
+        target_platform=target_platform,
+        image_records_dir=image_records_dir,
+        use_existing_auth=use_existing_auth,
     )
-    exit(0 if success else 1)
+    sys.exit(0 if success else 1)
 
 
 @app.command("dag")
 def dag(
-    recipe_folder: RecipeFolderArg = "recipes/",
-    config: ConfigArg = "config.yml",
+    recipe_folder: RecipeFolderArg = Path("recipes/"),
+    config: ConfigArg = Path("config.yml"),
     packages: PackagesOpt = None,
-    format: Annotated[
+    output_format: Annotated[
         Literal["gml", "dot", "txt"],
         typer.Option(
-            "--format",
-            help='Set format to print\n     graph. "gml" and "dot" can be imported into graph visualization tools\n     (graphviz, gephi, cytoscape). "txt" will print out recipes grouped by\n     independent subdags, largest subdag first, each in topologically sorted\n     order. Singleton subdags (if not hidden with --hide-singletons) are\n     reported as one large group at the end.',
+            "--output-format",
+            help='Output format. "gml" and "dot" serialize the graph for visualization tools. "txt" lists recipe paths in dependency-first order, grouped by disconnected components. Disconnected packages are listed together at the end unless --hide-singletons is used.',
         ),
     ] = "gml",
     hide_singletons: Annotated[
         bool,
-        typer.Option("--hide-singletons", help="Hide singletons in the printed graph."),
+        typer.Option(
+            "--hide-singletons",
+            help="Omit packages with no dependency relationship to another selected package.",
+        ),
     ] = False,
     loglevel: LoglevelOpt = "info",
     logfile: LogfileOpt = None,
     logfile_level: LogfileLevelOpt = "debug",
     log_command_max_lines: LogCommandMaxLinesOpt = None,
 ) -> None:
-    """Export the DAG of packages to a graph format file for visualization"""
+    """Export the dependency DAG among selected packages.
+
+    Nodes are packages. An edge from A to B means that B has A as a build,
+    host, or run dependency.
+    """
     _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines)
-    package_patterns: PackagePatterns = packages or "*"
+    package_patterns: PackagePatterns = packages or ["*"]
     config_data = utils.load_config(config)
     dag, name2recipes = graph.build(
         utils.get_recipes(Path(recipe_folder), package_patterns), config_data
     )
     if hide_singletons:
-        for node in nx.nodes(dag):
-            if dag.degree(node) == 0:
-                dag.remove_node(node)
-    if format == "gml":
+        dag.remove_nodes_from(list(nx.isolates(dag)))
+    if output_format == "gml":
         nx.write_gml(dag, sys.stdout.buffer)
-    elif format == "dot":
+    elif output_format == "dot":
         write_dot(dag, sys.stdout)
-    elif format == "txt":
+    elif output_format == "txt":
         subdags: list[list[str]] = sorted(
             map(sorted, nx.connected_components(dag.to_undirected()))
         )
@@ -600,7 +700,7 @@ def dag(
                 for package in nx.topological_sort(subdag)
                 for recipe in name2recipes[package]
             ]
-            print("\n".join(recipes) + "\n")
+            print("\n".join(map(os.fspath, recipes)) + "\n")
         if not hide_singletons:
             print("# singletons")
             recipes: list[str] = [
@@ -608,13 +708,13 @@ def dag(
                 for package in singletons
                 for recipe in name2recipes[package]
             ]
-            print("\n".join(recipes) + "\n")
+            print("\n".join(map(os.fspath, recipes)) + "\n")
 
 
 @app.command("dependent")
 def dependent(
-    recipe_folder: RecipeFolderArg = "recipes/",
-    config: ConfigArg = "config.yml",
+    recipe_folder: RecipeFolderArg = Path("recipes/"),
+    config: ConfigArg = Path("config.yml"),
     restrict: Annotated[
         bool,
         typer.Option(
@@ -652,9 +752,7 @@ def dependent(
             "One of `--dependencies` or `--reverse-dependencies` is required."
         )
     config_data = utils.load_config(config)
-    d, _ = graph.build(
-        utils.get_recipes(Path(recipe_folder), "*"), config_data, restrict=restrict
-    )
+    d, _ = graph.build(utils.get_recipes(recipe_folder), config_data, restrict=restrict)
     if reverse_dependencies is not None:
         dependency_func = nx.algorithms.descendants
         selected_packages = reverse_dependencies
@@ -664,13 +762,13 @@ def dependent(
     pkgs = []
     for pkg in selected_packages:
         pkgs.extend(dependency_func(d, pkg))
-    print("\n".join(sorted(list(set(pkgs)))))
+    print("\n".join(sorted(set(pkgs))))
 
 
 @app.command("lint")
 def lint(
-    recipe_folder: LintRecipeFolderArg = "recipes/",
-    config: LintConfigArg = "config.yml",
+    recipe_folder: LintRecipeFolderArg = Path("recipes/"),
+    config: LintConfigArg = Path("config.yml"),
     packages: PackagesOpt = None,
     cache: Annotated[
         str | None,
@@ -707,14 +805,14 @@ def lint(
 
     Reports a TSV of linting results to stdout."""
     _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines)
-    package_patterns: PackagePatterns = packages or "*"
+    package_patterns: PackagePatterns = packages or ["*"]
     try:
+        parsed_git_range = _parse_git_range_if_needed(git_range)
         if list_checks:
-            print("\n".join((str(check) for check in _lint.get_checks())))
+            print("\n".join(str(check) for check in _lint.get_checks()))
             sys.exit(0)
         _validate_path_exists(recipe_folder)
         _validate_path_exists(config)
-        parsed_git_range = GitRange.parse(git_range) if git_range is not None else None
         config_data = utils.load_config(config)
         if cache is not None:
             utils.RepoData().set_cache(cache)
@@ -747,12 +845,8 @@ def lint(
         else:
             sys.exit("Errors were found")
     except Exception:
-        logger.exception("Lint command failed")
-        if pdb:
-            import pdb as debugger
-
-            debugger.post_mortem()
-            return None
+        if _handle_pdb_exception("Lint", pdb):
+            return
         raise
 
 
@@ -793,7 +887,7 @@ def duplicates(
         raise ValueError(
             "Removing packages is only supported in case of --strict-build."
         )
-    config_data = utils.load_config(config)
+    config_data = utils.load_config(Path(config))
     if channel not in config_data["channels"]:
         raise ValueError("Channel given with --channel must be in config channels")
     our_channel = channel
@@ -816,14 +910,17 @@ def duplicates(
             if dry_run:
                 logger.info(" ".join([utils.bin_for("anaconda")] + subcmd))
             else:
-                token = os.environ.get("ANACONDA_TOKEN")
-                if token is None:
-                    token = []
+                token_val = os.environ.get("ANACONDA_TOKEN")
+                if token_val is None:
+                    token_args = []
+                    secrets = None
                 else:
-                    token = ["-t", token]
+                    token_args = ["-t", token_val]
+                    secrets = [token_val]
                 logger.info(
                     utils.run(
-                        [utils.bin_for("anaconda")] + token + subcmd, mask=token
+                        [utils.bin_for("anaconda")] + token_args + subcmd,
+                        secrets=secrets,
                     ).stdout
                 )
 
@@ -835,15 +932,17 @@ def duplicates(
         our_channel,
     )
     duplicate = defaultdict(list)
-    for channel in channels:
-        package_specs = set(repodata.get_package_data(check_fields, channel))
+    for candidate_channel in channels:
+        package_specs = set(repodata.get_package_data(check_fields, candidate_channel))
         logger.info(
-            "%s unique packages specs to consider in %s", len(package_specs), channel
+            "%s unique packages specs to consider in %s",
+            len(package_specs),
+            candidate_channel,
         )
         dups = our_package_specs & package_specs
         logger.info("  (of which %s are duplicate)", len(dups))
         for spec in dups:
-            duplicate[spec].append(channel)
+            duplicate[spec].append(candidate_channel)
     print("\t".join(check_fields + ["channels"]))
     for spec, dup_channels in sorted(duplicate.items()):
         if remove:
@@ -860,14 +959,14 @@ def duplicates(
 
 @app.command("update-pinning")
 def update_pinning(
-    recipe_folder: RecipeFolderArg = "recipes/",
-    config: ConfigArg = "config.yml",
+    recipe_folder: RecipeFolderArg = Path("recipes/"),
+    config: ConfigArg = Path("config.yml"),
     packages: PackagesOpt = None,
     skip_additional_channels: Annotated[
         list[str] | None,
         typer.Option(
             "--skip-additional-channels",
-            help="Skip updating/bumping packges that are already built with\n     compatible pinnings in one of the given channels in addition to those\n     listed in 'config'.",
+            help="Skip updating/bumping packages that are already built with\n     compatible pinnings in one of the given channels in addition to those\n     listed in 'config'.",
         ),
     ] = None,
     skip_variants: Annotated[
@@ -906,7 +1005,7 @@ def update_pinning(
     """Bump a package build number and all dependencies as required due
     to a change in pinnings"""
     _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines, threads)
-    package_patterns: PackagePatterns = packages or "*"
+    package_patterns: PackagePatterns = packages or ["*"]
     try:
         config_data = utils.load_config(config)
         if skip_additional_channels:
@@ -914,17 +1013,15 @@ def update_pinning(
         variant_keys = frozenset(skip_variants or ())
         if cache:
             utils.RepoData().set_cache(cache)
-        utils.RepoData().df
+        _ = utils.RepoData().df
         build_config = utils.load_conda_build_config()
         skiplist = Skiplist(config_data, Path(recipe_folder))
         from . import recipe
 
         dag = graph.build_from_recipes(
-            (
-                r
-                for r in recipe.load_parallel_iter(recipe_folder, "*")
-                if not skiplist.is_skiplisted(r)
-            )
+            r
+            for r in recipe.load_parallel_iter(recipe_folder, ["*"])
+            if not skiplist.is_skiplisted(r)
         )
         dag = graph.filter_recipe_dag(dag, package_patterns, [])
         if no_leaves:
@@ -979,19 +1076,15 @@ def update_pinning(
                 f"The build numbers in the following recipes could not be incremented: {list(bumpErrors)}"
             )
     except Exception:
-        logger.exception("Update-pinning command failed")
-        if pdb:
-            import pdb as debugger
-
-            debugger.post_mortem()
-            return None
+        if _handle_pdb_exception("Update-pinning", pdb):
+            return
         raise
 
 
 @app.command("bioconductor-skeleton")
 def bioconductor_skeleton(
-    recipe_folder: RecipeFolderArg = "recipes/",
-    config: ConfigArg = "config.yml",
+    recipe_folder: RecipeFolderArg = Path("recipes/"),
+    config: ConfigArg = Path("config.yml"),
     packages: PackagesOpt = None,
     update_all: Annotated[
         bool,
@@ -1045,7 +1138,7 @@ def bioconductor_skeleton(
         list[str] | None,
         typer.Option(
             "--skip-if-in-channels",
-            help="When --recursive is used, it will build\n     *all* recipes. Use this argument to skip recipes for packages\n     that already exist in the packages listed here.",
+            help="When --recursive is used, it will build\n     *all* recipes. Use this argument to skip recipes for packages\n     that already exist in the channels listed here.",
         ),
     ] = None,
     loglevel: LoglevelOpt = "debug",
@@ -1074,6 +1167,7 @@ def bioconductor_skeleton(
         bioconda-utils bioconductor-skeleton --packages DESeq2 --packages edgeR --recursive
         bioconda-utils bioconductor-skeleton --update-all"""
     _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines)
+    config_data = utils.load_config(config)
     skip_if_in_channels = (
         skip_if_in_channels
         if skip_if_in_channels is not None
@@ -1093,7 +1187,7 @@ def bioconductor_skeleton(
                 _bioconductor_skeleton.write_recipe(
                     k,
                     recipe_folder,
-                    config,
+                    config_data,
                     bioc_data_packages=bioc_data_packages,
                     force=True,
                     bioc_version=bioc_version,
@@ -1103,7 +1197,7 @@ def bioconductor_skeleton(
                     skip_if_in_channels=skip_if_in_channels,
                     needs_x=k in needs_x,
                 )
-            except Exception:
+            except (OSError, RuntimeError, ValueError, requests.RequestException):
                 problems.append(k)
         if len(problems):
             sys.exit(
@@ -1116,7 +1210,7 @@ def bioconductor_skeleton(
             _bioconductor_skeleton.write_recipe(
                 pkg,
                 recipe_folder,
-                config,
+                config_data,
                 bioc_data_packages,
                 force=force,
                 bioc_version=bioc_version,
@@ -1161,8 +1255,8 @@ def clean_cran_skeleton(
 
 @app.command("autobump")
 def autobump(
-    recipe_folder: RecipeFolderArg = "recipes/",
-    config: ConfigArg = "config.yml",
+    recipe_folder: RecipeFolderArg = Path("recipes/"),
+    config: ConfigArg = Path("config.yml"),
     packages: PackagesOpt = None,
     exclude: Annotated[
         list[str] | None,
@@ -1179,17 +1273,17 @@ def autobump(
         ),
     ] = None,
     failed_urls: Annotated[
-        str | None,
+        Path | None,
         typer.Option(
             "--failed-urls", help="Write urls with permanent failure to this file"
         ),
     ] = None,
     unparsed_urls: Annotated[
-        str | None,
+        Path | None,
         typer.Option("--unparsed-urls", help="Write unrecognized urls to this file"),
     ] = None,
     recipe_status: Annotated[
-        str | None,
+        Path | None,
         typer.Option(
             "--recipe-status", help="Write status for each recipe to this file"
         ),
@@ -1244,7 +1338,7 @@ def autobump(
         int, typer.Option("--max-updates", help="Stop after this many updates")
     ] = 0,
     dry_run: Annotated[
-        bool, typer.Option("--dry-run", help="Don't update remote git or github\"")
+        bool, typer.Option("--dry-run", help="Don't update remote git or github.")
     ] = False,
     no_check_pinnings: Annotated[
         bool,
@@ -1254,7 +1348,7 @@ def autobump(
         bool,
         typer.Option(
             "--no-follow-graph",
-            help="Don't process recipes in graph order or add dependent recipes\n     to checks. Implies --no-skip-pending-deps.",
+            help="Don't process recipes in graph order or add dependent recipes\n     to checks. Implies --no-check-pending-deps.",
         ),
     ] = False,
     no_check_version_update: Annotated[
@@ -1268,7 +1362,7 @@ def autobump(
         bool,
         typer.Option(
             "--no-check-pending-deps",
-            help="Don't check for recipes having a dependency with a pending update.\n     Update all recipes, including those having deps in need or rebuild.",
+            help="Don't check for recipes having a dependency with a pending update.\n     Update all recipes, including those having deps in need of rebuild.",
         ),
     ] = False,
     sign: Annotated[
@@ -1294,15 +1388,13 @@ def autobump(
 ) -> None:
     """Updates recipes in recipe_folder"""
     _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines, threads)
-    package_patterns: PackagePatterns = packages or "*"
+    package_patterns: PackagePatterns = packages or ["*"]
     excluded_channels = exclude_channels or ["conda-forge"]
     use_default_signing_key = sign and sign_key is None
     try:
         # load and register config
         config_dict = utils.load_config(config)
-        from . import autobump
-        from . import githubhandler
-        from . import hosters
+        from . import autobump, githubhandler
 
         if no_follow_graph:
             recipe_source = autobump.RecipeSource(
@@ -1387,9 +1479,10 @@ def autobump(
 
         # Check for new versions and update the SHA afterwards
         if not no_check_version_update:
-            scanner.add(
-                autobump.UpdateVersion, hosters.Hoster.select_hoster, unparsed_urls
-            )
+            # UpdateVersion selects a hoster per-URL via Hoster.select_hoster
+            # directly (hoster_factory is no longer injected), so we pass only
+            # the unparsed-urls output file.
+            scanner.add(autobump.UpdateVersion, unparsed_urls)
             if fetch_requirements:
                 # This attempts to determine dependencies exported by PyPi packages,
                 # requires running setup.py, so only enabled on request.
@@ -1406,7 +1499,7 @@ def autobump(
             token = os.environ.get("GITHUB_TOKEN")
             if not token and (not dry_run):
                 logger.critical("GITHUB_TOKEN required to create PRs")
-                exit(1)
+                sys.exit(1)
             github_handler = githubhandler.AiohttpGitHubHandler(
                 token, dry_run, "bioconda", "bioconda-recipes"
             )
@@ -1423,27 +1516,33 @@ def autobump(
         if git_handler:
             git_handler.close()
     except Exception:
-        logger.exception("Autobump command failed")
-        if pdb:
-            import pdb as debugger
-
-            debugger.post_mortem()
-            return None
+        if _handle_pdb_exception("Autobump", pdb):
+            return
         raise
 
 
 @app.command("handle-merged-pr")
 def handle_merged_pr(
-    recipe_folder: RecipeFolderArg = "recipes/",
-    config: ConfigArg = "config.yml",
     repo: Annotated[
-        str | None,
+        str,
         typer.Option(
             "--repo",
             help="Name of the github repository to check (e.g. bioconda/bioconda-recipes).",
         ),
-    ] = None,
-    git_range: GitRangeOpt = None,
+    ],
+    git_range: Annotated[
+        str,
+        typer.Option(
+            "--git-range",
+            metavar="BASE[...REF]",
+            help=(
+                "Select changes on REF since its merge base with BASE. "
+                "BASE alone means BASE...HEAD."
+            ),
+        ),
+    ],
+    recipe_folder: RecipeFolderArg = Path("recipes/"),
+    config: ConfigArg = Path("config.yml"),
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Do not actually upload anything.")
     ] = False,
@@ -1453,20 +1552,29 @@ def handle_merged_pr(
             "--fallback", help="What to do if no artifacts are found in the PR."
         ),
     ] = "build",
-    quay_upload_target: Annotated[
+    container_upload_target: Annotated[
         str | None,
         typer.Option(
-            "--quay-upload-target",
-            help="Provide a quay.io target to push docker images to.",
+            "--container-upload-target",
+            help="Provide a quay.io target to push container images to.",
         ),
     ] = None,
     artifact_source: Annotated[
-        Literal["azure", "circleci", "github-actions"],
+        ArtifactSource,
         typer.Option(
             "--artifact-source",
             help="Application hosting build artifacts (e.g., Azure, Circle CI, or GitHub Actions).",
         ),
     ] = "azure",
+    package_platform: Annotated[
+        PackageSubdir | None,
+        typer.Option(
+            "--platform",
+            help="Conda package subdirectory to upload from PR artifacts (for example, linux-aarch64). Defaults to the native subdirectory.",
+        ),
+    ] = None,
+    image_records_dir: ImageRecordsDirOpt = None,
+    use_existing_auth: UseExistingAuthOpt = False,
     loglevel: LoglevelOpt = "info",
     logfile: LogfileOpt = None,
     logfile_level: LogfileLevelOpt = "debug",
@@ -1475,38 +1583,114 @@ def handle_merged_pr(
     """Upload artifacts from a merged pull request."""
     _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines)
     label = os.getenv("BIOCONDA_LABEL", None) or None
-    if repo is None:
-        raise ValueError("repo is required")
-    if git_range is None:
-        raise ValueError("git_range is required")
-    parsed_git_range = GitRange.parse(git_range)
+    parsed_git_range = _parse_git_range(git_range)
+    parsed_upload_target = _parse_quay_upload_target(container_upload_target)
+    image_records_dir = _resolve_image_records_dir(
+        image_records_dir, parsed_upload_target
+    )
     res = upload_pr_artifacts(
-        config,
         repo,
         parsed_git_range.ref,
         dryrun=dry_run,
-        mulled_upload_target=quay_upload_target,
+        mulled_upload_target=parsed_upload_target,
         label=label,
         artifact_source=artifact_source,
+        package_platform=package_platform,
+        image_records_dir=image_records_dir,
+        use_existing_auth=use_existing_auth,
     )
     if res == UploadResult.NO_ARTIFACTS and fallback == "build":
+        fallback_package_platform = package_platform or utils.RepoData.native_subdir()
+        try:
+            package_subdir_to_container_platform(fallback_package_platform)
+        except ValueError:
+            native_package_platform = utils.RepoData.native_subdir()
+            if fallback_package_platform != native_package_platform:
+                raise ValueError(
+                    "--fallback build cannot build non-native macOS package platform "
+                    f"{fallback_package_platform} from {native_package_platform}"
+                ) from None
+            fallback_docker = False
+            fallback_build_platform = None
+        else:
+            fallback_docker = True
+            fallback_build_platform = fallback_package_platform
+
         success = build(
             recipe_folder,
             config,
             git_range=git_range,
+            docker=fallback_docker,
+            platform=fallback_build_platform,
             anaconda_upload=not dry_run,
-            mulled_upload_target=quay_upload_target if not dry_run else None,
-            mulled_test=True,
+            container_upload_target=parsed_upload_target if not dry_run else None,
+            mulled_build_and_test=True,
+            image_records_dir=image_records_dir,
+            use_existing_auth=use_existing_auth,
         )
     else:
         success = res != UploadResult.FAILURE
-    exit(0 if success else 1)
+    sys.exit(0 if success else 1)
+
+
+@app.command("create-mulled-manifests")
+def create_mulled_manifests(
+    record_paths: Annotated[
+        list[Path] | None,
+        typer.Argument(
+            help="Mulled image record files (JSONL) or directories containing them."
+        ),
+    ] = None,
+    platform: Annotated[
+        list[PackageSubdir] | None,
+        typer.Option(
+            "--platform",
+            help="Conda package subdirectories to include (e.g. linux-64, linux-aarch64). Defaults to all supported platforms.",
+        ),
+    ] = None,
+    use_existing_auth: UseExistingAuthOpt = False,
+    loglevel: LoglevelOpt = "info",
+    logfile: LogfileOpt = None,
+    logfile_level: LogfileLevelOpt = "debug",
+    log_command_max_lines: LogCommandMaxLinesOpt = None,
+) -> None:
+    """Create or update canonical manifests for uploaded mulled images."""
+    _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines)
+    try:
+        target_platforms = (
+            [package_subdir_to_container_platform(p) for p in platform]
+            if platform
+            else list(ALL_CONTAINER_PLATFORMS)
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--platform") from exc
+    paths = record_paths or []
+    if not paths:
+        if not DEFAULT_MULLED_RECORDS_DIR.exists():
+            logger.info("No mulled image records found; nothing to reconcile.")
+            return
+        paths = [DEFAULT_MULLED_RECORDS_DIR]
+    try:
+        records = load_image_records(paths)
+    except FileNotFoundError as exc:
+        raise typer.BadParameter(
+            f"mulled image record path not found: {exc.args[0]}"
+        ) from exc
+    if not records:
+        logger.info("No mulled image records found; nothing to reconcile.")
+        return
+    changed, total = reconcile_manifests(
+        records,
+        target_platforms,
+        creds=resolve_registry_creds(use_existing_auth=use_existing_auth),
+    )
+    logger.info("Manifest summary: %d changed, %d checked", changed, total)
 
 
 @app.command("annotate-build-failures")
 def annotate_build_failures(
     recipes: Annotated[
-        list[str], typer.Argument(help="Paths to recipes that shall be skiplisted")
+        list[Path], typer.Argument(help="Paths to recipes with build failures")
     ],
     skiplist: Annotated[
         bool, typer.Option("--skiplist", help="Skiplist recipes.")
@@ -1533,8 +1717,9 @@ def annotate_build_failures(
             help="Category of build failure. If omitted, will fail if there is no existing build failure record with a log entry.",
         ),
     ] = None,
-    platforms: Annotated[
-        list[str] | None, typer.Option("--platforms", help="Platforms to annotate")
+    platform: Annotated[
+        list[PackageSubdir] | None,
+        typer.Option("--platform", help="Conda package subdirectories to annotate"),
     ] = None,
     existing_only: Annotated[
         bool,
@@ -1545,27 +1730,18 @@ def annotate_build_failures(
     ] = False,
 ) -> None:
     """Create or update recipe build-failure records."""
-    valid_platform_names = set(conda.base.constants.PLATFORM_DIRECTORIES)
-    if platforms is None:
-        platforms = [
-            utils.RepoData.platform2subdir(p)
-            for p in utils.RepoData.platforms
-            if p != "noarch"
-        ]
+    target_platforms = platform if platform is not None else list(ALL_PACKAGE_SUBDIRS)
     for recipe in recipes:
         if existing_only:
-            platforms = [
-                platform
-                for platform in conda.base.constants.PLATFORM_DIRECTORIES
-                if BuildFailureRecord(recipe, platform=platform).exists()
+            recipe_platforms = [
+                plat
+                for plat in ALL_PACKAGE_SUBDIRS
+                if BuildFailureRecord(recipe, platform=plat).exists()
             ]
-        for platform in platforms:
-            if platform not in valid_platform_names:
-                logger.error(
-                    f"Invalid platform {platform}, choose from: {', '.join(valid_platform_names)}"
-                )
-                continue
-            failure_record = BuildFailureRecord(recipe, platform=platform)
+        else:
+            recipe_platforms = target_platforms
+        for plat in recipe_platforms:
+            failure_record = BuildFailureRecord(recipe, platform=plat)
             if not reason and failure_record.exists():
                 if not failure_record.log:
                     logger.error(
@@ -1586,8 +1762,8 @@ def annotate_build_failures(
 # list how many recipes depend on this and sort by it primarily if inner
 @app.command("list-build-failures")
 def list_build_failures(
-    recipe_folder: RecipeFolderArg = "recipes/",
-    config: ConfigArg = "config.yml",
+    recipe_folder: RecipeFolderArg = Path("recipes/"),
+    config: ConfigArg = Path("config.yml"),
     channel: Annotated[
         str, typer.Option("--channel", help="Channel with packages to check")
     ] = "bioconda",
@@ -1602,7 +1778,7 @@ def list_build_failures(
 ) -> None:
     """List recipes with build failure records"""
     config_data = utils.load_config(config)
-    parsed_git_range = GitRange.parse(git_range) if git_range is not None else None
+    parsed_git_range = _parse_git_range_if_needed(git_range)
     df = collect_build_failure_dataframe(
         recipe_folder,
         config_data,
@@ -1611,13 +1787,11 @@ def list_build_failures(
         link_prefix=link_prefix,
         git_range=parsed_git_range,
     )
-    if output_format == "markdown":
-        fmt_writer = pandas.DataFrame.to_markdown
-    elif output_format == "txt":
-        fmt_writer = pandas.DataFrame.to_string
-    else:
-        logger.error("Invalid output format, must be txt or markdown.")
-        exit(1)
+    fmt_writer = (
+        pandas.DataFrame.to_markdown
+        if output_format == "markdown"
+        else pandas.DataFrame.to_string
+    )
     fmt_writer(df, sys.stdout, index=False)
 
 

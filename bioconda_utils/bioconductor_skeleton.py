@@ -8,11 +8,11 @@ import logging
 import os
 import re
 import shutil
-import sys
 import tarfile
 import tempfile
 from collections import OrderedDict
-from datetime import date
+from datetime import UTC, datetime
+from pathlib import Path
 from textwrap import dedent
 from typing import Any
 
@@ -181,13 +181,14 @@ class PageNotFoundError(Exception):
     pass
 
 
+@utils.disk_cache.memoize(expire=86400)
 def bioconductor_versions():
     """
     Returns a list of available Bioconductor versions scraped from the
     Bioconductor site.
     """
     url = "https://bioconductor.org/config.yaml"
-    response = requests.get(url)
+    response = requests.get(url, timeout=20)
     bioc_config = yaml.safe_load(response.text)
     versions = list(bioc_config["r_ver_for_bioc_ver"].keys())
     # Handle semantic version sorting like 3.10 and 3.9
@@ -333,6 +334,7 @@ def cargoport_url(package, pkg_version, bioc_version=None):
     )
 
 
+@utils.disk_cache.memoize(expire=604800)
 def find_best_bioc_version(package, version):
     """
     Given a package version number, identifies which BioC version[s] it is in
@@ -361,24 +363,28 @@ def find_best_bioc_version(package, version):
             ),
         ):
             url = func(package, version, bioc_version)
-            if requests.head(url, allow_redirects=True).status_code == 200:
-                logger.debug("success: %s", url)
-                logger.info(
-                    "A working URL for %s==%s was identified for Bioconductor version %s: %s",
-                    package,
-                    version,
-                    bioc_version,
-                    url,
-                )
-                found_version = bioc_version
-                return found_version
-            else:
-                logger.debug("missing: %s", url)
+            try:
+                response = requests.head(url, allow_redirects=True, timeout=20)
+                if response.status_code == 200:
+                    logger.debug("success: %s", url)
+                    logger.info(
+                        "A working URL for %s==%s was identified for Bioconductor version %s: %s",
+                        package,
+                        version,
+                        bioc_version,
+                        url,
+                    )
+                    found_version = bioc_version
+                    return found_version
+            except requests.RequestException:
+                pass
+            logger.debug("missing: %s", url)
     raise PackageNotFoundError(
         f"Cannot find any Bioconductor versions for {package}=={version}"
     )
 
 
+@utils.disk_cache.memoize(expire=86400)
 def fetchPackages(bioc_version):
     """
     Return a dictionary of all bioconductor packages in a given release::
@@ -393,7 +399,7 @@ def fetchPackages(bioc_version):
                   ...
         }
     """
-    d = dict()
+    d = {}
     packages_urls = [
         (os.path.join(base_url, bioc_version, "bioc", "VIEWS"), "bioc"),
         (
@@ -406,11 +412,23 @@ def fetchPackages(bioc_version):
         ),
     ]
     for url, prefix in packages_urls:
-        req = requests.get(url)
-        if not req.ok:
-            sys.exit(f"ERROR: Could not fetch {url}!\n")
+        try:
+            req = requests.get(url, timeout=20)
+            if not req.ok:
+                logger.warning(
+                    "Could not fetch %s (status %s): %s",
+                    url,
+                    req.status_code,
+                    req.reason,
+                )
+                continue
+        except requests.RequestException as e:
+            logger.warning("Could not fetch %s: %s", url, e)
+            continue
         for pkg in req.text.strip().split("\n\n"):
-            pkgDict = dict()
+            if not pkg.strip():
+                continue
+            pkgDict = {}
             lastKey = None
             for line in pkg.split("\n"):
                 if line.startswith(" "):
@@ -424,6 +442,10 @@ def fetchPackages(bioc_version):
                     pkgDict[lastKey] = line[idx + 2 :].strip()
             pkgDict["URLprefix"] = prefix.strip()
             d[pkgDict["Package"]] = pkgDict
+    if not d:
+        raise RuntimeError(
+            f"Could not fetch any Bioconductor package metadata files (VIEWS) for version {bioc_version}."
+        )
     return d
 
 
@@ -514,7 +536,7 @@ class BioCProjectPage:
             "html",
             package + ".html",
         )
-        request = requests.get(url)
+        request = requests.get(url, timeout=20)
 
         if not request:
             raise PageNotFoundError(
@@ -537,7 +559,7 @@ class BioCProjectPage:
         """
         url = bioarchive_url(self.package, self.version, self.bioc_version)
         try:
-            response = requests.head(url)
+            response = requests.head(url, timeout=20)
             if response.status_code == 200:
                 return url
         except requests.exceptions.SSLError:
@@ -551,7 +573,7 @@ class BioCProjectPage:
         """
         url = cargoport_url(self.package, self.version, self.bioc_version)
         try:
-            response = requests.head(url)
+            response = requests.head(url, timeout=20)
             if response.status_code == 404:
                 # This is expected if this is a new package or an updated version.
                 # Cargo Port will archive a working URL upon merging
@@ -576,7 +598,7 @@ class BioCProjectPage:
             str(self.packages[self.package]["URLprefix"]),
             str(self.packages[self.package]["source.ver"]),
         )
-        response = requests.head(url, allow_redirects=True)
+        response = requests.head(url, allow_redirects=True, timeout=20)
         if response.status_code == 200:
             return url
 
@@ -590,7 +612,7 @@ class BioCProjectPage:
             ]
             for url in urls:
                 if url is not None:
-                    response = requests.head(url, allow_redirects=True)
+                    response = requests.head(url, allow_redirects=True, timeout=20)
                     if response.status_code == 200:
                         self._tarball_url = url
                         return url
@@ -634,10 +656,10 @@ class BioCProjectPage:
         if os.path.exists(fn):
             self._cached_tarball = fn
             return fn
-        tmp = tempfile.NamedTemporaryFile(delete=False).name
-        with open(tmp, "wb") as fout:
+        with tempfile.NamedTemporaryFile(delete=False) as fout:
+            tmp = fout.name
             logger.info(f"Downloading {self.tarball_url} to {fn}")
-            response = requests.get(self.tarball_url)
+            response = requests.get(self.tarball_url, timeout=30)
             if response.status_code == 200:
                 fout.write(response.content)
             else:
@@ -799,7 +821,7 @@ class BioCProjectPage:
 
     @property
     def dependencies(self):
-        """ """
+        """Return the package dependencies."""
         if self._dependencies:
             return self._dependencies
 
@@ -1059,7 +1081,7 @@ class BioCProjectPage:
             additional_run_deps.append("curl")
             additional_run_deps.append(
                 "bioconductor-data-packages >={}".format(
-                    date.today().strftime("%Y%m%d")
+                    datetime.now(UTC).strftime("%Y%m%d")
                 )
             )
 
@@ -1133,20 +1155,15 @@ class BioCProjectPage:
         if self.license_file_location():
             d["about"]["license_file"] = self.license_file_location()
 
-        if self.packages[self.package].get("SystemRequirements", None):
-            if self.parseSystemRequirements(
-                self.packages[self.package]["SystemRequirements"]
-            ):
-                d["requirements"]["host"].extend(
-                    self.parseSystemRequirements(
-                        self.packages[self.package]["SystemRequirements"]
-                    )
-                )
-                d["requirements"]["run"].extend(
-                    self.parseSystemRequirements(
-                        self.packages[self.package]["SystemRequirements"]
-                    )
-                )
+        system_requirements = self.packages[self.package].get("SystemRequirements")
+        parsed_requirements = (
+            self.parseSystemRequirements(system_requirements)
+            if system_requirements
+            else []
+        )
+        if parsed_requirements:
+            d["requirements"]["host"].extend(parsed_requirements)
+            d["requirements"]["run"].extend(parsed_requirements)
 
         if self.needsX:
             # Anything that causes rgl to get imported needs X around
@@ -1310,7 +1327,7 @@ def updateDataPackages(bioc_data_packages, pkg, urls, md5, tarball):
     }
     """
     jsPath = os.path.join(bioc_data_packages, "dataURLs.json")
-    jsContent = dict()
+    jsContent = {}
     if os.path.exists(jsPath):
         with open(jsPath) as fin:
             jsContent = json.load(fin)
@@ -1323,7 +1340,7 @@ def updateDataPackages(bioc_data_packages, pkg, urls, md5, tarball):
 def write_recipe(
     package,
     recipe_dir,
-    config,
+    config: dict[str, Any],
     bioc_data_packages=None,
     force=False,
     bioc_version=None,
@@ -1349,7 +1366,8 @@ def write_recipe(
 
     recipe_dir : str
 
-    config : str or dict
+    config : dict
+        Parsed Bioconda configuration.
 
     bioc_data_packages : str
         Path to the bioc_data_packages recipe, which stores the URL and MD5 of
@@ -1388,7 +1406,8 @@ def write_recipe(
         If None, we need to determine if this requires X and therefore additional
         build dependencies and test environment variables.
     """
-    config = utils.load_config(config)
+    config = utils.normalize_config(config)
+    utils.RepoData.register_config(config)
     proj = BioCProjectPage(package, bioc_version, pkg_version, packages=packages)
     logger.info(f"Making recipe for: {package}")
 
@@ -1467,7 +1486,7 @@ def write_recipe(
             if not existing_bldnos:
                 proj.build_number = 0
             else:
-                proj.build_number = sorted([int(i) for i in existing_bldnos])[-1] + 1
+                proj.build_number = max([int(i) for i in existing_bldnos]) + 1
 
         if "source" in current_meta and "patches" in current_meta["source"]:
             proj.patches = current_meta["source"]["patches"]
@@ -1479,7 +1498,7 @@ def write_recipe(
             )
 
     with open(os.path.join(recipe_dir, "meta.yaml"), "w") as fout:
-        fout.write(open(proj.meta_yaml).read())
+        fout.write(Path(proj.meta_yaml).read_text())
 
     if not proj.is_data_package:
         with open(os.path.join(recipe_dir, "build.sh"), "w") as fout:

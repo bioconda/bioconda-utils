@@ -4,10 +4,10 @@ import shutil
 from copy import deepcopy
 from pathlib import Path
 
-from ruamel.yaml import YAML
 import pandas as pd
-import pytest
 import py
+import pytest
+from ruamel.yaml import YAML
 
 from bioconda_utils import utils
 
@@ -20,16 +20,17 @@ TEST_CONFIG_YAML = {"blacklists": [], "channels": []}
 
 
 def pytest_runtest_makereport(item, call):
-    if "successive" in item.keywords:
-        # if we failed, mark parent with callspec id (name from test args)
-        if call.excinfo is not None:
-            item.parent.failedcallspec = item.callspec.id
+    # If we failed, mark the parent with the callspec ID (name from test args).
+    if "successive" in item.keywords and call.excinfo is not None:
+        item.parent.failedcallspec = item.callspec.id
 
 
 def pytest_runtest_setup(item):
-    if "successive" in item.keywords:
-        if getattr(item.parent, "failedcallspec", None) == item.callspec.id:
-            pytest.xfail("preceding test failed")
+    if (
+        "successive" in item.keywords
+        and getattr(item.parent, "failedcallspec", None) == item.callspec.id
+    ):
+        pytest.xfail("preceding test failed")
 
 
 @pytest.fixture
@@ -73,11 +74,11 @@ def mock_repodata(case):
             columns=utils.RepoData.columns,
         )
     else:
-        dataframe = pd.DataFrame(dict(), columns=utils.RepoData.columns)
+        dataframe = pd.DataFrame({}, columns=utils.RepoData.columns)
 
     backup = utils.RepoData()._df, utils.RepoData()._df_ts
     utils.RepoData()._df = dataframe
-    utils.RepoData()._df_ts = datetime.datetime.now()
+    utils.RepoData()._df_ts = datetime.datetime.now(datetime.UTC)
     yield
     utils.RepoData()._df, utils.RepoData()._df_ts = backup
 
@@ -113,7 +114,7 @@ def config_file(tmpdir: py.path.local, case):
     data = deepcopy(TEST_CONFIG_YAML)
     if "config" in case:
         dict_merge(data, case["config"])
-    config_fname = tmpdir.join(Path(TEST_CONFIG_YAML_FNAME))
+    config_fname = Path(os.path.join(str(tmpdir), TEST_CONFIG_YAML_FNAME))
     with config_fname.open("w") as fdes:
         yaml.dump(data, fdes)
 

@@ -6,7 +6,7 @@ from pathlib import Path
 from shutil import which
 from zipfile import ZipFile, ZipInfo
 
-from aiohttp import ClientSession
+from aiohttp import ClientError, ClientSession
 from yaml import safe_load
 
 from .common import (
@@ -114,9 +114,10 @@ async def toggle_visibility(session: ClientSession, container_repo: str) -> None
     try:
         async with session.post(url, headers=headers, json=body) as response:
             rc = response.status
-    except Exception:
-        # Do nothing
-        pass
+    except ClientError:
+        logger.warning(
+            "Unable to toggle visibility for %s", container_repo, exc_info=True
+        )
     log("Trying to toggle visibility (%s) returned %d", url, rc)
 
 
@@ -346,7 +347,7 @@ async def merge_pr(session: ClientSession, pr: int, init_message: str) -> MergeS
             pr,
             "I received an error uploading the build artifacts or merging the PR!",
         )
-        logger.exception("Upload failed", exc_info=True)
+        logger.exception("Upload failed")
     return MergeState.MERGED
 
 
@@ -372,7 +373,9 @@ async def main() -> None:
         return
 
     comment = original_comment.lower()
-    if comment.startswith(("@bioconda-bot", "@biocondabot")):
-        if " please merge" in comment:
-            async with ClientSession() as session:
-                await request_merge(session, issue_number)
+    if (
+        comment.startswith(("@bioconda-bot", "@biocondabot"))
+        and " please merge" in comment
+    ):
+        async with ClientSession() as session:
+            await request_merge(session, issue_number)

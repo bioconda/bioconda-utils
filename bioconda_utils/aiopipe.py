@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-
 import abc
 import asyncio
 import logging
 import os
 import pickle
 import signal
-
 from concurrent.futures import ProcessPoolExecutor
+from pathlib import Path
 
 try:
     from concurrent.futures import BrokenExecutor
@@ -20,15 +19,16 @@ except ImportError:
     from concurrent.futures.process import BrokenProcessPool as BrokenExecutor
 
 from hashlib import sha256
-from urllib.parse import urlparse
 from typing import Any, Generic, TypeVar
+from urllib.parse import urlparse
 
-import aiohttp
+import aiofiles
 import aioftp
+import aiohttp
 import backoff
+from typing_extensions import Self
 
-from .utils import tqdm, threads_to_use
-
+from .utils import threads_to_use, tqdm
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -43,7 +43,7 @@ class EndProcessing(BaseException):
 class EndProcessingItem(Exception):
     """Raised to indicate that an item should not be processed further"""
 
-    __slots__ = ["item", "args"]
+    __slots__ = ["args", "item"]
     template = "broken: %s"
     level = logging.INFO
 
@@ -253,7 +253,7 @@ class AsyncRequests:
         #: cache
         self.cache: dict[str, dict[str, Any]] | None = None
 
-    async def __aenter__(self) -> AsyncRequests:
+    async def __aenter__(self) -> Self:
         session = aiohttp.ClientSession(
             headers={"User-Agent": self.USER_AGENT}, trust_env=True
         )
@@ -261,8 +261,8 @@ class AsyncRequests:
         self.session = session
         if self.cache_fn:
             if os.path.exists(self.cache_fn):
-                with open(self.cache_fn, "rb") as stream:
-                    self.cache = pickle.load(stream)
+                cache_data = await asyncio.to_thread(Path(self.cache_fn).read_bytes)
+                self.cache = pickle.loads(cache_data)
             else:
                 self.cache = {}
             if "url_text" not in self.cache:
@@ -278,8 +278,8 @@ class AsyncRequests:
         await self.session.__aexit__(ext_type, exc, trace)
         self.session = None
         if self.cache_fn:
-            with open(self.cache_fn, "wb") as stream:
-                pickle.dump(self.cache, stream)
+            cache_data = pickle.dumps(self.cache)
+            await asyncio.to_thread(Path(self.cache_fn).write_bytes, cache_data)
 
     @backoff.on_exception(
         backoff.fibo,
@@ -395,12 +395,12 @@ class AsyncRequests:
                 leave=False,
                 disable=None,
             ) as progress:
-                with open(fname, "wb") as out:
+                async with aiofiles.open(fname, "wb") as out:
                     while True:
                         block = await resp.content.read(1024 * 1024)
                         if not block:
                             break
-                        out.write(block)
+                        await out.write(block)
                         progress.update(len(block))
 
     async def get_ftp_listing(self, url):
@@ -426,10 +426,12 @@ class AsyncRequests:
         """
         parsed = urlparse(url)
         checksum = sha256()
-        async with aioftp.Client.context(
-            parsed.netloc, password=self.USER_AGENT + "@", trust_env=True
-        ) as client:
-            async with client.download_stream(parsed.path) as stream:
-                async for block in stream.iter_by_block():
-                    checksum.update(block)
+        async with (
+            aioftp.Client.context(
+                parsed.netloc, password=self.USER_AGENT + "@", trust_env=True
+            ) as client,
+            client.download_stream(parsed.path) as stream,
+        ):
+            async for block in stream.iter_by_block():
+                checksum.update(block)
         return checksum.hexdigest()

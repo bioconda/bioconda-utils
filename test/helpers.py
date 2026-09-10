@@ -1,12 +1,13 @@
+import os
+import tempfile
 from pathlib import Path
 from textwrap import dedent
-import tempfile
 from typing import Literal
-import yaml
-import os
-import rattler_build as rb
 
+import rattler_build as rb
+import yaml
 from conda_index.index import update_index
+
 from bioconda_utils import utils
 
 
@@ -99,7 +100,7 @@ class Recipes:
             self.recipes = yaml.safe_load(data)
         else:
             self.data = os.path.join(os.path.dirname(__file__), data)
-            self.recipes = yaml.safe_load(open(self.data))
+            self.recipes = yaml.safe_load(Path(self.data).read_text())
         self.pkgs: dict[str, list[str]] = {}
 
     def write_recipes(self):

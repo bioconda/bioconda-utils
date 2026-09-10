@@ -1,7 +1,7 @@
 import logging
 import sys
 
-from aiohttp import ClientSession
+from aiohttp import ClientError, ClientSession
 
 from .common import (
     async_exec,
@@ -57,7 +57,7 @@ async def update_from_master_runner(session: ClientSession, pr: int) -> None:
 async def update_from_master(session: ClientSession, pr: int) -> None:
     try:
         await update_from_master_runner(session, pr)
-    except Exception:
+    except (ClientError, RuntimeError, ValueError):
         await send_comment(
             session,
             pr,
@@ -74,7 +74,9 @@ async def main() -> None:
         return
 
     comment = original_comment.lower()
-    if comment.startswith(("@bioconda-bot", "@biocondabot")):
-        if "please update" in comment:
-            async with ClientSession() as session:
-                await update_from_master(session, issue_number)
+    if (
+        comment.startswith(("@bioconda-bot", "@biocondabot"))
+        and "please update" in comment
+    ):
+        async with ClientSession() as session:
+            await update_from_master(session, issue_number)

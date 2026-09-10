@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+
+# Functionally test both architectures of an immutable remote manifest.
+
+set -euo pipefail
+
+cleanup() {
+    buildah rmi --prune || true
+}
+trap cleanup EXIT
+
+if [[ "$#" -ne 2 ]]; then
+    echo 'Usage: test-pushed-container TEST_CONTAINERFILE CONTEXT' >&2
+    exit 2
+fi
+: "${TEST_IMAGE:?Set TEST_IMAGE to the publish action test-image output.}"
+
+test_containerfile="$1"
+context="$2"
+
+for architecture in amd64 arm64; do
+    printf 'Testing pushed %s image %s\n' "${architecture}" "${TEST_IMAGE}"
+    buildah build \
+        --pull=always \
+        --arch="${architecture}" \
+        --build-arg=base="${TEST_IMAGE}" \
+        --file="${test_containerfile}" \
+        "${context}"
+done

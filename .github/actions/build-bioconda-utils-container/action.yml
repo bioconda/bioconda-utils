@@ -1,0 +1,106 @@
+name: Build bioconda-utils container
+description: Build and test the multi-architecture bioconda-utils build environment.
+
+inputs:
+  tags:
+    description: Whitespace-separated tags to apply to the local manifest.
+    required: true
+
+outputs:
+  image:
+    description: Local multi-architecture manifest name.
+    value: ${{ steps.metadata.outputs.image }}
+  tags:
+    description: Whitespace-separated tags applied to the local manifest.
+    value: ${{ steps.metadata.outputs.tags }}
+
+runs:
+  using: composite
+  steps:
+    - name: Prepare metadata
+      id: metadata
+      shell: bash
+      env:
+        TAGS: ${{ inputs.tags }}
+      run: |
+        set -euo pipefail
+
+        tags="$( xargs <<< "${TAGS}" )"
+        test -n "${tags}"
+        printf '%s\n' \
+          'image=bioconda-utils-build-env-cos7' \
+          "tags=${tags}" \
+          >> "${GITHUB_OUTPUT}"
+
+    - name: Set up QEMU
+      shell: bash
+      run: |
+        set -euo pipefail
+        podman run --rm --privileged \
+          docker.io/tonistiigi/binfmt --install arm64
+
+    - name: Install tools
+      shell: bash
+      run: |
+        set -euo pipefail
+        # jq is not installed in travier/podman-action.
+        dnf install -qy jq
+
+    - name: Build amd64 image
+      uses: redhat-actions/buildah-build@v3
+      with:
+        image: bioconda-utils-build-env-cos7-amd64
+        arch: amd64
+        build-args: |
+          BASE_IMAGE=quay.io/condaforge/linux-anvil-cos7-x86_64
+        tags: ${{ steps.metadata.outputs.tags }}
+        containerfiles: ./Dockerfile
+
+    - name: Build arm64 image
+      uses: redhat-actions/buildah-build@v3
+      with:
+        image: bioconda-utils-build-env-cos7-arm64
+        arch: arm64
+        build-args: |
+          BASE_IMAGE=quay.io/condaforge/linux-anvil-aarch64
+        tags: ${{ steps.metadata.outputs.tags }}
+        containerfiles: ./Dockerfile
+
+    - name: Assemble multi-architecture manifest
+      shell: bash
+      env:
+        IMAGE: ${{ steps.metadata.outputs.image }}
+        TAGS: ${{ steps.metadata.outputs.tags }}
+      run: |
+        set -euo pipefail
+
+        read -r -a tags <<< "${TAGS}"
+        for tag in "${tags[@]}" ; do
+          buildah manifest create "${IMAGE}:${tag}"
+          buildah manifest add \
+            "${IMAGE}:${tag}" \
+            "${IMAGE}-amd64:${tag}"
+          buildah manifest add \
+            "${IMAGE}:${tag}" \
+            "${IMAGE}-arm64:${tag}"
+        done
+
+    - name: Test
+      shell: bash
+      env:
+        LOCAL_IMAGE: ${{ steps.metadata.outputs.image }}
+        LOCAL_TAGS: ${{ steps.metadata.outputs.tags }}
+      run: |
+        set -euo pipefail
+
+        read -r -a tags <<< "${LOCAL_TAGS}"
+        for tag in "${tags[@]}" ; do
+          for architecture in amd64 arm64 ; do
+            podman run --rm --pull=never \
+              --arch="${architecture}" \
+              "${LOCAL_IMAGE}:${tag}" \
+              bioconda-utils --version
+          done
+        done
+
+        .github/scripts/test-local-container Dockerfile.test .

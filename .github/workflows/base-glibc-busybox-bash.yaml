@@ -29,7 +29,7 @@ jobs:
       DEBIAN_VERSION: '12.5'
 
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
 
     - name: Set up QEMU
       run: |
@@ -68,10 +68,11 @@ jobs:
           ${{ env.MAJOR_VERSION }}.${{ env.MINOR_VERSION }}
           latest
         '
+        tags="$( printf '%s\n' "${tags}" | xargs )"
         printf %s\\n \
           "image=${image_name}" \
-          "tags=$( echo ${tags} )" \
-          >> $GITHUB_OUTPUT
+          "tags=${tags}" \
+          >> "${GITHUB_OUTPUT}"
 
         for tag in ${tags} ; do
           buildah manifest create "${image_name}:${tag}"
@@ -126,82 +127,34 @@ jobs:
         done
 
     - name: Test
+      shell: bash
+      env:
+        LOCAL_IMAGE: ${{ steps.build.outputs.image }}
+        LOCAL_TAGS: ${{ steps.build.outputs.tags }}
       run: |
-        image='${{ steps.build.outputs.image }}'
-        ids="$(
-          for tag in ${{ steps.build.outputs.tags }} ; do
-            buildah manifest inspect "${image}:${tag}" \
-              | jq -r '.manifests[]|.digest' \
-              | while read id ; do
-                  buildah images --format '{{.ID}}{{.Digest}}' \
-                  | sed -n "s/${id}//p"
-                done
-          done
-          )"
-        ids="$( printf %s "${ids}" | sort -u )"
-        for id in ${ids} ; do
-          podman history "${id}"
-          buildah bud \
-            --build-arg=base="${id}" \
-            --file=Dockerfile.test \
-            "images/${image}"
-        done
-        buildah rmi --prune || true
+        .github/scripts/test-local-container \
+          'images/${{ env.IMAGE_NAME }}/Dockerfile.test' \
+          'images/${{ env.IMAGE_NAME }}'
 
     - if: ${{ github.ref == 'refs/heads/master' }}
-      name: Check Tags
-      run: |
-        # Quay.io does not support immutable images.
-        # => Check for duplicate tags to avoid overwriting existing images.
-        existing_tags="$(
-          skopeo list-tags docker://quay.io/bioconda/${{ steps.build.outputs.image }} \
-            | jq -r '.Tags[]'
-        )" \
-        || {
-          echo 'Could not list tags via skopeo.'
-          exit 1
-        }
-        for tag in ${{ steps.build.outputs.tags }} ; do
-          case "${tag}" in
-            latest | '${{ env.MAJOR_VERSION }}' ) ;;
-            * )
-              if printf %s "${existing_tags}" | grep -qxF "${tag}" ; then
-                printf 'Tag %s already exists!\n' "${tag}"
-                exit 1
-              fi
-          esac
-        done
-
-    - if: ${{ github.ref == 'refs/heads/master' }}
-      name: Push
-      uses: redhat-actions/push-to-registry@v2
+      id: publish
+      name: Publish
+      uses: ./.github/actions/publish-container
       with:
         image: ${{ steps.build.outputs.image }}
         tags: ${{ steps.build.outputs.tags }}
-        registry: ${{ secrets.QUAY_BIOCONDA_REPO }}
+        mutable-tags: >-
+          latest
+          ${{ env.MAJOR_VERSION }}
+        registry: ${{ vars.QUAY_BIOCONDA_REPO }}
         username: ${{ secrets.QUAY_BIOCONDA_USERNAME }}
         password: ${{ secrets.QUAY_BIOCONDA_TOKEN }}
 
     - if: ${{ github.ref == 'refs/heads/master' }}
       name: Test Pushed
+      env:
+        TEST_IMAGE: ${{ steps.publish.outputs.test-image }}
       run: |
-        image='${{ env.IMAGE_NAME }}'
-        ids="$(
-          for tag in ${{ steps.build.outputs.tags }} ; do
-            buildah manifest inspect "${image}:${tag}" \
-              | jq -r '.manifests[]|.digest' \
-              | while read id ; do
-                  buildah images --format '{{.ID}}{{.Digest}}' \
-                  | sed -n "s/${id}//p"
-                done
-          done
-          )"
-        ids="$( printf %s "${ids}" | sort -u )"
-        for id in ${ids} ; do
-          podman history "${id}"
-          buildah bud \
-            --build-arg=base="${id}" \
-            --file=Dockerfile.test \
-            "images/${image}"
-        done
-        buildah rmi --prune || true
+        .github/scripts/test-pushed-container \
+          'images/${{ env.IMAGE_NAME }}/Dockerfile.test' \
+          'images/${{ env.IMAGE_NAME }}'

@@ -1,15 +1,16 @@
-import os.path as op
-from ruamel.yaml import YAML
-
 import glob
+import os.path as op
+from pathlib import Path
+
 import pytest
+from ruamel.yaml import YAML
 
 from bioconda_utils import lint, utils
 from bioconda_utils.utils import ensure_list
 
 yaml = YAML(typ="rt")  # pylint: disable=invalid-name
 
-TEST_DATA = dict()
+TEST_DATA = {}
 
 # gather all linting test case YAML files from lint_cases/ subdirectory
 linting_case_files = glob.glob(op.join(op.dirname(__file__), "lint_cases", "*.yaml"))
@@ -32,12 +33,12 @@ TEST_CASE_IDS = list(TEST_DATA.keys())
 def linter(config_file, recipes_folder):
     """Prepares a linter given config_folder and recipes_folder"""
     config = utils.load_config(config_file)
-    yield lint.Linter(config, str(recipes_folder), nocatch=True)
+    yield lint.Linter(config, Path(recipes_folder), nocatch=True)
 
 
 @pytest.mark.parametrize("case", TEST_CASES, ids=TEST_CASE_IDS)
 def test_lint(linter, recipe_dirs, mock_repodata, case):
-    recipes = [str(p) for p in recipe_dirs]
+    recipes = [Path(p) for p in recipe_dirs]
     linter.clear_messages()
     linter.lint(recipes)
     messages = linter.get_messages()

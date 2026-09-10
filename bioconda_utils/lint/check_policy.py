@@ -7,10 +7,11 @@ can be mechanically checked).
 
 import glob
 import os
-from typing import Any
+from typing import Any, ClassVar
 
-from . import LintCheck, WARNING, _recipe
 from bioconda_utils import utils
+
+from . import WARNING, LintCheck, _recipe
 
 
 class uses_vcs_url(LintCheck):
@@ -57,12 +58,13 @@ class gpl_requires_license_distributed(LintCheck):
     """
 
     severity = WARNING
-    requires = ["missing_license"]
+    requires: ClassVar = ["missing_license"]
 
     def check_recipe(self, recipe: _recipe.Recipe) -> None:
-        if "gpl" in recipe.get("about/license").lower():
-            if not recipe.get("about/license_file", ""):
-                self.message("about/license")
+        if "gpl" in recipe.get("about/license").lower() and not recipe.get(
+            "about/license_file", ""
+        ):
+            self.message("about/license")
 
 
 class should_not_use_fn(LintCheck):
@@ -131,13 +133,15 @@ class cran_packages_to_conda_forge(LintCheck):
 
     def check_deps(self, deps: dict[str, list[str]], package_location: str) -> None:
         # must have R in run a run dep
-        if "R" in deps and any("run" in dep for dep in deps["R"]):
-            # and all deps satisfied in conda-forge
-            if all(
+        if (
+            "R" in deps
+            and any("run" in dep for dep in deps["R"])
+            and all(
                 utils.RepoData().get_package_data(name=dep, channels="conda-forge")
                 for dep in deps
-            ):
-                self.message()
+            )
+        ):
+            self.message()
 
 
 class outputs_name_same_as_package_name(LintCheck):

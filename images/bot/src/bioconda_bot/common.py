@@ -3,11 +3,12 @@ import os
 import re
 import sys
 from asyncio.subprocess import create_subprocess_exec
-from typing import Any
 from collections.abc import Mapping
+from typing import Any
 from zipfile import ZipFile
 
-from aiohttp import ClientSession, ClientTimeout
+import aiofiles
+from aiohttp import ClientResponseError, ClientSession, ClientTimeout
 from yaml import safe_load
 
 logger = logging.getLogger(__name__)
@@ -56,9 +57,8 @@ async def is_bioconda_member(session: ClientSession, user: str) -> bool:
         try:
             response.raise_for_status()
             rc = response.status
-        except Exception:
-            # Do nothing, this just prevents things from crashing on 404
-            pass
+        except ClientResponseError:
+            logger.debug("User %s is not a public organization member", user)
 
     return rc == 204
 
@@ -101,12 +101,12 @@ async def download_file(
     ) as response:
         if response.status == 200:
             ofile = f"{zipName}.zip"
-            with open(ofile, "wb") as fd:
+            async with aiofiles.open(ofile, "wb") as fd:
                 while True:
                     chunk = await response.content.read(1024 * 1024 * 1024)
                     if not chunk:
                         break
-                    fd.write(chunk)
+                    await fd.write(chunk)
             return ofile
     return None
 

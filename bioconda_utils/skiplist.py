@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from typing import Any
+
 from bioconda_utils.recipe import Recipe
 
 
@@ -10,23 +11,19 @@ class Skiplist:
         self.global_list: set[Path] = set()
 
         for p in config.get("blacklists", []):
-            blacklist_path: Path = Path(p)
-
-            if not blacklist_path.exists():
-                continue
-
-            lines: list[str] = blacklist_path.read_text(encoding="utf8").splitlines()
-
+            lines = Path(p).read_text(encoding="utf8").splitlines()
             self.global_list.update(
-                self._get_reldir(line.strip())
-                for line in lines
-                if line.strip() and not line.startswith("#")
+                [
+                    self._get_reldir(Path(i.strip()))
+                    for i in lines
+                    if not i.startswith("#") and i.strip()
+                ]
             )
 
-    def _get_reldir(self, recipe_path: str | Path) -> Path:
-        return Path(recipe_path).resolve().relative_to(self.recipe_folder)
+    def _get_reldir(self, recipe_path: Path) -> Path:
+        return Path(os.path.relpath(recipe_path, self.recipe_folder))
 
-    def is_skiplisted(self, recipe: str | Path | Recipe) -> bool:
+    def is_skiplisted(self, recipe: Path | Recipe) -> bool:
         from bioconda_utils.build_failure import BuildFailureRecord
 
         if isinstance(recipe, Recipe):

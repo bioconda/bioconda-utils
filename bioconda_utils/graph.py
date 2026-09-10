@@ -4,10 +4,10 @@ Construction and Manipulation of Package/Recipe Graphs
 
 import logging
 from collections import defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from fnmatch import fnmatch
 from itertools import chain
-from token import ISTERMINAL
+from pathlib import Path
 from typing import (
     Any,
     Literal,
@@ -143,7 +143,7 @@ def build_from_recipes(recipes: Iterable[Recipe]) -> nx.DiGraph:
 def filter_recipe_dag(
     dag: nx.DiGraph, include: Sequence[str], exclude: Sequence[str]
 ) -> nx.DiGraph:
-    """Reduces **dag** to packages in **names** and their requirements"""
+    """Reduces **dag** to packages in **include** and their requirements"""
     nodes = set()
     for recipe in dag:
         if (

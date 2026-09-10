@@ -4,7 +4,7 @@ Verify that the recipe is not missing anything essential.
 """
 
 import os
-from typing import Any
+from typing import Any, ClassVar
 
 from . import LintCheck, _recipe
 
@@ -151,7 +151,7 @@ class missing_tests(LintCheck):
     ``outputs:`` entries.
     """
 
-    test_files = ["run_test.py", "run_test.sh", "run_test.pl"]
+    test_files: ClassVar = ["run_test.py", "run_test.sh", "run_test.pl"]
 
     def check_recipe(self, recipe: _recipe.Recipe) -> None:
         if any(os.path.exists(os.path.join(recipe.dir, f)) for f in self.test_files):

@@ -11,10 +11,11 @@ QUAY_API_URL = "https://quay.io/api/v1/repository"
 
 if __name__ == "__main__":
     import argparse as ap
-    import requests
     import os
     import sys
     import time
+
+    import requests
 
     parser = ap.ArgumentParser(
         prog=PROGRAM,
@@ -137,5 +138,7 @@ if __name__ == "__main__":
     # Print status
     with open(f"{args.namespace}-status.txt", "w") as fh:
         fh.write("namespace\tname\tis_public\n")
-        for k, v in sorted(repo_status.items()):
-            fh.write(f"{v['namespace']}\t{v['name']}\t{v['is_public']}\n")
+        fh.writelines(
+            f"{v['namespace']}\t{v['name']}\t{v['is_public']}\n"
+            for k, v in sorted(repo_status.items())
+        )

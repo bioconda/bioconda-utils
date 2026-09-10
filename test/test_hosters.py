@@ -1,9 +1,9 @@
+import asyncio
+import json
 import os.path as op
 
 import pytest
 import yaml
-import json
-import asyncio
 
 from bioconda_utils.hosters import Hoster
 

@@ -17,23 +17,21 @@ to match links and extract their version.
 
 from __future__ import annotations
 
-
 import abc
 import inspect
 import json
 import logging
 import os
-
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from html.parser import HTMLParser
 from itertools import chain
-from packaging.version import InvalidVersion, parse as parse_version
-from typing import Any, Protocol
 from re import Match, Pattern
+from typing import Any, ClassVar, Protocol
 from urllib.parse import urljoin
 
 import regex as re
-
+from packaging.version import InvalidVersion
+from packaging.version import parse as parse_version
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -97,7 +95,7 @@ class HosterMeta(abc.ABCMeta):
 class Hoster(metaclass=HosterMeta):
     """Hoster Baseclass"""
 
-    hoster_types: list[type[Hoster]] = []
+    hoster_types: ClassVar[list[type[Hoster]]] = []
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -112,10 +110,9 @@ class Hoster(metaclass=HosterMeta):
             if attr.endswith("_pattern") and isinstance(getattr(cls, attr), str)
         }
 
-        for pat in patterns:
+        for pat, new_pattern in patterns.items():
             # expand pattern references:
             pattern = ""
-            new_pattern = patterns[pat]
             while pattern != new_pattern:
                 pattern = new_pattern
                 new_pattern = re.sub(r"(\{\d+,?\d*\})", r"{\1}", pattern)
@@ -156,7 +153,7 @@ class Hoster(metaclass=HosterMeta):
     ext_pattern: str = r"(?P<ext>(?i)\.(?:(?:(tar\.|t)(?:xz|bz2|gz))|zip|jar))"
 
     #: named patterns that will change with a version upgrade
-    exclude = ["version"]
+    exclude: ClassVar = ["version"]
 
     @property
     @abc.abstractmethod
@@ -328,7 +325,7 @@ class FTPHoster(Hoster):
     suffix_pattern = r"(?P<suffix>([-_](lin|linux|Linux|x64|x86|src|64|OSX))*)"
     link_pattern = "{path}{package}{version}{suffix}{ext}"
     url_pattern = r"ftp://{host}/{link}"
-    releases_formats = ["ftp://{host}/{path}"]
+    releases_formats: ClassVar = ["ftp://{host}/{path}"]
 
 
 class OrderedHTMLHoster(HTMLHoster):
@@ -356,7 +353,7 @@ class OrderedHTMLHoster(HTMLHoster):
 class GithubBase(OrderedHTMLHoster):
     """Base class for software hosted on github.com"""
 
-    exclude = ["version", "fname"]
+    exclude: ClassVar = ["version", "fname"]
     account_pattern = r"(?P<account>[-\w]+)"
     project_pattern = r"(?P<project>[-.\w]+)"
     prefix_pattern = r"(?P<prefix>[-_./\w]+?)"
@@ -365,7 +362,7 @@ class GithubBase(OrderedHTMLHoster):
     tag_pattern = "{prefix}??{version}"
     url_pattern = r"github\.com{link}"
     fname_pattern = r"(?P<fname>[^/]+)"
-    releases_formats = ["https://github.com/{account}/{project}/releases"]
+    releases_formats: ClassVar = ["https://github.com/{account}/{project}/releases"]
 
 
 class GithubRelease(GithubBase):
@@ -375,7 +372,9 @@ class GithubRelease(GithubBase):
     expanded_assets_pattern = (
         r"https://github.com/{account}/{project}/releases/expanded_assets/{version}"
     )
-    alt_releases_formats = ["https://api.github.com/repos/{account}/{project}/releases"]
+    alt_releases_formats: ClassVar = [
+        "https://api.github.com/repos/{account}/{project}/releases"
+    ]
 
     async def get_versions(self, req, orig_version):
         # first, try the older version when HTML worked
@@ -493,7 +492,7 @@ class GithubTag(GithubBase):
     """Matches GitHub repository archives created automatically from tags"""
 
     link_pattern = r"/{account}/{project}/archive(/refs/tags)?/{tag}{ext}"
-    releases_formats = ["https://github.com/{account}/{project}/tags"]
+    releases_formats: ClassVar = ["https://github.com/{account}/{project}/tags"]
 
 
 class GithubReleaseAttachment(GithubBase):
@@ -513,7 +512,9 @@ class GithubRepoStore(GithubBase):
         r"{account}/{project}/(?(raw)|(?:(?P<blob>blob/)|raw/))"
         r"{branch}/{subdir}?{tag}{ext}(?(blob)\?raw|)"
     )
-    releases_formats = ["https://github.com/{account}/{project}/tree/master/{subdir}"]
+    releases_formats: ClassVar = [
+        "https://github.com/{account}/{project}/tree/master/{subdir}"
+    ]
 
 
 class Bioconductor(HTMLHoster):
@@ -522,7 +523,7 @@ class Bioconductor(HTMLHoster):
     link_pattern = r"/src/contrib/(?P<package>[^/]+)_{version}{ext}"
     section_pattern = r"/(bioc|data/annotation|data/experiment)"
     url_pattern = r"bioconductor.org/packages/(?P<bioc>[\d\.]+){section}{link}"
-    releases_formats = [
+    releases_formats: ClassVar = [
         "https://bioconductor.org/packages/{bioc}/bioc/html/{package}.html"
     ]
 
@@ -533,7 +534,7 @@ class CargoPort(HTMLHoster):
     os_pattern = r"_(?P<os>src_all|linux_x86|darwin_x86)"
     link_pattern = r"(?P<package>[^/]+)_{version}{os}{ext}"
     url_pattern = r"depot.galaxyproject.org/software/(?P<package>[^/]+)/{link}"
-    releases_formats = ["https://depot.galaxyproject.org/software/{package}"]
+    releases_formats: ClassVar = ["https://depot.galaxyproject.org/software/{package}"]
 
 
 class SourceForge(HTMLHoster):
@@ -553,7 +554,7 @@ class SourceForge(HTMLHoster):
 
     url_pattern = r"{baseurl}{filename}"
     link_pattern = r"{baseurl}{filename}"
-    releases_formats = ["https://sourceforge.net/projects/{project}/files/"]
+    releases_formats: ClassVar = ["https://sourceforge.net/projects/{project}/files/"]
 
 
 class JSONHoster(Hoster):
@@ -585,7 +586,7 @@ class PyPi(JSONHoster):
     async def get_versions_from_json(self, data, req, orig_version):
         latest = data["info"]["version"]
         result = []
-        for vers in list({latest, orig_version}):
+        for vers in {latest, orig_version}:
             if vers not in data["releases"]:
                 continue
             for rel in data["releases"][vers]:
@@ -606,24 +607,25 @@ class PyPi(JSONHoster):
         """
         from conda_build.skeletons.pypi import get_pkginfo, get_requirements
 
-        with open("/dev/null", "w") as devnull:
-            with redirect_stdout(devnull), redirect_stderr(devnull):
-                try:
-                    pkg_info = get_pkginfo(
-                        package,
-                        fname,
-                        url,
-                        digest,
-                        python_version,
-                        [],
-                        build_config,
-                        [],
-                    )
-                    requirements = get_requirements(package, pkg_info)
-                except SystemExit as exc:
-                    raise Exception(exc) from None
-                except Exception as exc:
-                    raise Exception(exc) from None
+        with (
+            open(os.devnull, "w") as devnull,
+            redirect_stdout(devnull),
+            redirect_stderr(devnull),
+        ):
+            try:
+                pkg_info = get_pkginfo(
+                    package,
+                    fname,
+                    url,
+                    digest,
+                    python_version,
+                    [],
+                    build_config,
+                    [],
+                )
+                requirements = get_requirements(package, pkg_info)
+            except SystemExit as exc:
+                raise RuntimeError(str(exc)) from None
 
         if len(requirements) == 1 and isinstance(requirements[0], list):
             requirements = requirements[0]
@@ -734,7 +736,7 @@ class PyPi(JSONHoster):
         # Write to rel dict for return
         rel["depends"] = {"host": deps, "run": deps}
 
-    releases_formats = ["https://pypi.org/pypi/{package}/json"]
+    releases_formats: ClassVar = ["https://pypi.org/pypi/{package}/json"]
     package_pattern = r"(?P<package>[\w\-\.]+)"
     source_pattern = r"{package}[-_]{version}{ext}"
     hoster_pattern = (
@@ -767,7 +769,9 @@ class Bioarchive(JSONHoster):
         except KeyError:
             return []
 
-    releases_formats = ["https://bioarchive.galaxyproject.org/api/{package}.json"]
+    releases_formats: ClassVar = [
+        "https://bioarchive.galaxyproject.org/api/{package}.json"
+    ]
     package_pattern = r"(?P<package>[-\w.]+)"
     url_pattern = r"bioarchive.galaxyproject.org/{package}_{version}{ext}"
 
@@ -835,7 +839,7 @@ class CPAN(JSONHoster):
         r"(www.cpan.org|cpan.metacpan.org|search.cpan.org/CPAN)"
         r"/authors/id/./../{author}/([^/]+/|){package}-v?{version}{ext}"
     )
-    releases_formats = ["https://fastapi.metacpan.org/v1/release/{package}"]
+    releases_formats: ClassVar = ["https://fastapi.metacpan.org/v1/release/{package}"]
     orig_release_format = (
         "https://fastapi.metacpan.org/v1/release/_search"
         "?q=distribution:{dist}%20AND%20version:{vers}"
@@ -876,7 +880,7 @@ class CRAN(JSONHoster):
         r"(/Archive)?/{package}(?(1)/{package}|)"
         r"_{version}{ext}"
     )
-    releases_formats = ["https://crandb.r-pkg.org/{package}/all"]
+    releases_formats: ClassVar = ["https://crandb.r-pkg.org/{package}/all"]
 
 
 # pylint: disable=abstract-method
@@ -893,7 +897,7 @@ class BitBucketTag(BitBucketBase):
     """Tag based releases hosted at bitbucket.org"""
 
     link_pattern = "/{account}/{project}/get/{prefix}{version}{ext}"
-    releases_formats = [
+    releases_formats: ClassVar = [
         "https://bitbucket.org/{account}/{project}/downloads/?tab=tags",
         "https://bitbucket.org/{account}/{project}/downloads/?tab=branches",
     ]
@@ -903,7 +907,7 @@ class BitBucketDownload(BitBucketBase):
     """Uploaded releases hosted at bitbucket.org"""
 
     link_pattern = "/{account}/{project}/downloads/{prefix}{version}{ext}"
-    releases_formats = [
+    releases_formats: ClassVar = [
         "https://bitbucket.org/{account}/{project}/downloads/?tab=downloads"
     ]
 
@@ -919,7 +923,9 @@ class GitlabTag(OrderedHTMLHoster):
         r"{version}/(archive|{project}-{version}){ext}"
     )
     url_pattern = r"gitlab\.com{link}"
-    releases_formats = ["https://gitlab.com/{account}{subgroup}/{project}/tags"]
+    releases_formats: ClassVar = [
+        "https://gitlab.com/{account}{subgroup}/{project}/tags"
+    ]
 
 
 logger.info("Hosters loaded: %s", [h.__name__ for h in Hoster.hoster_types])

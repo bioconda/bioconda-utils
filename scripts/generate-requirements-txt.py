@@ -12,6 +12,7 @@ Usage:
 
 import argparse
 from pathlib import Path
+from typing import cast
 
 try:
     import tomllib
@@ -25,13 +26,16 @@ SUPPORTED_DICT_KEYS = {"version", "build"}
 SPEC_OPERATORS = ("==", ">=", "<=", ">", "<", "~=", "!=")
 
 
-def read_pixi_deps():
+def load_pixi_toml():
     if not PIXI_TOML.exists():
         raise FileNotFoundError(f"{PIXI_TOML} does not exist")
 
     with open(PIXI_TOML, "rb") as f:
-        data = tomllib.load(f)
+        return tomllib.load(f)
 
+
+def read_pixi_deps():
+    data = load_pixi_toml()
     deps = data.get("dependencies")
     if not isinstance(deps, dict) or not deps:
         raise ValueError(f"{PIXI_TOML} must define a non-empty [dependencies] table")
@@ -53,6 +57,7 @@ def format_dep(pkg, ver):
         raise ValueError(f"Invalid dependency name: {pkg!r}")
 
     if isinstance(ver, dict):
+        ver = cast(dict[str, object], ver)
         unknown_keys = set(ver) - SUPPORTED_DICT_KEYS
         if unknown_keys:
             keys = ", ".join(sorted(unknown_keys))
@@ -72,7 +77,7 @@ def format_dep(pkg, ver):
         return f"{pkg}={v}" if v != "*" else pkg
 
     if not isinstance(ver, str):
-        raise ValueError(f"Unsupported dependency specification for {pkg!r}: {ver!r}")
+        raise TypeError(f"Unsupported dependency specification for {pkg!r}: {ver!r}")
 
     ver = str(ver)
     if ver == "*":

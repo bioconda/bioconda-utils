@@ -6,16 +6,20 @@ import json
 from pathlib import Path
 import subprocess as sp
 import tempfile
+import logging
 import os
 import shlex
-import logging
+import subprocess as sp
+import tempfile
 from collections.abc import Sequence
-
-from . import utils
+from pathlib import Path
 
 from conda_build.metadata import MetaData
 from conda_index.index import update_index
 from conda_package_streaming.package_streaming import stream_conda_info
+
+from . import utils
+from ._types import MULLED_LOCAL_NAMESPACE, ContainerPlatform, PkgBuildRef
 
 logger = logging.getLogger(__name__)
 
@@ -23,19 +27,20 @@ logger = logging.getLogger(__name__)
 CREATE_ENV_IMAGE = os.getenv("CREATE_ENV_IMAGE", "quay.io/bioconda/create-env:latest")
 
 
-def get_tests(path: str) -> str:
-    "Extract tests from a built package"
+def get_test_command(path: Path | str) -> str:
+    """Extract tests from a built package"""
+    path = Path(path)
     tmp = tempfile.mkdtemp()
     for tar, member in stream_conda_info(path):
         if member.name.startswith("info/recipe/"):
             tar.extract(member, tmp)
-    input_dir = os.path.join(tmp, "info", "recipe")
+    input_dir = Path(tmp) / "info" / "recipe"
 
     tests = [
         "/usr/local/env-execute true",
         ". /usr/local/env-activate.sh",
     ]
-    recipe_meta = MetaData(input_dir)
+    recipe_meta = MetaData(str(input_dir))
 
     tests_commands = recipe_meta.get_value("test/commands")
     tests_imports = recipe_meta.get_value("test/imports")
@@ -64,61 +69,57 @@ def get_tests(path: str) -> str:
     return f"bash -c {shlex.quote(tests)}"
 
 
-def get_image_name(path: Path | str) -> str:
+def get_image_name(path: Path | str) -> PkgBuildRef:
     """
-    Returns name of generated docker image.
+    Returns a package build reference parsed from a built package filename.
 
     Parameters
     ----------
 
-    path : str
-        Path to .tar.bz2 or .conda package build by conda-build
+    path : Path | str
+        Path to .tar.bz2 or .conda package built by conda-build
 
     """
-    # convert paths to strings to keep current logic for now
-    # TODO: convert function to work with pathlib.Path object instead of strings
-    path: str = Path(path).as_posix()
-
-    if path.endswith(".tar.bz2"):
+    path = Path(path)
+    if path.suffix == ".tar.bz2":
         ext = ".tar.bz2"
-    elif path.endswith(".conda"):
+    elif path.suffix == ".conda":
         ext = ".conda"
     else:
-        raise ValueError()
+        raise ValueError(f"Unsupported package extension: {path.name}")
 
-    pkg = os.path.basename(path).removesuffix(ext)
+    pkg = path.name.removesuffix(ext)
     toks = pkg.split("-")
     build_string = toks[-1]
     version = toks[-2]
     name = "-".join(toks[:-2])
 
-    spec = f"{name}={version}--{build_string}"
-    return spec
+    return PkgBuildRef(name, version, build_string)
 
 
 def _generate_explicit_spec(
-    spec: str, channels: Sequence[str], conda_bld_dir: str, tmpdir: str
-) -> str | None:
+    spec: PkgBuildRef, channels: Sequence[str], conda_bld_dir: Path, tmpdir: Path
+) -> Path | None:
     """Generate an @EXPLICIT spec file by dry-running conda create.
 
     Parameters
     ----------
-    spec : str
-        Package spec in name=version--build format
+    spec : PkgBuildRef
+        Package build reference (name, version, build string)
     channels : list
         List of resolved channel URLs (no "local")
-    conda_bld_dir : str
+    conda_bld_dir : Path
         Path to local conda-bld directory
-    tmpdir : str
+    tmpdir : Path
         Directory to write the spec file into
 
     Returns
     -------
-    str or None
+    Path or None
         Path to explicit spec file, or None on failure
     """
-    # Convert spec from mulled format (name=version--build) to conda format (name=version=build)
-    pkg_spec = spec.replace("--", "=")
+    # Convert to conda format (name=version=build)
+    pkg_spec = f"{spec.name}={spec.version}={spec.build_string}"
 
     channel_args = []
     for ch in channels:
@@ -143,6 +144,7 @@ def _generate_explicit_spec(
             capture_output=True,
             text=True,
             timeout=300,
+            check=False,
         )
         if result.returncode != 0:
             logger.debug("conda create --dry-run failed: %s", result.stderr)
@@ -155,21 +157,40 @@ def _generate_explicit_spec(
             logger.debug("No LINK actions in dry-run output")
             return None
 
-        # Build @EXPLICIT spec file
-        spec_path = os.path.join(tmpdir, "explicit_spec.txt")
+        # Build @EXPLICIT spec file. Under conda 26.x the LINK entries no
+        # longer carry ``url`` or ``md5`` -- only ``base_url`` (the full
+        # channel URL), ``channel`` (the bare channel name), ``dist_name``,
+        # and ``platform``. The authoritative ``url`` and ``md5`` live in the
+        # FETCH entries, so index those by dist name and prefer them. Packages
+        # already cached on the host may appear in LINK but not FETCH; for
+        # those, reconstruct an absolute URL from ``base_url`` (the bare
+        # ``channel`` would yield a relative, unusable path).
+        def _dist_name(fn: str) -> str:
+            for ext in (".conda", ".tar.bz2"):
+                if fn.endswith(ext):
+                    return fn[: -len(ext)]
+            return fn
+
+        fetch_by_dist = {
+            _dist_name(pkg["fn"]): pkg
+            for pkg in actions.get("FETCH", [])
+            if "fn" in pkg
+        }
+
+        spec_path = tmpdir / "explicit_spec.txt"
         with open(spec_path, "w") as f:
             f.write("@EXPLICIT\n")
             for pkg in link_actions:
-                url = pkg.get("url")
-                if not url:
-                    # Build URL from channel + subdir + fn
-                    channel = pkg.get("channel", "")
+                dist = pkg.get("dist_name", "")
+                fetch = fetch_by_dist.get(dist)
+                if fetch:
+                    url = fetch.get("url", "")
+                    md5 = fetch.get("md5", "")
+                else:
+                    base_url = pkg.get("base_url") or pkg.get("channel", "")
                     subdir = pkg.get("platform", pkg.get("subdir", ""))
-                    fn = pkg.get("dist_name", "")
-                    if fn and not fn.endswith((".tar.bz2", ".conda")):
-                        fn += ".conda"
-                    url = f"{channel}/{subdir}/{fn}"
-                md5 = pkg.get("md5", "")
+                    url = f"{base_url}/{subdir}/{dist}.conda"
+                    md5 = pkg.get("md5", "")
                 line = url
                 if md5:
                     line += f"#{md5}"
@@ -184,18 +205,18 @@ def _generate_explicit_spec(
 
 
 def _test_with_explicit_spec(
-    spec_path: str,
+    spec_path: Path,
     tests: str,
     base_image: str | None,
     conda_image: str,
-    conda_bld_dir: str,
+    conda_bld_dir: Path,
     live_logs: bool,
 ) -> sp.CompletedProcess:
     """Run mulled test using a pre-solved explicit spec file.
 
     Parameters
     ----------
-    spec_path : str
+    spec_path : Path
         Path to @EXPLICIT spec file
     tests : str
         Test commands to run
@@ -203,7 +224,7 @@ def _test_with_explicit_spec(
         Base image for the test container
     conda_image : str
         Conda image used to install packages
-    conda_bld_dir : str
+    conda_bld_dir : Path
         Path to local conda-bld directory (needed for file:// URLs)
     live_logs : bool
         Enable live log output
@@ -216,20 +237,24 @@ def _test_with_explicit_spec(
 set -eo pipefail
 
 # Install from pre-solved explicit spec (no solver needed)
-conda create --name test --file /opt/explicit_spec.txt --yes --quiet
+conda create --prefix /usr/local --file /opt/explicit_spec.txt --yes --quiet
 
 # Run create-env to set up activation/entrypoint scripts
 # This replicates the POSTINSTALL step from involucro
 create-env --conda=: /usr/local
+
+# Source activation script if present
+if [ -f /usr/local/env-activate.sh ]; then
+    . /usr/local/env-activate.sh
+fi
 
 # Run tests
 {tests}
 """
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        script_path = os.path.join(tmpdir, "test_script.bash")
-        with open(script_path, "w") as f:
-            f.write(test_script)
+        script_path = Path(tmpdir) / "test_script.bash"
+        script_path.write_text(test_script)
 
         cmd = [
             "docker",
@@ -256,26 +281,117 @@ create-env --conda=: /usr/local
 
         logger.debug("Pre-solved mulled test command: %s", cmd)
         with utils.Progress():
-            p = utils.run(cmd, mask=False, live=live_logs)
+            p = utils.run(cmd, live=live_logs)
         return p
 
 
-def test_package(
-    path: str | Path,
+def _test_inputs(
+    path: Path | str,
+    channels: Sequence[str] = ("conda-forge", "local", "bioconda"),
+    update_local_index: bool = True,
+) -> tuple[Path, PkgBuildRef, list[str], str]:
+    """Return shared inputs needed for package container tests."""
+    path = Path(path)
+    assert path.name.endswith((".tar.bz2", ".conda")), f"Unrecognized path {path}"
+
+    conda_bld_dir = path.resolve().parent.parent
+
+    if update_local_index:
+        # conda-index uses spawn workers, so this cannot run from a REPL or python -c.
+        update_index(str(conda_bld_dir))
+
+    spec = get_image_name(path)
+
+    if "local" not in channels:
+        raise ValueError('"local" must be in channel list')
+
+    resolved_channels = [
+        f"file://{conda_bld_dir}" if channel == "local" else channel
+        for channel in channels
+    ]
+
+    tests = get_test_command(path)
+    logger.debug("Tests to run: %s", tests)
+
+    return conda_bld_dir, spec, resolved_channels, tests
+
+
+def test_package_in_temporary_container(
+    path: Path | str,
+    channels: Sequence[str] = ("conda-forge", "local", "bioconda"),
+    base_image: str | None = None,
+    conda_image: str = CREATE_ENV_IMAGE,
+    live_logs: bool = True,
+) -> sp.CompletedProcess | None:
+    """
+    Test a built package in a temporary container from a pre-solved spec.
+
+    This path does not create the BioContainers production image. It exists as
+    a faster native-platform test path. If the host-side pre-solve cannot
+    produce an explicit spec, return None so callers can fall back to building
+    and testing the production mulled image.
+
+    Parameters
+    ----------
+    path : Path | str
+        Path to a .tar.bz2 or .conda package built by conda-build
+
+    channels : list
+        List of Conda channels to use. Must include an entry "local" for the
+        local build channel.
+
+    base_image : None | str
+        Specify custom base image. Busybox is used in the default case.
+
+    conda_image : None | str
+        Conda Docker image to install the package with during the test.
+
+    live_logs : True | bool
+        If True, enable live logging during the build process
+    """
+    conda_bld_dir, spec, resolved_channels, tests = _test_inputs(path, channels)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        spec_path = _generate_explicit_spec(
+            spec,
+            resolved_channels,
+            conda_bld_dir,
+            Path(tmpdir),
+        )
+        if spec_path is None:
+            logger.info("Pre-solve failed, falling back to mulled-build")
+            return None
+
+        logger.info("Using pre-solved explicit spec for temporary container test")
+        return _test_with_explicit_spec(
+            spec_path,
+            tests,
+            base_image,
+            conda_image,
+            conda_bld_dir,
+            live_logs,
+        )
+
+
+def build_and_test_mulled_image(
+    path: Path | str,
     name_override: str | None = None,
     channels: Sequence[str] = ("conda-forge", "local", "bioconda"),
     mulled_args: str = "",
     base_image: str | None = None,
     conda_image: str = CREATE_ENV_IMAGE,
     live_logs: bool = True,
-    presolved: bool = True,
+    target_platform: ContainerPlatform | None = None,
 ) -> sp.CompletedProcess:
     """
-    Tests a built package in a minimal docker container.
+    Build the BioContainers production mulled image and run package tests in it.
+
+    This wraps ``mulled-build build-and-test``. The generated local image is
+    the artifact later uploaded by :func:`bioconda_utils.upload.mulled_upload`.
 
     Parameters
     ----------
-    path : str
+    path : Path | str
         Path to a .tar.bz2 or .conda package built by conda-build
 
     name_override : str
@@ -295,91 +411,40 @@ def test_package(
 
     conda_image : None | str
         Conda Docker image to install the package with during the mulled based
-        tests.
+        image build.
 
     live_logs : True | bool
         If True, enable live logging during the build process
 
-    presolved : bool
-        If True, attempt to pre-solve the test environment on the host and
-        pass an @EXPLICIT spec file to the container, avoiding a redundant
-        solver run. Falls back to the original mulled-build path on failure.
+    target_platform : ContainerPlatform | None
+        Docker target platform to pass to mulled-build, e.g. linux/arm64.
     """
-
-    # convert paths to strings to keep current logic for now
-    # TODO: convert function to work with pathlib.Path object instead of strings
-    path: str = Path(path).as_posix()
-    assert path.endswith((".tar.bz2", ".conda")), f"Unrecognized path {path}"
-    # assert os.path.exists(path), '{0} does not exist'.format(path)
-
-    conda_bld_dir = os.path.abspath(os.path.dirname(os.path.dirname(path)))
-
-    update_index(conda_bld_dir)
-
-    spec = get_image_name(path)
-
-    if "local" not in channels:
-        raise ValueError('"local" must be in channel list')
-
-    resolved_channels = [
-        f"file://{conda_bld_dir}" if channel == "local" else channel
-        for channel in channels
-    ]
-
-    tests = get_tests(path)
-    logger.debug("Tests to run: %s", tests)
-
-    # Try the pre-solved path first for faster testing
-    if presolved:
-        try:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                spec_path = _generate_explicit_spec(
-                    spec,
-                    resolved_channels,
-                    conda_bld_dir,
-                    tmpdir,
-                )
-                if spec_path is not None:
-                    logger.info("Using pre-solved explicit spec for mulled test")
-                    return _test_with_explicit_spec(
-                        spec_path,
-                        tests,
-                        base_image,
-                        conda_image,
-                        conda_bld_dir,
-                        live_logs,
-                    )
-                else:
-                    logger.info("Pre-solve failed, falling back to mulled-build")
-        except Exception as exc:
-            logger.info(
-                "Pre-solved test failed (%s), falling back to mulled-build", exc
-            )
-
-    # Original mulled-build path
+    _conda_bld_dir, spec, resolved_channels, tests = _test_inputs(path, channels)
     channel_args = ["--channels", ",".join(resolved_channels)]
 
     cmd = [
         "mulled-build",
         "build-and-test",
-        spec,
+        str(spec),
         "-n",
-        "biocontainers",
+        MULLED_LOCAL_NAMESPACE,
         "--test",
         tests,
     ]
     if name_override:
         cmd += ["--name-override", name_override]
+    if target_platform:
+        cmd += ["--target-platform", target_platform]
     cmd += channel_args
     cmd += shlex.split(mulled_args)
 
     # galaxy-lib always downloads involucro, unless it's in cwd or its path is explicitly given.
     # We inject a POSTINSTALL to the involucro command with a small wrapper to
     # create activation / entrypoint scripts for the container.
-    involucro_path = os.path.join(os.path.dirname(__file__), "involucro")
-    if not os.path.exists(involucro_path):
+    involucro_path = Path(__file__).parent / "involucro"
+    if not involucro_path.exists():
         raise RuntimeError("internal involucro wrapper missing")
-    cmd += ["--involucro-path", involucro_path]
+    cmd += ["--involucro-path", str(involucro_path)]
 
     logger.debug(f"mulled-build command: {cmd}")
 
@@ -390,8 +455,7 @@ def test_package(
         raise ValueError("CONDA_IMAGE env var already exists!")
     else:
         env["CONDA_IMAGE"] = conda_image
-    with tempfile.TemporaryDirectory() as d:
-        with utils.Progress():
-            p = utils.run(cmd, env=env, cwd=d, mask=False, live=live_logs)
+    with tempfile.TemporaryDirectory() as d, utils.Progress():
+        p = utils.run(cmd, env=env, cwd=d, live=live_logs)
 
     return p

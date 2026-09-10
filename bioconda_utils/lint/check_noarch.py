@@ -7,7 +7,7 @@ behavior. These checks aim at getting the right settings.
 """
 
 import re
-from typing import Any
+from typing import Any, ClassVar
 
 from . import LintCheck, _recipe
 
@@ -71,7 +71,7 @@ class should_be_noarch_generic(LintCheck):
 
     """
 
-    requires = ["should_be_noarch_python"]
+    requires: ClassVar = ["should_be_noarch_python"]
 
     def check_deps(self, deps: dict[str, list[str]], package_location: str) -> None:
         build_section = f"{package_location}build"
@@ -96,7 +96,7 @@ class should_not_be_noarch_compiler(LintCheck):
     """
 
     def check_deps(self, deps: dict[str, list[str]], package_location: str) -> None:
-        outputs = self.recipe.get("outputs", dict())
+        outputs = self.recipe.get("outputs", {})
         if outputs:
             # we have to do the lint per outputs: package
             for i in range(len(outputs)):
@@ -105,8 +105,8 @@ class should_not_be_noarch_compiler(LintCheck):
                     continue  # no noarch, or noarch=False
                 # filter down to dependencies for this outputs: package
                 output_deps = []
-                for dep in deps:
-                    if any(f"outputs/{i}" in d for d in deps[dep]):
+                for dep, locations in deps.items():
+                    if any(f"outputs/{i}" in location for location in locations):
                         output_deps.append(dep)
                 if not any(dep.startswith("compiler_") for dep in output_deps):
                     continue  # not compiled

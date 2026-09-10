@@ -1,18 +1,18 @@
-import os.path as op
 import os
+import os.path as op
 from pathlib import Path
 
 import pytest
-
 from ruamel.yaml import YAML
 
 from bioconda_utils.recipe import (
-    Recipe,
-    EmptyRecipe,
-    MissingMetaYaml,
-    RenderFailure,
     DuplicateKey,
+    EmptyRecipe,
     MissingKey,
+    MissingMetaYaml,
+    Recipe,
+    RenderFailure,
+    load_parallel_iter,
 )
 
 yaml = YAML(typ="rt")  # pylint: disable=invalid-name
@@ -67,7 +67,7 @@ RECIPES = yaml.load(RECIPE_DATA)
 def recipes(recipe_dirs, recipes_folder):
     recipes = []
     for recipe_dir in recipe_dirs:
-        recipes.append(Recipe.from_file(str(recipes_folder), str(recipe_dir)))
+        recipes.append(Recipe.from_file(Path(recipes_folder), Path(recipe_dir)))
     yield recipes
 
 
@@ -91,15 +91,27 @@ def test_empty_recipe(tmpdir):
     with open(op.join(tmpdir, "meta.yaml"), "w"):
         pass
     with pytest.raises(EmptyRecipe):
-        Recipe.from_file(str(tmpdir), str(tmpdir))
-    res = Recipe.from_file(str(tmpdir), str(tmpdir), return_exceptions=True)
+        Recipe.from_file(Path(tmpdir), Path(tmpdir))
+    res = Recipe.from_file(Path(tmpdir), Path(tmpdir), return_exceptions=True)
     assert isinstance(res, EmptyRecipe)
+
+
+def test_load_parallel_iter_accepts_discovered_recipe_paths(tmp_path):
+    recipe_dir = tmp_path / "recipes" / "example"
+    recipe_dir.mkdir(parents=True)
+    (recipe_dir / "meta.yaml").write_text(
+        'package:\n  name: example\n  version: "1.0"\n', encoding="utf-8"
+    )
+
+    loaded = list(load_parallel_iter(tmp_path / "recipes", ["*"]))
+
+    assert [recipe.path for recipe in loaded] == [recipe_dir / "meta.yaml"]
 
 
 def test_file_not_found():
     with pytest.raises(MissingMetaYaml):
-        Recipe.from_file("/", "/doesnotexist")
-    res = Recipe.from_file("/", "/doesnotexist", return_exceptions=True)
+        Recipe.from_file(Path("/"), Path("/doesnotexist"))
+    res = Recipe.from_file(Path("/"), Path("/doesnotexist"), return_exceptions=True)
     assert isinstance(res, MissingMetaYaml)
 
 
@@ -281,9 +293,9 @@ def test_recipe_package_names(recipes):
 
 
 @with_recipes
-def test_recipe_extra_additional_platforms(recipes):
+def test_recipe_additional_platforms(recipes):
     for recipe in recipes:
-        assert recipe.extra_additional_platforms == []
+        assert recipe.additional_platforms == []
         recipe.meta_yaml += [
             "extra:",
             "  additional-platforms:",
@@ -291,7 +303,7 @@ def test_recipe_extra_additional_platforms(recipes):
             "    - osx-arm64",
         ]
         recipe.render()
-        assert recipe.extra_additional_platforms == [
+        assert recipe.additional_platforms == [
             "linux-aarch64",
             "osx-arm64",
         ]
@@ -300,27 +312,41 @@ def test_recipe_extra_additional_platforms(recipes):
 @with_recipes
 def test_recipe_extra_additional_platform_osx(recipes):
     for recipe in recipes:
-        assert recipe.extra_additional_platforms == []
+        assert recipe.additional_platforms == []
         recipe.meta_yaml += [
             "extra:",
             "  additional-platforms:",
             "    - osx-arm64",
         ]
         recipe.render()
-        assert recipe.extra_additional_platforms == ["osx-arm64"]
+        assert recipe.additional_platforms == ["osx-arm64"]
 
 
 @with_recipes
 def test_recipe_extra_additional_platform_linux(recipes):
     for recipe in recipes:
-        assert recipe.extra_additional_platforms == []
+        assert recipe.additional_platforms == []
         recipe.meta_yaml += [
             "extra:",
             "  additional-platforms:",
             "    - linux-aarch64",
         ]
         recipe.render()
-        assert recipe.extra_additional_platforms == ["linux-aarch64"]
+        assert recipe.additional_platforms == ["linux-aarch64"]
+
+
+@with_recipes
+def test_recipe_extra_additional_platform_ignores_invalid(recipes):
+    for recipe in recipes:
+        assert recipe.additional_platforms == []
+        recipe.meta_yaml += [
+            "extra:",
+            "  additional-platforms:",
+            "    - linux-aarch64",
+            "    - osx-x86_64",
+        ]
+        recipe.render()
+        assert recipe.additional_platforms == ["linux-aarch64"]
 
 
 @with_recipes

@@ -4,9 +4,10 @@ These checks verify consistency with the repository (blacklisting,
 other channels, existing versions).
 """
 
-from typing import Any
+from typing import Any, ClassVar
 
 from bioconda_utils.build_failure import BuildFailureRecord
+
 from .. import utils
 from . import LintCheck, _recipe
 
@@ -45,7 +46,7 @@ class build_number_needs_bump(LintCheck):
 
     """
 
-    requires = ["missing_build_number"]
+    requires: ClassVar = ["missing_build_number"]
 
     def check_recipe(self, recipe: _recipe.Recipe) -> None:
         bldnos = utils.RepoData().get_package_data(
@@ -71,7 +72,7 @@ class build_number_needs_reset(LintCheck):
 
     """
 
-    requires = ["missing_build_number"]
+    requires: ClassVar = ["missing_build_number"]
 
     def check_recipe(self, recipe: _recipe.Recipe) -> None:
         bldnos = utils.RepoData().get_package_data(

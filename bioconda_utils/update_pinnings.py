@@ -6,16 +6,15 @@ import enum
 import logging
 import re
 import string
-
-from .utils import RepoData
+from collections.abc import Set as AbstractSet
 
 # FIXME: trim_build_only_deps is not exported via conda_build.api!
 #        Re-implement it here or ask upstream to export that functionality.
-from conda_build.metadata import trim_build_only_deps
+from conda_build.metadata import MetaData, trim_build_only_deps
 
-from collections.abc import Set as AbstractSet
+from ._types import PkgBuildRef
 from .recipe import Recipe, RecipeError
-from conda_build.metadata import MetaData
+from .utils import RepoData
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -57,7 +56,7 @@ def will_build_variant(meta: MetaData) -> bool:
         "build_number",
         name=meta.name(),
         version=meta.version(),
-        platform=["linux", "noarch"],
+        native=True,
     )
     current_num = int(meta.build_number())
     res = all(num < current_num for num in build_numbers)
@@ -84,7 +83,7 @@ _legacy_build_string_prefixes = re.compile(
         (?P<mro_base> mro  [0-9]{3,9})
     )*
     """,
-    re.X,
+    re.VERBOSE,
 )
 
 
@@ -96,7 +95,7 @@ def _have_partially_matching_build_id(meta: MetaData) -> bool:
         name=meta.name(),
         version=meta.version(),
         build_number=meta.build_number(),
-        platform=["linux", "noarch"],
+        native=True,
     )
     is_noarch = bool(meta.noarch)
     current_build_id = meta.build_id()
@@ -163,29 +162,26 @@ def _have_partially_matching_build_id(meta: MetaData) -> bool:
         trimmed_current_build_id = current_build_id
         for prefix_key, prefix in matches.groupdict().items():
             current_prefix = current_prefixes[prefix_key]
-            if prefix != current_prefix:
-                if prefix and current_prefix:
-                    # noarch:python is handled in have_noarch_python_build_number
-                    # but we might have noarch:generic recipes that use python.
-                    # It probably doesn't matter which python is chosen then, so
-                    # we also trim the "py*" prefix in that case here.
-                    if not (is_noarch and prefix_key == "python"):
-                        return False
+            if (
+                prefix != current_prefix
+                and prefix
+                and current_prefix
+                and not (is_noarch and prefix_key == "python")
+            ):
+                # noarch:python is handled in have_noarch_python_build_number
+                # but we might have noarch:generic recipes that use python.
+                # It probably doesn't matter which python is chosen then, so
+                # we also trim the "py*" prefix in that case here.
+                return False
             if prefix:
                 trimmed_build_id = trimmed_build_id.replace(prefix, "")
             if current_prefix:
                 trimmed_current_build_id = trimmed_current_build_id.replace(
                     current_prefix, ""
                 )
-        if trimmed_build_id.startswith("_"):
-            # If we trimmed everything but the number, no '_' is inserted.
-            trimmed_build_id = trimmed_build_id[1:]
-        if trimmed_current_build_id.startswith("_"):
-            # If we trimmed everything but the number, no '_' is inserted.
-            trimmed_current_build_id = trimmed_current_build_id[1:]
-        if trimmed_build_id == trimmed_current_build_id:
-            return True
-        return False
+        trimmed_build_id = trimmed_build_id.removeprefix("_")
+        trimmed_current_build_id = trimmed_current_build_id.removeprefix("_")
+        return trimmed_build_id == trimmed_current_build_id
 
     for build_id in res:
         if is_matching_trimmed_build_id(build_id, current_build_id):
@@ -209,7 +205,7 @@ def have_variant(meta: MetaData) -> bool:
         name=meta.name(),
         version=meta.version(),
         build=meta.build_id(),
-        platform=["linux", "noarch"],
+        native=True,
     )
     if res:
         logger.debug(
@@ -259,21 +255,24 @@ def will_build_only_missing(metas: list[MetaData]) -> bool:
       True if no divergent build strings exist in repodata
     """
     builds = {(meta.name(), meta.version(), meta.build_number()) for meta in metas}
-    existing_builds = set()
+    existing_builds: set[PkgBuildRef] = set()
     for name, version, build_number in builds:
         existing_builds.update(
-            map(
-                tuple,
-                RepoData().get_package_data(
-                    ["name", "version", "build"],
-                    name=name,
-                    version=version,
-                    build_number=build_number,
-                    platform=["linux", "noarch"],
-                ),
-            ),
+            PkgBuildRef(name=n, version=v, build_string=b)
+            for n, v, b in RepoData().get_package_data(
+                ["name", "version", "build"],
+                name=name,
+                version=version,
+                build_number=build_number,
+                native=True,
+            )
         )
-    new_builds = {(meta.name(), meta.version(), meta.build_id()) for meta in metas}
+    new_builds = {
+        PkgBuildRef(
+            name=meta.name(), version=meta.version(), build_string=meta.build_id()
+        )
+        for meta in metas
+    }
     return new_builds.issuperset(existing_builds)
 
 
@@ -326,7 +325,7 @@ def check(
     Args:
       recipe: The recipe to check
       build_config: conda build config object
-      keep_metas: If true, `Recipe.conda_release` is not called
+      keep_metas: If true, `Recipe.conda_render_cleanup` is not called
       skip_variant_keys: Variant keys to skip a recipe for if they are used
 
     Returns:
@@ -387,5 +386,5 @@ def check(
         else:
             flags |= State.BUMP
     if not keep_metas:
-        recipe.conda_release()
+        recipe.conda_render_cleanup()
     return flags, recipe

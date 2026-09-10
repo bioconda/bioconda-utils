@@ -56,9 +56,9 @@ class compilers_must_be_in_build(LintCheck):
     """
 
     def check_deps(self, deps: dict[str, list[str]], package_location: str) -> None:
-        for dep in deps:
+        for dep, locations in deps.items():
             if dep.startswith("compiler_"):
-                for location in deps[dep]:
+                for location in locations:
                     if "run" in location or "host" in location:
                         self.message(section=location)
 
@@ -75,12 +75,10 @@ class compiler_needs_stdlib_c(LintCheck):
         stdlib = False
         for dep, locations in deps.items():
             if dep.startswith("compiler_") and any(
-                ["build" in location for location in locations]
+                "build" in location for location in locations
             ):
                 compiler = True
-            if dep == "stdlib_c" and any(
-                ["build" in location for location in locations]
-            ):
+            if dep == "stdlib_c" and any("build" in location for location in locations):
                 stdlib = True
         if compiler and not stdlib:
             self.message(section="requirements/build")
@@ -120,9 +118,7 @@ class setup_py_install_args(LintCheck):
         """Check a line for a broken call to setup.py"""
         if "setup.py install" not in line:
             return True
-        if "--single-version-externally-managed" in line:
-            return True
-        return False
+        return "--single-version-externally-managed" in line
 
     def check_deps(self, deps: dict[str, list[str]], package_location: str) -> None:
         if "setuptools" not in deps:
@@ -151,9 +147,10 @@ class cython_must_be_in_host(LintCheck):
     """
 
     def check_deps(self, deps: dict[str, list[str]], package_location: str) -> None:
-        if "cython" in deps:
-            if any("host" not in location for location in deps["cython"]):
-                self.message()
+        if "cython" in deps and any(
+            "host" not in location for location in deps["cython"]
+        ):
+            self.message()
 
 
 class cython_needs_compiler(LintCheck):
@@ -268,7 +265,6 @@ class unnecessary_run_exports_in_main_build_section_with_multiple_outputs(LintCh
     """
 
     def check_recipe(self, recipe):
-        outputs = recipe.get("outputs", dict())
-        if outputs:
-            if "run_exports" in recipe.meta.get("build", dict()):
-                self.message()
+        outputs = recipe.get("outputs", {})
+        if outputs and "run_exports" in recipe.meta.get("build", {}):
+            self.message()

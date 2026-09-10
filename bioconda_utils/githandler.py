@@ -8,6 +8,8 @@ import re
 import subprocess
 from typing import BinaryIO, Iterable, Protocol
 from dataclasses import dataclass
+from pathlib import Path
+from typing import BinaryIO, Protocol
 
 import git
 import yaml
@@ -66,7 +68,11 @@ def install_gpg_key(key) -> str:
       ValueError if importing the key failed
     """
     proc = subprocess.run(
-        ["gpg", "--import"], input=key, stderr=subprocess.PIPE, encoding="ascii"
+        ["gpg", "--import"],
+        input=key,
+        stderr=subprocess.PIPE,
+        encoding="ascii",
+        check=False,
     )
     for line in proc.stderr.splitlines():
         match = re.match(
@@ -189,9 +195,7 @@ class GitHandlerBase:
                     except KeyError:
                         pass
         # now try if any remote matches the url
-        remotes = [
-            r for r in self.repo.remotes if any(filter(lambda x: desc in x, r.urls))
-        ]
+        remotes = [r for r in self.repo.remotes if any(desc in url for url in r.urls)]
 
         if not remotes:
             raise KeyError(f"No remote matching '{desc}' found")
@@ -200,7 +204,7 @@ class GitHandlerBase:
 
         return remotes[0]
 
-    async def branch_is_current(self, branch, path: str, master="master") -> bool:
+    async def branch_is_current(self, branch, path: Path, master="master") -> bool:
         """Checks if **branch** is missing any commits to **path**
         as compared to **master**"""
         # proc = await asyncio.create_subprocess_exec(
@@ -584,7 +588,7 @@ class GitHandler(GitHandlerBase):
 
     def __init__(
         self,
-        folder: str = ".",
+        folder: Path = Path("."),
         dry_run=False,
         home="bioconda/bioconda-recipes",
         fork=None,
@@ -606,12 +610,11 @@ class GitHandler(GitHandlerBase):
         #: Branch to restore after running
         try:
             self.prev_active_branch = self.repo.active_branch
-        except Exception:
+        except TypeError:
             # This will fail on CI nodes from forks, but we don't need to switch back and forth between branches there
             logger.warning(
                 "Couldn't get the active branch name, we must be on detached HEAD"
             )
-            pass
 
     def checkout_master(self):
         """Check out master branch (original branch restored by `close()`)"""
