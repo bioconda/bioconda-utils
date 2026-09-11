@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.1.0](https://github.com/bioconda/bioconda-utils/compare/v5.0.0...v5.1.0) (2026-09-11)
+
+
+### Features
+
+* add caching support and missing CI features ([#1129](https://github.com/bioconda/bioconda-utils/issues/1129)) ([baa4b6f](https://github.com/bioconda/bioconda-utils/commit/baa4b6f78918537f8dfcd83118c320a51e753a27))
+
+
+### Bug Fixes
+
+* fix pixi env mixup ([#1133](https://github.com/bioconda/bioconda-utils/issues/1133)) ([560bb40](https://github.com/bioconda/bioconda-utils/commit/560bb40458946e4c8302a2b5fed448c0abc3a31f))
+
 ## [5.0.0](https://github.com/bioconda/bioconda-utils/compare/v4.5.0...v5.0.0) (2026-08-31)
 
 
