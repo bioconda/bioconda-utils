@@ -11,11 +11,11 @@ from __future__ import annotations
 
 import logging
 import os
-import shutil
+import sys
 from collections import namedtuple
 from importlib.resources import files
 from itertools import chain
-from pathlib import Path, PurePath
+from pathlib import Path
 from typing import Any, cast
 
 # FIXME(upstream): For conda>=4.7.0 initialize_logging is (erroneously) called
@@ -139,6 +139,18 @@ def subdir_to_oslabel(subdir: PackageSubdir) -> OsLabel:
     return "linux" if subdir.startswith("linux") else "osx"
 
 
+def _env_root() -> Path:
+    """Return the conda prefix this installation lives in.
+
+    ``conda-forge-pinning`` installs its ``conda_build_config.yaml`` directly
+    into ``$PREFIX``, i.e. into the same environment that also provides the
+    ``bioconda-utils`` entry point. The prefix of the running interpreter is
+    therefore the right place to look, independent of ``PATH`` and of any
+    environment that happens to be activated in the shell.
+    """
+    return Path(sys.prefix)
+
+
 def load_conda_build_config(
     subdir: PackageSubdir | None = None, trim_skip: bool = True
 ):
@@ -154,20 +166,23 @@ def load_conda_build_config(
         config_kwargs["channel_urls"] = tuple(RepoData.config["channels"])
     config = api.Config(**config_kwargs)
 
-    # get environment root
-    bioconda_utils_bin = shutil.which("bioconda-utils")
-    if bioconda_utils_bin is None:
-        raise FileNotFoundError("Unable to find bioconda-utils on PATH")
-    env_root = PurePath(os.path.realpath(bioconda_utils_bin)).parents[1]
+    pinnings = _env_root() / "conda_build_config.yaml"
     # set path to pinnings from conda forge package
     packaged_config = files("bioconda_utils") / "bioconda_utils-conda_build_config.yaml"
     config.exclusive_config_files = [
-        os.path.join(env_root, "conda_build_config.yaml"),
+        str(pinnings),
         str(packaged_config),
     ]
     variant_config_files = getattr(config, "variant_config_files", None) or []
-    for cfg in chain(config.exclusive_config_files, variant_config_files):
-        assert os.path.exists(cfg), f"error: {cfg} does not exist"
+    for config_file in chain(config.exclusive_config_files, variant_config_files):
+        if not os.path.exists(config_file):
+            raise FileNotFoundError(
+                f"conda-build configuration file does not exist: {config_file}\n"
+                f"Expected the pinnings at {pinnings} (installed by the "
+                "conda-forge-pinning package) and the packaged "
+                "bioconda_utils-conda_build_config.yaml. Variant files passed via "
+                "variant_config_files must exist as given."
+            )
     if subdir is not None and config.subdir != subdir:
         os_label = subdir_to_oslabel(subdir)
         config.platform = os_label

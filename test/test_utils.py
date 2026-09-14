@@ -1500,21 +1500,20 @@ def test_variants():
     assert len(conda_build_bridge.load_all_meta(recipe, config)) == 2
 
 
-def test_load_conda_build_config_resolves_symlink(monkeypatch, tmp_path):
+def test_load_conda_build_config_reads_pinnings_from_env_root(monkeypatch, tmp_path):
     env_root = tmp_path / "env"
-    executable = env_root / "bin" / "bioconda-utils"
-    executable.parent.mkdir(parents=True)
-    executable.touch()
+    env_root.mkdir()
     (env_root / "conda_build_config.yaml").write_text("{}\n")
-
-    symlink = tmp_path / "bin" / "bioconda-utils"
-    symlink.parent.mkdir()
-    symlink.symlink_to(executable)
-    monkeypatch.setattr(shutil, "which", lambda _: str(symlink))
+    monkeypatch.setattr(conda_build_bridge, "_env_root", lambda: env_root)
 
     config = conda_build_bridge.load_conda_build_config()
 
     assert config.exclusive_config_files[0] == str(env_root / "conda_build_config.yaml")
+    # The packaged config is resolved relative to the bioconda_utils package,
+    # independent of the working directory the interpreter was started from.
+    packaged = Path(config.exclusive_config_files[1])
+    assert packaged.name == "bioconda_utils-conda_build_config.yaml"
+    assert packaged.is_file()
 
 
 @pytest.mark.long_running_2
