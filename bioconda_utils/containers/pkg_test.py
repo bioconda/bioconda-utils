@@ -385,7 +385,8 @@ def build_and_test_mulled_image(
     Build the BioContainers production mulled image and run package tests in it.
 
     This wraps ``mulled-build build-and-test``. The generated local image is
-    the artifact later uploaded by :func:`bioconda_utils.upload.mulled_upload`.
+    the artifact later uploaded by
+    :func:`bioconda_utils.containers.upload.mulled_upload`.
 
     Parameters
     ----------

@@ -652,8 +652,8 @@ def purgeImage(
     The local image is tagged under the canonical ``biocontainers`` namespace
     by ``pkg_test.build_and_test_mulled_image`` (not the upload target), so the
     ref is derived via :func:`local_mulled_image_ref` -- the same source
-    :func:`bioconda_utils.upload.mulled_upload` reads from when copying to the
-    registry.
+    :func:`bioconda_utils.containers.upload.mulled_upload` reads from when
+    copying to the registry.
     """
     cmd = ["docker", "rmi", local_mulled_image_ref(img, target_platform)]
     run(cmd)

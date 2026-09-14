@@ -3,9 +3,9 @@
 Writing additional checks
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Lint checks are defined in :py:mod:`bioconda_utils.lint.checks` as
-subclasses of `LintCheck`. It might be easiest to have a look at that
-module and the already existing checks and go from there.
+Lint checks are defined in the modules of :py:mod:`bioconda_utils.lint`
+as subclasses of `LintCheck`. It might be easiest to have a look at those
+modules and the already existing checks and go from there.
 
 Briefly, each class becomes a check by:
 
