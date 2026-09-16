@@ -1470,9 +1470,6 @@ class RepoData:
     _df_ts = None
     _repository_cache: ClassVar[dict[RepoDataKey, _CachedRepoData]] = {}
 
-    use_shards: ClassVar[bool] = os.environ.get(
-        "BIOCONDA_UTILS_USE_SHARDS", "true"
-    ).lower() in ("true", "1")
     _shard_index_cache: ClassVar[dict[RepoDataKey, _CachedShardIndex]] = {}
     _package_shard_cache: ClassVar[
         dict[tuple[str, Subdir, str], _CachedPackageShard]
@@ -1984,8 +1981,7 @@ class RepoData:
         """
         # called from doc generator
         can_use_shards = (
-            self.use_shards
-            and not self._is_loader_mocked()
+            not self._is_loader_mocked()
             and self._df is None
             and self.cache_file is None
         )
@@ -2068,8 +2064,7 @@ class RepoData:
             return iter([])
 
         can_use_shards = (
-            self.use_shards
-            and not self._is_loader_mocked()
+            not self._is_loader_mocked()
             and self._df is None
             and self.cache_file is None
         )

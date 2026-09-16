@@ -1275,7 +1275,6 @@ def test_repodata_creates_configured_disk_cache(monkeypatch, tmp_path):
     monkeypatch.setattr(repodata, "_df_ts", None)
     monkeypatch.setattr(repodata, "cache_file", cache_file)
     monkeypatch.setattr(repodata, "_repository_cache", {})
-    monkeypatch.setattr(repodata, "use_shards", True)
     monkeypatch.setattr(repodata, "platforms", [PackageSubdir.LINUX_AARCH64])
 
     monkeypatch.setattr(
@@ -1391,7 +1390,6 @@ def test_repodata_shards_get_package_data_by_name(monkeypatch):
     repodata = utils.RepoData()
     monkeypatch.setattr(repodata, "_df", None)
     monkeypatch.setattr(repodata, "cache_file", None)
-    monkeypatch.setattr(repodata, "use_shards", True)
     monkeypatch.setattr(repodata, "platforms", [PackageSubdir.LINUX_64])
     monkeypatch.setattr(repodata, "_package_shard_cache", {})
 
@@ -1463,7 +1461,6 @@ def test_repodata_shards_get_package_names(monkeypatch):
     repodata = utils.RepoData()
     monkeypatch.setattr(repodata, "_df", None)
     monkeypatch.setattr(repodata, "cache_file", None)
-    monkeypatch.setattr(repodata, "use_shards", True)
     monkeypatch.setattr(repodata, "platforms", [PackageSubdir.LINUX_64])
     monkeypatch.setattr(repodata, "_package_shard_cache", {})
 
@@ -1587,7 +1584,6 @@ def test_repodata_shards_get_versions(monkeypatch):
     repodata = utils.RepoData()
     monkeypatch.setattr(repodata, "_df", None)
     monkeypatch.setattr(repodata, "cache_file", None)
-    monkeypatch.setattr(repodata, "use_shards", True)
     monkeypatch.setattr(repodata, "platforms", [PackageSubdir.LINUX_64])
     monkeypatch.setattr(repodata, "_package_shard_cache", {})
 
@@ -1629,7 +1625,6 @@ def test_repodata_shards_fallback_on_unsharded(monkeypatch):
     repodata = utils.RepoData()
     monkeypatch.setattr(repodata, "_df", None)
     monkeypatch.setattr(repodata, "cache_file", None)
-    monkeypatch.setattr(repodata, "use_shards", True)
     monkeypatch.setattr(repodata, "platforms", [PackageSubdir.LINUX_64])
     monkeypatch.setattr(
         repodata,
@@ -1669,7 +1664,6 @@ def test_repodata_shards_fallback_on_failed_package_shard(monkeypatch):
     repodata = utils.RepoData()
     monkeypatch.setattr(repodata, "_df", None)
     monkeypatch.setattr(repodata, "cache_file", None)
-    monkeypatch.setattr(repodata, "use_shards", True)
     monkeypatch.setattr(repodata, "platforms", [PackageSubdir.LINUX_64])
     monkeypatch.setattr(repodata, "_package_shard_cache", {})
     repository = ("bioconda", PackageSubdir.LINUX_64)
