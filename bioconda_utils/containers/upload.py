@@ -122,7 +122,7 @@ def mulled_upload(
 def inspect_image_platform(source_ref: str) -> ContainerPlatform:
     """Return the Docker platform recorded in an image source config."""
     raw = run(
-        ["skopeo", "inspect", "--config", source_ref],
+        [oci.skopeo_bin(), "inspect", "--config", source_ref],
         env=oci.skopeo_env(),
     ).stdout
     config = json.loads(raw)
@@ -155,7 +155,7 @@ def upload_mulled_image_source(
     dest_auth_args, secrets = oci.skopeo_auth_args(creds, option="--dest-creds")
     run(
         [
-            "skopeo",
+            oci.skopeo_bin(),
             "--command-timeout",
             f"{timeout}s",
             "copy",

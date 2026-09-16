@@ -214,7 +214,7 @@ def _is_index(manifest: dict[str, Any]) -> bool:
 def _inspect_raw(ref: str, creds: str | None) -> dict[str, Any] | None:
     auth_args, secrets = oci.skopeo_auth_args(creds, option="--creds")
     result = run(
-        ["skopeo", "inspect", "--raw", *auth_args, f"docker://{ref}"],
+        [oci.skopeo_bin(), "inspect", "--raw", *auth_args, f"docker://{ref}"],
         secrets=secrets,
         env=oci.skopeo_env(),
         check=False,
@@ -239,7 +239,7 @@ def _inspect_single_image(ref: str, creds: str | None) -> tuple[ContainerPlatfor
     """Return the platform and digest of a non-index image ref."""
     auth_args, secrets = oci.skopeo_auth_args(creds, option="--creds")
     raw = run(
-        ["skopeo", "inspect", "--no-tags", *auth_args, f"docker://{ref}"],
+        [oci.skopeo_bin(), "inspect", "--no-tags", *auth_args, f"docker://{ref}"],
         secrets=secrets,
         env=oci.skopeo_env(),
     ).stdout

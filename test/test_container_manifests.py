@@ -306,6 +306,7 @@ def test_current_descriptors_inspects_index_once(monkeypatch):
 
     monkeypatch.setattr(container_manifests, "run", run)
     monkeypatch.setattr(container_manifests.oci, "skopeo_env", dict)
+    monkeypatch.setattr(container_manifests.oci, "skopeo_bin", lambda: "skopeo")
 
     assert container_manifests._current_descriptors(canonical, None) == {
         ContainerPlatform.LINUX_AMD64: digest
@@ -333,6 +334,7 @@ def test_current_descriptors_inspects_single_image_twice(monkeypatch):
 
     monkeypatch.setattr(container_manifests, "run", run)
     monkeypatch.setattr(container_manifests.oci, "skopeo_env", dict)
+    monkeypatch.setattr(container_manifests.oci, "skopeo_bin", lambda: "skopeo")
 
     assert container_manifests._current_descriptors(canonical, None) == {
         ContainerPlatform.LINUX_ARM64: digest
@@ -350,6 +352,7 @@ def test_inspect_raw_returns_none_for_missing_ref(monkeypatch, message):
 
     monkeypatch.setattr(container_manifests, "run", run)
     monkeypatch.setattr(container_manifests.oci, "skopeo_env", dict)
+    monkeypatch.setattr(container_manifests.oci, "skopeo_bin", lambda: "skopeo")
 
     assert container_manifests._inspect_raw("quay.io/example/missing:tag", None) is None
 
@@ -360,6 +363,7 @@ def test_inspect_raw_raises_for_unexpected_failure(monkeypatch):
 
     monkeypatch.setattr(container_manifests, "run", run)
     monkeypatch.setattr(container_manifests.oci, "skopeo_env", dict)
+    monkeypatch.setattr(container_manifests.oci, "skopeo_bin", lambda: "skopeo")
 
     with pytest.raises(RuntimeError, match="connection refused"):
         container_manifests._inspect_raw("quay.io/example/image:tag", None)

@@ -397,6 +397,7 @@ def test_mulled_upload_passes_target_platform(monkeypatch):
     commands = []
     monkeypatch.setenv("QUAY_LOGIN", "user:token")
     monkeypatch.setattr(upload.oci, "skopeo_env", dict)
+    monkeypatch.setattr(upload.oci, "skopeo_bin", lambda: "skopeo")
 
     def run(cmd, **_kwargs):
         commands.append(cmd)
@@ -437,6 +438,7 @@ def test_mulled_upload_stages_amd64_under_suffixed_tag(monkeypatch):
     commands = []
     monkeypatch.setenv("QUAY_LOGIN", "user:token")
     monkeypatch.setattr(upload.oci, "skopeo_env", dict)
+    monkeypatch.setattr(upload.oci, "skopeo_bin", lambda: "skopeo")
 
     def run(cmd, **_kwargs):
         commands.append(cmd)
@@ -463,6 +465,7 @@ def test_mulled_upload_stages_amd64_under_suffixed_tag(monkeypatch):
 def test_mulled_upload_rejects_wrong_source_platform(monkeypatch):
     monkeypatch.setenv("QUAY_LOGIN", "user:token")
     monkeypatch.setattr(upload.oci, "skopeo_env", dict)
+    monkeypatch.setattr(upload.oci, "skopeo_bin", lambda: "skopeo")
     monkeypatch.setattr(
         upload,
         "run",
@@ -488,6 +491,7 @@ def test_upload_mulled_image_source_records_destination_digest(monkeypatch):
     commands = []
     monkeypatch.setenv("QUAY_LOGIN", "user:token")
     monkeypatch.setattr(upload.oci, "skopeo_env", dict)
+    monkeypatch.setattr(upload.oci, "skopeo_bin", lambda: "skopeo")
 
     def run(cmd, **_kwargs):
         commands.append(cmd)
@@ -533,6 +537,7 @@ def test_upload_mulled_image_source_can_use_ambient_registry_auth(monkeypatch):
     monkeypatch.delenv("QUAY_LOGIN", raising=False)
     monkeypatch.delenv("QUAY_OAUTH_TOKEN", raising=False)
     monkeypatch.setattr(upload.oci, "skopeo_env", dict)
+    monkeypatch.setattr(upload.oci, "skopeo_bin", lambda: "skopeo")
 
     def run(cmd, **_kwargs):
         commands.append(cmd)
@@ -589,6 +594,7 @@ def test_mulled_upload_sources_local_image_from_biocontainers(monkeypatch):
     purgeImage: the destination is target-namespaced, but the source is not."""
     monkeypatch.setenv("QUAY_LOGIN", "user:token")
     monkeypatch.setattr(upload.oci, "skopeo_env", dict)
+    monkeypatch.setattr(upload.oci, "skopeo_bin", lambda: "skopeo")
 
     sources = []
 
