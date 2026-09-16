@@ -51,6 +51,12 @@ DEFAULT_PRIMARY_PLATFORMS: tuple[PackageSubdir, ...] = (
 )
 #: Conda repodata subdir notation, including ``noarch``.
 Subdir: TypeAlias = PackageSubdir | Literal["noarch"]
+#: Conda channel name. Deliberately a plain ``str`` alias, not an enum:
+#: channels are an open set (any anaconda.org namespace, mirror URL, or
+#: ``file://`` path), so the valid values cannot be enumerated the way
+#: package subdirs can. Use this alias to mark which strings are channels
+#: as opposed to URLs or other names.
+Channel: TypeAlias = str
 #: A two-part OS label -- the form conda-build's ``config.platform`` and its
 #: ``DEFAULT_COMPILERS`` table require (see ``conda_build.variants``). This is
 #: *not* a subdir: ``"linux-64"`` is not a valid ``OsLabel``.

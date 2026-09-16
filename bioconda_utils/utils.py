@@ -62,6 +62,7 @@ from yaspin.spinners import Spinners
 from bioconda_utils._types import (
     ALL_PACKAGE_SUBDIRS,
     DEFAULT_PRIMARY_PLATFORMS,
+    Channel,
     Config,
     ContainerPlatform,
     OCIImageConfig,
@@ -79,7 +80,7 @@ logger = logging.getLogger(__name__)
 
 disk_cache = diskcache.Cache(platformdirs.user_cache_dir("bioconda-utils"))
 
-RepoDataKey: TypeAlias = tuple[str, Subdir]
+RepoDataKey: TypeAlias = tuple[Channel, Subdir]
 
 
 @dataclass
@@ -1201,7 +1202,16 @@ def normalize_config(config: dict[str, Any]) -> Config:
     if "blacklists" in config:
         default_config["blacklists"] = list(get_list("blacklists"))
     if "channels" in config:
-        default_config["channels"] = list(get_list("channels"))
+        normalized_channels: list[Channel] = []
+        for channel in get_list("channels"):
+            if not isinstance(channel, str):
+                raise TypeError(f"Channel names must be strings, not {channel!r}")
+            channel = channel.strip().rstrip("/")
+            if not channel:
+                raise ValueError("Channel names must not be empty")
+            if channel not in normalized_channels:
+                normalized_channels.append(channel)
+        default_config["channels"] = normalized_channels
     if "primary_platforms" in config:
         default_config["primary_platforms"] = [
             PackageSubdir(p) for p in get_list("primary_platforms")
@@ -1451,10 +1461,6 @@ class RepoData:
 
     """
 
-    REPODATA_URL = "https://conda.anaconda.org/{channel}/{subdir}/repodata.json"
-    REPODATA_DEFAULTS_URL = "https://repo.anaconda.com/pkgs/main/{subdir}/repodata.json"
-    LOCAL_REPODATA = "{channel}/{subdir}/repodata.json"
-
     _load_columns: ClassVar = ["build", "build_number", "name", "version", "depends"]
 
     #: Columns available in internal dataframe
@@ -1472,7 +1478,7 @@ class RepoData:
 
     _shard_index_cache: ClassVar[dict[RepoDataKey, _CachedShardIndex]] = {}
     _package_shard_cache: ClassVar[
-        dict[tuple[str, Subdir, str], _CachedPackageShard]
+        dict[tuple[Channel, Subdir, str], _CachedPackageShard]
     ] = {}
     _shards_unavailable: ClassVar[dict[RepoDataKey, datetime.datetime]] = {}
 
@@ -1540,19 +1546,22 @@ class RepoData:
             self._repository_cache.clear()
         return self._df
 
-    def _make_repodata_url(self, channel, subdir: Subdir):
-        if channel == "defaults":
-            # caveat: this only gets defaults main, not 'free', 'r' or 'pro'
-            url_template = self.REPODATA_DEFAULTS_URL
-        else:
-            url_template = self.REPODATA_URL
-        local_url_template = self.LOCAL_REPODATA
+    def _make_repodata_dir_url(self, channel: Channel, subdir: Subdir) -> str:
+        """Return the base URL of a channel subdirectory.
 
-        if channel.startswith("file://"):  # Allow local channels
-            url = local_url_template.format(channel=channel, subdir=subdir)
+        Single place that knows that ``defaults`` is an alias for
+        ``pkgs/main`` on a different host (caveat: only main, not free/r/pro)
+        and that ``file://`` channels are local paths.
+        """
+        if channel == "defaults":
+            return f"https://repo.anaconda.com/pkgs/main/{subdir}/"
+        elif channel.startswith("file://"):
+            return f"{channel}/{subdir}/"
         else:
-            url = url_template.format(channel=channel, subdir=subdir)
-        return url
+            return f"https://conda.anaconda.org/{channel}/{subdir}/"
+
+    def _make_repodata_url(self, channel: Channel, subdir: Subdir) -> str:
+        return f"{self._make_repodata_dir_url(channel, subdir)}repodata.json"
 
     def _load_channel_dataframe_cached(self):
         if self.cache_file is not None and os.path.exists(self.cache_file):
@@ -1576,7 +1585,7 @@ class RepoData:
         return res
 
     def _load_channel_dataframe(
-        self, repositories: Iterable[tuple[str, Subdir]] | None = None
+        self, repositories: Iterable[tuple[Channel, Subdir]] | None = None
     ):
         repos = list(
             product(self.channels, self.platforms)
@@ -1626,22 +1635,14 @@ class RepoData:
             return False
         return getattr(loader, "__func__", loader) != RepoData._load_channel_dataframe
 
-    def _make_repodata_dir_url(self, channel: str, subdir: Subdir) -> str:
-        if channel == "defaults":
-            return f"https://repo.anaconda.com/pkgs/main/{subdir}/"
-        elif channel.startswith("file://"):
-            return f"{channel}/{subdir}/"
-        else:
-            return f"https://conda.anaconda.org/{channel}/{subdir}/"
-
-    def _make_shards_index_url(self, channel: str, subdir: Subdir) -> str:
+    def _make_shards_index_url(self, channel: Channel, subdir: Subdir) -> str:
         return (
             f"{self._make_repodata_dir_url(channel, subdir)}repodata_shards.msgpack.zst"
         )
 
     def _make_shard_url(
         self,
-        channel: str,
+        channel: Channel,
         subdir: Subdir,
         shard_index: _CachedShardIndex,
         hex_hash: str,
@@ -1713,7 +1714,7 @@ class RepoData:
     def _parse_package_shard(
         cls,
         data: bytes | None,
-        meta_data: tuple[str, Subdir, str],
+        meta_data: tuple[Channel, Subdir, str],
     ) -> list[dict[str, Any]] | None:
         if not data:
             return None
@@ -1818,7 +1819,7 @@ class RepoData:
 
     def _get_sharded_package_data(
         self,
-        requested_channels: Sequence[str],
+        requested_channels: Sequence[Channel],
         requested_subdirs: Sequence[Subdir],
         package_names: Collection[str],
     ) -> list[dict[str, Any]]:
@@ -1831,7 +1832,7 @@ class RepoData:
         }
         to_fetch_urls: list[str] = []
         to_fetch_descs: list[str] = []
-        to_fetch_metadata: list[tuple[str, Subdir, str]] = []
+        to_fetch_metadata: list[tuple[Channel, Subdir, str]] = []
 
         fallback_repos: set[RepoDataKey] = set()
 
@@ -1907,16 +1908,24 @@ class RepoData:
 
         return list(chain.from_iterable(records_by_repo[repo] for repo in repositories))
 
+    def _filter_channels(self, channels: Iterable[Channel]) -> tuple[Channel, ...]:
+        """Keep only configured channels, warning about dropped names."""
+        configured_channels = set(self.channels)
+        requested = tuple(dict.fromkeys(channels))
+        dropped = [c for c in requested if c not in configured_channels]
+        if dropped:
+            logger.warning(
+                "Ignoring unknown channels %s (configured: %s)",
+                dropped,
+                sorted(configured_channels),
+            )
+        return tuple(c for c in requested if c in configured_channels)
+
     def _get_repository_dataframe(
-        self, channels: Iterable[str], subdirs: Iterable[Subdir]
+        self, channels: Iterable[Channel], subdirs: Iterable[Subdir]
     ) -> pd.DataFrame:
         """Load and cache only the requested channel/subdirectory pairs."""
-        configured_channels = set(self.channels)
-        requested_channels = tuple(
-            channel
-            for channel in dict.fromkeys(channels)
-            if channel in configured_channels
-        )
+        requested_channels = self._filter_channels(channels)
         requested_subdirs = tuple(dict.fromkeys(subdirs))
         return self._get_repository_pairs_dataframe(
             product(requested_channels, requested_subdirs)
@@ -1929,12 +1938,10 @@ class RepoData:
         if self._df is not None or self.cache_file is not None:
             return self.df
 
-        configured_channels = set(self.channels)
-        repositories = tuple(
-            repo
-            for repo in dict.fromkeys(repositories)
-            if repo[0] in configured_channels
-        )
+        repositories = tuple(dict.fromkeys(repositories))
+        requested_channels = self._filter_channels(repo[0] for repo in repositories)
+        allowed = set(requested_channels)
+        repositories = tuple(repo for repo in repositories if repo[0] in allowed)
         now = datetime.datetime.now(datetime.UTC)
         missing = [
             repository
@@ -2052,10 +2059,7 @@ class RepoData:
         else:
             requested_subdirs = [cast(Subdir, subdir) for subdir in platform]
 
-        configured_channels = set(self.channels)
-        requested_channels = [
-            c for c in dict.fromkeys(requested_channels) if c in configured_channels
-        ]
+        requested_channels = self._filter_channels(requested_channels)
         if not requested_channels or not requested_subdirs:
             if key is None:
                 return False
@@ -2161,7 +2165,7 @@ def yaml_remove_invalid_chars(
 
 # Cache results to disk for one week.
 @disk_cache.memoize(expire=604800)
-def get_package_downloads(channel: str, package: str) -> int:
+def get_package_downloads(channel: Channel, package: str) -> int:
     """Use anaconda API to obtain download counts."""
     data = requests.get(f"https://api.anaconda.org/package/{channel}/{package}").json()
     if "files" in data:
