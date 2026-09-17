@@ -5,8 +5,9 @@ from pathlib import Path
 import pytest
 from ruamel.yaml import YAML
 
-from bioconda_utils import lint, utils
-from bioconda_utils.utils import ensure_list
+from bioconda_utils import lint
+from bioconda_utils._types import ensure_list
+from bioconda_utils.config import load_config
 
 yaml = YAML(typ="rt")  # pylint: disable=invalid-name
 
@@ -32,7 +33,7 @@ TEST_CASE_IDS = list(TEST_DATA.keys())
 @pytest.fixture
 def linter(config_file, recipes_folder):
     """Prepares a linter given config_folder and recipes_folder"""
-    config = utils.load_config(config_file)
+    config = load_config(config_file)
     yield lint.Linter(config, Path(recipes_folder), nocatch=True)
 
 

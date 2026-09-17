@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import NewType
 
-import yaml
+from ruamel.yaml import YAML
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -719,7 +719,7 @@ class BiocondaRepoMixin(GitHandlerBase):
         if branch is None:
             raise GitHandlerFailure(f"Unable to resolve branch {ref}")
         config_data = self.read_from_branch(branch, self.config_file)
-        config = yaml.safe_load(config_data)
+        config = YAML(typ="safe").load(config_data)
         blacklists = config.get("blacklists", [])
         blacklisted: set[Path] = set()
         for blacklist in blacklists:

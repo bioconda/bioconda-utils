@@ -15,8 +15,9 @@ from conda_build.metadata import MetaData
 from conda_index.index import update_index
 from conda_package_streaming.package_streaming import stream_conda_info
 
-from . import utils
-from ._types import MULLED_LOCAL_NAMESPACE, ContainerPlatform, PkgBuildRef
+from .._types import MULLED_LOCAL_NAMESPACE, ContainerPlatform, PkgBuildRef
+from ..support.logsetup import Progress
+from ..support.subproc import run
 
 logger = logging.getLogger(__name__)
 
@@ -277,8 +278,8 @@ fi
         cmd += ["/bin/bash", "/opt/test_script.bash"]
 
         logger.debug("Pre-solved mulled test command: %s", cmd)
-        with utils.Progress():
-            p = utils.run(cmd, live=live_logs)
+        with Progress():
+            p = run(cmd, live=live_logs)
         return p
 
 
@@ -384,7 +385,8 @@ def build_and_test_mulled_image(
     Build the BioContainers production mulled image and run package tests in it.
 
     This wraps ``mulled-build build-and-test``. The generated local image is
-    the artifact later uploaded by :func:`bioconda_utils.upload.mulled_upload`.
+    the artifact later uploaded by
+    :func:`bioconda_utils.containers.upload.mulled_upload`.
 
     Parameters
     ----------
@@ -438,7 +440,7 @@ def build_and_test_mulled_image(
     # galaxy-lib always downloads involucro, unless it's in cwd or its path is explicitly given.
     # We inject a POSTINSTALL to the involucro command with a small wrapper to
     # create activation / entrypoint scripts for the container.
-    involucro_path = Path(__file__).parent / "involucro"
+    involucro_path = Path(__file__).parents[1] / "involucro"
     if not involucro_path.exists():
         raise RuntimeError("internal involucro wrapper missing")
     cmd += ["--involucro-path", str(involucro_path)]
@@ -452,7 +454,7 @@ def build_and_test_mulled_image(
         raise ValueError("CONDA_IMAGE env var already exists!")
     else:
         env["CONDA_IMAGE"] = conda_image
-    with tempfile.TemporaryDirectory() as d, utils.Progress():
-        p = utils.run(cmd, env=env, cwd=d, live=live_logs)
+    with tempfile.TemporaryDirectory() as d, Progress():
+        p = run(cmd, env=env, cwd=d, live=live_logs)
 
     return p

@@ -61,7 +61,7 @@ def test_diagnostics(monkeypatch, tmp_path):
             "exclusive_config_files": [first, second],
         },
     )()
-    monkeypatch.setattr(cli.utils, "load_conda_build_config", lambda: config)
+    monkeypatch.setattr(cli, "load_conda_build_config", lambda: config)
 
     result = runner.invoke(cli.app, ["diagnostics"])
 
@@ -196,8 +196,8 @@ def test_dag_hides_singletons(monkeypatch, tmp_path):
     package_dag = nx.DiGraph([("dependency", "package")])
     package_dag.add_node("singleton")
     name2recipes = {name: {Path("recipes") / name} for name in package_dag.nodes}
-    monkeypatch.setattr(cli.utils, "load_config", lambda _: {})
-    monkeypatch.setattr(cli.utils, "get_recipes", lambda *_: [])
+    monkeypatch.setattr(cli, "load_config", lambda _: {})
+    monkeypatch.setattr(cli, "get_recipes", lambda *_: [])
     monkeypatch.setattr(cli.graph, "build", lambda *_: (package_dag, name2recipes))
 
     result = runner.invoke(
@@ -450,7 +450,7 @@ def test_lint_list_checks_allows_missing_paths(monkeypatch):
 def test_lint_logs_exceptions_without_pdb(monkeypatch, caplog, tmp_path):
     monkeypatch.setattr(cli, "_setup_runtime", lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        cli.utils,
+        cli,
         "load_config",
         lambda path: (_ for _ in ()).throw(RuntimeError("bad")),
     )
@@ -480,10 +480,8 @@ def test_handle_merged_pr_accepts_single_git_ref(monkeypatch):
 def test_shared_runtime_options_are_applied(monkeypatch):
     logger_calls = []
     thread_calls = []
-    monkeypatch.setattr(
-        cli.utils, "setup_logger", lambda *args: logger_calls.append(args)
-    )
-    monkeypatch.setattr(cli.utils, "set_max_threads", thread_calls.append)
+    monkeypatch.setattr(cli, "setup_logger", lambda *args: logger_calls.append(args))
+    monkeypatch.setattr(cli, "set_max_threads", thread_calls.append)
     cli._setup_runtime(
         loglevel="warning",
         log_command_max_lines=12,

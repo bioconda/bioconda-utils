@@ -37,9 +37,11 @@ from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap
 from ruamel.yaml.constructor import DuplicateKeyError
 
-from . import utils
-from ._types import ALL_PACKAGE_SUBDIRS, PackageSubdir
+from ._types import ALL_PACKAGE_SUBDIRS, PackageSubdir, ensure_list
 from .aiopipe import EndProcessingItem
+from .conda.conda_build_bridge import jinja_silent_undef
+from .conda.recipes import get_recipes
+from .support.parallel import parallel_iter
 
 yaml = YAML(typ="rt")  # pylint: disable=invalid-name
 
@@ -386,7 +388,7 @@ class Recipe:
         # Storing it means the recipe cannot be pickled, which in turn
         # means we cannot pass it to ProcessExecutors.
         try:
-            return utils.jinja_silent_undef.from_string("\n".join(self.meta_yaml))
+            return jinja_silent_undef.from_string("\n".join(self.meta_yaml))
         except jinja2.exceptions.TemplateSyntaxError as exc:
             raise RenderFailure(self, message=exc.message, line=exc.lineno)
         except jinja2.exceptions.TemplateError as exc:
@@ -450,7 +452,7 @@ class Recipe:
     def maintainers(self):
         """List of recipe maintainers"""
         if "extra" in self.meta and "recipe-maintainers" in self.meta["extra"]:
-            return utils.ensure_list(self.meta["extra"]["recipe-maintainers"])
+            return ensure_list(self.meta["extra"]["recipe-maintainers"])
         return []
 
     @property
@@ -813,7 +815,7 @@ class Recipe:
         if not sections:
             sections = ("build", "run", "host")
         else:
-            sections = utils.ensure_list(sections)
+            sections = ensure_list(sections)
         check_paths = []
         for section in sections:
             check_paths.append(f"requirements/{section}")
@@ -953,8 +955,8 @@ class Recipe:
 def load_parallel_iter(
     recipe_folder: Path, package_patterns: Sequence[str]
 ) -> Iterator[Recipe]:
-    recipes = list(utils.get_recipes(recipe_folder, package_patterns))
-    for recipe in utils.parallel_iter(
+    recipes = list(get_recipes(recipe_folder, package_patterns))
+    for recipe in parallel_iter(
         Recipe.from_file,
         recipes,
         "Loading Recipes...",

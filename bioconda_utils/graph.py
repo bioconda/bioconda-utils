@@ -17,7 +17,8 @@ import networkx as nx
 from bioconda_utils.recipe import Recipe
 from bioconda_utils.skiplist import Skiplist
 
-from . import utils
+from .conda.conda_build_bridge import load_meta_fast
+from .support.parallel import parallel_iter
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -58,9 +59,7 @@ def build(
     """
     logger.info("Generating DAG")
     recipes = list(recipes)
-    metadata = list(
-        utils.parallel_iter(utils.load_meta_fast, recipes, "Loading Recipes")
-    )
+    metadata = list(parallel_iter(load_meta_fast, recipes, "Loading Recipes"))
 
     # name2recipe is meta.yaml's package:name mapped to the recipe path.
     #

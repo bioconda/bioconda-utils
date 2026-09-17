@@ -18,7 +18,7 @@ from github.CheckRun import CheckRun
 from github.PullRequest import PullRequest
 from github.Repository import Repository
 
-from bioconda_utils import utils
+from bioconda_utils import githubhandler
 from bioconda_utils._types import (
     ContainerPlatform,
     PackageSubdir,
@@ -26,11 +26,12 @@ from bioconda_utils._types import (
     docker_platform_tag_suffix,
     package_subdir_to_container_platform,
 )
-from bioconda_utils.container_manifests import (
+from bioconda_utils.conda import repodata
+from bioconda_utils.containers.container_manifests import (
     resolve_registry_creds,
     write_image_record,
 )
-from bioconda_utils.upload import (
+from bioconda_utils.containers.upload import (
     anaconda_upload,
     inspect_image_platform,
     upload_mulled_image_source,
@@ -241,7 +242,7 @@ def upload_pr_artifacts(
 ) -> UploadResult:
     """Upload package and image artifacts from the PR associated with git_sha."""
     if package_platform is None:
-        package_platform = utils.RepoData.native_subdir()
+        package_platform = repodata.RepoData.native_subdir()
     target_platform = (
         package_subdir_to_container_platform(package_platform)
         if mulled_upload_target
@@ -249,7 +250,7 @@ def upload_pr_artifacts(
     )
     job_platform = _job_platform_from_package_platform(package_platform)
 
-    gh = utils.get_github_client()
+    gh = githubhandler.get_github_client()
 
     repo = gh.get_repo(repo_name)
 
@@ -358,8 +359,7 @@ def fetch_artifacts(
     if package_platform is not None:
         package_platform = PackageSubdir(package_platform)
     if job_platform is None or package_platform is None:
-        repodata = utils.RepoData()
-        package_platform = package_platform or repodata.native_subdir()
+        package_platform = package_platform or repodata.RepoData().native_subdir()
         job_platform = job_platform or _job_platform_from_package_platform(
             package_platform
         )

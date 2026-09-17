@@ -1,7 +1,9 @@
 import pytest
 
-from bioconda_utils import bioconductor_skeleton, cran_skeleton, utils
+from bioconda_utils import bioconductor_skeleton, cran_skeleton
 from bioconda_utils._types import Config
+from bioconda_utils.conda import repodata
+from bioconda_utils.conda.conda_build_bridge import load_first_metadata
 
 config = {"channels": ["conda-forge", "bioconda"]}
 
@@ -20,7 +22,7 @@ def test_write_recipe_normalizes_raw_config_at_boundary(monkeypatch, tmp_path):
         assert captured["config"]["requirements"] is None
         raise NormalizationObserved
 
-    monkeypatch.setattr(utils.RepoData, "register_config", register_config)
+    monkeypatch.setattr(repodata.RepoData, "register_config", register_config)
     monkeypatch.setattr(bioconductor_skeleton, "BioCProjectPage", observe_config)
 
     with pytest.raises(NormalizationObserved):
@@ -111,7 +113,7 @@ def test_meta_contents(tmpdir, bioc_fetch):
         packages=bioc_fetch,
     )
 
-    edger_meta = utils.load_first_metadata(str(tmpdir.join("bioconductor-edger"))).meta
+    edger_meta = load_first_metadata(str(tmpdir.join("bioconductor-edger"))).meta
     assert "r-rcpp" in edger_meta["requirements"]["run"]
 
     # The rendered meta has {{ compiler('c') }} filled in, so we need to check
@@ -191,7 +193,7 @@ def test_annotation_data(tmpdir, bioc_fetch):
     bioconductor_skeleton.write_recipe(
         "AHCytoBands", str(tmpdir), config, recursive=False, packages=bioc_fetch
     )
-    meta = utils.load_first_metadata(
+    meta = load_first_metadata(
         str(tmpdir.join("bioconductor-ahcytobands")), finalize=False
     ).meta
     assert "curl" in {dep.split()[0] for dep in meta["requirements"]["run"]}
@@ -209,7 +211,7 @@ def test_experiment_data(tmpdir, bioc_fetch):
         recursive=False,
         packages=bioc_fetch,
     )
-    meta = utils.load_first_metadata(
+    meta = load_first_metadata(
         str(tmpdir.join("bioconductor-affyhgu133a2expr")), finalize=False
     ).meta
     assert "curl" in {dep.split()[0] for dep in meta["requirements"]["run"]}

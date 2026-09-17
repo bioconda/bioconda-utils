@@ -9,7 +9,7 @@ import glob
 import os
 from typing import Any, ClassVar
 
-from bioconda_utils import utils
+from bioconda_utils.conda.repodata import RepoData
 
 from . import WARNING, LintCheck, _recipe
 
@@ -137,7 +137,7 @@ class cran_packages_to_conda_forge(LintCheck):
             "R" in deps
             and any("run" in dep for dep in deps["R"])
             and all(
-                utils.RepoData().get_package_data(name=dep, channels="conda-forge")
+                RepoData().get_package_data(name=dep, channels="conda-forge")
                 for dep in deps
             )
         ):

@@ -3,9 +3,9 @@
 Writing additional checks
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Lint checks are defined in :py:mod:`bioconda_utils.lint.checks` as
-subclasses of `LintCheck`. It might be easiest to have a look at that
-module and the already existing checks and go from there.
+Lint checks are defined in the modules of :py:mod:`bioconda_utils.lint`
+as subclasses of `LintCheck`. It might be easiest to have a look at those
+modules and the already existing checks and go from there.
 
 Briefly, each class becomes a check by:
 
@@ -110,7 +110,8 @@ import networkx as nx
 from bioconda_utils.skiplist import Skiplist
 
 from .. import recipe as _recipe
-from .. import utils
+from ..support.logsetup import tqdm
+from ..support.subproc import run
 
 logger = logging.getLogger(__name__)
 
@@ -488,7 +489,7 @@ class Linter:
     """Lint executor
 
     Arguments:
-      config: Configuration dict as provided by `utils.load_config()`.
+      config: Configuration dict as provided by `config.load_config()`.
       recipe_folder: Folder which recipes are located.
       exclude: List of function names in ``registry`` to skip globally.
                When running on CI, this will be merged with anything
@@ -566,7 +567,7 @@ class Linter:
             commit_message = os.environ["LINT_SKIP"]
         elif os.path.exists(".git"):
             # Obtain commit message from last commit.
-            commit_message = utils.run(
+            commit_message = run(
                 ["git", "log", "--format=%B", "-n", "1"],
                 loglevel=0,
             ).stdout
@@ -592,7 +593,7 @@ class Linter:
           True if issues with errors were found
 
         """
-        for recipe_name in utils.tqdm(sorted(recipe_names)):
+        for recipe_name in tqdm(sorted(recipe_names)):
             self.order_and_load_checks()
             try:
                 msgs = self.lint_one(recipe_name, fix=fix)

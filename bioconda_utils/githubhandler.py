@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import abc
 import logging
+import os
 from collections.abc import AsyncIterator
 from copy import copy
 from enum import Enum
@@ -15,6 +16,8 @@ import cachetools
 import gidgethub
 import gidgethub.abc
 import gidgethub.aiohttp
+from github import Github
+from urllib3 import Retry
 
 if TYPE_CHECKING:
     import aiohttp
@@ -374,3 +377,16 @@ class AiohttpGitHubHandler(GitHubHandler):
             cache=cachetools.LRUCache(maxsize=500),
         )
         self.session = session
+
+
+def get_github_client() -> Github:
+    """Get a Github client with a robust retry policy."""
+    if "GITHUB_TOKEN" in os.environ:
+        return Github(
+            os.environ["GITHUB_TOKEN"],
+            retry=Retry(total=10, status_forcelist=(500, 502, 504), backoff_factor=0.3),
+        )
+    logger.warning("GITHUB_TOKEN not found, restrictions may be enforced by GitHub API")
+    return Github(
+        retry=Retry(total=10, status_forcelist=(500, 502, 504), backoff_factor=0.3),
+    )

@@ -11,7 +11,8 @@ from itertools import zip_longest
 
 from conda_build.api import skeletonize
 
-from .utils import run, setup_logger
+from .support.logsetup import setup_logger
+from .support.subproc import run
 
 logger = logging.getLogger(__name__)
 

@@ -7,24 +7,19 @@ import logging
 import os
 import subprocess as sp
 
-from . import utils
-from ._types import (
+from .._types import (
     ContainerPlatform,
     PkgBuildRef,
     QuayUploadTarget,
     local_mulled_image_ref,
     native_container_platform,
 )
+from ..support.subproc import run
+from . import oci
 from .container_manifests import (
     MulledImageRecord,
     platform_ref,
     resolve_registry_creds,
-)
-from .utils import (
-    parse_oci_config_platform,
-    skopeo_auth_args,
-    skopeo_env,
-    skopeo_inspect_digest,
 )
 
 logger = logging.getLogger(__name__)
@@ -64,7 +59,7 @@ def anaconda_upload(
     logger.info("UPLOAD uploading package %s", package)
     try:
         cmds = ["anaconda", "-t", token, "upload", package] + label_arg
-        utils.run(cmds, secrets=[token])
+        run(cmds, secrets=[token])
         logger.info("UPLOAD SUCCESS: uploaded package %s", package)
         return True
 
@@ -126,12 +121,12 @@ def mulled_upload(
 
 def inspect_image_platform(source_ref: str) -> ContainerPlatform:
     """Return the Docker platform recorded in an image source config."""
-    raw = utils.run(
-        ["skopeo", "inspect", "--config", source_ref],
-        env=skopeo_env(),
+    raw = run(
+        [oci.skopeo_bin(), "inspect", "--config", source_ref],
+        env=oci.skopeo_env(),
     ).stdout
     config = json.loads(raw)
-    return parse_oci_config_platform(config, ref=source_ref)
+    return oci.parse_oci_config_platform(config, ref=source_ref)
 
 
 def upload_mulled_image_source(
@@ -157,10 +152,10 @@ def upload_mulled_image_source(
                 f"expected {target_platform}, found {source_platform}"
             )
     destination_ref = platform_ref(canonical_ref, target_platform)
-    dest_auth_args, secrets = skopeo_auth_args(creds, option="--dest-creds")
-    utils.run(
+    dest_auth_args, secrets = oci.skopeo_auth_args(creds, option="--dest-creds")
+    run(
         [
-            "skopeo",
+            oci.skopeo_bin(),
             "--command-timeout",
             f"{timeout}s",
             "copy",
@@ -169,9 +164,9 @@ def upload_mulled_image_source(
             *dest_auth_args,
         ],
         secrets=secrets,
-        env=skopeo_env(),
+        env=oci.skopeo_env(),
     )
-    digest = skopeo_inspect_digest(destination_ref, creds)
+    digest = oci.skopeo_inspect_digest(destination_ref, creds)
     return MulledImageRecord(
         canonical_ref=canonical_ref,
         platform=target_platform,
