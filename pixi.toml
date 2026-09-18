@@ -18,8 +18,8 @@ conda-build = "26.7.*"
 conda-index = "0.12.*"
 conda-package-streaming = "0.13.*"
 mamba = "2.5.*"
-zstandard = "*"
-msgpack-python = "*"
+zstandard = ">=0.23,<1"
+msgpack-python = ">=1.1,<2"
 
 # CLI
 typer = "0.26.*"

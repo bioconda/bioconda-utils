@@ -1,5 +1,6 @@
 """Unit tests for bioconda_utils.githandler"""
 
+import asyncio
 import subprocess
 from pathlib import Path
 
@@ -9,6 +10,7 @@ import yaml
 from bioconda_utils.githandler import (
     BiocondaRepoMixin,
     BranchName,
+    CommitSha,
     GitActor,
     GitHandler,
     GitHandlerFailure,
@@ -206,6 +208,38 @@ def test_commit_and_push_changes(sample_git_repo: Path):
     assert log == "Bioconda Bot <bot@bioconda.org> update readme"
 
 
+def test_commit_and_push_changes_with_author_without_email(sample_git_repo: Path):
+    handler = GitHandler(sample_git_repo, dry_run=True, allow_dirty=True)
+    handler.set_user("Bioconda Bot")
+    (sample_git_repo / "config.yml").write_text("blacklists: []\n")
+
+    assert handler.commit_and_push_changes([], "master", "update config")
+    log = run_git(
+        ["log", "-1", "--format=%an <%ae> %s"], cwd=sample_git_repo
+    ).stdout.strip()
+    assert log == "Bioconda Bot <test@example.com> update config"
+
+
+def test_create_local_branch_from_raw_sha(sample_git_repo: Path, monkeypatch):
+    handler = GitHandler(sample_git_repo, dry_run=True, allow_dirty=True)
+    commit = handler.rev_parse("HEAD")
+    monkeypatch.setattr(
+        handler, "get_remote_branch", lambda *args, **kwargs: CommitSha(commit)
+    )
+
+    branch = handler.create_local_branch("from-sha", commit)
+
+    assert branch == BranchName("from-sha")
+    assert handler.rev_parse(branch) == commit
+
+
+def test_branch_is_current_raises_when_git_log_fails(sample_git_repo: Path):
+    handler = GitHandler(sample_git_repo, dry_run=True, allow_dirty=True)
+
+    with pytest.raises(GitHandlerFailure, match="Unable to compare branch"):
+        asyncio.run(handler.branch_is_current("missing-branch", Path("config.yml")))
+
+
 def test_branch_lifecycle_and_restore(sample_git_repo: Path):
     handler = GitHandler(sample_git_repo, dry_run=True, allow_dirty=True)
     assert handler.prev_active_branch == BranchName("master")
@@ -247,3 +281,15 @@ def test_bioconda_repo_unblacklisted(sample_git_repo: Path):
 
     to_build = repo.get_recipes_to_build("unblacklist_branch", "master")
     assert Path("recipes/pkg_blacklisted") in to_build
+
+
+def test_get_blacklisted_rejects_missing_configured_file(sample_git_repo: Path):
+    repo = MockBiocondaRepo(sample_git_repo, dry_run=True, allow_dirty=True)
+    (sample_git_repo / "config.yml").write_text(
+        yaml.dump({"blacklists": ["missing-blacklist.txt"]})
+    )
+    run_git(["add", "config.yml"], cwd=sample_git_repo)
+    run_git(["commit", "-m", "configure missing blacklist"], cwd=sample_git_repo)
+
+    with pytest.raises(GitHandlerFailure, match="Unable to read configured blacklist"):
+        repo.get_blacklisted("HEAD")

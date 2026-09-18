@@ -1307,6 +1307,27 @@ def test_async_requests_preserves_request_order(monkeypatch):
     assert result == ["first", "second"]
 
 
+def test_async_requests_can_isolate_request_failures(monkeypatch):
+    async def fetch_one(_session, url, _desc, _cb, data, _fd, allow_404=False):
+        if url == "broken":
+            raise OSError("download failed")
+        return data
+
+    monkeypatch.setattr(utils.AsyncRequests, "_async_fetch_one", fetch_one)
+
+    result = asyncio.run(
+        utils.AsyncRequests.async_fetch(
+            ["working", "broken"],
+            ["working", "broken"],
+            datas=["result", None],
+            return_exceptions=True,
+        )
+    )
+
+    assert result[0] == "result"
+    assert isinstance(result[1], OSError)
+
+
 def _pack_shard(data):
     return zstandard.ZstdCompressor().compress(msgpack.packb(data))
 
@@ -1403,7 +1424,7 @@ def test_repodata_shards_get_package_data_by_name(monkeypatch):
 
     fetch_calls = []
 
-    def mock_fetch(urls, descs, cb, datas, allow_404=False):
+    def mock_fetch(urls, descs, cb, datas, allow_404=False, return_exceptions=False):
         fetch_calls.append((urls, datas))
         return [
             [
@@ -1472,7 +1493,7 @@ def test_repodata_shards_get_package_names(monkeypatch):
         lambda repos: {("bioconda", PackageSubdir.LINUX_64): shard_idx},
     )
 
-    def mock_fetch(urls, descs, cb, datas, allow_404=False):
+    def mock_fetch(urls, descs, cb, datas, allow_404=False, return_exceptions=False):
         records = {
             "pkg-a": [
                 {
@@ -1519,10 +1540,8 @@ def test_repodata_package_shard_cache_tracks_index_hash(monkeypatch):
     monkeypatch.setattr(repodata, "_package_shard_cache", {})
     repository = ("bioconda", PackageSubdir.LINUX_64)
     old_records = [{"name": "pkg-a", "version": "1"}]
-    repodata._package_shard_cache[(*repository, "pkg-a")] = utils._CachedPackageShard(
-        records=old_records,
-        shard_hash="old-hash",
-        fetched_at=datetime.datetime.now(datetime.UTC),
+    repodata._package_shard_cache[(*repository, "old-hash")] = (
+        utils._CachedPackageShard(records=old_records)
     )
     new_index = utils._CachedShardIndex(
         shards={"pkg-a": "new-hash"},
@@ -1535,7 +1554,7 @@ def test_repodata_package_shard_cache_tracks_index_hash(monkeypatch):
     )
     fetched = []
 
-    def mock_fetch(urls, descs, cb, datas, allow_404=False):
+    def mock_fetch(urls, descs, cb, datas, allow_404=False, return_exceptions=False):
         fetched.extend(urls)
         return [[{"name": "pkg-a", "version": "2"}]]
 
@@ -1564,7 +1583,7 @@ def test_repodata_retries_expired_unavailable_shard_index(monkeypatch):
     )
     fetch_calls = []
 
-    def mock_fetch(urls, descs, cb, datas, allow_404=False):
+    def mock_fetch(urls, descs, cb, datas, allow_404=False, return_exceptions=False):
         fetch_calls.append(urls)
         return [index]
 
@@ -1595,7 +1614,7 @@ def test_repodata_shards_get_versions(monkeypatch):
         lambda repos: {("bioconda", PackageSubdir.LINUX_64): shard_idx},
     )
 
-    def mock_fetch(urls, descs, cb, datas, allow_404=False):
+    def mock_fetch(urls, descs, cb, datas, allow_404=False, return_exceptions=False):
         return [
             [
                 {
@@ -1662,6 +1681,7 @@ def test_repodata_shards_fallback_on_failed_package_shard(monkeypatch):
     monkeypatch.setattr(repodata, "cache_file", None)
     monkeypatch.setattr(repodata, "platforms", [PackageSubdir.LINUX_64])
     monkeypatch.setattr(repodata, "_package_shard_cache", {})
+    monkeypatch.setattr(repodata, "_package_shards_unavailable", {})
     repository = ("bioconda", PackageSubdir.LINUX_64)
     shard_idx = utils._CachedShardIndex(
         shards={"pkg-a": "hash1"},
@@ -1672,7 +1692,8 @@ def test_repodata_shards_fallback_on_failed_package_shard(monkeypatch):
     monkeypatch.setattr(
         repodata, "_get_shard_indexes", lambda repos: {repository: shard_idx}
     )
-    monkeypatch.setattr(utils.AsyncRequests, "fetch", lambda *args, **kwargs: [None])
+    fetch = Mock(return_value=[None])
+    monkeypatch.setattr(utils.AsyncRequests, "fetch", fetch)
     fallback_called = []
 
     def fallback(repositories):
@@ -1688,11 +1709,64 @@ def test_repodata_shards_fallback_on_failed_package_shard(monkeypatch):
         "version", name="pkg-a", platform=PackageSubdir.LINUX_64
     ) == ["1"]
     assert fallback_called == [{repository}]
-    assert (
-        "bioconda",
-        PackageSubdir.LINUX_64,
-        "pkg-a",
-    ) not in repodata._package_shard_cache
+    assert ("bioconda", PackageSubdir.LINUX_64, "hash1") in (
+        repodata._package_shards_unavailable
+    )
+
+    assert repodata.get_package_data(
+        "version", name="pkg-a", platform=PackageSubdir.LINUX_64
+    ) == ["1"]
+    assert fetch.call_count == 1
+
+
+def test_repodata_shards_isolate_partial_batch_failure(monkeypatch):
+    channels = ["working", "broken"]
+    subdir = PackageSubdir.LINUX_64
+    monkeypatch.setattr(utils.RepoData, "config", {"channels": channels})
+    repodata = utils.RepoData()
+    monkeypatch.setattr(repodata, "_package_shard_cache", {})
+    monkeypatch.setattr(repodata, "_package_shards_unavailable", {})
+
+    indexes = {
+        (channel, subdir): utils._CachedShardIndex(
+            shards={"pkg-a": f"{channel}-hash"},
+            base_url="",
+            shards_base_url="",
+            fetched_at=datetime.datetime.now(datetime.UTC),
+        )
+        for channel in channels
+    }
+    monkeypatch.setattr(repodata, "_get_shard_indexes", lambda _repos: indexes)
+
+    working_record = {
+        "name": "pkg-a",
+        "version": "1",
+        "build": "0",
+        "build_number": 0,
+        "depends": [],
+        "channel": "working",
+        "platform": subdir,
+        "subdir": subdir,
+    }
+    monkeypatch.setattr(
+        utils.AsyncRequests,
+        "fetch",
+        lambda *args, **kwargs: [[working_record], OSError("download failed")],
+    )
+
+    def fallback(repositories):
+        assert tuple(repositories) == (("broken", subdir),)
+        return _repodata_dataframe("pkg-a").assign(
+            channel="broken", platform=subdir, subdir=subdir
+        )
+
+    monkeypatch.setattr(repodata, "_get_repository_pairs_dataframe", fallback)
+
+    records = repodata._get_sharded_package_data(channels, [subdir], ["pkg-a"])
+
+    assert [record["channel"] for record in records] == channels
+    assert ("working", subdir, "working-hash") in repodata._package_shard_cache
+    assert ("broken", subdir, "broken-hash") in (repodata._package_shards_unavailable)
 
 
 def test_repodata_shards_preserve_channel_order_with_fallback(monkeypatch):

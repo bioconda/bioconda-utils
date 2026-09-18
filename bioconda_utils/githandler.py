@@ -320,8 +320,14 @@ class GitHandlerBase:
             str(path),
             cwd=self._working_dir,
             stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
-        stdout, _ = await proc.communicate()
+        stdout, stderr = await proc.communicate()
+        if proc.returncode != 0:
+            raise GitHandlerFailure(
+                "Unable to compare branch "
+                f"{branch_name} with {master}: {stderr.decode().strip()}"
+            )
         return len(stdout) == 0
 
     def delete_local_branch(self, branch: BranchName | CommitSha | str) -> None:
@@ -633,10 +639,16 @@ class GitHandlerBase:
         if sign:
             commit_cmd.append("-S" + sign if isinstance(sign, str) else "-S")
         if self.actor:
-            if self.actor.email:
-                author_str = f"{self.actor.name} <{self.actor.email}>"
-            else:
-                author_str = self.actor.name
+            email = self.actor.email
+            if email is None:
+                ident = self._git(["var", "GIT_AUTHOR_IDENT"]).stdout.strip()
+                match = re.search(r"<([^<>]+)>", ident)
+                if match is None:
+                    raise GitHandlerFailure(
+                        f"Unable to determine author email from {ident!r}"
+                    )
+                email = match.group(1)
+            author_str = f"{self.actor.name} <{email}>"
             commit_cmd.extend(["--author", author_str])
 
         self._git(commit_cmd)
@@ -725,8 +737,10 @@ class BiocondaRepoMixin(GitHandlerBase):
         for blacklist in blacklists:
             try:
                 blacklist_data = self.read_from_branch(branch, Path(blacklist))
-            except GitHandlerFailure:
-                continue
+            except GitHandlerFailure as exc:
+                raise GitHandlerFailure(
+                    f"Unable to read configured blacklist {blacklist!r} from {branch}"
+                ) from exc
             for line in blacklist_data.splitlines():
                 if line.startswith("#") or not line.strip():
                     continue

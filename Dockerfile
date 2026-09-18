@@ -5,6 +5,11 @@ ARG BASE_IMAGE=quay.io/condaforge/linux-anvil-cos7-x86_64
 
 FROM ${BASE_IMAGE} as base
 
+# Conda honors settings exposed as CONDA_<SETTING>. Keep a cache-friendly
+# default for CI while allowing callers to request fresher repodata at runtime
+# (for example, `docker run -e CONDA_LOCAL_REPODATA_TTL=0 ...`).
+ENV CONDA_LOCAL_REPODATA_TTL=3600
+
 # Copy over C.UTF-8 locale from our base image to make it consistently available during build.
 COPY --from=quay.io/bioconda/base-glibc-busybox-bash /usr/lib/locale/C.utf8 /usr/lib/locale/C.utf8
 
@@ -30,8 +35,7 @@ RUN . /opt/conda/etc/profile.d/conda.sh && \
     { conda config --remove repodata_fns current_repodata.json 2> /dev/null || true ; } && \
     conda config --prepend repodata_fns repodata.json && \
     conda config --set channel_priority strict && \
-    conda config --set auto_update_conda False && \
-    conda config --set local_repodata_ttl 3600
+    conda config --set auto_update_conda False
 
 FROM base as build
 WORKDIR /tmp/repo

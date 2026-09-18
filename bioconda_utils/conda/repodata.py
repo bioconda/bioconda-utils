@@ -69,8 +69,6 @@ class _CachedShardIndex:
 @dataclass
 class _CachedPackageShard:
     records: list[dict[str, Any]]
-    shard_hash: str
-    fetched_at: datetime.datetime
 
 
 class AsyncRequests:
@@ -85,7 +83,7 @@ class AsyncRequests:
     CONNECTIONS_PER_HOST = 4
 
     @classmethod
-    def fetch(cls, urls, descs, cb, datas, allow_404=False):
+    def fetch(cls, urls, descs, cb, datas, allow_404=False, return_exceptions=False):
         """Fetch data from URLs.
 
         This will use asyncio to manage a pool of connections at once, speeding
@@ -99,6 +97,8 @@ class AsyncRequests:
           cb: As each download is completed, data is passed through this function.
               Use to e.g. offload json parsing into download loop.
           allow_404: If true, missing resources produce ``None`` instead of an error.
+          return_exceptions: If true, request failures are returned in their
+              corresponding result positions instead of failing the whole batch.
         """
         try:
             loop = asyncio.get_event_loop()
@@ -111,11 +111,21 @@ class AsyncRequests:
             # Workaround the fact that asyncio's loop is marked as not-reentrant
             # (it is apparently easy to patch, but not desired by the devs,
             with ThreadPool(1) as pool:
-                res = pool.apply(cls.fetch, (urls, descs, cb, datas, allow_404))
+                res = pool.apply(
+                    cls.fetch,
+                    (urls, descs, cb, datas, allow_404, return_exceptions),
+                )
             return res
 
         task = asyncio.ensure_future(
-            cls.async_fetch(urls, descs, cb, datas, allow_404=allow_404)
+            cls.async_fetch(
+                urls,
+                descs,
+                cb,
+                datas,
+                allow_404=allow_404,
+                return_exceptions=return_exceptions,
+            )
         )
 
         try:
@@ -129,7 +139,14 @@ class AsyncRequests:
 
     @classmethod
     async def async_fetch(
-        cls, urls, descs=None, cb=None, datas=None, fds=None, allow_404=False
+        cls,
+        urls,
+        descs=None,
+        cb=None,
+        datas=None,
+        fds=None,
+        allow_404=False,
+        return_exceptions=False,
     ):
         if descs is None:
             descs = []
@@ -144,9 +161,15 @@ class AsyncRequests:
         ) as session:
 
             async def fetch_indexed(index, url, desc, data, fd):
-                return index, await cls._async_fetch_one(
-                    session, url, desc, cb, data, fd, allow_404=allow_404
-                )
+                try:
+                    value = await cls._async_fetch_one(
+                        session, url, desc, cb, data, fd, allow_404=allow_404
+                    )
+                except Exception as exc:
+                    if not return_exceptions:
+                        raise
+                    value = exc
+                return index, value
 
             coros = [
                 asyncio.ensure_future(fetch_indexed(index, url, desc, data, fd))
@@ -281,10 +304,18 @@ class RepoData:
     _package_shard_cache: ClassVar[
         dict[tuple[Channel, Subdir, str], _CachedPackageShard]
     ] = {}
+    _package_shards_unavailable: ClassVar[
+        dict[tuple[Channel, Subdir, str], datetime.datetime]
+    ] = {}
     _shards_unavailable: ClassVar[dict[RepoDataKey, datetime.datetime]] = {}
 
     #: Retry unavailable shard indexes sooner than successful cache entries.
     shards_unavailable_timeout = 60 * 5
+    package_shards_unavailable_timeout = 60 * 5
+
+    #: Shard indexes are mutable; content-addressed package shards are not.
+    shard_index_cache_timeout = 60 * 15
+    package_shard_cache_max_entries = 4096
 
     #: default lifetime for repodata cache
     cache_timeout = 60 * 60 * 8
@@ -299,6 +330,7 @@ class RepoData:
             cls._repository_cache.clear()
             cls._shard_index_cache.clear()
             cls._package_shard_cache.clear()
+            cls._package_shards_unavailable.clear()
             cls._shards_unavailable.clear()
         cls.config = config
 
@@ -584,13 +616,15 @@ class RepoData:
                     now - unavailable_at
                 ).total_seconds() <= self.shards_unavailable_timeout:
                     continue
-                del self._shards_unavailable[repo]
+                self._shards_unavailable.pop(repo, None)
             if repo in self._shard_index_cache:
                 cached = self._shard_index_cache[repo]
-                if (now - cached.fetched_at).total_seconds() <= self.cache_timeout:
+                if (
+                    now - cached.fetched_at
+                ).total_seconds() <= self.shard_index_cache_timeout:
                     result[repo] = cached
                     continue
-                del self._shard_index_cache[repo]
+                self._shard_index_cache.pop(repo, None)
             missing.append(repo)
 
         if missing:
@@ -603,9 +637,15 @@ class RepoData:
                     cb=self._parse_shard_index,
                     datas=missing,
                     allow_404=True,
+                    return_exceptions=True,
                 )
                 for repo, index in zip(missing, indexes):
-                    if index is not None:
+                    if isinstance(index, Exception):
+                        logger.debug(
+                            "Error fetching shard index for %s/%s: %s", *repo, index
+                        )
+                        self._shards_unavailable[repo] = now
+                    elif index is not None:
                         self._shards_unavailable.pop(repo, None)
                         self._shard_index_cache[repo] = index
                         result[repo] = index
@@ -648,17 +688,20 @@ class RepoData:
                 if pkg_name not in shard_index.shards:
                     continue
                 hex_hash = shard_index.shards[pkg_name]
-                cache_key = (channel, subdir, pkg_name)
+                cache_key = (channel, subdir, hex_hash)
                 if cache_key in self._package_shard_cache:
                     cached = self._package_shard_cache[cache_key]
+                    records_by_repo[repo].extend(cached.records)
+                    continue
+
+                unavailable_at = self._package_shards_unavailable.get(cache_key)
+                if unavailable_at is not None:
                     if (
-                        cached.shard_hash == hex_hash
-                        and (now - cached.fetched_at).total_seconds()
-                        <= self.cache_timeout
-                    ):
-                        records_by_repo[repo].extend(cached.records)
+                        now - unavailable_at
+                    ).total_seconds() <= self.package_shards_unavailable_timeout:
+                        fallback_repos.add(repo)
                         continue
-                    del self._package_shard_cache[cache_key]
+                    self._package_shards_unavailable.pop(cache_key, None)
 
                 url = self._make_shard_url(channel, subdir, shard_index, hex_hash)
                 to_fetch_urls.append(url)
@@ -673,27 +716,50 @@ class RepoData:
                     cb=self._parse_package_shard,
                     datas=to_fetch_metadata,
                     allow_404=True,
+                    return_exceptions=True,
                 )
                 for meta, records in zip(to_fetch_metadata, fetched_shards):
                     channel, subdir, pkg_name = meta
                     repo = (channel, subdir)
+                    shard_hash = shard_indexes[repo].shards[pkg_name]
+                    cache_key = (channel, subdir, shard_hash)
+                    if isinstance(records, Exception):
+                        logger.debug(
+                            "Error fetching package shard for %s/%s/%s: %s",
+                            channel,
+                            subdir,
+                            pkg_name,
+                            records,
+                        )
+                        self._package_shards_unavailable[cache_key] = now
+                        fallback_repos.add(repo)
+                        continue
                     if records is None:
+                        self._package_shards_unavailable[cache_key] = now
                         fallback_repos.add(repo)
                         continue
                     recs = records
-                    self._package_shard_cache[(channel, subdir, pkg_name)] = (
-                        _CachedPackageShard(
-                            records=recs,
-                            shard_hash=shard_indexes[repo].shards[pkg_name],
-                            fetched_at=now,
+                    self._package_shards_unavailable.pop(cache_key, None)
+                    if (
+                        len(self._package_shard_cache)
+                        >= self.package_shard_cache_max_entries
+                    ):
+                        self._package_shard_cache.pop(
+                            next(iter(self._package_shard_cache))
                         )
+                    self._package_shard_cache[cache_key] = _CachedPackageShard(
+                        records=recs
                     )
                     records_by_repo[repo].extend(recs)
             except (aiohttp.ClientError, OSError, TimeoutError, RuntimeError) as exc:
                 logger.debug("Error fetching package shards: %s", exc)
-                fallback_repos.update(
-                    (channel, subdir) for channel, subdir, _ in to_fetch_metadata
-                )
+                for channel, subdir, pkg_name in to_fetch_metadata:
+                    repo = (channel, subdir)
+                    shard_hash = shard_indexes[repo].shards[pkg_name]
+                    self._package_shards_unavailable[(channel, subdir, shard_hash)] = (
+                        now
+                    )
+                    fallback_repos.add(repo)
 
         if fallback_repos:
             ordered_fallback_repos = tuple(
