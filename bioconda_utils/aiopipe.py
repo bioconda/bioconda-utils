@@ -8,24 +8,15 @@ import logging
 import os
 import pickle
 import signal
-from concurrent.futures import ProcessPoolExecutor
-from pathlib import Path
-
-try:
-    from concurrent.futures import BrokenExecutor
-except ImportError:
-    # BrokenExecutor is new in Py3.7, 3.6 only has one of its
-    # subclasses, the BrokenProcessPool RuntimeError.
-    from concurrent.futures.process import BrokenProcessPool as BrokenExecutor
-
+from concurrent.futures import BrokenExecutor, ProcessPoolExecutor
 from hashlib import sha256
-from typing import Any, Generic, TypeVar
+from pathlib import Path
+from typing import Any, Generic, Self, TypeVar
 from urllib.parse import urlparse
 
 import aiofiles
 import aioftp
 import aiohttp
-from typing_extensions import Self
 
 from .support import http
 from .support.logsetup import tqdm
