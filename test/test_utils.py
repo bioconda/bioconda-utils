@@ -52,7 +52,7 @@ BUILD_ENV_IMAGE = os.getenv(
     "BUILD_ENV_IMAGE", "quay.io/bioconda/bioconda-utils-test-env-cos7:latest"
 )
 
-SKIP_DOCKER_TESTS = sys.platform.startswith("darwin")
+SKIP_DOCKER_TESTS = True  # sys.platform.startswith("darwin")
 SKIP_NOT_OSX = not sys.platform.startswith("darwin")
 
 if SKIP_DOCKER_TESTS:

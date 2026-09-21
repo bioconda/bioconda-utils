@@ -792,10 +792,15 @@ def load_meta_and_recipe_fast(recipe: RecipePath, env=None) -> MetaOrRattler:
 # TODO (rb): Is it correct to assume the native platform is the target platform?
 def _filter_config(config_path: Path) -> str:
     # TODO (rb): fix urgently! How do we get the native platform now?
-    target = RepoData.native_platform().split("-")
-    native_platform = target[0]
-    arch = platform.machine()
-    config = conda_build.config.Config(platform=native_platform, arch=arch)
+
+    subdir = RepoData.native_subdir()
+    os_label = subdir_to_oslabel(subdir)
+    arch = subdir.removeprefix(f"{os_label}-")
+    config = conda_build.config.Config(platform=os_label, arch=arch)
+    # target = RepoData.native_platform().split("-")
+    # native_platform = target[0]
+    # arch = platform.machine()
+    # config = conda_build.config.Config(platform=native_platform, arch=arch)
     namespace = metadata.get_selectors(config)
 
     with open(config_path, "r") as f:
