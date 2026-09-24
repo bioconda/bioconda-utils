@@ -18,20 +18,23 @@ import rattler_build as rb
 from conda_build.build import render_recipe
 from regex import R
 
-from bioconda_utils.recipe import Recipe
-from bioconda_utils.skiplist import Skiplist
+from ._types import MetaOrRattler
+from .recipe import Recipe
+from .skiplist import Skiplist
 
-from . import utils
+from .conda.conda_build_bridge import load_meta_fast
+from .support.parallel import parallel_iter
+from .recipes import RecipePath, load_meta_and_recipe_fast
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
 def build(
-    recipes: Iterable[utils.RecipePath],
+    recipes: Iterable[RecipePath],
     config: dict[str, Any],
     blacklist: Skiplist | None = None,
     restrict: bool = True,
-) -> tuple[nx.DiGraph, defaultdict[str, set[utils.RecipePath]]]:
+) -> tuple[nx.DiGraph, defaultdict[str, set[RecipePath]]]:
     """
     Returns the DAG of recipe paths and a dictionary that maps package names to
     lists of recipe paths to all defined versions of the package.  defined
@@ -61,16 +64,16 @@ def build(
         values are lists and contain paths to all defined versions.
     """
     logger.info("Generating DAG")
-    recipes: list[utils.RecipePath] = list(recipes)
+    recipes: list[RecipePath] = list(recipes)
     # TODO (rb): is it possible to load global variants here and pass them on?
     # it seems that it doesn't work because utils.parallel_iter wants to pickle them
     # which fails
     #
     # global_variants: rb.VariantConfig = utils.load_rattler_build_global_variants()
 
-    meta_rattler_data: list[utils.MetaOrRattler] = list(
-        utils.parallel_iter(
-            utils.load_meta_and_recipe_fast,
+    meta_rattler_data: list[MetaOrRattler] = list(
+        parallel_iter(
+            load_meta_and_recipe_fast,
             recipes,
             "Loading Recipes",
         )
@@ -81,7 +84,7 @@ def build(
     # A name should map to exactly one recipe. It is possible for multiple
     # names to map to the same recipe, if the package name somehow depends on
     # the environment.
-    name2recipe: defaultdict[str, set[utils.RecipePath]] = defaultdict(set)
+    name2recipe: defaultdict[str, set[RecipePath]] = defaultdict(set)
 
     for rendered_recipe in meta_rattler_data:
         name: str = rendered_recipe.get_package_name()

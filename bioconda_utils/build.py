@@ -19,13 +19,18 @@ from typing import Any, NamedTuple
 import networkx as nx
 import rattler_build as rb
 from conda.exceptions import UnsatisfiableError
+import psutil
 from conda_build.exceptions import DependencyNeedsBuildingError
 from conda_build.metadata import MetaData
 
 from bioconda_utils.build_failure import BuildFailureRecord
+from bioconda_utils.rattler.rattler_build_bridge import (
+    load_rattler_build_global_variants,
+    render_rattler_recipe,
+)
 from bioconda_utils.skiplist import Skiplist
 
-from . import docker_utils, graph, lint, pkg_test, upload, utils
+from . import graph, lint
 from . import recipe as _recipe
 from ._types import (
     ALL_PACKAGE_SUBDIRS,
@@ -34,14 +39,30 @@ from ._types import (
     PackageSubdir,
     PkgBuildRef,
     QuayUploadTarget,
+    RecipePath,
     container_platform_is_native,
     container_platform_to_package_subdir,
     native_container_platform,
 )
-from .container_manifests import write_image_record
-from .utils import BuildSystem
 
 from conda_build import api
+from .conda.conda_build_bridge import (
+    get_conda_build_config_files,
+    load_conda_build_config,
+    load_first_metadata,
+    subdir_to_oslabel,
+)
+from .conda.recipes import (
+    DivergentBuildsError,
+    recipe_requires_finalized_render,
+)
+from .recipes import BuildSystem, get_package_paths
+from .conda.repodata import RepoData
+from .config import normalize_config
+from .containers import docker_utils, pkg_test, upload
+from .containers.container_manifests import write_image_record
+from .support.logsetup import Progress
+from .support.subproc import allowed_env_var, bin_for, run, sandboxed_env
 
 logger = logging.getLogger(__name__)
 
@@ -77,15 +98,15 @@ def conda_build_purge() -> None:
     ``conda clean --all`` is called if we haveless than 300 MB free space
     on the current disk.
     """
-    utils.run(["conda", "build", "purge"])
+    run(["conda", "build", "purge"])
 
-    free_mb = utils.get_free_space()
+    free_mb = get_free_space()
     if free_mb < 300:
         logger.info("CLEANING UP PACKAGE CACHE (free space: %iMB).", free_mb)
-        utils.run(["conda", "clean", "--all"])
+        run(["conda", "clean", "--all"])
         logger.info(
             "CLEANED UP PACKAGE CACHE (free space: %iMB).",
-            utils.get_free_space(),
+            get_free_space(),
         )
 
 
@@ -102,7 +123,7 @@ def rattler_build_purge(rattler_cache: Path, rattler_output_dir: Path) -> None:
 
 
 def build(
-    recipe: utils.RecipePath,
+    recipe: RecipePath,
     global_variants: rb.VariantConfig,
     tool_config: rb.ToolConfiguration,
     render_config: rb.RenderConfig,
@@ -183,7 +204,7 @@ def build(
     whitelisted_env = {
         k: str(v)
         for k, v in os.environ.items()
-        if utils.allowed_env_var(k, docker_builder is not None)
+        if allowed_env_var(k, docker_builder is not None)
     }
 
     logger.info("BUILD START %s", recipe.path.as_posix())
@@ -207,9 +228,7 @@ def build(
         # Even though there may be variants of the recipe that will be built, we
         # will only be checking attributes that are independent of variants (pkg
         # name, version, noarch, whether or not an extended container was used)
-        meta: api.MetaData | None = utils.load_first_metadata(
-            recipe.path, finalize=False
-        )
+        meta: api.MetaData | None = load_first_metadata(recipe.path, finalize=False)
         package_name = meta.meta["package"]["name"] if meta is not None else ""
 
         is_noarch = bool(meta.get_value("build/noarch", default=False))
@@ -221,8 +240,8 @@ def build(
         # docker we use py-rattler-build's bindings directly in the code.
 
         # TODO (rb): is there a more elegant way to do this?
-        rendered_recipe: rb.RenderedVariant = utils.render_rattler_recipe(
-            recipe.path, utils.load_rattler_build_global_variants()
+        rendered_recipe: rb.RenderedVariant = render_rattler_recipe(
+            recipe.path, load_rattler_build_global_variants()
         )[0]
 
         is_noarch: bool = bool(rendered_recipe.recipe.build.noarch)
@@ -263,7 +282,7 @@ def build(
             )
             # Use presence of expected packages to check for success
             if docker_builder.pkg_dir is not None:
-                conda_build_config = utils.load_conda_build_config()
+                conda_build_config = load_conda_build_config()
 
                 conda_build_root: Path = Path(conda_build_config.output_folder)
                 docker_build_root: Path = Path(docker_builder.pkg_dir)
@@ -283,17 +302,17 @@ def build(
         else:
             match recipe.build_system:
                 case BuildSystem.CONDA:
-                    conda_build_cmd = [utils.bin_for("conda-build")]
+                    conda_build_cmd = [bin_for("conda-build")]
                     # - Temporarily reset os.environ to avoid leaking env vars
                     # - Also pass filtered env to run()
                     # - Point conda-build to meta.yaml, to avoid building subdirs
-                    with utils.sandboxed_env(whitelisted_env):
+                    with sandboxed_env(whitelisted_env):
                         cmd = conda_build_cmd + args
-                        for config_file in utils.get_conda_build_config_files():
+                        for config_file in get_conda_build_config_files():
                             cmd += [config_file.arg, config_file.path]
                         cmd += [str(recipe.path / "meta.yaml")]
-                        with utils.Progress():
-                            utils.run(cmd, live=live_logs)
+                        with Progress():
+                            run(cmd, live=live_logs)
                 case BuildSystem.RATTLER:
                     recipe_file: Path = recipe.path / "recipe.yaml"
                     local_variants_path: Path = recipe.path / "variants.yaml"
@@ -432,9 +451,9 @@ def store_build_failure_record(
 
 def remove_cycles(
     dag: nx.DiGraph,
-    name2recipes: dict[str, set[utils.RecipePath]],
-    failed: list[utils.RecipePath],
-    skip_dependent: defaultdict[str, list[utils.RecipePath]],
+    name2recipes: dict[str, set[RecipePath]],
+    failed: list[RecipePath],
+    skip_dependent: defaultdict[str, list[RecipePath]],
 ) -> nx.DiGraph:
     nodes_in_cycles: set[str] = set()
     for cycle in list(nx.simple_cycles(dag)):
@@ -442,7 +461,7 @@ def remove_cycles(
         nodes_in_cycles.update(cycle)
 
     for name in sorted(nodes_in_cycles):
-        cycle_fail_recipes: list[utils.RecipePath] = sorted(name2recipes[name])
+        cycle_fail_recipes: list[RecipePath] = sorted(name2recipes[name])
         logger.error(
             "BUILD ERROR: cannot build recipes for %s since "
             "it cyclically depends on other packages in the "
@@ -525,7 +544,7 @@ def get_worker_subdag(
 
 def should_skip_platform(
     recipe_folder: Path,
-    recipe: utils.RecipePath,
+    recipe: RecipePath,
     platform: PackageSubdir,
     primary_platforms: Iterable[PackageSubdir] | None = None,
 ) -> bool:
@@ -578,7 +597,7 @@ def should_skip_platform(
 def build_recipes(
     recipe_folder: Path,
     config: dict[str, Any],
-    recipes: list[utils.RecipePath],
+    recipes: list[RecipePath],
     mulled_build_and_test: bool = True,
     force: bool = False,
     docker_builder: docker_utils.RecipeBuilder | None = None,
@@ -643,8 +662,8 @@ def build_recipes(
         logger.info("Nothing to be done.")
         return True
 
-    config = utils.normalize_config(config)
-    utils.RepoData.register_config(config)
+    config = normalize_config(config)
+    RepoData.register_config(config)
     blacklist = Skiplist(config, recipe_folder)
     global_variants: rb.VariantConfig = utils.load_rattler_build_global_variants()
     # TODO (rb): make platform_config and render_config customisable
@@ -669,7 +688,7 @@ def build_recipes(
     else:
         linter = None
 
-    failed: list[utils.RecipePath] = []
+    failed: list[RecipePath] = []
 
     dag, name2recipes = graph.build(recipes, config=config, blacklist=blacklist)
     if exclude:
@@ -680,7 +699,7 @@ def build_recipes(
         logger.info("Nothing to be done.")
         return True
 
-    skip_dependent: defaultdict[str, list[utils.RecipePath]] = defaultdict(list)
+    skip_dependent: defaultdict[str, list[RecipePath]] = defaultdict(list)
     dag = remove_cycles(dag, name2recipes, failed, skip_dependent)
     subdag: nx.DiGraph = get_worker_subdag(dag, n_workers, worker_offset, subdag_depth)
     if not subdag:
@@ -692,26 +711,26 @@ def build_recipes(
         "\n".join(subdag.nodes()),
     )
 
-    recipe2name: defaultdict[utils.RecipePath, str] = defaultdict()
+    recipe2name: defaultdict[RecipePath, str] = defaultdict()
     for name, recipe_list in name2recipes.items():
         for recipe in recipe_list:
             recipe2name[recipe] = name
 
-    recipe_jobs: list[tuple[utils.RecipePath, str]] = [
+    recipe_jobs: list[tuple[RecipePath, str]] = [
         (recipe, recipe2name[recipe])
         for package in nx.topological_sort(subdag)
         for recipe in name2recipes[package]
     ]
 
-    built_recipes: list[utils.RecipePath] = []
-    skipped_recipes: list[utils.RecipePath] = []
+    built_recipes: list[RecipePath] = []
+    skipped_recipes: list[RecipePath] = []
     failed_uploads: list[Path] = []
 
     for recipe, name in recipe_jobs:
         platform = (
             container_platform_to_package_subdir(target_platform)
             if target_platform is not None
-            else utils.RepoData().native_subdir()
+            else RepoData().native_subdir()
         )
         if not force and should_skip_platform(
             recipe_folder,
@@ -741,8 +760,8 @@ def build_recipes(
             rattler_output_dir: Path = Path(docker_builder.pkg_dir)
         else:
             # TODO (rb): is this the correct subdir here?
-            subdir: PackageSubdir = utils.RepoData.native_subdir()
-            conda_build_config = utils.load_conda_build_config(subdir=subdir)
+            subdir: PackageSubdir = RepoData.native_subdir()
+            conda_build_config = load_conda_build_config(subdir=subdir)
             rattler_output_dir: Path = Path(conda_build_config.output_folder)
 
         try:
@@ -759,14 +778,11 @@ def build_recipes(
             #   2. linux-64 hosts — sysroot run_exports inject __glibc here
             #      regardless of the recipe's text form.
             finalize = docker_builder is None or not fast_resolve
-            if (
-                not finalize
-                and utils.subdir_to_oslabel(utils.RepoData.native_subdir()) == "linux"
-            ):
+            if not finalize and subdir_to_oslabel(RepoData.native_subdir()) == "linux":
                 finalize = True
-            if not finalize and utils.recipe_requires_finalized_render(recipe.path):
+            if not finalize and recipe_requires_finalized_render(recipe.path):
                 finalize = True
-            pkg_paths: list[Path] = utils.get_package_paths(
+            pkg_paths: list[Path] = get_package_paths(
                 recipe,
                 check_channels,
                 force=force,
@@ -775,7 +791,7 @@ def build_recipes(
                 global_variants=global_variants,
                 target_platform=target_platform,
             )
-        except utils.DivergentBuildsError as exc:
+        except DivergentBuildsError as exc:
             logger.error(
                 "BUILD ERROR: packages with divergent build strings in repository "
                 "for recipe %s. A build number bump is likely needed: %s",
@@ -898,15 +914,31 @@ def build_recipes(
     return True
 
 
+def get_free_space() -> float:
+    """Return free space in MB on disk"""
+    s = os.statvfs(os.getcwd())
+    return s.f_frsize * s.f_bavail / (1024**2)
+
+
+def get_free_memory_percent() -> float:
+    """Return free memory as a percentage of total memory"""
+    return psutil.virtual_memory().available * 100 / psutil.virtual_memory().total
+
+
+def get_free_memory_mb() -> float:
+    """Return free memory as megabytes"""
+    return psutil.virtual_memory().available / (1024**2)
+
+
 def report_resources(message: str, show_docker: bool = True) -> None:
-    free_space_mb = utils.get_free_space()
-    free_mem_mb = utils.get_free_memory_mb()
-    free_mem_percent = utils.get_free_memory_percent()
+    free_space_mb = get_free_space()
+    free_mem_mb = get_free_memory_mb()
+    free_mem_percent = get_free_memory_percent()
     logger.info(
         f"{message} Free disk space: {free_space_mb:.2f} MB. Free memory: {free_mem_mb:.2f} MB ({free_mem_percent:.2f}%)"
     )
     if show_docker:
         cmd = ["docker", "system", "df"]
-        utils.run(cmd, live=True)
+        run(cmd, live=True)
         cmd = ["docker", "ps", "-a"]
-        utils.run(cmd, live=True)
+        run(cmd, live=True)

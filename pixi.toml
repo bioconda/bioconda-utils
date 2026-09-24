@@ -1,7 +1,7 @@
 [workspace]
 name = "bioconda-utils"
 version = "0.0.0"
-platforms = ["linux-64", "osx-64"]
+platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64"]
 channels = ["conda-forge", "bioconda"]
 
 [dependencies]
@@ -12,11 +12,11 @@ conda-forge-pinning = "==2026.01.07.13.16.30"
 python = "3.13.*"
 setuptools = "81.*"
 setuptools-scm = ">=8"
-conda = "26.3.*"
-conda-libmamba-solver = "26.3.*"
-conda-build = "26.3.*"
-conda-index = "0.10.*"
-conda-package-streaming = "0.12.*"
+conda = "26.7.*"
+conda-libmamba-solver = "26.7.*"
+conda-build = "26.7.*"
+conda-index = "0.12.*"
+conda-package-streaming = "0.13.*"
 mamba = "2.5.*"
 
 # CLI
@@ -27,7 +27,6 @@ tqdm = "4.67.*"  # Progress monitor
 yaspin = "3.*"
 # Recipe YAML parsing
 "ruamel.yaml" = "0.18.*"
-pyaml = "26.2.*"  # Faster YAML parser (deprecate?)
 networkx = "3.6.*"  # (networkx>3.3 needs python>=3.10)
 pandas = "3.0.*"
 # Avoid large mkl package (pulled in by pandas)
@@ -86,6 +85,13 @@ psutil = "*"
 py-rattler-build = ">=0.67.0,<0.68"
 conda-smithy = ">=2026.8.5,<2027"
 
+# macOS-only: provides run_conda_forge_build_setup (SDK/compiler setup
+# for Darwin CI runners)
+[target.osx-64.dependencies]
+conda-forge-ci-setup = "*"
+[target.osx-arm64.dependencies]
+conda-forge-ci-setup = "*"
+
 [feature.test.dependencies]
 pip = "*"
 pytest = ">=3.3"
@@ -99,17 +105,14 @@ shellcheck = "*"
 just = "*"
 
 [environments]
-default = ["test"]
-dev = ["test", "dev"]
+default = ["test", "dev"]
 
 [tasks.format]
 cmd = "ruff format ."
-default-environment = "dev"
 description = "Format Python files"
 
 [tasks.install]
 cmd = "python -m pip install --no-deps --no-build-isolation ."
-default-environment = "dev"
 description = "Build and install bioconda-utils into the Pixi environment"
 
 [tasks.global-install]
@@ -118,7 +121,6 @@ mkdir -p ~/.local/bin
 ln -sf "$CONDA_PREFIX/bin/bioconda-utils" ~/.local/bin/bioconda-utils
 """
 depends-on = ["install"]
-default-environment = "dev"
 description = "Make the Pixi-installed CLI available in ~/.local/bin"
 
 [tasks.regenerate-requirements]
@@ -132,21 +134,17 @@ description = "Check that the shipped conda requirements file is current"
 [tasks.check]
 cmd = "ruff check . && ty check ."
 depends-on = ["check-requirements"]
-default-environment = "dev"
 description = "Run fast Python static checks"
 
 [tasks.test]
 cmd = "pytest"
 depends-on = ["install"]
-default-environment = "dev"
 description = "Run the full test suite (slow)"
 
 [tasks.shfmt]
 cmd = "shfmt"
-default-environment = "dev"
 description = "Run shfmt with arguments supplied by the caller"
 
 [tasks.shellcheck]
 cmd = "shellcheck"
-default-environment = "dev"
 description = "Run ShellCheck with arguments supplied by the caller"

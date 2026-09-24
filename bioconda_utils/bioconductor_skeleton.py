@@ -10,18 +10,20 @@ import re
 import shutil
 import tarfile
 import tempfile
-from collections import OrderedDict
 from datetime import UTC, datetime
+from io import StringIO
 from pathlib import Path
 from textwrap import dedent
 from typing import Any
 
 import networkx as nx
-import pyaml
 import requests
-import yaml
+from ruamel.yaml import YAML
 
-from . import utils
+from .conda.conda_build_bridge import load_first_metadata
+from .conda.repodata import RepoData
+from .config import normalize_config
+from .support.caching import disk_cache
 
 logger = logging.getLogger(__name__)
 
@@ -181,7 +183,7 @@ class PageNotFoundError(Exception):
     pass
 
 
-@utils.disk_cache.memoize(expire=86400)
+@disk_cache.memoize(expire=86400)
 def bioconductor_versions():
     """
     Returns a list of available Bioconductor versions scraped from the
@@ -189,7 +191,7 @@ def bioconductor_versions():
     """
     url = "https://bioconductor.org/config.yaml"
     response = requests.get(url, timeout=20)
-    bioc_config = yaml.safe_load(response.text)
+    bioc_config = YAML(typ="safe").load(response.text)
     versions = list(bioc_config["r_ver_for_bioc_ver"].keys())
     # Handle semantic version sorting like 3.10 and 3.9
     versions = sorted(
@@ -334,7 +336,7 @@ def cargoport_url(package, pkg_version, bioc_version=None):
     )
 
 
-@utils.disk_cache.memoize(expire=604800)
+@disk_cache.memoize(expire=604800)
 def find_best_bioc_version(package, version):
     """
     Given a package version number, identifies which BioC version[s] it is in
@@ -384,7 +386,7 @@ def find_best_bioc_version(package, version):
     )
 
 
-@utils.disk_cache.memoize(expire=86400)
+@disk_cache.memoize(expire=86400)
 def fetchPackages(bioc_version):
     """
     Return a dictionary of all bioconductor packages in a given release::
@@ -502,7 +504,7 @@ class BioCProjectPage:
         self.is_data_package = False
         self.package_lower = package.lower()
         self.version = pkg_version or ""
-        self.extra: OrderedDict[Any, Any] | None = None
+        self.extra: dict[Any, Any] | None = None
         self.patches = None
         self.needsX = False
 
@@ -999,16 +1001,11 @@ class BioCProjectPage:
         """
         Build the meta.yaml string based on discovered values.
 
-        Here we use a nested OrderedDict so that all meta.yaml files created by
-        this script have the same consistent format. Otherwise we're at the
-        mercy of Python dict sorting.
+        All meta.yaml files created by this script have consistent structure.
+        We use ruamel.yaml directly for formatting.
 
-        We use pyaml (rather than yaml) because it has better handling of
-        OrderedDicts.
-
-        However pyaml does not support comments, but if there are gcc and llvm
-        dependencies then they need to be added with preprocessing selectors
-        for ``# [linux]`` and ``# [osx]``.
+        If there are gcc and llvm dependencies then they need to be added with
+        preprocessing selectors for ``# [linux]`` and ``# [osx]``.
 
         We do this with a unique placeholder (not a jinja or $-based
         string.Template) so as to avoid conflicting with the conda jinja
@@ -1085,72 +1082,34 @@ class BioCProjectPage:
                 )
             )
 
-        d: OrderedDict[str, Any] = OrderedDict(
-            (
-                (
-                    "package",
-                    OrderedDict(
-                        (
-                            ("name", "bioconductor-{{ name|lower }}"),
-                            ("version", "{{ version }}"),
-                        )
-                    ),
-                ),
-                (
-                    "source",
-                    OrderedDict(
-                        (
-                            ("url", url),
-                            ("md5", self.md5),
-                        )
-                    ),
-                ),
-                (
-                    "build",
-                    OrderedDict(
-                        (
-                            ("number", self.build_number),
-                            ("rpaths", ["lib/R/lib/", "lib/"]),
-                            (
-                                "run_exports",
-                                f'{{{{ pin_subpackage("bioconductor-{self.package_lower}", max_pin="x.x") }}}}',
-                            ),
-                        )
-                    ),
-                ),
-                (
-                    "requirements",
-                    OrderedDict(
-                        (
-                            # If you don't make copies, pyaml sees these as the same
-                            # object and tries to make a shortcut, causing an error in
-                            # decoding unicode. Possible pyaml bug? Anyway, this fixes
-                            # it.
-                            ("host", DEPENDENCIES[:] + additional_host_deps),
-                            ("run", DEPENDENCIES[:] + additional_run_deps),
-                        )
-                    ),
-                ),
-                (
-                    "test",
-                    OrderedDict((("commands", ['''$R -e "library('{{ name }}')"''']),)),
-                ),
-                (
-                    "about",
-                    OrderedDict(
-                        (
-                            ("home", sub_placeholders(self.url)),
-                            ("license", self.license),
-                            ("summary", self.pacified_text(section="Title")),
-                            (
-                                "description",
-                                self.pacified_text(section="Description"),
-                            ),
-                        )
-                    ),
-                ),
-            )
-        )
+        d: dict[str, Any] = {
+            "package": {
+                "name": "bioconductor-{{ name|lower }}",
+                "version": "{{ version }}",
+            },
+            "source": {
+                "url": url,
+                "md5": self.md5,
+            },
+            "build": {
+                "number": self.build_number,
+                "rpaths": ["lib/R/lib/", "lib/"],
+                "run_exports": f'{{{{ pin_subpackage("bioconductor-{self.package_lower}", max_pin="x.x") }}}}',
+            },
+            "requirements": {
+                "host": DEPENDENCIES[:] + additional_host_deps,
+                "run": DEPENDENCIES[:] + additional_run_deps,
+            },
+            "test": {
+                "commands": ['''$R -e "library('{{ name }}')"'''],
+            },
+            "about": {
+                "home": sub_placeholders(self.url),
+                "license": self.license,
+                "summary": self.pacified_text(section="Title"),
+                "description": self.pacified_text(section="Description"),
+            },
+        }
 
         if self.license_file_location():
             d["about"]["license_file"] = self.license_file_location()
@@ -1168,11 +1127,11 @@ class BioCProjectPage:
         if self.needsX:
             # Anything that causes rgl to get imported needs X around
             if not self.extra:
-                self.extra = OrderedDict()
-            self.extra["container"] = OrderedDict([("extended-base", True)])
+                self.extra = {}
+            self.extra["container"] = {"extended-base": True}
 
             if "build" not in d["requirements"]:
-                # This is filled in manually later since pyaml.dumps will mess of the formatting otherwise
+                # This is filled in manually later
                 d["requirements"]["build"] = ["PLACEHOLDER"]
 
             d["test"]["commands"] = [
@@ -1194,12 +1153,17 @@ class BioCProjectPage:
             d["requirements"]["build"].append(k + "_" + "PLACEHOLDER")
 
         # sort requirements sections to match standard order
-        d["requirements"] = OrderedDict(sorted(d["requirements"].items()))
+        d["requirements"] = dict(sorted(d["requirements"].items()))
 
-        rendered = pyaml.dumps(d, width=1e6, sort_keys=False)
+        yaml = YAML()
+        yaml.indent(mapping=2, sequence=4, offset=2)
+        yaml.width = 1000000
+        buf = StringIO()
+        yaml.dump(d, buf)
+        rendered = buf.getvalue()
 
         # Add Suggests: and SystemRequirements:
-        renderedsplit = rendered.split("\n")
+        renderedsplit = rendered.strip().split("\n")
         idx = renderedsplit.index("requirements:")
         if self.packages[self.package].get("SystemRequirements", None):
             renderedsplit.insert(
@@ -1406,8 +1370,8 @@ def write_recipe(
         If None, we need to determine if this requires X and therefore additional
         build dependencies and test environment variables.
     """
-    config = utils.normalize_config(config)
-    utils.RepoData.register_config(config)
+    config = normalize_config(config)
+    RepoData.register_config(config)
     proj = BioCProjectPage(package, bioc_version, pkg_version, packages=packages)
     logger.info(f"Making recipe for: {package}")
 
@@ -1426,7 +1390,7 @@ def write_recipe(
         # get a list of existing packages in channels
         if skip_if_in_channels is not None:
             for name in set(
-                utils.RepoData().get_package_data("name", channels=skip_if_in_channels)
+                RepoData().get_package_data("name", channels=skip_if_in_channels)
             ):
                 if name.startswith(("r-", "bioconductor-")):
                     seen_dependencies.add(name)
@@ -1463,8 +1427,8 @@ def write_recipe(
     # *has* changed, then bump the version number.
     meta_file = os.path.join(recipe_dir, "meta.yaml")
     if os.path.exists(meta_file):
-        updated_meta = utils.load_first_metadata(proj.meta_yaml, finalize=False).meta
-        current_meta = utils.load_first_metadata(meta_file, finalize=False).meta
+        updated_meta = load_first_metadata(proj.meta_yaml, finalize=False).meta
+        current_meta = load_first_metadata(meta_file, finalize=False).meta
 
         # pop off the version and build numbers so we can compare the rest of
         # the dicts
@@ -1478,7 +1442,7 @@ def write_recipe(
             # Sometimes when updating all packages, the updating process fails
             # partway. Re-running the updating process should not bump the
             # build number if no builds for this version exist yet in the repo.
-            existing_bldnos = utils.RepoData().get_package_data(
+            existing_bldnos = RepoData().get_package_data(
                 key="build_number",
                 name="bioconductor-" + proj.package.lower(),
                 version=updated_version,
@@ -1493,9 +1457,9 @@ def write_recipe(
 
         if "extra" in current_meta:
             exclude = {"final", "copy_test_source_files"}
-            proj.extra = OrderedDict(
-                (x, y) for x, y in current_meta["extra"].items() if x not in exclude
-            )
+            proj.extra = {
+                x: y for x, y in current_meta["extra"].items() if x not in exclude
+            }
 
     with open(os.path.join(recipe_dir, "meta.yaml"), "w") as fout:
         fout.write(Path(proj.meta_yaml).read_text())

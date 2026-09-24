@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from bioconda_utils import container_manifests
 from bioconda_utils._types import ContainerPlatform
-from bioconda_utils.container_manifests import (
+from bioconda_utils.containers import container_manifests
+from bioconda_utils.containers.container_manifests import (
     ManifestDescriptor,
     MulledImageRecord,
 )
@@ -304,8 +304,9 @@ def test_current_descriptors_inspects_index_once(monkeypatch):
         calls.append((command, kwargs))
         return sp.CompletedProcess(command, 0, stdout=json.dumps(manifest))
 
-    monkeypatch.setattr(container_manifests.utils, "run", run)
-    monkeypatch.setattr(container_manifests, "skopeo_env", dict)
+    monkeypatch.setattr(container_manifests, "run", run)
+    monkeypatch.setattr(container_manifests.oci, "skopeo_env", dict)
+    monkeypatch.setattr(container_manifests.oci, "skopeo_bin", lambda: "skopeo")
 
     assert container_manifests._current_descriptors(canonical, None) == {
         ContainerPlatform.LINUX_AMD64: digest
@@ -331,8 +332,9 @@ def test_current_descriptors_inspects_single_image_twice(monkeypatch):
         output = manifest if "--raw" in command else inspection
         return sp.CompletedProcess(command, 0, stdout=json.dumps(output))
 
-    monkeypatch.setattr(container_manifests.utils, "run", run)
-    monkeypatch.setattr(container_manifests, "skopeo_env", dict)
+    monkeypatch.setattr(container_manifests, "run", run)
+    monkeypatch.setattr(container_manifests.oci, "skopeo_env", dict)
+    monkeypatch.setattr(container_manifests.oci, "skopeo_bin", lambda: "skopeo")
 
     assert container_manifests._current_descriptors(canonical, None) == {
         ContainerPlatform.LINUX_ARM64: digest
@@ -348,8 +350,9 @@ def test_inspect_raw_returns_none_for_missing_ref(monkeypatch, message):
     def run(command, **_kwargs):
         return sp.CompletedProcess(command, 1, stdout=message)
 
-    monkeypatch.setattr(container_manifests.utils, "run", run)
-    monkeypatch.setattr(container_manifests, "skopeo_env", dict)
+    monkeypatch.setattr(container_manifests, "run", run)
+    monkeypatch.setattr(container_manifests.oci, "skopeo_env", dict)
+    monkeypatch.setattr(container_manifests.oci, "skopeo_bin", lambda: "skopeo")
 
     assert container_manifests._inspect_raw("quay.io/example/missing:tag", None) is None
 
@@ -358,8 +361,9 @@ def test_inspect_raw_raises_for_unexpected_failure(monkeypatch):
     def run(command, **_kwargs):
         return sp.CompletedProcess(command, 1, stdout="connection refused")
 
-    monkeypatch.setattr(container_manifests.utils, "run", run)
-    monkeypatch.setattr(container_manifests, "skopeo_env", dict)
+    monkeypatch.setattr(container_manifests, "run", run)
+    monkeypatch.setattr(container_manifests.oci, "skopeo_env", dict)
+    monkeypatch.setattr(container_manifests.oci, "skopeo_bin", lambda: "skopeo")
 
     with pytest.raises(RuntimeError, match="connection refused"):
         container_manifests._inspect_raw("quay.io/example/image:tag", None)
@@ -689,7 +693,7 @@ def test_initial_publish_succeeds_when_no_manifest_exists(monkeypatch):
 def test_publish_single_platform_creates_index(monkeypatch):
     commands = []
     monkeypatch.setattr(
-        container_manifests.utils,
+        container_manifests,
         "run",
         lambda command, **_kwargs: commands.append(command),
     )
@@ -720,7 +724,7 @@ def test_publish_manifest_injects_docker_config_when_creds_provided(monkeypatch)
         docker_config = _kwargs["env"]["DOCKER_CONFIG"]
         config_paths.append(Path(docker_config))
 
-    monkeypatch.setattr(container_manifests.utils, "run", fake_run)
+    monkeypatch.setattr(container_manifests, "run", fake_run)
     descriptor = ManifestDescriptor(
         ContainerPlatform.LINUX_AMD64,
         "sha256:" + "a" * 64,
@@ -750,7 +754,7 @@ def test_publish_manifest_cleans_up_docker_config_on_failure(monkeypatch):
         config_paths.append(Path(docker_config))
         raise RuntimeError("buildx failed")
 
-    monkeypatch.setattr(container_manifests.utils, "run", fake_run)
+    monkeypatch.setattr(container_manifests, "run", fake_run)
     descriptor = ManifestDescriptor(
         ContainerPlatform.LINUX_AMD64,
         "sha256:" + "a" * 64,
@@ -774,7 +778,7 @@ def test_publish_manifest_handles_oauth_token_format(monkeypatch):
         docker_config = Path(_kwargs["env"]["DOCKER_CONFIG"])
         captured["config"] = json.loads((docker_config / "config.json").read_text())
 
-    monkeypatch.setattr(container_manifests.utils, "run", fake_run)
+    monkeypatch.setattr(container_manifests, "run", fake_run)
     descriptor = ManifestDescriptor(
         ContainerPlatform.LINUX_AMD64,
         "sha256:" + "a" * 64,
@@ -813,7 +817,7 @@ def test_publish_manifest_without_creds_omits_docker_config(monkeypatch):
         captured["env"] = _kwargs.get("env")
         captured["secrets"] = _kwargs.get("secrets")
 
-    monkeypatch.setattr(container_manifests.utils, "run", fake_run)
+    monkeypatch.setattr(container_manifests, "run", fake_run)
     descriptor = ManifestDescriptor(
         ContainerPlatform.LINUX_AMD64,
         "sha256:" + "a" * 64,
@@ -850,7 +854,7 @@ def test_publish_manifest_preserves_user_docker_config(monkeypatch, tmp_path):
             (Path(_kwargs["env"]["DOCKER_CONFIG"]) / "config.json").read_text()
         )
 
-    monkeypatch.setattr(container_manifests.utils, "run", fake_run)
+    monkeypatch.setattr(container_manifests, "run", fake_run)
     descriptor = ManifestDescriptor(
         ContainerPlatform.LINUX_AMD64,
         "sha256:" + "a" * 64,
@@ -899,7 +903,7 @@ def test_publish_manifest_overrides_existing_auth_for_target_host(
             (Path(_kwargs["env"]["DOCKER_CONFIG"]) / "config.json").read_text()
         )
 
-    monkeypatch.setattr(container_manifests.utils, "run", fake_run)
+    monkeypatch.setattr(container_manifests, "run", fake_run)
     descriptor = ManifestDescriptor(
         ContainerPlatform.LINUX_AMD64,
         "sha256:" + "a" * 64,
@@ -927,7 +931,7 @@ def test_publish_manifest_handles_missing_user_docker_config(monkeypatch, tmp_pa
             (Path(_kwargs["env"]["DOCKER_CONFIG"]) / "config.json").read_text()
         )
 
-    monkeypatch.setattr(container_manifests.utils, "run", fake_run)
+    monkeypatch.setattr(container_manifests, "run", fake_run)
     descriptor = ManifestDescriptor(
         ContainerPlatform.LINUX_AMD64,
         "sha256:" + "a" * 64,
@@ -962,14 +966,16 @@ def test_publish_manifest_warns_and_proceeds_on_malformed_user_config(
             (Path(_kwargs["env"]["DOCKER_CONFIG"]) / "config.json").read_text()
         )
 
-    monkeypatch.setattr(container_manifests.utils, "run", fake_run)
+    monkeypatch.setattr(container_manifests, "run", fake_run)
     descriptor = ManifestDescriptor(
         ContainerPlatform.LINUX_AMD64,
         "sha256:" + "a" * 64,
         "quay.io/biocontainers/samtools:1.20--0-amd64",
     )
 
-    with caplog.at_level("WARNING", logger="bioconda_utils.container_manifests"):
+    with caplog.at_level(
+        "WARNING", logger="bioconda_utils.containers.container_manifests"
+    ):
         container_manifests._publish_manifest(
             "quay.io/biocontainers/samtools:1.20--0",
             [descriptor],
@@ -997,14 +1003,16 @@ def test_publish_manifest_ignores_non_object_user_config(monkeypatch, tmp_path, 
             (Path(_kwargs["env"]["DOCKER_CONFIG"]) / "config.json").read_text()
         )
 
-    monkeypatch.setattr(container_manifests.utils, "run", fake_run)
+    monkeypatch.setattr(container_manifests, "run", fake_run)
     descriptor = ManifestDescriptor(
         ContainerPlatform.LINUX_AMD64,
         "sha256:" + "a" * 64,
         "quay.io/biocontainers/samtools:1.20--0-amd64",
     )
 
-    with caplog.at_level("WARNING", logger="bioconda_utils.container_manifests"):
+    with caplog.at_level(
+        "WARNING", logger="bioconda_utils.containers.container_manifests"
+    ):
         container_manifests._publish_manifest(
             "quay.io/biocontainers/samtools:1.20--0",
             [descriptor],

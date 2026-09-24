@@ -8,7 +8,7 @@ from typing import Any, ClassVar
 
 from bioconda_utils.build_failure import BuildFailureRecord
 
-from .. import utils
+from ..conda.repodata import RepoData
 from . import LintCheck, _recipe
 
 
@@ -28,7 +28,7 @@ class in_other_channels(LintCheck):
     """
 
     def check_recipe(self, recipe: _recipe.Recipe) -> None:
-        channels = utils.RepoData().get_package_data(key="channel", name=recipe.name)
+        channels = RepoData().get_package_data(key="channel", name=recipe.name)
         if set(channels) - {"bioconda"}:
             self.message(section="package/name")
 
@@ -49,7 +49,7 @@ class build_number_needs_bump(LintCheck):
     requires: ClassVar = ["missing_build_number"]
 
     def check_recipe(self, recipe: _recipe.Recipe) -> None:
-        bldnos = utils.RepoData().get_package_data(
+        bldnos = RepoData().get_package_data(
             key="build_number", name=recipe.name, version=recipe.version
         )
         if bldnos and recipe.build_number <= max(bldnos):
@@ -75,7 +75,7 @@ class build_number_needs_reset(LintCheck):
     requires: ClassVar = ["missing_build_number"]
 
     def check_recipe(self, recipe: _recipe.Recipe) -> None:
-        bldnos = utils.RepoData().get_package_data(
+        bldnos = RepoData().get_package_data(
             key="build_number", name=recipe.name, version=recipe.version
         )
         if not bldnos and recipe.build_number > 0:

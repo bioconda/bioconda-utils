@@ -16,17 +16,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from . import utils
-from ._types import (
+from .._types import (
     ALL_CONTAINER_PLATFORMS,
     ContainerPlatform,
     docker_platform_staging_suffix,
     normalize_container_platform,
 )
-from .utils import (
-    skopeo_auth_args,
-    skopeo_env,
-)
+from ..support.subproc import run
+from . import oci
 
 logger = logging.getLogger(__name__)
 
@@ -215,11 +212,11 @@ def _is_index(manifest: dict[str, Any]) -> bool:
 
 
 def _inspect_raw(ref: str, creds: str | None) -> dict[str, Any] | None:
-    auth_args, secrets = skopeo_auth_args(creds, option="--creds")
-    result = utils.run(
-        ["skopeo", "inspect", "--raw", *auth_args, f"docker://{ref}"],
+    auth_args, secrets = oci.skopeo_auth_args(creds, option="--creds")
+    result = run(
+        [oci.skopeo_bin(), "inspect", "--raw", *auth_args, f"docker://{ref}"],
         secrets=secrets,
-        env=skopeo_env(),
+        env=oci.skopeo_env(),
         check=False,
         quiet_failure=True,
     )
@@ -240,11 +237,11 @@ def _inspect_raw(ref: str, creds: str | None) -> dict[str, Any] | None:
 
 def _inspect_single_image(ref: str, creds: str | None) -> tuple[ContainerPlatform, str]:
     """Return the platform and digest of a non-index image ref."""
-    auth_args, secrets = skopeo_auth_args(creds, option="--creds")
-    raw = utils.run(
-        ["skopeo", "inspect", "--no-tags", *auth_args, f"docker://{ref}"],
+    auth_args, secrets = oci.skopeo_auth_args(creds, option="--creds")
+    raw = run(
+        [oci.skopeo_bin(), "inspect", "--no-tags", *auth_args, f"docker://{ref}"],
         secrets=secrets,
-        env=skopeo_env(),
+        env=oci.skopeo_env(),
     ).stdout
     inspection = json.loads(raw)
     digest = inspection.get("Digest")
@@ -374,7 +371,7 @@ def _publish_manifest(
     command += ["--tag", canonical_ref, *sources]
     docker_env, secrets, config_dir = _docker_config_env(canonical_ref, creds)
     try:
-        utils.run(
+        run(
             command,
             secrets=secrets,
             live=True,

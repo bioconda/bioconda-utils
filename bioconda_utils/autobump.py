@@ -60,13 +60,15 @@ import conda_build.config
 import networkx as nx
 from aiohttp import ClientResponseError
 from conda.exports import MatchSpec, VersionOrder
+from jinja2 import Environment, PackageLoader
 from packaging.version import InvalidVersion, Version
 from packaging.version import parse as _pep440_parse
 
+from bioconda_utils._types import ensure_list
 from bioconda_utils.skiplist import Skiplist
 from test.conftest import recipe_dirs
 
-from . import __version__, graph, update_pinnings, utils
+from . import __version__, graph, update_pinnings
 from .aiopipe import (
     AsyncFilter,
     AsyncPipeline,
@@ -74,12 +76,24 @@ from .aiopipe import (
     EndProcessing,
     EndProcessingItem,
 )
+from .conda.conda_build_bridge import load_conda_build_config
+from .recipes import get_recipes
+from .conda.repodata import RepoData
 from .githandler import GitHandler
 from .githubhandler import GitHubHandler
 from .hosters import Hoster
 from .recipe import Recipe
 from .recipe import load_parallel_iter as recipes_load_parallel_iter
-from .utils import RATTLER, BuildSystem, RepoData, ensure_list
+from ._types import BuildSystem, ensure_list, RATTLER, RecipePath
+from .conda.repodata import RepoData
+
+#: Jinja environment used to render PR titles, descriptions and comments
+#: from the packaged templates.
+jinja = Environment(
+    loader=PackageLoader("bioconda_utils", "templates"),
+    trim_blocks=True,
+    lstrip_blocks=True,
+)
 
 
 def _parse_or_legacy(s: str) -> tuple[Version | str, bool]:
@@ -124,12 +138,12 @@ class RecipeSource:
         exclude: list[str],
         shuffle: bool = True,
     ) -> None:
-        unfiltered_recipe_dirs: list[utils.RecipePath] = list(
-            utils.get_recipes(recipe_base, self.packages, exclude)
+        unfiltered_recipe_dirs: list[RecipePath] = list(
+            get_recipes(recipe_base, self.packages, exclude)
         )
         self.recipe_base = recipe_base
         self.packages = packages
-        self.recipe_dirs: list[utils.RecipePath] = []
+        self.recipe_dirs: list[RecipePath] = []
 
         # TODO (rb): implement autobump for rattler-build
         for r in unfiltered_recipe_dirs:
@@ -331,7 +345,7 @@ class ExcludeOtherChannel(Filter):
         super().__init__(scanner)
         self.channels = channels
         logger.info("Loading package lists for %s", channels)
-        channel_data = utils.RepoData()
+        channel_data = RepoData()
         if cache:
             channel_data.set_cache(cache)
         self.other = set(channel_data.get_package_data("name", channels=channels))
@@ -454,7 +468,7 @@ class CheckPinning(Filter):
 
     def __init__(self, scanner: Scanner) -> None:
         self.scanner = scanner
-        self.build_config = utils.load_conda_build_config()
+        self.build_config = load_conda_build_config()
 
     @staticmethod
     def match_version(spec: str, version: str) -> bool:
@@ -637,7 +651,7 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
         #: output file name for failed urls
         self.unparsed_file = unparsed_file
         #: conda build config
-        self.build_config: conda_build.config.Config = utils.load_conda_build_config()
+        self.build_config: conda_build.config.Config = load_conda_build_config()
 
     def finalize(self) -> None:
         """Save unparsed urls to file and print stats to log"""
@@ -812,7 +826,7 @@ class FetchUpstreamDependencies(Filter):
     def __init__(self, scanner: Scanner) -> None:
         super().__init__(scanner)
         #: conda build config
-        self.build_config: conda_build.config.Config = utils.load_conda_build_config()
+        self.build_config: conda_build.config.Config = load_conda_build_config()
 
     async def apply(self, recipe: Recipe) -> None:
         await asyncio.gather(
@@ -1255,7 +1269,7 @@ class CreatePullRequest(GitFilter):
             template_name = "autobump_bump_version_pr.md"
         else:
             template_name = "autobump_update_pinning_pr.md"
-        template = utils.jinja.get_template(template_name)
+        template = jinja.get_template(template_name)
 
         context = template.new_context(
             {

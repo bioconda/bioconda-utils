@@ -58,10 +58,13 @@ from typing import Literal, Protocol
 
 from packaging.version import Version
 
-from . import utils
-from .utils import BuildSystem
-from ._types import (
+from ..rattler.rattler_build_bridge import (
+    get_rattler_build_global_variants_paths,
+)
+
+from .._types import (
     ALL_PACKAGE_SUBDIRS,
+    BuildSystem,
     ContainerPlatform,
     PkgBuildRef,
     Subdir,
@@ -69,6 +72,12 @@ from ._types import (
     local_mulled_image_ref,
     native_container_platform,
 )
+from ..conda.conda_build_bridge import (
+    get_conda_build_config_files,
+    load_conda_build_config,
+)
+from ..support.logsetup import Progress
+from ..support.subproc import run
 
 logger = logging.getLogger(__name__)
 
@@ -243,6 +252,7 @@ class RecipeBuilder:
         image_build_dir: str | None = None,
         docker_base_image: str | None = None,
         target_platform: ContainerPlatform | None = None,
+        container_pkgs_cache: str | None = None,
     ) -> None:
         """
         Class to handle building a custom docker container that can be used for
@@ -324,10 +334,28 @@ class RecipeBuilder:
 
         docker_base_image : str or None
             Name of base image that can be used in **dockerfile_template**.
+
+        container_pkgs_cache : str or None
+            Host directory bind-mounted at /opt/conda/pkgs in build
+            containers, so repodata, shards indexes and downloaded build/host
+            env packages persist across the containers of one build run.
+            Falls back to the BIOCONDA_UTILS_CONTAINER_PKGS_CACHE
+            environment variable when not given.
         """
         self.requirements = requirements
         self.conda_build_args: str = ""
         self.rattler_build_args: str = ""
+        # Host directory bind-mounted at /opt/conda/pkgs in build containers
+        # so repodata/shards and downloaded build/host env packages persist
+        # across the containers of one build run. Falls back to the
+        self.container_pkgs_cache = container_pkgs_cache or os.environ.get(
+            "BIOCONDA_UTILS_CONTAINER_PKGS_CACHE"
+        )
+        if self.container_pkgs_cache:
+            os.makedirs(self.container_pkgs_cache, exist_ok=True)
+            # build containers run as a different user (uid 9001 "conda") and
+            # conda writes cache state even on cache hits
+            os.chmod(self.container_pkgs_cache, 0o777)
         self.target_platform: ContainerPlatform | None = target_platform
         self.build_script_template: str = build_script_template
         self.rattler_build_script_template: str = rattler_build_script_template
@@ -354,7 +382,7 @@ class RecipeBuilder:
         self.container_recipe = container_recipe
         self.container_staging = container_staging
 
-        conda_build_config = utils.load_conda_build_config()
+        conda_build_config = load_conda_build_config()
         # Identify conda-bld directory on the host.
         self.host_conda_bld = conda_build_config.croot
         # Pass on config to choose wheter to build .tar.bz2 or .conda format.
@@ -372,7 +400,7 @@ class RecipeBuilder:
 
         # Copy the conda build config files to the staging directory that is
         # visible in the container
-        for i, config_file in enumerate(utils.get_conda_build_config_files()):
+        for i, config_file in enumerate(get_conda_build_config_files()):
             dst_file = self._get_config_path(self.pkg_dir, i, config_file)
             if not os.path.exists(self.pkg_dir):
                 os.makedirs(self.pkg_dir)
@@ -410,7 +438,7 @@ class RecipeBuilder:
         if self.target_platform is not None:
             command += ["--platform", self.target_platform]
         command.append(image)
-        utils.run(command, live=True)
+        run(command, live=True)
 
     def _get_config_path(
         self, staging_prefix: str, i: int, config_file: CondaBuildConfigFile
@@ -530,8 +558,8 @@ class RecipeBuilder:
             cmd[2:2] = ["--platform", self.target_platform]
 
         try:
-            with utils.Progress():
-                p = utils.run(cmd)
+            with Progress():
+                p = run(cmd)
         except sp.CalledProcessError:
             logger.error(
                 "DOCKER FAILED: Error building docker container %s. ",
@@ -591,7 +619,7 @@ class RecipeBuilder:
         match build_system:
             case BuildSystem.CONDA:
                 build_args_list = [build_args]
-                for i, config_file in enumerate(utils.get_conda_build_config_files()):
+                for i, config_file in enumerate(get_conda_build_config_files()):
                     dst_file = self._get_config_path(
                         self.container_staging, i, config_file
                     )
@@ -616,7 +644,7 @@ class RecipeBuilder:
                 )
             case BuildSystem.RATTLER:
                 build_args_list = [rattler_args]
-                global_variants = utils.get_rattler_build_global_variants_paths()
+                global_variants = get_rattler_build_global_variants_paths()
 
                 # TODO (rb) should we also allow `conda_build_config.yaml` as per rattler-build docs?
                 local_variant: Path = Path(recipe_dir) / "variants.yaml"
@@ -674,6 +702,17 @@ class RecipeBuilder:
             "-v",
             f"{recipe_dir}:{self.container_recipe}",
         ]
+        # Optionally persist the container's conda package cache (repodata,
+        # shards indexes, downloaded packages) across the containers of one
+        # build run. Containers are ephemeral (--rm); without this, every
+        # recipe re-downloads repodata and its build/host env packages.
+        # Enabled via --container-pkgs-cache (or the
+        # BIOCONDA_UTILS_CONTAINER_PKGS_CACHE environment variable).
+        if self.container_pkgs_cache:
+            cmd += [
+                "-v",
+                f"{self.container_pkgs_cache}:/opt/conda/pkgs",
+            ]
         cmd += env_list
         image = self.docker_temp_image if self.build_image else self.docker_base_image
         if image is None:
@@ -682,14 +721,14 @@ class RecipeBuilder:
         cmd += ["/bin/bash", "/opt/build_script.bash"]
 
         logger.debug("DOCKER: cmd: %s", cmd)
-        with utils.Progress():
-            p = utils.run(cmd, live=live_logs)
+        with Progress():
+            p = run(cmd, live=live_logs)
         return p
 
     def cleanup(self) -> None:
         if self.build_image and not self.keep_image:
             cmd = ["docker", "rmi", self.docker_temp_image]
-            utils.run(cmd)
+            run(cmd)
 
 
 def purgeImage(
@@ -701,13 +740,13 @@ def purgeImage(
     The local image is tagged under the canonical ``biocontainers`` namespace
     by ``pkg_test.build_and_test_mulled_image`` (not the upload target), so the
     ref is derived via :func:`local_mulled_image_ref` -- the same source
-    :func:`bioconda_utils.upload.mulled_upload` reads from when copying to the
-    registry.
+    :func:`bioconda_utils.containers.upload.mulled_upload` reads from when
+    copying to the registry.
     """
     cmd = ["docker", "rmi", local_mulled_image_ref(img, target_platform)]
-    utils.run(cmd)
+    run(cmd)
 
 
 def pruneStoppedContainers() -> None:
     cmd = ["docker", "container", "prune", "-f"]
-    utils.run(cmd)
+    run(cmd)

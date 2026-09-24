@@ -6,8 +6,11 @@ from unittest.mock import Mock
 
 import pytest
 
-from bioconda_utils import _types, build, cli, docker_utils, pkg_test, upload, utils
+from bioconda_utils import _types, build, cli
 from bioconda_utils._types import ContainerPlatform, PackageSubdir, PkgBuildRef
+from bioconda_utils.conda.repodata import RepoData
+from bioconda_utils.containers import docker_utils, pkg_test, upload
+from bioconda_utils.support.subproc import run
 
 SAMTOOLS_1_3_0 = PkgBuildRef(name="samtools", version="1.3", build_string="0")
 BIOCONTAINERS = _types.QuayUploadTarget("biocontainers")
@@ -184,9 +187,7 @@ def test_handle_merged_pr_native_macos_fallback_uses_host(monkeypatch, tmp_path)
     config.write_text("channels: []\n", encoding="utf-8")
     build_calls = []
 
-    monkeypatch.setattr(
-        cli.utils.RepoData, "native_subdir", lambda: PackageSubdir.OSX_ARM64
-    )
+    monkeypatch.setattr(RepoData, "native_subdir", lambda: PackageSubdir.OSX_ARM64)
     monkeypatch.setattr(
         cli,
         "upload_pr_artifacts",
@@ -220,9 +221,7 @@ def test_handle_merged_pr_rejects_foreign_macos_fallback(monkeypatch, tmp_path):
     config = tmp_path / "config.yaml"
     config.write_text("channels: []\n", encoding="utf-8")
 
-    monkeypatch.setattr(
-        cli.utils.RepoData, "native_subdir", lambda: PackageSubdir.OSX_64
-    )
+    monkeypatch.setattr(RepoData, "native_subdir", lambda: PackageSubdir.OSX_64)
     monkeypatch.setattr(
         cli,
         "upload_pr_artifacts",
@@ -269,7 +268,7 @@ def test_test_package_passes_target_platform(monkeypatch, tmp_path):
     monkeypatch.setattr(pkg_test, "get_test_command", lambda _path: "true")
     monkeypatch.setattr(os.path, "exists", lambda path: True)
     monkeypatch.setattr(
-        pkg_test.utils,
+        pkg_test,
         "run",
         lambda cmd, **_kwargs: commands.append(cmd),
     )
@@ -304,7 +303,7 @@ def test_recipe_builder_build_image_passes_target_platform(monkeypatch, tmp_path
         lambda _cmd: b"Docker version 24.0.0, build 0000000",
     )
     monkeypatch.setattr(
-        docker_utils.utils,
+        docker_utils,
         "run",
         lambda cmd, **_kwargs: commands.append(cmd),
     )
@@ -330,7 +329,7 @@ def test_recipe_builder_reuses_matching_local_base_image(monkeypatch):
         lambda *_args, **_kwargs: Mock(returncode=0, stdout="linux/arm64\n"),
     )
     monkeypatch.setattr(
-        docker_utils.utils,
+        docker_utils,
         "run",
         lambda command, **_kwargs: pulls.append(command),
     )
@@ -354,7 +353,7 @@ def test_recipe_builder_pulls_missing_base_image_for_target(monkeypatch):
         lambda *_args, **_kwargs: Mock(returncode=1, stdout=""),
     )
     monkeypatch.setattr(
-        docker_utils.utils,
+        docker_utils,
         "run",
         lambda command, **_kwargs: pulls.append(command),
     )
@@ -388,7 +387,7 @@ def test_recipe_builder_fails_when_base_image_cannot_be_pulled(monkeypatch):
     def fail_pull(command, **_kwargs):
         raise sp.CalledProcessError(1, command)
 
-    monkeypatch.setattr(docker_utils.utils, "run", fail_pull)
+    monkeypatch.setattr(docker_utils, "run", fail_pull)
 
     with pytest.raises(sp.CalledProcessError):
         builder._ensure_base_image()
@@ -397,7 +396,8 @@ def test_recipe_builder_fails_when_base_image_cannot_be_pulled(monkeypatch):
 def test_mulled_upload_passes_target_platform(monkeypatch):
     commands = []
     monkeypatch.setenv("QUAY_LOGIN", "user:token")
-    monkeypatch.setattr(upload.utils, "skopeo_env", dict)
+    monkeypatch.setattr(upload.oci, "skopeo_env", dict)
+    monkeypatch.setattr(upload.oci, "skopeo_bin", lambda: "skopeo")
 
     def run(cmd, **_kwargs):
         commands.append(cmd)
@@ -418,10 +418,11 @@ def test_mulled_upload_passes_target_platform(monkeypatch):
         return type("R", (), {"stdout": "sha256:" + "a" * 64})()
 
     monkeypatch.setattr(
-        upload.utils,
+        upload,
         "run",
         run,
     )
+    monkeypatch.setattr(upload.oci, "run", run)
 
     record = upload.mulled_upload(
         SAMTOOLS_1_3_0, BIOCONTAINERS, ContainerPlatform.LINUX_ARM64
@@ -436,7 +437,8 @@ def test_mulled_upload_passes_target_platform(monkeypatch):
 def test_mulled_upload_stages_amd64_under_suffixed_tag(monkeypatch):
     commands = []
     monkeypatch.setenv("QUAY_LOGIN", "user:token")
-    monkeypatch.setattr(upload.utils, "skopeo_env", dict)
+    monkeypatch.setattr(upload.oci, "skopeo_env", dict)
+    monkeypatch.setattr(upload.oci, "skopeo_bin", lambda: "skopeo")
 
     def run(cmd, **_kwargs):
         commands.append(cmd)
@@ -449,10 +451,11 @@ def test_mulled_upload_stages_amd64_under_suffixed_tag(monkeypatch):
         return type("R", (), {"stdout": "sha256:" + "a" * 64})()
 
     monkeypatch.setattr(
-        upload.utils,
+        upload,
         "run",
         run,
     )
+    monkeypatch.setattr(upload.oci, "run", run)
 
     upload.mulled_upload(SAMTOOLS_1_3_0, BIOCONTAINERS, ContainerPlatform.LINUX_AMD64)
 
@@ -461,9 +464,17 @@ def test_mulled_upload_stages_amd64_under_suffixed_tag(monkeypatch):
 
 def test_mulled_upload_rejects_wrong_source_platform(monkeypatch):
     monkeypatch.setenv("QUAY_LOGIN", "user:token")
-    monkeypatch.setattr(upload.utils, "skopeo_env", dict)
+    monkeypatch.setattr(upload.oci, "skopeo_env", dict)
+    monkeypatch.setattr(upload.oci, "skopeo_bin", lambda: "skopeo")
     monkeypatch.setattr(
-        upload.utils,
+        upload,
+        "run",
+        lambda _cmd, **_kwargs: type(
+            "R", (), {"stdout": json.dumps({"os": "linux", "architecture": "amd64"})}
+        )(),
+    )
+    monkeypatch.setattr(
+        upload.oci,
         "run",
         lambda _cmd, **_kwargs: type(
             "R", (), {"stdout": json.dumps({"os": "linux", "architecture": "amd64"})}
@@ -479,7 +490,8 @@ def test_mulled_upload_rejects_wrong_source_platform(monkeypatch):
 def test_upload_mulled_image_source_records_destination_digest(monkeypatch):
     commands = []
     monkeypatch.setenv("QUAY_LOGIN", "user:token")
-    monkeypatch.setattr(upload.utils, "skopeo_env", dict)
+    monkeypatch.setattr(upload.oci, "skopeo_env", dict)
+    monkeypatch.setattr(upload.oci, "skopeo_bin", lambda: "skopeo")
 
     def run(cmd, **_kwargs):
         commands.append(cmd)
@@ -493,7 +505,8 @@ def test_upload_mulled_image_source_records_destination_digest(monkeypatch):
             return type("R", (), {"stdout": "sha256:" + "d" * 64})()
         return type("R", (), {"stdout": ""})()
 
-    monkeypatch.setattr(upload.utils, "run", run)
+    monkeypatch.setattr(upload, "run", run)
+    monkeypatch.setattr(upload.oci, "run", run)
 
     record = upload.upload_mulled_image_source(
         "docker-archive:/tmp/samtools.tar.gz",
@@ -523,7 +536,8 @@ def test_upload_mulled_image_source_can_use_ambient_registry_auth(monkeypatch):
     commands = []
     monkeypatch.delenv("QUAY_LOGIN", raising=False)
     monkeypatch.delenv("QUAY_OAUTH_TOKEN", raising=False)
-    monkeypatch.setattr(upload.utils, "skopeo_env", dict)
+    monkeypatch.setattr(upload.oci, "skopeo_env", dict)
+    monkeypatch.setattr(upload.oci, "skopeo_bin", lambda: "skopeo")
 
     def run(cmd, **_kwargs):
         commands.append(cmd)
@@ -537,7 +551,8 @@ def test_upload_mulled_image_source_can_use_ambient_registry_auth(monkeypatch):
             return type("R", (), {"stdout": "sha256:" + "d" * 64})()
         return type("R", (), {"stdout": ""})()
 
-    monkeypatch.setattr(upload.utils, "run", run)
+    monkeypatch.setattr(upload, "run", run)
+    monkeypatch.setattr(upload.oci, "run", run)
 
     upload.upload_mulled_image_source(
         "docker-archive:/tmp/samtools.tar.gz",
@@ -553,7 +568,7 @@ def test_upload_mulled_image_source_can_use_ambient_registry_auth(monkeypatch):
 def test_purge_image_removes_biocontainers_local_image(monkeypatch):
     commands = []
     monkeypatch.setattr(
-        docker_utils.utils,
+        docker_utils,
         "run",
         lambda cmd, **_kwargs: commands.append(cmd),
     )
@@ -578,7 +593,8 @@ def test_mulled_upload_sources_local_image_from_biocontainers(monkeypatch):
     image as biocontainers. Guards the same namespace split that broke
     purgeImage: the destination is target-namespaced, but the source is not."""
     monkeypatch.setenv("QUAY_LOGIN", "user:token")
-    monkeypatch.setattr(upload.utils, "skopeo_env", dict)
+    monkeypatch.setattr(upload.oci, "skopeo_env", dict)
+    monkeypatch.setattr(upload.oci, "skopeo_bin", lambda: "skopeo")
 
     sources = []
 
@@ -593,7 +609,8 @@ def test_mulled_upload_sources_local_image_from_biocontainers(monkeypatch):
             )()
         return type("R", (), {"stdout": "sha256:" + "a" * 64})()
 
-    monkeypatch.setattr(upload.utils, "run", run)
+    monkeypatch.setattr(upload, "run", run)
+    monkeypatch.setattr(upload.oci, "run", run)
 
     # Upload to a NON-biocontainers target: the destination is quay0-namespaced,
     # but the skopeo copy source must still be the biocontainers local image.
@@ -608,19 +625,19 @@ def test_mulled_upload_sources_local_image_from_biocontainers(monkeypatch):
 
 def test_utils_run_logs_and_redacts_secrets(caplog):
     with caplog.at_level(logging.INFO):
-        utils.run(["echo", "hello", "world"])
+        run(["echo", "hello", "world"])
         assert "(COMMAND) echo hello world" in caplog.text
 
     caplog.clear()
     with caplog.at_level(logging.INFO):
-        utils.run(["echo", "supersecret123", "public"], secrets=["supersecret123"])
+        run(["echo", "supersecret123", "public"], secrets=["supersecret123"])
         assert "(COMMAND) echo <hidden> public" in caplog.text
         assert "supersecret123" not in caplog.text
 
     caplog.clear()
     with caplog.at_level(logging.INFO):
         # A bare string is a single secret, not a sequence of characters
-        utils.run(["echo", "supersecret123", "public"], secrets="supersecret123")
+        run(["echo", "supersecret123", "public"], secrets="supersecret123")
         assert "(COMMAND) echo <hidden> public" in caplog.text
         assert "supersecret123" not in caplog.text
 
@@ -629,4 +646,4 @@ def test_utils_run_rejects_removed_redacted_secrets_kwarg():
     # The pre-`secrets` kwarg is gone; unknown kwargs are forwarded to Popen,
     # which rejects it instead of silently skipping redaction.
     with pytest.raises(TypeError):
-        utils.run(["echo", "hello"], redacted_secrets=["s3cret"])
+        run(["echo", "hello"], redacted_secrets=["s3cret"])

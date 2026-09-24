@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from pathlib import Path
 import platform
+from collections.abc import Sequence
 from enum import StrEnum
 from typing import (
     Any,
@@ -11,6 +14,111 @@ from typing import (
     TypeAlias,
     TypedDict,
 )
+
+from .rattler.rattler_build_bridge import RattlerDictList
+
+
+class BuildSystem(StrEnum):
+    CONDA = "conda"
+    RATTLER = "rattler"
+
+
+CONDA = BuildSystem.CONDA
+RATTLER = BuildSystem.RATTLER
+
+
+class RecipePath(NamedTuple):
+    """
+    Named tuple with the fields:
+
+    path : Path
+
+    build_system : BuildSystem
+    """
+
+    path: Path
+    build_system: BuildSystem
+
+    def __fspath__(self) -> str:
+        return self.path.__fspath__()
+
+
+@dataclass(slots=True)
+class MetaOrRattler:
+    path: RecipePath
+    meta: dict[str, Any] | None
+    rattler: RattlerDictList | None
+
+    def __init__(
+        self,
+        path: RecipePath,
+        meta: dict[str, Any] | None,
+        rattler: RattlerDictList | None,
+    ) -> None:
+        if meta is None and rattler is None:
+            raise ValueError(
+                f"Either meta or rattler must be set but both are None for recipe: {path.path.as_posix()}"
+            )
+        self.path = path
+        self.meta = meta
+        self.rattler = rattler
+
+    def get_package_name(self) -> str:
+        if self.meta is not None:
+            # TODO: what actually happens if this is a multi output recipe?
+            return self.meta["package"]["name"]
+        elif self.rattler is not None:
+            # if rattler recipe is a multi-output recipe, return the name of its directory
+            # if it is a single output directory (i.e. the list contains just the variants of the same
+            # recipe), return the name of the package
+            if self.rattler.is_multi:
+                return self.path.path.name
+            else:
+                return self.rattler.recipes[0]["package"]["name"]
+        else:
+            raise ValueError(
+                f"No meta or rattler-recipe found for: {self.path.path.as_posix()}"
+            )
+
+    def get_dependencies(self, section: Literal["build", "host", "run"]) -> list[str]:
+        if self.meta is not None:
+            requirements = self.meta.get("requirements")
+            if not requirements:
+                return []
+
+            deps = requirements.get(section)
+
+            if not deps:
+                return []
+            return [dep.split()[0] for dep in deps if dep]
+        elif self.rattler is not None:
+            result: list[str] = []
+
+            # return the dependencies of all variants as dependencies of this
+            # package. If this should be able to be split by variants, that behaviour
+            # needs to be implemented separately
+            for variant in self.rattler:
+                requirements = variant.get("requirements")
+                if not requirements:
+                    return []
+                deps = requirements.get(section)
+                if not deps:
+                    return []
+
+                for dep in deps:
+                    if isinstance(dep, str):
+                        result.append(dep)
+                    elif isinstance(dep, dict) and "pin_subpackage" in dep:
+                        result.append(dep["pin_subpackage"]["name"])
+                    else:
+                        raise ValueError(f"Failed to parse dependency: {dep}")
+
+            return result
+        else:
+            # this is just to appease linters. Due to __init__ this will never be called
+            raise ValueError(
+                f"Either meta or rattler must be set but both are None for recipe: {self.path.path.as_posix()}"
+            )
 
 
 class Config(dict[str, Any]):
@@ -157,7 +265,7 @@ def docker_platform_staging_suffix(target_platform: ContainerPlatform) -> str:
     ``docker buildx imagetools create`` can assemble into a multi-platform
     manifest at the unsuffixed canonical tag. Nothing in ``galaxy-tool-util``
     produces these tags; they are a bioconda-utils convention used only by
-    :func:`bioconda_utils.container_manifests.platform_ref`.
+    :func:`bioconda_utils.containers.container_manifests.platform_ref`.
     """
     return target_platform.removeprefix("linux/").replace("/", "-")
 
@@ -165,10 +273,10 @@ def docker_platform_staging_suffix(target_platform: ContainerPlatform) -> str:
 #: Namespace under which bioconda-utils tells ``mulled-build`` to tag local
 #: images (the ``-n`` argument). Local mulled images are always built under
 #: this canonical namespace regardless of the upload target, so they match
-#: production naming; :func:`bioconda_utils.upload.mulled_upload` re-namespaces
+#: production naming; :func:`bioconda_utils.containers.upload.mulled_upload` re-namespaces
 #: them on push. Every consumer of the local image ref -- ``pkg_test``'s
 #: ``-n`` value, :func:`local_mulled_image_ref`, and the cleanup in
-#: :func:`bioconda_utils.docker_utils.purgeImage` -- must agree on this.
+#: :func:`bioconda_utils.containers.docker_utils.purgeImage` -- must agree on this.
 MULLED_LOCAL_NAMESPACE = "biocontainers"
 
 
@@ -181,8 +289,8 @@ def local_mulled_image_ref(
     ``quay.io/biocontainers/<name>:<version>--<build>`` for the native arch and
     appends ``-<arch>`` for every other target platform (see
     :func:`docker_platform_tag_suffix`). This is the single source of truth for
-    that ref: the upload source (:func:`bioconda_utils.upload.mulled_upload`)
-    and the post-upload cleanup (:func:`bioconda_utils.docker_utils.purgeImage`)
+    that ref: the upload source (:func:`bioconda_utils.containers.upload.mulled_upload`)
+    and the post-upload cleanup (:func:`bioconda_utils.containers.docker_utils.purgeImage`)
     both build it here so they can never disagree on the namespace.
     """
     tag = f"{image.version}--{image.build_string}"
@@ -246,3 +354,16 @@ class PkgBuildRef(NamedTuple):
 
 class RecipeMetaLike(Protocol):
     def get_value(self, key: str, default: Any = None) -> Any: ...
+
+
+def ensure_list(obj):
+    """Wraps **obj** in a list if necessary
+
+    >>> ensure_list("one")
+    ["one"]
+    >>> ensure_list(["one", "two"])
+    ["one", "two"]
+    """
+    if isinstance(obj, Sequence) and not isinstance(obj, str):
+        return obj
+    return [obj]
