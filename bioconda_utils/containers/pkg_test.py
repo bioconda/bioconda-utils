@@ -3,9 +3,6 @@ Mulled Tests
 """
 
 import json
-from pathlib import Path
-import subprocess as sp
-import tempfile
 import logging
 import os
 import shlex

@@ -54,13 +54,9 @@ import tempfile
 from importlib.resources import as_file, files
 from pathlib import Path
 from shlex import quote
-from typing import Literal, Protocol
+from typing import Protocol
 
 from packaging.version import Version
-
-from ..rattler.rattler_build_bridge import (
-    get_rattler_build_global_variants_paths,
-)
 
 from .._types import (
     ALL_PACKAGE_SUBDIRS,
@@ -75,6 +71,9 @@ from .._types import (
 from ..conda.conda_build_bridge import (
     get_conda_build_config_files,
     load_conda_build_config,
+)
+from ..rattler.rattler_build_bridge import (
+    get_rattler_build_global_variants_paths,
 )
 from ..support.logsetup import Progress
 from ..support.subproc import run

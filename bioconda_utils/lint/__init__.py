@@ -94,23 +94,22 @@ Module Autodocs
 from __future__ import annotations
 
 import abc
-from collections.abc import Iterable
 import importlib
 import inspect
 import logging
 import os
-from pathlib import Path
 import pkgutil
 import re
 from collections import defaultdict
+from collections.abc import Iterable
 from enum import IntEnum
+from pathlib import Path
 from typing import Any, ClassVar, NamedTuple, Protocol, cast, runtime_checkable
 
-from jsonschema.exceptions import ValidationError
+import networkx as nx
 import yaml
 from conda_smithy.lint_recipe import lintify_meta_yaml
-
-import networkx as nx
+from jsonschema.exceptions import ValidationError
 
 from bioconda_utils._types import RecipePath
 from bioconda_utils.skiplist import Skiplist
@@ -191,8 +190,6 @@ class RattlerLintMessage(NamedTuple):
     """Message issued by LintChecks for rattler build recipes"""
 
     #: The recipe this message refers to
-    # _recipe.Recipe for conda recipes, utils.RecipePath for
-    # rattler recipes
     recipe: RecipePath
 
     lint_or_hint: str

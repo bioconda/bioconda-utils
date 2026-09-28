@@ -8,19 +8,16 @@ skipped because they already exist in the target channels.
 
 from __future__ import annotations
 
-import fnmatch
-import glob
 import logging
 import os
 import re
 from collections import Counter, defaultdict
-from collections.abc import Iterator, Sequence
 from itertools import chain
 from pathlib import Path
 
 from conda_build import api
 
-from .._types import container_platform_to_package_subdir, ContainerPlatform
+from .._types import ContainerPlatform, container_platform_to_package_subdir
 from .conda_build_bridge import load_all_meta, load_conda_build_config
 from .repodata import RepoData
 

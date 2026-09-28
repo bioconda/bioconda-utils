@@ -7,21 +7,19 @@ from __future__ import annotations
 import itertools
 import logging
 import os
-import platform
 import shutil
 import subprocess as sp
 from collections import defaultdict
 from collections.abc import Iterable
 from pathlib import Path
-
 from typing import Any, NamedTuple
 
 import networkx as nx
+import psutil
 import rattler_build as rb
 from conda.exceptions import UnsatisfiableError
-import psutil
+from conda_build import api
 from conda_build.exceptions import DependencyNeedsBuildingError
-from conda_build.metadata import MetaData
 
 from bioconda_utils.build_failure import BuildFailureRecord
 from bioconda_utils.rattler.rattler_build_bridge import (
@@ -45,8 +43,6 @@ from ._types import (
     container_platform_to_package_subdir,
     native_container_platform,
 )
-
-from conda_build import api
 from .conda.conda_build_bridge import (
     get_conda_build_config_files,
     load_conda_build_config,
@@ -57,11 +53,11 @@ from .conda.recipes import (
     DivergentBuildsError,
     recipe_requires_finalized_render,
 )
-from .recipes import BuildSystem, get_package_paths
 from .conda.repodata import RepoData
 from .config import normalize_config
 from .containers import docker_utils, pkg_test, upload
 from .containers.container_manifests import write_image_record
+from .recipes import BuildSystem, get_package_paths
 from .support.logsetup import Progress
 from .support.subproc import allowed_env_var, bin_for, run, sandboxed_env
 

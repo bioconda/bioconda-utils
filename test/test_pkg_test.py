@@ -1,15 +1,16 @@
-from pathlib import Path
-import sys
-from textwrap import dedent
 import subprocess as sp
+import sys
+from pathlib import Path
+from textwrap import dedent
 
 import pytest
-from .helpers import Recipes, ensure_missing, get_rattler_params
 
 from bioconda_utils import build
+from bioconda_utils._types import BuildSystem
 from bioconda_utils.conda.recipes import built_package_paths
 from bioconda_utils.containers import pkg_test
-from bioconda_utils._types import BuildSystem
+
+from .helpers import Recipes, ensure_missing, get_rattler_params
 
 # TODO:
 # need tests for channel order and extra channels (see

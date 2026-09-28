@@ -51,10 +51,8 @@ from ._types import (
     package_subdir_to_container_platform,
     parse_quay_upload_target,
 )
-from .recipes import RecipePath
 from .build import build_recipes
 from .conda.conda_build_bridge import load_conda_build_config
-from .recipes import get_recipes as find_recipes
 from .conda.repodata import RepoData
 from .config import load_config
 from .containers import docker_utils, pkg_test
@@ -65,6 +63,8 @@ from .containers.container_manifests import (
     resolve_registry_creds,
 )
 from .githandler import BiocondaRepo, GitRange, install_gpg_key
+from .recipes import RecipePath
+from .recipes import get_recipes as find_recipes
 from .support.logsetup import ellipsize_recipes, setup_logger
 from .support.parallel import parallel_iter, set_max_threads
 from .support.subproc import bin_for, run
@@ -625,7 +625,7 @@ def build(
     set_rattler_cache_to_dir(rattler_cache_dir)
 
     # TODO: should we also load the rattler variants config here?
-    # currently it is loaded by utils.load_rattler_build_global_variants
+    # currently it is loaded by rattler.ratter_build_bridge.load_rattler_build_global_variants
     # using a semi-hardcoded path
     if repodata_cache is not None:
         RepoData().set_cache(repodata_cache)

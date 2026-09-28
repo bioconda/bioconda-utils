@@ -9,20 +9,16 @@ Redirects to the backend-specific methods from the conda and rattler modules.
 """
 
 from __future__ import annotations
+
+import fnmatch
+import logging
+import os
+from collections import Counter
+from collections.abc import Iterator, Sequence
+from pathlib import Path
 from typing import Iterable
 
 import rattler_build as rb
-import fnmatch
-import glob
-import logging
-import os
-import re
-from collections import Counter, defaultdict
-from collections.abc import Iterator, Sequence
-from itertools import chain
-from pathlib import Path
-
-from conda_build import api
 
 from bioconda_utils.conda.conda_build_bridge import (
     load_all_meta,
@@ -32,21 +28,21 @@ from bioconda_utils.conda.conda_build_bridge import (
 from bioconda_utils.conda.repodata import RepoData
 
 from ._types import (
-    BuildSystem,
-    ContainerPlatform,
-    container_platform_to_package_subdir,
-    RecipePath,
-    MetaOrRattler,
     CONDA,
     RATTLER,
+    BuildSystem,
+    ContainerPlatform,
+    MetaOrRattler,
+    RecipePath,
+    container_platform_to_package_subdir,
 )
+from .conda.recipes import get_package_paths as conda_get_package_paths
 from .rattler.rattler_build_bridge import (
     load_rattler_build_global_variants,
     render_rattler_recipe_to_dicts,
 )
-from .conda.recipes import get_deps as conda_get_deps
-from .conda.recipes import get_package_paths as conda_get_package_paths
 from .rattler.recipes import get_package_paths as rattler_get_package_paths
+
 # from .conda_build_bridge import load_all_meta, load_conda_build_config
 # from .repodata import RepoData
 

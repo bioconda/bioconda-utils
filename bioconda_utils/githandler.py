@@ -3,13 +3,11 @@
 import asyncio
 import logging
 import os
-from pathlib import Path
 import re
 import subprocess
-from typing import BinaryIO, Iterable, Protocol
 from dataclasses import dataclass
 from pathlib import Path
-from typing import BinaryIO, Protocol
+from typing import BinaryIO, Iterable, Protocol
 
 import git
 from ruamel.yaml import YAML

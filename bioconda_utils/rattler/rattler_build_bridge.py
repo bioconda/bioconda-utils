@@ -2,20 +2,20 @@
 Bridge to py-rattler-build.
 """
 
-from dataclasses import dataclass
 import json
-import platformdirs
 import os
-from pathlib import Path
 import shutil
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Iterator
 
-from .._types import OsLabel
-from ..conda.conda_build_bridge import subdir_to_oslabel
-from ..conda.repodata import RepoData
-import rattler_build as rb
 import conda_build.config
 import conda_build.metadata as metadata
+import platformdirs
+import rattler_build as rb
+
+from ..conda.conda_build_bridge import subdir_to_oslabel
+from ..conda.repodata import RepoData
 
 
 @dataclass(slots=True)

@@ -46,7 +46,6 @@ import abc
 import asyncio
 import logging
 import os
-from pathlib import Path
 import pickle
 import random
 from collections import Counter, defaultdict
@@ -66,9 +65,9 @@ from packaging.version import parse as _pep440_parse
 
 from bioconda_utils._types import ensure_list
 from bioconda_utils.skiplist import Skiplist
-from test.conftest import recipe_dirs
 
 from . import __version__, graph, update_pinnings
+from ._types import BuildSystem, RecipePath, ensure_list
 from .aiopipe import (
     AsyncFilter,
     AsyncPipeline,
@@ -77,15 +76,13 @@ from .aiopipe import (
     EndProcessingItem,
 )
 from .conda.conda_build_bridge import load_conda_build_config
-from .recipes import get_recipes
 from .conda.repodata import RepoData
 from .githandler import GitHandler
 from .githubhandler import GitHubHandler
 from .hosters import Hoster
 from .recipe import Recipe
 from .recipe import load_parallel_iter as recipes_load_parallel_iter
-from ._types import BuildSystem, ensure_list, RATTLER, RecipePath
-from .conda.repodata import RepoData
+from .recipes import get_recipes
 
 #: Jinja environment used to render PR titles, descriptions and comments
 #: from the packaged templates.

@@ -4,27 +4,20 @@ Construction and Manipulation of Package/Recipe Graphs
 
 import logging
 from collections import defaultdict
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Sequence
 from fnmatch import fnmatch
 from itertools import chain
-from pathlib import Path
 from typing import (
     Any,
-    Literal,
 )
 
 import networkx as nx
-import rattler_build as rb
-from conda_build.build import render_recipe
-from regex import R
 
 from ._types import MetaOrRattler
 from .recipe import Recipe
-from .skiplist import Skiplist
-
-from .conda.conda_build_bridge import load_meta_fast
-from .support.parallel import parallel_iter
 from .recipes import RecipePath, load_meta_and_recipe_fast
+from .skiplist import Skiplist
+from .support.parallel import parallel_iter
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -66,10 +59,10 @@ def build(
     logger.info("Generating DAG")
     recipes: list[RecipePath] = list(recipes)
     # TODO (rb): is it possible to load global variants here and pass them on?
-    # it seems that it doesn't work because utils.parallel_iter wants to pickle them
+    # it seems that it doesn't work because support.parallel.parallel_iter wants to pickle them
     # which fails
     #
-    # global_variants: rb.VariantConfig = utils.load_rattler_build_global_variants()
+    # global_variants: rb.VariantConfig = support.parallel.load_rattler_build_global_variants()
 
     meta_rattler_data: list[MetaOrRattler] = list(
         parallel_iter(

@@ -5,8 +5,8 @@ Deploy Artifacts to Anaconda and Quay
 import json
 import logging
 import os
-from pathlib import Path
 import subprocess as sp
+from pathlib import Path
 
 from .._types import (
     ContainerPlatform,

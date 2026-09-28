@@ -8,11 +8,11 @@ import shutil
 import subprocess as sp
 import sys
 import tempfile
-from typing import Any, Generator
 import uuid
 from collections import namedtuple
 from pathlib import Path
 from textwrap import dedent
+from typing import Any, Generator
 from unittest.mock import Mock
 
 import pandas as pd
@@ -22,16 +22,16 @@ from helpers import Recipes, ensure_missing, get_rattler_params
 from jsonschema import ValidationError
 
 from bioconda_utils import __version__, build
+from bioconda_utils import recipes as _recipes
 from bioconda_utils._types import (
+    BuildSystem,
     Config,
     ContainerPlatform,
     PackageSubdir,
-    BuildSystem,
     RecipePath,
 )
 from bioconda_utils.conda import conda_build_bridge
 from bioconda_utils.conda import recipes as conda_recipes
-from bioconda_utils import recipes as _recipes
 from bioconda_utils.conda.repodata import RepoData, _CachedRepoData
 from bioconda_utils.config import load_config, normalize_config, validate_config
 from bioconda_utils.containers import docker_utils, pkg_test, upload
@@ -136,6 +136,8 @@ def config_path_fixture() -> Generator[Path]:
     yield config
 
 
+# config_fixture must be loaded here, otherwise utils.RepoData.config is not set
+# and this test will fail
 @pytest.fixture(scope="function", params=PARAMS, ids=IDS)
 def single_build(request, recipes_fixture, config_fixture):
     """
@@ -156,10 +158,6 @@ def single_build(request, recipes_fixture, config_fixture):
         "within docker" if docker_builder else "locally",
     )
     pkg_paths: list[Path] = [Path(p) for p in recipes_fixture.pkgs["one"]]
-
-    # config_fixture must be loaded here, otherwise utils.RepoData.config is not set
-    # and this test will fail
-    # _ = load_config(config_fixture)
 
     recipe_path, global_variants, tool_config, render_config, rattler_output_dir = (
         get_rattler_params(
@@ -1477,21 +1475,22 @@ def test_get_package_paths_force_builds_existing_and_logs_force(caplog, monkeypa
 
     caplog.set_level(logging.INFO, logger="bioconda_utils.conda.recipes")
     paths = conda_recipes.get_package_paths(
-        "recipes/samtools", ["bioconda"], force=True
+        Path("recipes/samtools"), ["bioconda"], force=True
     )
-    assert paths == ["/tmp/samtools-1.24-h391949c_1.tar.bz2"]
+    assert paths == [Path("/tmp/samtools-1.24-h391949c_1.tar.bz2")]
     assert "FORCE: building samtools-1.24-h391949c_1" in caplog.text
     assert "it is not forced" not in caplog.text
 
     caplog.clear()
     paths = conda_recipes.get_package_paths(
-        "recipes/samtools", ["bioconda"], force=False
+        Path("recipes/samtools"), ["bioconda"], force=False
     )
     assert paths == []
     assert "it is not forced" in caplog.text
 
 
-def test_check_recipe_skippable_queries_requested_target(monkeypatch):
+# must import config_fixture, otherwise this test fails because RepoData can't be instantiated.
+def test_check_recipe_skippable_queries_requested_target(monkeypatch, config_fixture):
     meta = Mock()
     meta.name.return_value = "samtools"
     meta.version.return_value = "1.24"
@@ -1511,7 +1510,7 @@ def test_check_recipe_skippable_queries_requested_target(monkeypatch):
         queried_platforms.append(kwargs["platform"])
         return []
 
-    monkeypatch.setattr(recipes, "_load_platform_metas", load_platform_metas)
+    monkeypatch.setattr(conda_recipes, "_load_platform_metas", load_platform_metas)
     monkeypatch.setattr(RepoData, "get_package_data", get_package_data)
 
     assert not conda_recipes.check_recipe_skippable(

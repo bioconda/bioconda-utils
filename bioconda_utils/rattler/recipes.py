@@ -1,8 +1,9 @@
 from pathlib import Path
 from typing import Any
 
-from .._types import RecipePath
 import rattler_build as rb
+
+from .._types import RecipePath
 from .rattler_build_bridge import render_rattler_recipe
 
 
@@ -16,7 +17,6 @@ def get_package_paths(
     )
 
     for variant in variants:
-        pass
         name: str = variant.recipe.package.name
         version: str = variant.recipe.package.version
         build_str: str = variant.recipe.build.string

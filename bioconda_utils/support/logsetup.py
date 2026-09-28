@@ -18,8 +18,8 @@ from threading import Event, Thread
 import tqdm as _tqdm
 from colorlog import ColoredFormatter
 
-from .subproc import run
 from .._types import RecipePath
+from .subproc import run
 
 logger = logging.getLogger(__name__)
 

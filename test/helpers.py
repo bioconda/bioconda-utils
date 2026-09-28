@@ -2,13 +2,12 @@ import os
 import tempfile
 from pathlib import Path
 from textwrap import dedent
-from typing import Literal
 
 import rattler_build as rb
 from conda_index.index import update_index
 from ruamel.yaml import YAML
 
-from bioconda_utils._types import PackageSubdir, BuildSystem, RecipePath
+from bioconda_utils._types import BuildSystem, PackageSubdir, RecipePath
 from bioconda_utils.conda.conda_build_bridge import load_conda_build_config
 from bioconda_utils.conda.repodata import RepoData
 from bioconda_utils.rattler.rattler_build_bridge import (
