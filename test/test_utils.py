@@ -159,7 +159,7 @@ def single_build(request, recipes_fixture, config_fixture):
 
     # config_fixture must be loaded here, otherwise utils.RepoData.config is not set
     # and this test will fail
-    _ = utils.load_config(config_fixture)
+    # _ = load_config(config_fixture)
 
     recipe_path, global_variants, tool_config, render_config, rattler_output_dir = (
         get_rattler_params(
@@ -580,12 +580,9 @@ def test_conda_as_dep(config_fixture, mulled_build_and_test):
         recipe_folder,
         config,
         recipes,
-        Path(r.basedir),
-        config_fixture,
-        r.recipe_dirnames,
+        mulled_build_and_test=mulled_build_and_test,
         force=False,
         docker_builder=docker_builder,
-        mulled_build_and_test=mulled_build_and_test,
     )
     assert build_result
 
@@ -1463,7 +1460,7 @@ def test_get_package_paths_force_builds_existing_and_logs_force(caplog, monkeypa
 
     monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
     monkeypatch.setattr(
-        recipes,
+        conda_recipes,
         "_load_platform_metas",
         lambda *_a, **_k: (PackageSubdir.LINUX_64, [meta]),
     )
@@ -2088,7 +2085,7 @@ def test_rattler_recipe(config_fixture):
         config,
         recipes,
         docker_builder=docker_builder,
-        mulled_test=False,
+        mulled_build_and_test=False,
     )
     assert build_result
 

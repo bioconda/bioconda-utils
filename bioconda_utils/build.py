@@ -25,6 +25,7 @@ from conda_build.metadata import MetaData
 
 from bioconda_utils.build_failure import BuildFailureRecord
 from bioconda_utils.rattler.rattler_build_bridge import (
+    CURR_RATTLER_CACHE_DIR_PATH,
     load_rattler_build_global_variants,
     render_rattler_recipe,
 )
@@ -116,10 +117,20 @@ def rattler_build_purge(rattler_cache: Path, rattler_output_dir: Path) -> None:
     This includes only downloaded packages.
     """
     output_cache: Path = rattler_output_dir / "bld"
-    shutil.rmtree(output_cache)
-    output_cache.mkdir()
-    shutil.rmtree(rattler_cache)
-    rattler_cache.mkdir()
+    if output_cache.exists():
+        shutil.rmtree(output_cache)
+        output_cache.mkdir()
+    else:
+        logger.warning(
+            f"Failed to purge rattler output cache because it doesn't exist at: {output_cache}"
+        )
+    if rattler_cache.exists():
+        shutil.rmtree(rattler_cache)
+        rattler_cache.mkdir()
+    else:
+        logger.warning(
+            f"Failed to purge rattler cache because it doesn't exist at: {rattler_cache}"
+        )
 
 
 def build(
@@ -578,10 +589,8 @@ def should_skip_platform(
         case BuildSystem.RATTLER:
             if platform not in additional_platforms:
                 return False
-            global_variants = utils.load_rattler_build_global_variants()
-            rendered_variants = utils.render_rattler_recipe(
-                recipe.path, global_variants
-            )
+            global_variants = load_rattler_build_global_variants()
+            rendered_variants = render_rattler_recipe(recipe.path, global_variants)
             for variant in rendered_variants:
                 # Is there a more elegant way to access the `extra` section?
                 extra: dict[str, list[str]] = variant.recipe.to_dict().get("extra", {})
@@ -665,7 +674,7 @@ def build_recipes(
     config = normalize_config(config)
     RepoData.register_config(config)
     blacklist = Skiplist(config, recipe_folder)
-    global_variants: rb.VariantConfig = utils.load_rattler_build_global_variants()
+    global_variants: rb.VariantConfig = load_rattler_build_global_variants()
     # TODO (rb): make platform_config and render_config customisable
     platform_config: rb.PlatformConfig = rb.PlatformConfig()
     render_config: rb.RenderConfig = rb.RenderConfig(platform=platform_config)
@@ -870,7 +879,7 @@ def build_recipes(
         # remove traces of the build
         if not keep_old_work:
             conda_build_purge()
-            rattler_cache: Path = utils.CURR_RATTLER_CACHE_DIR_PATH
+            rattler_cache: Path = CURR_RATTLER_CACHE_DIR_PATH
             rattler_build_purge(rattler_cache, rattler_output_dir)
             # prune stopped containers
             if docker_builder is not None:

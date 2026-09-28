@@ -61,7 +61,8 @@ def get_rattler_build_global_variants_paths() -> list[Path]:
     env_root = Path(bioconda_utils_bin).parents[1]
     return [
         Path(env_root) / "bioconda_utils-conda_build_config.yaml",
-        Path(__file__).resolve().parent / "bioconda_utils-conda_build_config.yaml",
+        Path(__file__).resolve().parent.parent
+        / "bioconda_utils-conda_build_config.yaml",
     ]
 
 

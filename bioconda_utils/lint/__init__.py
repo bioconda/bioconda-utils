@@ -112,6 +112,7 @@ from conda_smithy.lint_recipe import lintify_meta_yaml
 
 import networkx as nx
 
+from bioconda_utils._types import RecipePath
 from bioconda_utils.skiplist import Skiplist
 from bioconda_utils.utils import BuildSystem
 
@@ -192,7 +193,7 @@ class RattlerLintMessage(NamedTuple):
     #: The recipe this message refers to
     # _recipe.Recipe for conda recipes, utils.RecipePath for
     # rattler recipes
-    recipe: utils.RecipePath
+    recipe: RecipePath
 
     lint_or_hint: str
 
@@ -636,7 +637,7 @@ class Linter:
         """
         for recipe_name in tqdm(sorted(recipe_names)):
             self.order_and_load_checks()
-            assert isinstance(recipe_name, utils.RecipePath)  # for linters/IDEs
+            assert isinstance(recipe_name, RecipePath)  # for linters/IDEs
             try:
                 match recipe_name.build_system:
                     case BuildSystem.CONDA:
@@ -648,7 +649,7 @@ class Linter:
                     raise
                 logger.exception("Unexpected exception in lint")
 
-                recipe: utils.RecipePath | _recipe.Recipe = recipe_name
+                recipe: RecipePath | _recipe.Recipe = recipe_name
                 match recipe.build_system:
                     case BuildSystem.CONDA:
                         recipe = _recipe.Recipe(recipe_name.path, self.recipe_folder)
@@ -746,7 +747,7 @@ class Linter:
         return extracted
 
     def lint_one_rattler(
-        self, recipe: utils.RecipePath, fix: bool = False
+        self, recipe: RecipePath, fix: bool = False
     ) -> list[LintMessage]:
         """Run the linter on a single rattler recipe. For now, only finds errors.
 
