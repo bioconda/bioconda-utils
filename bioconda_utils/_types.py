@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from enum import StrEnum
 from typing import (
     Any,
+    Iterator,
     Literal,
     NamedTuple,
     NewType,
@@ -15,7 +16,14 @@ from typing import (
     TypedDict,
 )
 
-from .rattler.rattler_build_bridge import RattlerDictList
+
+@dataclass(slots=True)
+class RattlerDictList:
+    recipes: list[dict[str, Any]]
+    is_multi: bool
+
+    def __iter__(self) -> Iterator[dict[str, Any]]:
+        return iter(self.recipes)
 
 
 class BuildSystem(StrEnum):

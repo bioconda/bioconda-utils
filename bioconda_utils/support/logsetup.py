@@ -19,7 +19,7 @@ import tqdm as _tqdm
 from colorlog import ColoredFormatter
 
 from .subproc import run
-from ..recipes import RecipePath
+from .._types import RecipePath
 
 logger = logging.getLogger(__name__)
 

@@ -40,7 +40,7 @@ from ruamel.yaml.constructor import DuplicateKeyError
 from ._types import ALL_PACKAGE_SUBDIRS, PackageSubdir, ensure_list
 from .aiopipe import EndProcessingItem
 from .conda.conda_build_bridge import jinja_silent_undef
-from .conda.recipes import get_recipes
+from .recipes import get_recipes
 from .support.parallel import parallel_iter
 
 yaml = YAML(typ="rt")  # pylint: disable=invalid-name

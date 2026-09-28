@@ -8,9 +8,12 @@ import rattler_build as rb
 from conda_index.index import update_index
 from ruamel.yaml import YAML
 
-from bioconda_utils import utils
-from bioconda_utils._types import PackageSubdir
-from bioconda_utils.utils import BuildSystem
+from bioconda_utils._types import PackageSubdir, BuildSystem, RecipePath
+from bioconda_utils.conda.conda_build_bridge import load_conda_build_config
+from bioconda_utils.conda.repodata import RepoData
+from bioconda_utils.rattler.rattler_build_bridge import (
+    load_rattler_build_global_variants,
+)
 
 
 def ensure_missing(package):
@@ -127,24 +130,20 @@ def get_rattler_params(
     path: Path,
     build_system: BuildSystem,
     docker_builder,
-) -> tuple[
-    utils.RecipePath, rb.VariantConfig, rb.ToolConfiguration, rb.RenderConfig, Path
-]:
+) -> tuple[RecipePath, rb.VariantConfig, rb.ToolConfiguration, rb.RenderConfig, Path]:
     platform_config: rb.PlatformConfig = rb.PlatformConfig()
     skip_rattler: str = "all"
     render_config: rb.RenderConfig = rb.RenderConfig(platform=platform_config)
-    global_variants: rb.VariantConfig = utils.load_rattler_build_global_variants()
+    global_variants: rb.VariantConfig = load_rattler_build_global_variants()
     tool_config: rb.ToolConfiguration = rb.ToolConfiguration(
         skip_existing=skip_rattler, test_strategy="native", keep_build=False
     )
     if docker_builder is not None:
         rattler_output_dir: Path = Path(docker_builder.pkg_dir)
     else:
-        repodata = utils.RepoData()
+        repodata = RepoData()
         subdir: PackageSubdir = repodata.native_subdir()
-        conda_build_config = utils.load_conda_build_config(subdir=subdir)
+        conda_build_config = load_conda_build_config(subdir=subdir)
         rattler_output_dir: Path = Path(conda_build_config.output_folder)
-    recipe_path: utils.RecipePath = utils.RecipePath(
-        path=path, build_system=build_system
-    )
+    recipe_path: RecipePath = RecipePath(path=path, build_system=build_system)
     return recipe_path, global_variants, tool_config, render_config, rattler_output_dir

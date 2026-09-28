@@ -17,7 +17,7 @@ from ruamel.yaml.scalarstring import LiteralScalarString
 from bioconda_utils import graph
 from bioconda_utils._types import ALL_PACKAGE_SUBDIRS, PackageSubdir
 from bioconda_utils.conda.conda_build_bridge import load_meta_fast
-from bioconda_utils.conda.recipes import get_recipes
+from bioconda_utils.recipes import get_recipes
 from bioconda_utils.conda.repodata import RepoData, get_package_downloads
 from bioconda_utils.recipe import Recipe
 from bioconda_utils.support.logsetup import ellipsize_recipes, tqdm

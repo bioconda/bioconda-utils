@@ -18,7 +18,7 @@ from unittest.mock import Mock
 import pandas as pd
 import pytest
 from conda_build import api, exceptions, metadata
-from .helpers import Recipes, ensure_missing, get_rattler_params
+from helpers import Recipes, ensure_missing, get_rattler_params
 from jsonschema import ValidationError
 
 from bioconda_utils import __version__, build
@@ -31,6 +31,7 @@ from bioconda_utils._types import (
 )
 from bioconda_utils.conda import conda_build_bridge
 from bioconda_utils.conda import recipes as conda_recipes
+from bioconda_utils import recipes as _recipes
 from bioconda_utils.conda.repodata import RepoData, _CachedRepoData
 from bioconda_utils.config import load_config, normalize_config, validate_config
 from bioconda_utils.containers import docker_utils, pkg_test, upload
@@ -1851,7 +1852,7 @@ def test_nested_recipes(config_fixture):
     )
     assert build_results
 
-    assert len(list(recipes.get_recipes(Path(r.basedir)))) == 4
+    assert len(list(_recipes.get_recipes(Path(r.basedir)))) == 4
 
     for v in r.recipe_dirs.values():
         for i in conda_recipes.built_package_paths(v):
