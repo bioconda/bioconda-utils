@@ -43,62 +43,24 @@ from .rattler.rattler_build_bridge import (
 )
 from .rattler.recipes import get_package_paths as rattler_get_package_paths
 
-# from .conda_build_bridge import load_all_meta, load_conda_build_config
-# from .repodata import RepoData
-
 logger = logging.getLogger(__name__)
 
 
-# def get_deps(recipe: RecipePath, build=True):
-#     """
-#     Generator of dependencies for a single recipe
-
-#     Only names (not versions) of dependencies are yielded.
-
-#     If the variant/version matrix yields multiple instances of the metadata,
-#     the union of these dependencies is returned.
-
-#     Parameters
-#     ----------
-#     recipe : str or MetaData
-#         If string, it is a path to the recipe; otherwise assume it is a parsed
-#         conda_build.metadata.MetaData instance.
-
-#     build : bool
-#         If True yield build dependencies, if False yield run dependencies.
-#     """
-#     assert isinstance(recipe, RecipePath)
-
-#     match recipe.build_system:
-#         case BuildSystem.CONDA:
-#             conda_get_deps(recipe.path, build)
-#     metadata = load_all_meta(recipe, finalize=False)
-
-#     all_deps = set()
-#     for meta in metadata:
-#         if build:
-#             deps = meta.get_value("requirements/build", [])
-#         else:
-#             deps = meta.get_value("requirements/run", [])
-#         all_deps.update(dep.split()[0] for dep in deps)
-#     return all_deps
-
-
-# def built_package_paths(recipe: RecipePath) -> list[str]:
-#     """
-#     Returns the path to which a recipe would be built.
-
-#     Does not necessarily exist; equivalent to ``conda build --output recipename``
-#     but without the subprocess.
-#     """
-#     config = load_conda_build_config()
-#     # NB: Setting bypass_env_check disables ``pin_compatible`` parsing, which
-#     #     these days does not change the package build string, so should be fine.
-#     paths = api.get_output_file_paths(recipe, config=config, bypass_env_check=True)
-#     return paths
-
-
 def _load_platform_metas(recipe, finalize=True, target_platform=None):
+    """
+    Load conda recipe metas for a single target platform.
+
+    If ``target_platform`` is provided, the corresponding package subdir is used.
+    Otherwise, the native platform subdir is used.
+
+    Args:
+        recipe: Recipe to load.
+        finalize: Whether to finalize the loaded metas.
+        target_platform: Optional target platform to target.
+
+    Returns:
+        A tuple of the resolved package subdir and the loaded metas.
+    """
     if target_platform is not None:
         subdir = container_platform_to_package_subdir(target_platform)
     else:
@@ -108,6 +70,15 @@ def _load_platform_metas(recipe, finalize=True, target_platform=None):
 
 
 def _meta_subdir(meta):
+    """
+    Return the package subdir implied by a conda meta object.
+
+    Args:
+        meta: Loaded conda recipe metadata.
+
+    Returns:
+        ``"noarch"`` if the meta is noarch, otherwise the host subdir.
+    """
     # logic extracted from conda_build.variants.bldpkg_path
     return "noarch" if meta.noarch or meta.noarch_python else meta.config.host_subdir
 
@@ -116,6 +87,15 @@ def check_recipe_skippable(recipe, check_channels, target_platform=None):
     """
     Return True if the same number of builds (per subdir) defined by the recipe
     are already in channel_packages.
+
+    Args:
+        recipe: Recipe to check.
+        check_channels: Channels to search for existing package builds.
+        target_platform: Optional target platform used when loading metas.
+
+    Returns:
+        True if the package builds defined by the recipe are already present
+        in the given channels for the corresponding subdirs, otherwise False.
     """
     subdir, metas = _load_platform_metas(
         recipe, finalize=False, target_platform=target_platform
@@ -184,6 +164,25 @@ def get_package_paths(
     global_variants: rb.VariantConfig | None = None,
     target_platform: ContainerPlatform | None = None,
 ) -> list[Path]:
+    """
+    Predict the output package file paths for a rendered recipe.
+
+    The paths are resolved according to the recipe build system: rattler recipes
+    use the rendered Rattler output paths, while conda recipes use conda-build
+    metadata and the provided channels.
+
+    Args:
+        recipe: Recipe to inspect.
+        check_channels: Channels used when resolving conda package paths.
+        force: Whether to force conda package path resolution.
+        finalize: Whether to finalize conda metadata before path resolution.
+        rattler_output_dir: Rattler output directory; required for rattler recipes.
+        global_variants: Rattler variant configuration; required for rattler recipes.
+        target_platform: Optional target platform used for conda path resolution.
+
+    Returns:
+        A list of expected package output paths.
+    """
     match recipe.build_system:
         case BuildSystem.RATTLER:
             if rattler_output_dir is None or global_variants is None:
@@ -201,10 +200,19 @@ def get_package_paths(
 
 def load_meta_and_recipe_fast(recipe: RecipePath, env=None) -> MetaOrRattler:
     """
-    Given a RecipePath, check whether the given package should be build with conda build
-    or rattler. Returns a MetaOrRattler object containing the original RecipePath and either
-    the contents of the recipe's meta.yaml (for conda build recipes) or a rattler build
-    RenderedVariant (for rattler build recipes). The other field will be set to None.
+    Load recipe metadata quickly for either conda or rattler recipes.
+
+    For conda recipes, the metadata is loaded from ``meta.yaml``. For rattler
+    recipes, the recipe is rendered using Rattler build global variants.
+
+    Args:
+        recipe: Recipe to load.
+        env: Optional environment variables used when loading conda metadata.
+
+    Returns:
+        A MetaOrRattler containing the original recipe path and either the
+        loaded conda metadata or the rendered rattler recipe data. The unused
+        field is set to ``None``.
     """
     match recipe.build_system:
         case BuildSystem.CONDA:
@@ -220,6 +228,15 @@ def load_meta_and_recipe_fast(recipe: RecipePath, env=None) -> MetaOrRattler:
 
 
 def get_recipe_paths(recipes: Iterable[RecipePath]) -> list[Path]:
+    """
+    Return the underlying paths for an iterable of recipe objects.
+
+    Args:
+        recipes: Iterable of RecipePath objects.
+
+    Returns:
+        A list of Path objects pointing to each recipe directory.
+    """
     return [recipe.path for recipe in recipes]
 
 

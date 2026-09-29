@@ -10,6 +10,20 @@ from .rattler_build_bridge import render_rattler_recipe
 def get_package_paths(
     recipe: RecipePath, rattler_output_dir: Path, global_variants: rb.VariantConfig
 ) -> list[Path]:
+    """
+    Predict the output package file paths for a rendered recipe.
+
+    Args:
+        recipe: Path to the Rattler recipe.
+        rattler_output_dir: Directory containing the Rattler build output.
+        global_variants: Global variant configuration used to render the recipe.
+
+    Returns:
+        A list of expected package file paths, one per rendered variant.
+
+    Raises:
+        ValueError: If a rendered variant does not contain a target platform.
+    """
     result: list[Path] = []
     # get rendered recipe
     variants: list[rb.RenderedVariant] = render_rattler_recipe(

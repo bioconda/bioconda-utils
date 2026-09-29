@@ -30,9 +30,16 @@ class RattlerDictList:
 # TODO (rb): Is it correct to assume the native platform is the target platform?
 def _filter_config(config_path: Path) -> str:
     """
-    Filters out lines in the conda build config based on the platforms
-    specified in their comments. This conda-build convention is not supported
-    by rattler-build.
+    Filter a conda-build configuration file for the native platform.
+
+    Removes conda-build platform selector lines that are not supported by
+    rattler-build and returns the remaining configuration as a string.
+
+    Args:
+        config_path: Path to the config yaml file.
+
+    Returns:
+        Filtered config as string.
     """
 
     subdir = RepoData.native_subdir()
@@ -55,6 +62,9 @@ def _filter_config(config_path: Path) -> str:
 
 
 def get_rattler_build_global_variants_paths() -> list[Path]:
+    """
+    Return candidate paths for the global rattler-build variants file.
+    """
     bioconda_utils_bin = shutil.which("bioconda-utils")
     if bioconda_utils_bin is None:
         raise FileNotFoundError("Unable to find bioconda-utils on PATH")
@@ -70,8 +80,16 @@ def render_rattler_recipe(
     recipe: Path, global_variants: rb.VariantConfig
 ) -> list[rb.RenderedVariant]:
     """
-    Given a package name, find the current recipe.yaml file, render it, and return
-    the rendered variants.
+    Render a rattler-build recipe and return its rendered variants.
+
+    Args:
+        recipe: Path to the recipe directory containing ``recipe.yaml`` and,
+            optionally, ``variants.yaml``.
+        global_variants: Global variant configuration to merge with local
+            variants, if present.
+
+    Returns:
+        A list of rendered variants for the recipe.
     """
     try:
         # Parse YAML into Stage0Recipe
@@ -100,8 +118,17 @@ def render_rattler_recipe_to_dicts(
     recipe: Path, global_variants: rb.VariantConfig
 ) -> RattlerDictList:
     """
-    Given a package name, find the current recipe.yaml file, render it, and return
-    the rendered variants.
+    Render a rattler-build recipe and return rendered recipe dictionaries.
+
+    Args:
+        recipe: Path to the recipe directory containing ``recipe.yaml`` and,
+            optionally, ``variants.yaml``.
+        global_variants: Global variant configuration to merge with local
+            variants, if present.
+
+    Returns:
+        A ``RattlerDictList`` containing rendered recipe dictionaries and
+        whether the recipe is a multi-output recipe.
     """
     try:
         # Parse YAML into Stage0Recipe
@@ -130,6 +157,7 @@ def render_rattler_recipe_to_dicts(
 
 
 def load_rattler_build_global_variants() -> rb.VariantConfig:
+    """Load the global rattler-build variant configuration."""
     paths: list[Path] = get_rattler_build_global_variants_paths()
 
     filtered_yaml: str = ""
@@ -150,6 +178,7 @@ def load_rattler_build_global_variants() -> rb.VariantConfig:
 
 
 def get_default_rattler_cache_dir_path() -> Path:
+    """Return the default cache directory path used by rattler-build."""
     bioconda_utils_cache: Path = Path(platformdirs.user_cache_dir("bioconda-utils"))
     return bioconda_utils_cache / "rattler_cache"
 
@@ -158,6 +187,7 @@ CURR_RATTLER_CACHE_DIR_PATH: Path = get_default_rattler_cache_dir_path()
 
 
 def load_v1_recipe_schema() -> dict[Any, Any]:
+    """Load and return the v1 recipe JSON schema used for validation."""
     schema_path: Path = Path(__file__).parent / "v1_recipe_schema.json"
     with open(schema_path, "r") as f:
         schema = json.load(f)
@@ -165,6 +195,13 @@ def load_v1_recipe_schema() -> dict[Any, Any]:
 
 
 def set_rattler_cache_to_dir(path: Path) -> None:
+    """
+    Set the rattler-build cache directory.
+
+    Creates the directory if it does not already exist, updates the
+    ``RATTLER_CACHE_DIR`` environment variable, and updates the module-level
+    current cache directory.
+    """
     if not path.exists():
         path.mkdir()
     os.environ["RATTLER_CACHE_DIR"] = str(path)
