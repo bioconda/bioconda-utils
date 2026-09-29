@@ -42,7 +42,7 @@ def get_deps(recipe: Path | str, build=True):
     build : bool
         If True yield build dependencies, if False yield run dependencies.
     """
-    assert isinstance(recipe, str)
+    recipe = Path(recipe)
     metadata = load_all_meta(recipe, finalize=False)
 
     all_deps = set()
@@ -236,9 +236,6 @@ def _filter_existing_packages(metas, check_channels):
     return new_metas, existing_metas, divergent_builds
 
 
-# TODO (rb): can this also be implemented for rattler-build?
-# for now in build.build we simply add the package paths of the packages
-# build with rattler-build **after** they have been built.
 def get_package_paths(
     recipe: Path,
     check_channels: list[str],

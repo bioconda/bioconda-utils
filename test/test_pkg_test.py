@@ -10,7 +10,7 @@ from bioconda_utils._types import BuildSystem
 from bioconda_utils.conda.recipes import built_package_paths
 from bioconda_utils.containers import pkg_test
 
-from .helpers import Recipes, ensure_missing, get_rattler_params
+from helpers import Recipes, ensure_missing, get_rattler_params
 
 # TODO:
 # need tests for channel order and extra channels (see

@@ -175,9 +175,6 @@ def check_recipe_skippable(recipe, check_channels, target_platform=None):
     return False
 
 
-# TODO (rb): can this also be implemented for rattler-build?
-# for now in build.build we simply add the package paths of the packages
-# build with rattler-build **after** they have been built.
 def get_package_paths(
     recipe: RecipePath,
     check_channels: list[str],

@@ -645,7 +645,7 @@ class RecipeBuilder:
                 build_args_list = [rattler_args]
                 global_variants = get_rattler_build_global_variants_paths()
 
-                # TODO (rb) should we also allow `conda_build_config.yaml` as per rattler-build docs?
+                # TODO (rb): should we also allow `conda_build_config.yaml` as per rattler-build docs?
                 local_variant: Path = Path(recipe_dir) / "variants.yaml"
                 global_variants.append(local_variant)
 

@@ -618,7 +618,7 @@ class Linter:
             skip_dict[recipe].append(func)
         return skip_dict
 
-    def lint(self, recipe_names: list[utils.RecipePath], fix: bool = False) -> bool:
+    def lint(self, recipe_names: list[RecipePath], fix: bool = False) -> bool:
         """Run linter on multiple recipes
 
         Lint messages are collected in the linter. They can be retrieved

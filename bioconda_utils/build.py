@@ -566,8 +566,6 @@ def should_skip_platform(
     this gate, every recipe would be attempted on every non-primary builder,
     wasting time on recipes that have not been verified for that platform.
     """
-    # TODO (rb): I'll solve it like this for now, but in the long run, `Recipe` should be turned into a
-    # Protocol with an implementation for both rattler-build and conda-build
     primary_set = (
         set(DEFAULT_PRIMARY_PLATFORMS)
         if primary_platforms is None
@@ -575,9 +573,11 @@ def should_skip_platform(
     )
     additional_platforms = set(ALL_PACKAGE_SUBDIRS) - primary_set
 
+    # TODO (rb): I'll solve it like this for now, but in the long run, `Recipe` should be turned into a
+    # Protocol with an implementation for both rattler-build and conda-build
     match recipe.build_system:
         case BuildSystem.CONDA:
-            recipe_obj = _recipe.Recipe.from_file(recipe_folder, recipe)
+            recipe_obj = _recipe.Recipe.from_file(recipe_folder, recipe.path)
             return (
                 platform in additional_platforms
                 and platform not in recipe_obj.additional_platforms
