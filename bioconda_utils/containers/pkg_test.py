@@ -79,9 +79,9 @@ def get_image_name(path: Path | str) -> PkgBuildRef:
 
     """
     path = Path(path)
-    if path.suffix == ".tar.bz2":
+    if path.name.endswith(".tar.bz2"):
         ext = ".tar.bz2"
-    elif path.suffix == ".conda":
+    elif path.name.endswith(".conda"):
         ext = ".conda"
     else:
         raise ValueError(f"Unsupported package extension: {path.name}")

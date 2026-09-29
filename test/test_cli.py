@@ -11,6 +11,7 @@ from typer.main import get_command
 from typer.testing import CliRunner
 
 from bioconda_utils import cli
+from bioconda_utils._types import RecipePath, CONDA
 
 runner = CliRunner()
 
@@ -195,7 +196,10 @@ def test_dag_hides_singletons(monkeypatch, tmp_path):
     config.write_text("{}")
     package_dag = nx.DiGraph([("dependency", "package")])
     package_dag.add_node("singleton")
-    name2recipes = {name: {Path("recipes") / name} for name in package_dag.nodes}
+    name2recipes = {
+        name: {RecipePath((Path("recipes") / name), CONDA)}
+        for name in package_dag.nodes
+    }
     monkeypatch.setattr(cli, "load_config", lambda _: {})
     monkeypatch.setattr(cli, "get_recipes", lambda *_: [])
     monkeypatch.setattr(cli.graph, "build", lambda *_: (package_dag, name2recipes))

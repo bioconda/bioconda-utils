@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator
 
-import conda_build.config
-import conda_build.metadata as metadata
+import conda_build.config as cb_config
+import conda_build.metadata as cb_metadata
 import platformdirs
 import rattler_build as rb
 
@@ -38,17 +38,17 @@ def _filter_config(config_path: Path) -> str:
     subdir = RepoData.native_subdir()
     os_label = subdir_to_oslabel(subdir)
     arch: str = subdir.removeprefix(f"{os_label}-")
-    config = conda_build.config.Config(platform=os_label, arch=arch)
+    config = cb_config.Config(platform=os_label, arch=arch)
     # target = RepoData.native_platform().split("-")
     # native_platform = target[0]
     # arch = platform.machine()
     # config = conda_build.config.Config(platform=native_platform, arch=arch)
-    namespace = metadata.get_selectors(config)
+    namespace = cb_metadata.get_selectors(config)
 
     with open(config_path, "r") as f:
         raw = f.read()
 
-    filtered: str = metadata.select_lines(
+    filtered: str = cb_metadata.select_lines(
         text=raw, namespace=namespace, variants_in_place=False
     )
     return filtered
@@ -164,9 +164,7 @@ def load_v1_recipe_schema() -> dict[Any, Any]:
     return schema
 
 
-def set_rattler_cache_to_dir(
-    path: Path, curr_path: Path = CURR_RATTLER_CACHE_DIR_PATH
-) -> None:
+def set_rattler_cache_to_dir(path: Path) -> None:
     if not path.exists():
         path.mkdir()
     os.environ["RATTLER_CACHE_DIR"] = str(path)
