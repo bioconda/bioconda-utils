@@ -5,9 +5,10 @@ import logging
 import os
 import re
 import subprocess
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import BinaryIO, Iterable, Protocol
+from typing import BinaryIO, Protocol
 
 import git
 from ruamel.yaml import YAML

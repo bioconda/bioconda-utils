@@ -11,7 +11,7 @@ from typer.main import get_command
 from typer.testing import CliRunner
 
 from bioconda_utils import cli
-from bioconda_utils._types import RecipePath, CONDA
+from bioconda_utils._types import CONDA, RecipePath
 
 runner = CliRunner()
 

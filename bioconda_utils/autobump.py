@@ -63,7 +63,6 @@ from jinja2 import Environment, PackageLoader
 from packaging.version import InvalidVersion, Version
 from packaging.version import parse as _pep440_parse
 
-from bioconda_utils._types import ensure_list
 from bioconda_utils.skiplist import Skiplist
 
 from . import __version__, graph, update_pinnings
@@ -136,7 +135,7 @@ class RecipeSource:
         shuffle: bool = True,
     ) -> None:
         unfiltered_recipe_dirs: list[RecipePath] = list(
-            get_recipes(recipe_base, self.packages, exclude)
+            get_recipes(recipe_base, packages, exclude)
         )
         self.recipe_base = recipe_base
         self.packages = packages

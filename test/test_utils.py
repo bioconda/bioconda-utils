@@ -10,9 +10,10 @@ import sys
 import tempfile
 import uuid
 from collections import namedtuple
+from collections.abc import Generator
 from pathlib import Path
 from textwrap import dedent
-from typing import Any, Generator
+from typing import Any
 from unittest.mock import Mock
 
 import pandas as pd
@@ -450,7 +451,9 @@ with open("{self.container_staging}/version", "w") as version_file:
     )
     temp_dir = docker_builder.pkg_dir
     # Set recipe_dir to any temporary directory, e.g., docker_builder.pkg_dir.
-    docker_builder.build_recipe(temp_dir, build_args="", env={})
+    docker_builder.build_recipe(
+        temp_dir, build_args="", rattler_args="", env={}, build_system=CONDA
+    )
     with open(os.path.join(temp_dir, "version")) as container_version_file:
         assert container_version_file.read() == __version__
 
@@ -465,7 +468,11 @@ def test_docker_builder_build(recipes_fixture):
     )
     pkgs = recipes_fixture.pkgs["one"]
     docker_builder.build_recipe(
-        recipes_fixture.recipe_dirs["one"], build_args="", env={}
+        recipes_fixture.recipe_dirs["one"],
+        build_args="",
+        rattler_args="",
+        env={},
+        build_system=CONDA,
     )
     for pkg in pkgs:
         assert os.path.exists(pkg)
@@ -1594,7 +1601,7 @@ def test_native_platform_skipping(config_fixture):
         assert (
             build.should_skip_platform(
                 Path(recipe_folder),
-                RecipePath(path=Path(r.recipe_dirs[recipe_name]), build_system=CONDA),
+                recipe_path,
                 PackageSubdir(platform),
             )
             == result
@@ -2218,7 +2225,7 @@ def test_load_meta_fast_allows_duplicate_keys(tmp_path):
         "  skip: true  # [win]\n",
         encoding="utf-8",
     )
-    meta, loaded_recipe = conda_build_bridge.load_meta_fast(str(recipe_dir))
+    meta, loaded_recipe = conda_build_bridge.load_meta_fast(Path(recipe_dir))
     assert meta["package"]["name"] == "test-pkg"
     assert meta["build"]["number"] == 0
     assert loaded_recipe == str(recipe_dir)

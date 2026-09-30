@@ -6,7 +6,7 @@ import pytest
 from ruamel.yaml import YAML
 
 from bioconda_utils import lint
-from bioconda_utils._types import ensure_list, RecipePath, CONDA
+from bioconda_utils._types import CONDA, RecipePath, ensure_list
 from bioconda_utils.config import load_config
 
 yaml = YAML(typ="rt")  # pylint: disable=invalid-name

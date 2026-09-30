@@ -4,13 +4,12 @@ from pathlib import Path
 from textwrap import dedent
 
 import pytest
+from helpers import Recipes, ensure_missing, get_rattler_params
 
 from bioconda_utils import build
 from bioconda_utils._types import BuildSystem
 from bioconda_utils.conda.recipes import built_package_paths
 from bioconda_utils.containers import pkg_test
-
-from helpers import Recipes, ensure_missing, get_rattler_params
 
 # TODO:
 # need tests for channel order and extra channels (see
@@ -76,7 +75,7 @@ def build_pkg(request):
             render_config=render_config,
             rattler_output_dir=rattler_output_dir,
             force=True,
-            pkg_paths=built_packages,
+            pkg_paths=pkg_paths,
             mulled_build_and_test=mulled_build_and_test,
             docker_builder=docker_builder,
         )

@@ -5,9 +5,10 @@ Bridge to py-rattler-build.
 import json
 import os
 import shutil
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 import conda_build.config as cb_config
 import conda_build.metadata as cb_metadata
@@ -111,7 +112,7 @@ def render_rattler_recipe(
 
         return rendered_variants
     except Exception:
-        raise ValueError("Problem inspecting rattler recipe {0}".format(recipe))
+        raise ValueError(f"Problem inspecting rattler recipe {recipe}")
 
 
 def render_rattler_recipe_to_dicts(
@@ -153,7 +154,7 @@ def render_rattler_recipe_to_dicts(
             recipes=[r.recipe.to_dict() for r in rendered_variants], is_multi=is_multi
         )
     except Exception:
-        raise ValueError("Problem rendering rattler recipe to dict {0}".format(recipe))
+        raise ValueError(f"Problem rendering rattler recipe to dict {recipe}")
 
 
 def load_rattler_build_global_variants() -> rb.VariantConfig:
