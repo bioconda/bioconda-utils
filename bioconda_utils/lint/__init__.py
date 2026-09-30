@@ -111,9 +111,8 @@ import yaml
 from conda_smithy.lint_recipe import lintify_meta_yaml
 from jsonschema.exceptions import ValidationError
 
-from bioconda_utils._types import RecipePath
+from bioconda_utils._types import BuildSystem, RecipePath
 from bioconda_utils.skiplist import Skiplist
-from bioconda_utils.utils import BuildSystem
 
 from .. import recipe as _recipe
 from ..support.logsetup import tqdm
