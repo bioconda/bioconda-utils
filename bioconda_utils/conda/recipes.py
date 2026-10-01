@@ -24,6 +24,7 @@ from .repodata import RepoData
 logger = logging.getLogger(__name__)
 
 
+# TODO: change to Path only
 def get_deps(recipe: Path | str, build=True):
     """
     Generator of dependencies for a single recipe
@@ -98,6 +99,7 @@ def built_package_paths(recipe: str) -> list[str]:
 _SOLVER_DEPENDENT_JINJA = re.compile(r"\{\{\s*(stdlib|compiler|pin_compatible)\s*\(")
 
 
+# TODO change to Path only
 def recipe_requires_finalized_render(recipe: Path | str):
     """
     Return True if the recipe's rendered hash can depend on solver state and

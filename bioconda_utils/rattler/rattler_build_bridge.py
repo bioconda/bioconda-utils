@@ -111,7 +111,7 @@ def render_rattler_recipe(
         rendered_variants: list[rb.RenderedVariant] = recipe_s0.render(variants)
 
         return rendered_variants
-    except Exception:
+    except Exception:  # noqa
         raise ValueError(f"Problem inspecting rattler recipe {recipe}")
 
 
@@ -185,14 +185,6 @@ def get_default_rattler_cache_dir_path() -> Path:
 
 
 CURR_RATTLER_CACHE_DIR_PATH: Path = get_default_rattler_cache_dir_path()
-
-
-def load_v1_recipe_schema() -> dict[Any, Any]:
-    """Load and return the v1 recipe JSON schema used for validation."""
-    schema_path: Path = Path(__file__).parent / "v1_recipe_schema.json"
-    with open(schema_path, "r") as f:
-        schema = json.load(f)
-    return schema
 
 
 def set_rattler_cache_to_dir(path: Path) -> None:
