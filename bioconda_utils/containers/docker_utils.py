@@ -207,7 +207,7 @@ conda index {self.container_staging}
 # Ensure permissions are correct on the host.
 HOST_USER={self.user_info[uid]}
 chown $HOST_USER:$HOST_USER {self.container_staging}/{arch}/*
-"""  # noqa: E501,E122: line too long, continuation line missing indentation or outdented
+"""  # noqa: E501,E122
 
 # ----------------------------------------------------------------------------
 # DOCKERFILE_TEMPLATE

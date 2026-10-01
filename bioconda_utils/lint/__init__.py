@@ -769,11 +769,11 @@ class Linter:
                     severity=ERROR,
                 )
             ]
-        except:
+        except Exception as e:
             return [
                 RattlerLintMessage(
                     recipe=recipe,
-                    lint_or_hint=f"Error loading recipe file for {recipe.path}",
+                    lint_or_hint=f"Error loading recipe file for {recipe.path}: {e}",
                     severity=ERROR,
                 )
             ]

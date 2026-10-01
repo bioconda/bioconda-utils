@@ -16,7 +16,7 @@ import os
 from collections import Counter
 from collections.abc import Iterator, Sequence
 from pathlib import Path
-from typing import Iterable
+from collections.abc import Iterable
 
 import rattler_build as rb
 

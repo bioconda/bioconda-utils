@@ -2,7 +2,6 @@
 Bridge to py-rattler-build.
 """
 
-import json
 import os
 import shutil
 from collections.abc import Iterator
@@ -111,8 +110,8 @@ def render_rattler_recipe(
         rendered_variants: list[rb.RenderedVariant] = recipe_s0.render(variants)
 
         return rendered_variants
-    except Exception:  # noqa
-        raise ValueError(f"Problem inspecting rattler recipe {recipe}")
+    except Exception as e:
+        raise ValueError(f"Problem inspecting rattler recipe {recipe}: {e}")
 
 
 def render_rattler_recipe_to_dicts(
@@ -153,8 +152,8 @@ def render_rattler_recipe_to_dicts(
         return RattlerDictList(
             recipes=[r.recipe.to_dict() for r in rendered_variants], is_multi=is_multi
         )
-    except Exception:
-        raise ValueError(f"Problem rendering rattler recipe to dict {recipe}")
+    except Exception as e:
+        raise ValueError(f"Problem rendering rattler recipe to dict ({recipe}): {e}")
 
 
 def load_rattler_build_global_variants() -> rb.VariantConfig:
