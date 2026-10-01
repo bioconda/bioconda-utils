@@ -198,11 +198,18 @@ def build(
                 logger.info("Linting recipe %s", recipe.path.as_posix())
                 linter.clear_messages()
                 if linter.lint([recipe]):
+                    # One log record per finding instead of a single record
+                    # holding the whole report: each message stays attributable
+                    # and greppable, and the logger adds its own level and
+                    # timestamp per finding. The severity prefix inside the
+                    # message is the check's own severity, which is not always
+                    # ERROR (only ERROR-or-worse fails the build).
+                    for msg in linter.get_messages():
+                        logger.error("%s", msg.get_report_message())
                     logger.error(
-                        "\n\nThe recipe %s failed linting. See "
-                        "https://bioconda.github.io/contributor/linting.html for details:\n\n%s\n",
+                        "The recipe %s failed linting. See "
+                        "https://bioconda.github.io/contributor/linting.html for details.",
                         recipe.path.as_posix(),
-                        linter.get_report(),
                     )
                     return BuildResult(False, None)
                 logger.info("Lint checks passed")
