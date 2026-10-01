@@ -2232,4 +2232,4 @@ def test_load_meta_fast_allows_duplicate_keys(tmp_path):
     meta, loaded_recipe = conda_build_bridge.load_meta_fast(Path(recipe_dir))
     assert meta["package"]["name"] == "test-pkg"
     assert meta["build"]["number"] == 0
-    assert loaded_recipe == str(recipe_dir)
+    assert loaded_recipe == recipe_dir
