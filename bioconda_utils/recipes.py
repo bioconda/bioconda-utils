@@ -32,7 +32,9 @@ from ._types import (
     RATTLER,
     BuildSystem,
     ContainerPlatform,
-    MetaOrRattler,
+    QueryableRecipe,
+    QueryableV0Recipe,
+    QueryableV1Recipe,
     RecipePath,
     container_platform_to_package_subdir,
 )
@@ -198,7 +200,7 @@ def get_package_paths(
             )
 
 
-def load_meta_and_recipe_fast(recipe: RecipePath, env=None) -> MetaOrRattler:
+def load_meta_and_recipe_fast(recipe: RecipePath, env=None) -> QueryableRecipe:
     """
     Load recipe metadata quickly for either conda or rattler recipes.
 
@@ -210,21 +212,25 @@ def load_meta_and_recipe_fast(recipe: RecipePath, env=None) -> MetaOrRattler:
         env: Optional environment variables used when loading conda metadata.
 
     Returns:
-        A MetaOrRattler containing the original recipe path and either the
+        A QueryableRecipe containing the original recipe path and either the
         loaded conda metadata or the rendered rattler recipe data. The unused
         field is set to ``None``.
     """
+    # TODO this always assumes the native platform (for both V1 and V2 recipes)
+    # One should perhaps consider the target platforms here as well, e.g. returning a union
+    # of all dependencies across target platforms. In most of the cases, this should
+    # not make a difference though.
     match recipe.build_system:
         case BuildSystem.CONDA:
             meta, _ = load_meta_fast(recipe.path, env)
-            return MetaOrRattler(path=recipe, meta=meta, rattler=None)
+            return QueryableV0Recipe(path=recipe, meta=meta)
         case BuildSystem.RATTLER:
             # TODO (rb): is it possible to pass the global variants to the function
             # so we don't have to reload it constantly?
             # as far as I know we have to reload it, otherwise the parallelisation calls pickle on it
             global_variants: rb.VariantConfig = load_rattler_build_global_variants()
-            rattler = render_rattler_recipe_to_dicts(recipe.path, global_variants)
-            return MetaOrRattler(path=recipe, meta=None, rattler=rattler)
+            rattler_dicts = render_rattler_recipe_to_dicts(recipe.path, global_variants)
+            return QueryableV1Recipe(path=recipe, recipe=rattler_dicts)
 
 
 def get_recipe_paths(recipes: Iterable[RecipePath]) -> list[Path]:

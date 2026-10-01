@@ -248,7 +248,7 @@ def build(
 
         # TODO (rb): is there a more elegant way to do this?
         rendered_recipe: rb.RenderedVariant = render_rattler_recipe(
-            recipe.path, load_rattler_build_global_variants()
+            recipe.path, load_rattler_build_global_variants(target_platform.to_subdir() if target_platform else None)
         )[0]
 
         is_noarch: bool = bool(rendered_recipe.recipe.build.noarch)
@@ -585,7 +585,7 @@ def should_skip_platform(
         case BuildSystem.RATTLER:
             if platform not in additional_platforms:
                 return False
-            global_variants = load_rattler_build_global_variants()
+            global_variants = load_rattler_build_global_variants(platform)
             rendered_variants = render_rattler_recipe(recipe.path, global_variants)
             for variant in rendered_variants:
                 # Is there a more elegant way to access the `extra` section?
@@ -670,9 +670,9 @@ def build_recipes(
     config = normalize_config(config)
     RepoData.register_config(config)
     blacklist = Skiplist(config, recipe_folder)
-    global_variants: rb.VariantConfig = load_rattler_build_global_variants()
+    global_variants: rb.VariantConfig = load_rattler_build_global_variants(target_platform.to_subdir() if target_platform else None)
     # TODO (rb): make platform_config and render_config customisable
-    platform_config: rb.PlatformConfig = rb.PlatformConfig()
+    platform_config: rb.PlatformConfig = rb.PlatformConfig(target_platform.to_subdir() if target_platform else None)
     render_config: rb.RenderConfig = rb.RenderConfig(platform=platform_config)
 
     # get channels to check

@@ -15,7 +15,7 @@ import platformdirs
 import rattler_build as rb
 
 from ..conda.conda_build_bridge import subdir_to_oslabel
-from ..conda.repodata import RepoData
+from ..conda.repodata import PackageSubdir, RepoData
 
 
 @dataclass(slots=True)
@@ -27,8 +27,7 @@ class RattlerDictList:
         return iter(self.recipes)
 
 
-# TODO (rb): Is it correct to assume the native platform is the target platform?
-def _filter_config(config_path: Path) -> str:
+def _filter_config(config_path: Path, platform: PackageSubdir | None) -> str:
     """
     Filter a conda-build configuration file for the native platform.
 
@@ -37,19 +36,17 @@ def _filter_config(config_path: Path) -> str:
 
     Args:
         config_path: Path to the config yaml file.
+        platform: optional conda package subdir (e.g., ``linux-64``). If ``None``,
+            the native platform will be used.
 
     Returns:
         Filtered config as string.
     """
 
-    subdir = RepoData.native_subdir()
-    os_label = subdir_to_oslabel(subdir)
-    arch: str = subdir.removeprefix(f"{os_label}-")
+    platform = platform or RepoData.native_subdir()
+    os_label = subdir_to_oslabel(platform)
+    arch: str = platform.removeprefix(f"{os_label}-")
     config = cb_config.Config(platform=os_label, arch=arch)
-    # target = RepoData.native_platform().split("-")
-    # native_platform = target[0]
-    # arch = platform.machine()
-    # config = conda_build.config.Config(platform=native_platform, arch=arch)
     namespace = cb_metadata.get_selectors(config)
 
     with open(config_path, "r") as f:
@@ -156,7 +153,7 @@ def render_rattler_recipe_to_dicts(
         raise ValueError(f"Problem rendering rattler recipe to dict ({recipe}): {e}")
 
 
-def load_rattler_build_global_variants() -> rb.VariantConfig:
+def load_rattler_build_global_variants(platform: PackageSubdir | None) -> rb.VariantConfig:
     """Load the global rattler-build variant configuration."""
     paths: list[Path] = get_rattler_build_global_variants_paths()
 
@@ -164,7 +161,7 @@ def load_rattler_build_global_variants() -> rb.VariantConfig:
 
     for p in paths:
         if p.exists():
-            filtered_yaml = _filter_config(p)
+            filtered_yaml = _filter_config(p, platform)
             break
 
     if not filtered_yaml:

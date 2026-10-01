@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 import platform
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
@@ -42,82 +43,76 @@ class RecipePath(NamedTuple):
         return self.path.__fspath__()
 
 
-@dataclass(slots=True)
-class MetaOrRattler:
-    path: RecipePath
-    meta: dict[str, Any] | None
-    rattler: RattlerDictList | None
-
-    def __init__(
-        self,
-        path: RecipePath,
-        meta: dict[str, Any] | None,
-        rattler: RattlerDictList | None,
-    ) -> None:
-        if meta is None and rattler is None:
-            raise ValueError(
-                f"Either meta or rattler must be set but both are None for recipe: {path.path.as_posix()}"
-            )
+class QueryableRecipe(ABC):
+    def __init__(self, path: RecipePath) -> None:
         self.path = path
+
+    @abstractmethod
+    def get_package_name(self) -> str:
+        ...
+
+    @abstractmethod
+    def get_dependencies(self, section: Literal["build", "host", "run"]) -> list[str]:
+        ...
+
+
+class QueryableV0Recipe(QueryableRecipe):
+    def __init__(self, path: RecipePath, meta: dict[str, Any]) -> None:
+        super().__init__(path)
         self.meta = meta
-        self.rattler = rattler
 
     def get_package_name(self) -> str:
-        if self.meta is not None:
-            # TODO: what actually happens if this is a multi output recipe?
-            return self.meta["package"]["name"]
-        elif self.rattler is not None:
-            # if rattler recipe is a multi-output recipe, return the name of its directory
-            # if it is a single output directory (i.e. the list contains just the variants of the same
-            # recipe), return the name of the package
-            if self.rattler.is_multi:
-                return self.path.path.name
-            else:
-                return self.rattler.recipes[0]["package"]["name"]
+        if self.meta.get("outputs"):
+            return self.path.path.name
         else:
-            raise ValueError(
-                f"No meta or rattler-recipe found for: {self.path.path.as_posix()}"
-            )
+            return self.meta["package"]["name"]
 
     def get_dependencies(self, section: Literal["build", "host", "run"]) -> list[str]:
-        if self.meta is not None:
-            requirements = self.meta.get("requirements")
+        requirements = self.meta.get("requirements")
+        if not requirements:
+            return []
+
+        deps = requirements.get(section)
+
+        if not deps:
+            return []
+        return [dep.split()[0] for dep in deps if dep]
+
+
+class QueryableV1Recipe(QueryableRecipe):
+    def __init__(self, path: RecipePath, recipe: RattlerDictList) -> None:
+        super().__init__(path)
+        self.recipe = recipe
+
+    def get_package_name(self) -> str:
+        if self.recipe.is_multi:
+            return self.path.path.name
+        else:
+            return self.recipe.recipes[0]["package"]["name"]
+
+    def get_dependencies(self, section: Literal["build", "host", "run"]) -> list[str]:
+        result: list[str] = []
+        
+        # return the dependencies of all variants as dependencies of this
+        # package. If this should be able to be split by variants, that behaviour
+        # needs to be implemented separately
+        for variant in self.recipe:
+            requirements = variant.get("requirements")
             if not requirements:
                 return []
-
             deps = requirements.get(section)
-
             if not deps:
                 return []
-            return [dep.split()[0] for dep in deps if dep]
-        elif self.rattler is not None:
-            result: list[str] = []
 
-            # return the dependencies of all variants as dependencies of this
-            # package. If this should be able to be split by variants, that behaviour
-            # needs to be implemented separately
-            for variant in self.rattler:
-                requirements = variant.get("requirements")
-                if not requirements:
-                    return []
-                deps = requirements.get(section)
-                if not deps:
-                    return []
+            for dep in deps:
+                if isinstance(dep, str):
+                    result.append(dep)
+                elif isinstance(dep, dict) and "pin_subpackage" in dep:
+                    result.append(dep["pin_subpackage"]["name"])
+                else:
+                    raise ValueError(f"Failed to parse dependency: {dep}")
 
-                for dep in deps:
-                    if isinstance(dep, str):
-                        result.append(dep)
-                    elif isinstance(dep, dict) and "pin_subpackage" in dep:
-                        result.append(dep["pin_subpackage"]["name"])
-                    else:
-                        raise ValueError(f"Failed to parse dependency: {dep}")
-
-            return result
-        else:
-            # this is just to appease linters. Due to __init__ this will never be called
-            raise ValueError(
-                f"Either meta or rattler must be set but both are None for recipe: {self.path.path.as_posix()}"
-            )
+        return result
 
 
 class Config(dict[str, Any]):
@@ -132,6 +127,9 @@ class ContainerPlatform(StrEnum):
     LINUX_AMD64 = "linux/amd64"
     LINUX_ARM64 = "linux/arm64"
     LINUX_RISCV64 = "linux/riscv64"
+
+    def to_subdir(self) -> PackageSubdir:
+        return CONTAINER_PLATFORM_TO_PACKAGE_SUBDIR[self]
 
 
 ALL_CONTAINER_PLATFORMS: tuple[ContainerPlatform, ...] = tuple(ContainerPlatform)

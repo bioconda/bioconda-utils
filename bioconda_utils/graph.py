@@ -13,7 +13,7 @@ from typing import (
 
 import networkx as nx
 
-from ._types import MetaOrRattler
+from ._types import QueryableRecipe, QueryableV0Recipe, QueryableV1Recipe
 from .recipe import Recipe
 from .recipes import RecipePath, load_meta_and_recipe_fast
 from .skiplist import Skiplist
@@ -64,7 +64,7 @@ def build(
     #
     # global_variants: rb.VariantConfig = support.parallel.load_rattler_build_global_variants()
 
-    meta_rattler_data: list[MetaOrRattler] = list(
+    meta_rattler_data: list[QueryableRecipe] = list(
         parallel_iter(
             load_meta_and_recipe_fast,
             recipes,

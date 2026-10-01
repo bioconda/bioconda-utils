@@ -129,11 +129,12 @@ def get_rattler_params(
     path: Path,
     build_system: BuildSystem,
     docker_builder,
+    platform: PackageSubdir | None = None,
 ) -> tuple[RecipePath, rb.VariantConfig, rb.ToolConfiguration, rb.RenderConfig, Path]:
-    platform_config: rb.PlatformConfig = rb.PlatformConfig()
+    platform_config: rb.PlatformConfig = rb.PlatformConfig(target_platform=platform)
     skip_rattler: str = "all"
     render_config: rb.RenderConfig = rb.RenderConfig(platform=platform_config)
-    global_variants: rb.VariantConfig = load_rattler_build_global_variants()
+    global_variants: rb.VariantConfig = load_rattler_build_global_variants(platform)
     tool_config: rb.ToolConfiguration = rb.ToolConfiguration(
         skip_existing=skip_rattler, test_strategy="native", keep_build=False
     )
