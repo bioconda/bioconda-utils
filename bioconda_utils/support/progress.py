@@ -79,7 +79,7 @@ class ProgressDisplay:
     def status(
         self, description: str
     ) -> AbstractContextManager[tuple[Progress, TaskID]]:
-        return self._task(self.statuses, description, transient=True)
+        return self._task(self.statuses, description)
 
     @contextmanager
     def _task(
@@ -88,24 +88,13 @@ class ProgressDisplay:
         description: str,
         *,
         total: float | None = None,
-        transient: bool = False,
     ) -> Iterator[tuple[Progress, TaskID]]:
         # Workers leave terminal output to the parent's item counter. Use a
         # local disabled Progress so forked workers never touch inherited locks.
-        worker = parent_process() is not None
-        if worker:
+        if parent_process() is not None:
             progress = Progress(*progress.columns, auto_refresh=False, disable=True)
         task_id = progress.add_task(description, total=total)
         try:
             yield progress, task_id
         finally:
-            progress.stop_task(task_id)
-            if transient or worker:
-                progress.remove_task(task_id)
-            else:
-                try:
-                    task = next(task for task in progress.tasks if task.id == task_id)
-                    final = progress.make_tasks_table([task])
-                finally:
-                    progress.remove_task(task_id)
-                progress.console.print(final)
+            progress.remove_task(task_id)

@@ -66,17 +66,17 @@ def test_overlapping_tasks_finish_in_start_order(display):
     second.__exit__(None, None, None)
 
 
-def test_progress_preserves_only_its_own_final_output():
+def test_finished_tasks_do_not_leave_permanent_output():
     output = StringIO()
     display = ProgressDisplay(Console(file=output, width=160))
     with display.live, display.count_task("outer", total=1):
         for description in ("first run", "second run"):
             with display.count_task(description, total=1) as (progress, task):
                 progress.update(task, advance=1)
-    text = output.getvalue()
-    assert (
-        text.count("first run") == text.count("second run") == text.count("outer") == 1
-    )
+        with display.download_task("unknown size") as (progress, task):
+            progress.update(task, advance=10)
+        assert display.downloads.tasks == []
+    assert output.getvalue() == ""
     assert display.counts.tasks == []
     assert not display.live.is_started
 
