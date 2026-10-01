@@ -340,8 +340,9 @@ class AsyncRequests:
         assert self.session is not None
         async with self.session.get(url) as resp:
             resp.raise_for_status()
-            async for block in http.stream_download(resp, desc):
-                checksum.update(block)
+            async with http.stream_download(resp, desc) as blocks:
+                async for block in blocks:
+                    checksum.update(block)
         return checksum.hexdigest()
 
     @http.retry_on_transient
@@ -353,8 +354,11 @@ class AsyncRequests:
         assert self.session is not None
         async with self.session.get(url) as resp:
             resp.raise_for_status()
-            async with aiofiles.open(fname, "wb") as out:
-                async for block in http.stream_download(resp, desc):
+            async with (
+                aiofiles.open(fname, "wb") as out,
+                http.stream_download(resp, desc) as blocks,
+            ):
+                async for block in blocks:
                     await out.write(block)
 
     async def get_ftp_listing(self, url):

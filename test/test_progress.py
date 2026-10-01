@@ -136,12 +136,10 @@ class DownloadResponse:
 
 
 async def download(response, description):
-    return [
-        block
-        async for block in http.stream_download(
-            cast(aiohttp.ClientResponse, response), description
-        )
-    ]
+    async with http.stream_download(
+        cast(aiohttp.ClientResponse, response), description
+    ) as blocks:
+        return [block async for block in blocks]
 
 
 @pytest.mark.parametrize("cancel_second", [False, True])

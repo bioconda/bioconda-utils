@@ -164,12 +164,13 @@ async def _async_fetch_one(
     else:
         async with session.get(url, timeout=None) as resp:
             resp.raise_for_status()
-            async for block in http.stream_download(
+            async with http.stream_download(
                 resp,
                 description,
                 block_size=1024 * 16,
-            ):
-                chunks.append(block)
+            ) as blocks:
+                async for block in blocks:
+                    chunks.append(block)
     raw = b"".join(chunks)
     if transform is None:
         return raw
