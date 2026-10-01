@@ -58,6 +58,7 @@ from .config import normalize_config
 from .containers import docker_utils, pkg_test, upload
 from .containers.container_manifests import write_image_record
 from .recipes import BuildSystem, get_package_paths
+from .support.logsetup import format_recipes
 from .support.subproc import allowed_env_var, bin_for, run, sandboxed_env
 
 logger = logging.getLogger(__name__)
@@ -191,10 +192,10 @@ def build(
             case BuildSystem.RATTLER:
                 logger.warning(
                     "Linting is currently only implemented for conda-build recipes. Skipping rattler-build recipe: %s",
-                    recipe.path.as_posix(),
+                    recipe,
                 )
             case BuildSystem.CONDA:
-                logger.info("Linting recipe %s", recipe.path.as_posix())
+                logger.info("Linting recipe %s", recipe)
                 linter.clear_messages()
                 if linter.lint([recipe]):
                     # One log record per finding instead of a single record
@@ -208,7 +209,7 @@ def build(
                     logger.error(
                         "The recipe %s failed linting. See "
                         "https://bioconda.github.io/contributor/linting.html for details.",
-                        recipe.path.as_posix(),
+                        recipe,
                     )
                     return BuildResult(False, None)
                 logger.info("Lint checks passed")
@@ -220,7 +221,7 @@ def build(
         if allowed_env_var(k, docker_builder is not None)
     }
 
-    logger.info("BUILD START %s", recipe.path.as_posix())
+    logger.info("BUILD START %s", recipe)
 
     use_base_image = None
 
@@ -488,7 +489,7 @@ def remove_cycles(
             "it cyclically depends on other packages in the "
             "current build job. Failed recipes: %s",
             name,
-            [r.path.as_posix() for r in cycle_fail_recipes],
+            format_recipes(cycle_fail_recipes),
         )
         failed.extend(cycle_fail_recipes)
         for node in nx.algorithms.descendants(dag, name):
@@ -763,7 +764,7 @@ def build_recipes(
         ):
             logger.info(
                 "BUILD SKIP: skipping %s for additional platform %s",
-                recipe.path.as_posix(),
+                recipe,
                 platform,
             )
             continue
@@ -771,13 +772,13 @@ def build_recipes(
         if name in skip_dependent:
             logger.info(
                 "BUILD SKIP: skipping %s because it depends on %s which had a failed build.",
-                recipe.path.as_posix(),
-                skip_dependent[name],
+                recipe,
+                format_recipes(skip_dependent[name]),
             )
             skipped_recipes.append(recipe)
             continue
 
-        logger.info("Determining expected packages for %s", recipe.path.as_posix())
+        logger.info("Determining expected packages for %s", recipe)
 
         if docker_builder is not None:
             rattler_output_dir: Path = Path(docker_builder.pkg_dir)
@@ -912,7 +913,7 @@ def build_recipes(
             logger.error(
                 "BUILD SUMMARY: while the entire build failed, "
                 "the following recipes were built successfully:\n%s",
-                "\n".join([r.path.as_posix() for r in built_recipes]),
+                format_recipes(built_recipes, separator="\n"),
             )
         for recipe in failed:
             logger.error("BUILD SUMMARY: FAILED recipe %s", recipe)
@@ -920,7 +921,7 @@ def build_recipes(
             logger.error(
                 "BUILD SUMMARY: SKIPPED recipe %s due to failed dependencies %s",
                 name,
-                dep,
+                format_recipes(dep),
             )
         if failed_uploads:
             logger.error(

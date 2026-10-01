@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Collection
+from collections.abc import Collection, Iterable
 from pathlib import Path
 
 from rich.console import Console
@@ -160,6 +160,21 @@ def setup_logger(
         rich_handler.addFilter(log_filter)
 
     return new_logger
+
+
+def format_recipes(recipes: Iterable[RecipePath | Path], separator: str = ", ") -> str:
+    """Logging helper rendering a collection of recipes as recipe paths
+
+    ``RecipePath`` renders as its path, but a *list* of them would be rendered
+    with the tuple ``repr``.  Use this to log collections of recipes.
+
+    Args:
+      recipes: Recipes to render.
+      separator: String to place between recipe paths.
+    Returns:
+      A string like "htslib/1.19, samtools/1.21" or "" if there are no recipes.
+    """
+    return separator.join(str(recipe) for recipe in recipes)
 
 
 def ellipsize_recipes(

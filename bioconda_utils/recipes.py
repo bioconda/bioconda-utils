@@ -72,7 +72,7 @@ def get_package_paths(
         case BuildSystem.RATTLER:
             if rattler_output_dir is None or global_variants is None:
                 raise ValueError(
-                    f"Both rattler_output_dir and global_variants must be set when calling get_package_paths on a rattler-recipe: {recipe.path.as_posix()}"
+                    f"Both rattler_output_dir and global_variants must be set when calling get_package_paths on a rattler-recipe: {recipe}"
                 )
             return rattler_get_package_paths(
                 recipe, rattler_output_dir, global_variants

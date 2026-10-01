@@ -806,7 +806,7 @@ def dag(
             _write_output(f"# subdag {i}\n")
             subdag = dag.subgraph(s)
             recipes: list[str] = [
-                recipe.path.as_posix()
+                str(recipe)
                 for package in nx.topological_sort(subdag)
                 for recipe in name2recipes[package]
             ]
@@ -814,7 +814,7 @@ def dag(
         if not hide_singletons:
             _write_output("# singletons\n")
             singletons_recipes: list[str] = [
-                recipe.path.as_posix()
+                str(recipe)
                 for package in singletons
                 for recipe in name2recipes[package]
             ]

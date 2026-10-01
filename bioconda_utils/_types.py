@@ -38,6 +38,12 @@ class RecipePath(NamedTuple):
     path: Path
     build_system: BuildSystem
 
+    def __str__(self) -> str:
+        # ``__str__`` is what ``%s`` and f-strings use, so log messages show
+        # ``recipes/samtools/1.7`` instead of the tuple repr.  ``__repr__``
+        # keeps both fields for debugging.
+        return self.path.as_posix()
+
     def __fspath__(self) -> str:
         return self.path.__fspath__()
 

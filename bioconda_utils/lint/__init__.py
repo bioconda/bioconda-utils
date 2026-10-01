@@ -788,7 +788,7 @@ class Linter:
             return [
                 RattlerLintMessage(
                     recipe=recipe,
-                    lint_or_hint=f"Failed to parse YAML in recipe {recipe.path}",
+                    lint_or_hint=f"Failed to parse YAML in recipe {recipe}",
                     severity=ERROR,
                 )
             ]
@@ -796,7 +796,7 @@ class Linter:
             return [
                 RattlerLintMessage(
                     recipe=recipe,
-                    lint_or_hint=f"Error loading recipe file for {recipe.path}: {e}",
+                    lint_or_hint=f"Error loading recipe file for {recipe}: {e}",
                     severity=ERROR,
                 )
             ]

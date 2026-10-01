@@ -149,7 +149,7 @@ class RecipeSource:
                 case BuildSystem.RATTLER:
                     logger.warning(
                         "Autobump not implemented for rattler build. Skipping recipe: %s",
-                        r.path,
+                        r,
                     )
         if shuffle:
             random.shuffle(self.recipe_dirs)

@@ -37,6 +37,7 @@ from bioconda_utils.conda.repodata import RepoData, _CachedRepoData
 from bioconda_utils.config import load_config, normalize_config, validate_config
 from bioconda_utils.containers import docker_utils, pkg_test, upload
 from bioconda_utils.support import subproc
+from bioconda_utils.support.logsetup import format_recipes
 
 logger = logging.getLogger(__name__)
 
@@ -2305,6 +2306,32 @@ def test_load_config_registers_config_after_resolving_paths(monkeypatch, tmp_pat
     assert config["channels"] == ["conda-forge", "bioconda"]
     assert config["primary_platforms"] == [PackageSubdir.LINUX_64, PackageSubdir.OSX_64]
     assert registered == [config]
+
+
+def test_recipe_path_renders_as_path_in_logs(caplog):
+    """RecipePath must not leak its tuple repr into log messages."""
+    recipe = RecipePath(path=Path("recipes/samtools/1.7"), build_system=CONDA)
+
+    with caplog.at_level(logging.INFO):
+        logging.getLogger("test").info("Nothing to be done for recipe %s", recipe)
+
+    assert "Nothing to be done for recipe recipes/samtools/1.7" in caplog.text
+    assert "build_system" not in caplog.text
+    # the tuple repr is still available for debugging
+    assert "build_system" in repr(recipe)
+
+
+def test_format_recipes_renders_collections():
+    recipes = [
+        RecipePath(path=Path("recipes/htslib/1.19"), build_system=CONDA),
+        RecipePath(path=Path("recipes/samtools/1.7"), build_system=RATTLER),
+    ]
+
+    assert format_recipes(recipes) == "recipes/htslib/1.19, recipes/samtools/1.7"
+    assert format_recipes(recipes, separator="\n") == (
+        "recipes/htslib/1.19\nrecipes/samtools/1.7"
+    )
+    assert format_recipes([]) == ""
 
 
 def test_load_meta_fast_allows_duplicate_keys(tmp_path):
