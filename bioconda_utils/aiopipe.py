@@ -17,7 +17,7 @@ import aioftp
 import aiohttp
 
 from .support import http
-from .support.logsetup import count_progress
+from .support.logsetup import progress_display
 from .support.parallel import threads_to_use
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -185,8 +185,10 @@ class AsyncPipeline[ITEM]:
     async def show_progress(
         self, in_q: asyncio.Queue[ITEM], out_q: asyncio.Queue[ITEM]
     ) -> None:
-        with count_progress() as progress:
-            task = progress.add_task("processing", total=self.get_item_count())
+        with progress_display.count_task("processing", total=self.get_item_count()) as (
+            progress,
+            task,
+        ):
             while True:
                 try:
                     item = await in_q.get()

@@ -14,7 +14,7 @@ from collections.abc import AsyncIterator
 import aiohttp
 import backoff
 
-from .logsetup import download_progress
+from .logsetup import progress_display
 
 # Used as user agent in http requests and as requester in github API requests
 USER_AGENT = "bioconda/bioconda-utils"
@@ -66,8 +66,7 @@ async def stream_download(
 ) -> AsyncIterator[bytes]:
     """Stream the body of **resp** in blocks, showing Rich progress."""
     size = int(resp.headers.get("Content-Length", 0)) or None
-    with download_progress() as progress:
-        task = progress.add_task(desc, total=size)
+    with progress_display.download_task(desc, total=size) as (progress, task):
         while True:
             block = await resp.content.read(block_size)
             if not block:

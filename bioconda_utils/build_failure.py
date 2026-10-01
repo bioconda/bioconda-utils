@@ -24,7 +24,7 @@ from bioconda_utils.conda.conda_build_bridge import load_meta_fast
 from bioconda_utils.conda.repodata import RepoData, get_package_downloads
 from bioconda_utils.recipe import Recipe
 from bioconda_utils.recipes import get_recipes
-from bioconda_utils.support.logsetup import count_progress, ellipsize_recipes
+from bioconda_utils.support.logsetup import ellipsize_recipes, progress_display
 from bioconda_utils.support.subproc import run
 
 from .githandler import BiocondaRepo, GitRange
@@ -320,8 +320,11 @@ def collect_build_failure_records(
     dag, _ = graph.build(recipes, config)
 
     def get_data() -> Iterator[dict[str, Any]]:
-        with count_progress() as progress:
-            for recipe in progress.track(recipes, description="Checking recipes"):
+        with progress_display.count_task("Checking recipes", total=len(recipes)) as (
+            progress,
+            task,
+        ):
+            for recipe in progress.track(recipes, task_id=task):
                 recipe_path: Path = recipe.path
                 if not has_build_failure(recipe_path):
                     continue

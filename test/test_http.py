@@ -1,10 +1,13 @@
 import asyncio
 import logging
+from io import StringIO
 from typing import cast
 
 import aiohttp
+from rich.console import Console
 
 from bioconda_utils.support import http, logsetup
+from bioconda_utils.support.progress import ProgressDisplay
 
 
 def test_make_session_uses_requested_user_agent():
@@ -38,50 +41,27 @@ def test_stream_download_yields_blocks_and_reports_progress(monkeypatch):
             self.headers = {"Content-Length": "11"}
             self.content = Content()
 
-    class FakeProgress:
-        def __init__(self):
-            self.tasks = {}
-            self.updates = []
-            self._next_task = 0
-
-        def add_task(self, description, total=None):
-            task = self._next_task
-            self._next_task += 1
-            self.tasks[task] = {"description": description, "total": total}
-            return task
-
-        def update(self, task, *, advance=1):
-            self.updates.append((task, advance))
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            return False
-
-    progress = FakeProgress()
-
-    def progress_factory():
-        return progress
-
-    monkeypatch.setattr(http, "download_progress", progress_factory)
+    display = ProgressDisplay(Console(file=StringIO()))
+    monkeypatch.setattr(http, "progress_display", display)
+    completed = []
     response = Response()
 
     async def download():
-        return [
-            block
-            async for block in http.stream_download(
-                cast(aiohttp.ClientResponse, response),
-                "artifact",
-                block_size=4,
-            )
-        ]
+        blocks = []
+        async for block in http.stream_download(
+            cast(aiohttp.ClientResponse, response), "artifact", block_size=4
+        ):
+            task = display.downloads.tasks[0]
+            assert task.description == "artifact"
+            assert task.total == 11
+            completed.append(task.completed)
+            blocks.append(block)
+        return blocks
 
     assert asyncio.run(download()) == [b"first", b"second"]
     assert response.content.block_sizes == [4, 4, 4]
-    assert progress.updates == [(0, 5), (0, 6)]
-    assert progress.tasks[0]["total"] == 11
-    assert progress.tasks[0]["description"] == "artifact"
+    assert completed == [5, 11]
+    assert display.downloads.tasks == []
 
 
 def test_retry_policy_gives_up_only_on_permanent_response_errors():
@@ -100,16 +80,16 @@ def test_progress_uses_item_columns_for_counts_and_byte_columns_for_downloads():
     def column_types(progress):
         return {type(column) for column in progress.columns}
 
-    assert MofNCompleteColumn in column_types(logsetup.count_progress())
-    assert DownloadColumn not in column_types(logsetup.count_progress())
-    assert TransferSpeedColumn not in column_types(logsetup.count_progress())
-    assert DownloadColumn in column_types(logsetup.download_progress())
-    assert TransferSpeedColumn in column_types(logsetup.download_progress())
+    assert MofNCompleteColumn in column_types(logsetup.progress_display.counts)
+    assert DownloadColumn not in column_types(logsetup.progress_display.counts)
+    assert TransferSpeedColumn not in column_types(logsetup.progress_display.counts)
+    assert DownloadColumn in column_types(logsetup.progress_display.downloads)
+    assert TransferSpeedColumn in column_types(logsetup.progress_display.downloads)
 
 
 def test_progress_track_iterates_headless():
-    with logsetup.count_progress() as progress:
-        assert list(progress.track([1, 2], description="x")) == [1, 2]
+    with logsetup.progress_display.count_task("x", total=2) as (progress, task):
+        assert list(progress.track([1, 2], task_id=task)) == [1, 2]
 
 
 def test_logger_treats_subprocess_output_as_literal_text():

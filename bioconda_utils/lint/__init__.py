@@ -115,7 +115,7 @@ from bioconda_utils._types import BuildSystem, RecipePath
 from bioconda_utils.skiplist import Skiplist
 
 from .. import recipe as _recipe
-from ..support.logsetup import count_progress
+from ..support.logsetup import progress_display
 from ..support.subproc import run
 
 logger = logging.getLogger(__name__)
@@ -648,10 +648,11 @@ class Linter:
           True if issues with errors were found
 
         """
-        with count_progress() as progress:
-            for recipe_name in progress.track(
-                sorted(recipe_names), description="Linting"
-            ):
+        with progress_display.count_task("Linting", total=len(recipe_names)) as (
+            progress,
+            task,
+        ):
+            for recipe_name in progress.track(sorted(recipe_names), task_id=task):
                 self.order_and_load_checks()
                 assert isinstance(recipe_name, RecipePath)  # for linters/IDEs
                 try:

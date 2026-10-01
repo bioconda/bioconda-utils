@@ -14,74 +14,15 @@ from pathlib import Path
 
 from rich.console import Console
 from rich.logging import RichHandler
-from rich.progress import (
-    BarColumn,
-    DownloadColumn,
-    MofNCompleteColumn,
-    Progress,
-    SpinnerColumn,
-    TaskProgressColumn,
-    TextColumn,
-    TimeRemainingColumn,
-    TransferSpeedColumn,
-)
 
 from .._types import RecipePath
+from .progress import ProgressDisplay
 
 logger = logging.getLogger(__name__)
 
 console = Console()
 err_console = Console(stderr=True)
-
-
-def count_progress() -> Progress:
-    """Progress display for counting items (recipes, files, ...) on stderr.
-
-    Use Rich's API directly, e.g.::
-
-        with count_progress() as progress:
-            for item in progress.track(items, description="Loading"):
-                ...
-
-    or for manual updates::
-
-        with count_progress() as progress:
-            task = progress.add_task("processing", total=n)
-            progress.update(task, advance=1)
-
-    Rich handles non-terminals itself (single final line, no animation),
-    so there is deliberately no disable logic here.
-    """
-    return Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        MofNCompleteColumn(),
-        TaskProgressColumn(),
-        TimeRemainingColumn(),
-        console=err_console,
-    )
-
-
-def download_progress() -> Progress:
-    """Progress display for byte downloads on stderr.
-
-    Use Rich's API directly, e.g.::
-
-        with download_progress() as progress:
-            task = progress.add_task(desc, total=size)
-            progress.update(task, advance=len(block))
-    """
-    return Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TaskProgressColumn(),
-        DownloadColumn(),
-        TransferSpeedColumn(),
-        TimeRemainingColumn(),
-        console=err_console,
-    )
+progress_display = ProgressDisplay(err_console)
 
 
 class LogFuncFilter:

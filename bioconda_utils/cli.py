@@ -41,7 +41,7 @@ from ._types import (
 )
 from .containers.pkg_test import CREATE_ENV_IMAGE
 from .support.logsetup import console as report_console
-from .support.logsetup import ellipsize_recipes, setup_logger
+from .support.logsetup import ellipsize_recipes, progress_display, setup_logger
 from .support.logsetup import err_console as error_console
 
 if TYPE_CHECKING:
@@ -360,6 +360,7 @@ def _version_callback(value: bool) -> None:
 
 @app.callback()
 def root(
+    ctx: typer.Context,
     version: Annotated[
         bool,
         typer.Option(
@@ -371,6 +372,7 @@ def root(
     ] = False,
 ) -> None:
     """Bioconda Utils command-line interface."""
+    ctx.with_resource(progress_display.live)
 
 
 @app.command("diagnostics")

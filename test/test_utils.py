@@ -945,7 +945,7 @@ def test_run_shows_a_single_spinner(monkeypatch):
         def __exit__(self, *_exc):
             return False
 
-    monkeypatch.setattr(subproc.err_console, "status", RecordingStatus)
+    monkeypatch.setattr(subproc.progress_display, "status", RecordingStatus)
 
     subproc.run(["echo", "hello"])
 
@@ -970,7 +970,7 @@ def test_run_does_not_spinner_when_streaming_live(monkeypatch):
         def __exit__(self, *_exc):
             return False
 
-    monkeypatch.setattr(subproc.err_console, "status", RecordingStatus)
+    monkeypatch.setattr(subproc.progress_display, "status", RecordingStatus)
 
     subproc.run(["echo", "hello"], live=True, status="Building recipe...")
 

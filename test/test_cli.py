@@ -1,12 +1,14 @@
 """Tests for the Typer command-line interface."""
 
 import logging
+from io import StringIO
 from pathlib import Path
 from typing import Any, cast
 
 import click
 import networkx as nx
 import pytest
+from rich.console import Console
 from typer.core import TyperArgument
 from typer.main import get_command
 from typer.testing import CliRunner
@@ -16,8 +18,38 @@ from bioconda_utils._types import CONDA, RecipePath
 from bioconda_utils.containers.artifacts import UploadResult
 from bioconda_utils.containers.pkg_test import CREATE_ENV_IMAGE
 from bioconda_utils.githandler import GitRange
+from bioconda_utils.support.progress import ProgressDisplay
 
 runner = CliRunner()
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_command_owns_progress_lifetime(monkeypatch, fail):
+    display = ProgressDisplay(Console(file=StringIO(), force_terminal=True))
+    monkeypatch.setattr(cli, "progress_display", display)
+
+    def callback():
+        assert display.live.is_started
+        with display.count_task("processing", total=1) as (progress, task):
+            assert not progress.live.is_started
+            progress.update(task, advance=1)
+            if fail:
+                raise ValueError("command failed")
+        cli._write_output("result\n")
+
+    command = next(
+        info for info in cli.app.registered_commands if info.name == "diagnostics"
+    )
+    monkeypatch.setattr(command, "callback", callback)
+    result = runner.invoke(cli.app, ["diagnostics"])
+    assert result.exit_code == int(fail)
+    if fail:
+        assert isinstance(result.exception, ValueError)
+    else:
+        assert result.stdout == "result\n"
+    assert display.counts.tasks == []
+    assert not display.live.is_started
+    assert display.live.console._live_stack == []
 
 
 def test_all_commands_render_help():

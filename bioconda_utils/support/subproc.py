@@ -20,7 +20,7 @@ from collections.abc import Sequence
 from threading import Thread
 from typing import Any
 
-from .logsetup import err_console
+from .logsetup import progress_display
 
 logger = logging.getLogger(__name__)
 
@@ -217,7 +217,7 @@ def run(
 
         output_lines = deque()
         if not live:
-            with err_console.status(status, spinner="dots"):
+            with progress_display.status(status):
                 handle_output(output_lines)
         else:
             handle_output(output_lines)
