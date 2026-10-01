@@ -48,3 +48,5 @@ diskcache=5.*
 platformdirs=4.*
 tabulate=0.10.*
 psutil
+py-rattler-build>=0.67.0,<0.68
+conda-smithy>=2026.8.5,<2027

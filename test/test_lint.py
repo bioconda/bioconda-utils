@@ -6,7 +6,7 @@ import pytest
 from ruamel.yaml import YAML
 
 from bioconda_utils import lint
-from bioconda_utils._types import ensure_list
+from bioconda_utils._types import CONDA, RecipePath, ensure_list
 from bioconda_utils.config import load_config
 
 yaml = YAML(typ="rt")  # pylint: disable=invalid-name
@@ -39,7 +39,7 @@ def linter(config_file, recipes_folder):
 
 @pytest.mark.parametrize("case", TEST_CASES, ids=TEST_CASE_IDS)
 def test_lint(linter, recipe_dirs, mock_repodata, case):
-    recipes = [Path(p) for p in recipe_dirs]
+    recipes: list[RecipePath] = [RecipePath(Path(p), CONDA) for p in recipe_dirs]
     linter.clear_messages()
     linter.lint(recipes)
     messages = linter.get_messages()

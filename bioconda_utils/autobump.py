@@ -63,10 +63,10 @@ from jinja2 import Environment, PackageLoader
 from packaging.version import InvalidVersion, Version
 from packaging.version import parse as _pep440_parse
 
-from bioconda_utils._types import ensure_list
 from bioconda_utils.skiplist import Skiplist
 
 from . import __version__, graph, update_pinnings
+from ._types import BuildSystem, RecipePath, ensure_list
 from .aiopipe import (
     AsyncFilter,
     AsyncPipeline,
@@ -75,13 +75,13 @@ from .aiopipe import (
     EndProcessingItem,
 )
 from .conda.conda_build_bridge import load_conda_build_config
-from .conda.recipes import get_recipes
 from .conda.repodata import RepoData
 from .githandler import GitHandler
 from .githubhandler import GitHubHandler
 from .hosters import Hoster
 from .recipe import Recipe
 from .recipe import load_parallel_iter as recipes_load_parallel_iter
+from .recipes import get_recipes
 
 #: Jinja environment used to render PR titles, descriptions and comments
 #: from the packaged templates.
@@ -134,9 +134,23 @@ class RecipeSource:
         exclude: list[str],
         shuffle: bool = True,
     ) -> None:
+        unfiltered_recipe_dirs: list[RecipePath] = list(
+            get_recipes(recipe_base, packages, exclude)
+        )
         self.recipe_base = recipe_base
         self.packages = packages
-        self.recipe_dirs = list(get_recipes(recipe_base, self.packages, exclude))
+        self.recipe_dirs: list[RecipePath] = []
+
+        # TODO (rb): implement autobump for rattler-build
+        for r in unfiltered_recipe_dirs:
+            match r.build_system:
+                case BuildSystem.CONDA:
+                    self.recipe_dirs.append(r)
+                case BuildSystem.RATTLER:
+                    logger.warning(
+                        "Autobump not implemented for rattler build. Skipping recipe: %s",
+                        r.path,
+                    )
         if shuffle:
             random.shuffle(self.recipe_dirs)
         logger.warning("Selected %i packages", len(self.recipe_dirs))
@@ -146,7 +160,7 @@ class RecipeSource:
     ) -> None:
         n_items = 0
         for recipe_dir in self.recipe_dirs:
-            await send_q.put(Recipe(recipe_dir, self.recipe_base))
+            await send_q.put(Recipe(recipe_dir.path, self.recipe_base))
             n_items += 1
             while return_q.qsize():
                 try:
@@ -292,7 +306,7 @@ class Scanner(AsyncPipeline[Recipe]):
             return False
         except EndProcessingItem as recipe_error:
             self.stats[recipe_error.name] += 1
-            self.status.append((recipe.reldir, recipe_error))
+            self.status.append((recipe.reldir.as_posix(), recipe_error))
             res = True
         return res
 
@@ -382,7 +396,7 @@ class ExcludeSubrecipe(Filter, AutoBumpConfigMixin):
         self.always_exclude = always
 
     async def apply(self, recipe: Recipe) -> None:
-        is_subrecipe = recipe.reldir.strip("/").count("/") > 0
+        is_subrecipe = recipe.reldir.as_posix().strip("/").count("/") > 0
         enabled = self.is_enabled(recipe)
         if is_subrecipe and not (enabled and not self.always_exclude):
             raise self.IsSubRecipe(recipe)
@@ -980,9 +994,7 @@ class GitFilter(Filter):
           ``bump/toolx/1.2.x``.
           Note: this will break if we have ``recipe/x`` and ``recipe/x.d`` in the repo.
         """
-        return (
-            f"{cls.branch_prefix}{recipe.reldir.replace('-', '_').replace('/', '.d/')}"
-        )
+        return f"{cls.branch_prefix}{recipe.reldir.as_posix().replace('-', '_').replace('/', '.d/')}"
 
     # placate pylint by reiterating abstract method
     @abc.abstractmethod

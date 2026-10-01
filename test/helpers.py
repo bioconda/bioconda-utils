@@ -3,8 +3,16 @@ import tempfile
 from pathlib import Path
 from textwrap import dedent
 
+import rattler_build as rb
 from conda_index.index import update_index
 from ruamel.yaml import YAML
+
+from bioconda_utils._types import BuildSystem, PackageSubdir, RecipePath
+from bioconda_utils.conda.conda_build_bridge import load_conda_build_config
+from bioconda_utils.conda.repodata import RepoData
+from bioconda_utils.rattler.rattler_build_bridge import (
+    load_rattler_build_global_variants,
+)
 
 
 def ensure_missing(package):
@@ -110,8 +118,32 @@ class Recipes:
             for key, value in recipe.items():
                 with open(os.path.join(rdir, key), "w") as fout:
                     fout.write(value)
-        self.basedir = basedir
+        self.basedir = Path(basedir)
 
     @property
-    def recipe_dirnames(self):
-        return list(self.recipe_dirs.values())
+    def recipe_dirnames(self) -> list[Path]:
+        return [Path(p) for p in list(self.recipe_dirs.values())]
+
+
+def get_rattler_params(
+    path: Path,
+    build_system: BuildSystem,
+    docker_builder,
+    platform: PackageSubdir | None = None,
+) -> tuple[RecipePath, rb.VariantConfig, rb.ToolConfiguration, rb.RenderConfig, Path]:
+    platform_config: rb.PlatformConfig = rb.PlatformConfig(target_platform=platform)
+    skip_rattler: str = "all"
+    render_config: rb.RenderConfig = rb.RenderConfig(platform=platform_config)
+    global_variants: rb.VariantConfig = load_rattler_build_global_variants(platform)
+    tool_config: rb.ToolConfiguration = rb.ToolConfiguration(
+        skip_existing=skip_rattler, test_strategy="native", keep_build=False
+    )
+    if docker_builder is not None:
+        rattler_output_dir: Path = Path(docker_builder.pkg_dir)
+    else:
+        repodata = RepoData()
+        subdir: PackageSubdir = repodata.native_subdir()
+        conda_build_config = load_conda_build_config(subdir=subdir)
+        rattler_output_dir: Path = Path(conda_build_config.output_folder)
+    recipe_path: RecipePath = RecipePath(path=path, build_system=build_system)
+    return recipe_path, global_variants, tool_config, render_config, rattler_output_dir

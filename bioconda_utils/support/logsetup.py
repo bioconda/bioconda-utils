@@ -18,6 +18,7 @@ from threading import Event, Thread
 import tqdm as _tqdm
 from colorlog import ColoredFormatter
 
+from .._types import RecipePath
 from .subproc import run
 
 logger = logging.getLogger(__name__)
@@ -216,7 +217,10 @@ def setup_logger(
 
 
 def ellipsize_recipes(
-    recipes: Collection[Path], recipe_folder: Path, n: int = 5, m: int = 50
+    recipes: Collection[RecipePath] | Collection[Path],
+    recipe_folder: Path,
+    n: int = 5,
+    m: int = 50,
 ) -> str:
     """Logging helper showing recipe list
 
@@ -229,16 +233,19 @@ def ellipsize_recipes(
     Returns:
       A string like " (htslib, samtools, ...)" or ""
     """
+    # ensure recipes are Paths
+    recipe_paths: list[Path] = [Path(recipe) for recipe in list(recipes)[:n]]
     if not recipes or len(recipes) > m:
         return ""
     if len(recipes) > n:
-        recipes = list(recipes)[:n]
         append = ", ..."
     else:
         append = ""
     return (
         " ("
-        + ", ".join(os.fspath(recipe.relative_to(recipe_folder)) for recipe in recipes)
+        + ", ".join(
+            os.fspath(recipe.relative_to(recipe_folder)) for recipe in recipe_paths
+        )
         + append
         + ")"
     )
