@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 import platform
+from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
@@ -48,12 +48,12 @@ class QueryableRecipe(ABC):
         self.path = path
 
     @abstractmethod
-    def get_package_name(self) -> str:
-        ...
+    def get_package_name(self) -> str: ...
 
     @abstractmethod
-    def get_dependencies(self, section: Literal["build", "host", "run"]) -> list[str]:
-        ...
+    def get_dependencies(
+        self, section: Literal["build", "host", "run"]
+    ) -> list[str]: ...
 
 
 class QueryableV0Recipe(QueryableRecipe):
@@ -92,7 +92,7 @@ class QueryableV1Recipe(QueryableRecipe):
 
     def get_dependencies(self, section: Literal["build", "host", "run"]) -> list[str]:
         result: list[str] = []
-        
+
         # return the dependencies of all variants as dependencies of this
         # package. If this should be able to be split by variants, that behaviour
         # needs to be implemented separately

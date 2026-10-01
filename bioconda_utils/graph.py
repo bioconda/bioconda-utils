@@ -13,7 +13,7 @@ from typing import (
 
 import networkx as nx
 
-from ._types import QueryableRecipe, QueryableV0Recipe, QueryableV1Recipe
+from ._types import QueryableRecipe
 from .recipe import Recipe
 from .recipes import RecipePath, load_meta_and_recipe_fast
 from .skiplist import Skiplist

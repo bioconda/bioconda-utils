@@ -14,9 +14,8 @@ import fnmatch
 import logging
 import os
 from collections import Counter
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
-from collections.abc import Iterable
 
 import rattler_build as rb
 

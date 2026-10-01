@@ -248,7 +248,10 @@ def build(
 
         # TODO (rb): is there a more elegant way to do this?
         rendered_recipe: rb.RenderedVariant = render_rattler_recipe(
-            recipe.path, load_rattler_build_global_variants(target_platform.to_subdir() if target_platform else None)
+            recipe.path,
+            load_rattler_build_global_variants(
+                target_platform.to_subdir() if target_platform else None
+            ),
         )[0]
 
         is_noarch: bool = bool(rendered_recipe.recipe.build.noarch)
@@ -670,9 +673,13 @@ def build_recipes(
     config = normalize_config(config)
     RepoData.register_config(config)
     blacklist = Skiplist(config, recipe_folder)
-    global_variants: rb.VariantConfig = load_rattler_build_global_variants(target_platform.to_subdir() if target_platform else None)
+    global_variants: rb.VariantConfig = load_rattler_build_global_variants(
+        target_platform.to_subdir() if target_platform else None
+    )
     # TODO (rb): make platform_config and render_config customisable
-    platform_config: rb.PlatformConfig = rb.PlatformConfig(target_platform.to_subdir() if target_platform else None)
+    platform_config: rb.PlatformConfig = rb.PlatformConfig(
+        target_platform.to_subdir() if target_platform else None
+    )
     render_config: rb.RenderConfig = rb.RenderConfig(platform=platform_config)
 
     # get channels to check

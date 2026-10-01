@@ -107,7 +107,7 @@ def render_rattler_recipe(
         rendered_variants: list[rb.RenderedVariant] = recipe_s0.render(variants)
 
         return rendered_variants
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         raise ValueError(f"Problem inspecting rattler recipe {recipe}: {e}")
 
 
@@ -149,11 +149,13 @@ def render_rattler_recipe_to_dicts(
         return RattlerDictList(
             recipes=[r.recipe.to_dict() for r in rendered_variants], is_multi=is_multi
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         raise ValueError(f"Problem rendering rattler recipe to dict ({recipe}): {e}")
 
 
-def load_rattler_build_global_variants(platform: PackageSubdir | None) -> rb.VariantConfig:
+def load_rattler_build_global_variants(
+    platform: PackageSubdir | None,
+) -> rb.VariantConfig:
     """Load the global rattler-build variant configuration."""
     paths: list[Path] = get_rattler_build_global_variants_paths()
 
