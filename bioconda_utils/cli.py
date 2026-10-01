@@ -46,6 +46,7 @@ from .support.logsetup import err_console as error_console
 
 if TYPE_CHECKING:
     # Annotation-only: imported lazily inside the functions that need it.
+    from ._types import RecipePath
     from .githandler import GitRange
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
@@ -287,7 +288,7 @@ def get_recipes(
     packages: PackagePatterns,
     git_range: GitRange | None,
     include_blacklisted: bool = False,
-) -> list[Path]:
+) -> list[RecipePath]:
     """Gets list of paths to recipe folders to be built
 
     Considers all recipes matching globs in packages, constrains to
@@ -295,22 +296,22 @@ def get_recipes(
     removes blacklisted recipes (unless include_blacklisted=True).
 
     """
-    from .conda.recipes import get_recipes as find_recipes
+    from .recipes import get_recipes as find_recipes
 
-    recipes = list(find_recipes(recipe_folder, packages))
+    recipes: list[RecipePath] = list(find_recipes(recipe_folder, packages))
     logger.info(
         "Considering total of %s recipes%s.",
         len(recipes),
         ellipsize_recipes(recipes, recipe_folder),
     )
     if git_range:
-        changed_recipes = get_recipes_to_build(git_range, recipe_folder)
+        changed_recipes: set[Path] = set(get_recipes_to_build(git_range, recipe_folder))
         logger.info(
             "Constraining to %s git modified recipes%s.",
             len(changed_recipes),
             ellipsize_recipes(changed_recipes, recipe_folder),
         )
-        recipes = [recipe for recipe in recipes if recipe in set(changed_recipes)]
+        recipes = [recipe for recipe in recipes if recipe.path in changed_recipes]
         if len(recipes) != len(changed_recipes):
             logger.info(
                 "Overlap was %s recipes%s.",
@@ -322,7 +323,9 @@ def get_recipes(
 
         skiplist = Skiplist(config, recipe_folder)
         all_len = len(recipes)
-        recipes = [recipe for recipe in recipes if not skiplist.is_skiplisted(recipe)]
+        recipes = [
+            recipe for recipe in recipes if not skiplist.is_skiplisted(recipe.path)
+        ]
         if all_len > len(recipes):
             logger.info(f"Ignoring {all_len - len(recipes)} skiplisted recipes.")
     logger.info(
@@ -422,7 +425,10 @@ def build(
     ] = None,
     git_range: GitRangeOpt = None,
     test_only: Annotated[
-        bool, typer.Option("--test-only", help="Test packages instead of building")
+        bool,
+        typer.Option(
+            "--test-only", help="Test packages instead of building. (Deprecated.)"
+        ),
     ] = False,
     force: Annotated[
         bool,
@@ -618,6 +624,14 @@ def build(
     log_command_max_lines: LogCommandMaxLinesOpt = None,
 ) -> None:
     """Build and test Bioconda recipes."""
+    if test_only:
+        # testonly calls `conda-build --test` but expects it to work when pointing
+        # to a recipe with a `meta.yaml`. However, according to the output of `conda-build --test` in version 26.3.0:
+        # "RECIPE_PATH argument must be a path to built package file".
+        # `rattler-build test` also expects an already built package.
+        logger.error("--testonly is deprecated. Rerun without this flag.")
+        sys.exit(1)
+
     _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines, threads)
     target_platform = _container_platform_for_build(platform, docker)
     parsed_upload_target = _parse_quay_upload_target(container_upload_target)
@@ -630,9 +644,23 @@ def build(
     from .conda.repodata import RepoData
     from .config import load_config
     from .containers import docker_utils
+    from .rattler.rattler_build_bridge import (
+        get_default_rattler_cache_dir_path,
+        set_rattler_cache_to_dir,
+    )
     from .support.subproc import run
 
     cfg = load_config(config)
+
+    # setting the rattler cache to custom path
+    # TODO (rb): should this be exposed to the user?
+    # how should this be handled for docker containers?
+    rattler_cache_dir: Path = get_default_rattler_cache_dir_path()
+    set_rattler_cache_to_dir(rattler_cache_dir)
+
+    # TODO: should we also load the rattler variants config here?
+    # currently it is loaded by rattler.ratter_build_bridge.load_rattler_build_global_variants
+    # using a semi-hardcoded path
     if repodata_cache is not None:
         RepoData().set_cache(repodata_cache)
     setup = cfg.get("setup", None)
@@ -640,7 +668,10 @@ def build(
         logger.debug("Running setup: %s", setup)
         for cmd in setup:
             run(shlex.split(cmd))
-    recipes = get_recipes(cfg, recipe_folder, package_patterns, parsed_git_range)
+
+    recipes: list[RecipePath] = get_recipes(
+        cfg, recipe_folder, package_patterns, parsed_git_range
+    )
     if docker:
         if build_script_template is not None:
             build_script_content = build_script_template.read_text()
@@ -684,7 +715,6 @@ def build(
         recipe_folder,
         cfg,
         recipes,
-        testonly=test_only,
         force=force,
         mulled_build_and_test=mulled_build_and_test,
         docker_builder=docker_builder,
@@ -746,8 +776,8 @@ def dag(
     import networkx as nx
 
     from . import graph
-    from .conda.recipes import get_recipes as find_recipes
     from .config import load_config
+    from .recipes import get_recipes as find_recipes
 
     config_data = load_config(config)
     dag, name2recipes = graph.build(
@@ -773,18 +803,20 @@ def dag(
                 continue
             _write_output(f"# subdag {i}\n")
             subdag = dag.subgraph(s)
-            recipes = [
-                recipe
+            recipes: list[str] = [
+                recipe.path.as_posix()
                 for package in nx.topological_sort(subdag)
                 for recipe in name2recipes[package]
             ]
-            _write_output("\n".join(map(os.fspath, recipes)) + "\n")
+            _write_output("\n".join(recipes) + "\n")
         if not hide_singletons:
             _write_output("# singletons\n")
-            recipes = [
-                recipe for package in singletons for recipe in name2recipes[package]
+            singletons_recipes: list[str] = [
+                recipe.path.as_posix()
+                for package in singletons
+                for recipe in name2recipes[package]
             ]
-            _write_output("\n".join(map(os.fspath, recipes)) + "\n")
+            _write_output("\n".join(singletons_recipes) + "\n")
 
 
 @app.command("dependent")
@@ -830,8 +862,8 @@ def dependent(
     import networkx as nx
 
     from . import graph
-    from .conda.recipes import get_recipes as find_recipes
     from .config import load_config
+    from .recipes import get_recipes as find_recipes
 
     config_data = load_config(config)
     d, _ = graph.build(find_recipes(recipe_folder), config_data, restrict=restrict)
@@ -902,14 +934,15 @@ def lint(
         config_data = load_config(config)
         if cache is not None:
             RepoData().set_cache(cache)
-        recipes = get_recipes(
+        recipes: list[RecipePath] = get_recipes(
             config_data,
-            recipe_folder,
+            Path(recipe_folder),
             package_patterns,
             parsed_git_range,
             include_blacklisted=True,
         )
         linter = _lint.Linter(config_data, recipe_folder, exclude)
+
         result = linter.lint(recipes, fix=try_fix)
         messages = linter.get_messages()
         if messages:
@@ -922,12 +955,7 @@ def lint(
             table.add_column("Check")
             table.add_column("Title")
             for msg in messages:
-                table.add_row(
-                    msg.severity.name,
-                    f"{msg.fname}:{msg.end_line}",
-                    str(msg.check),
-                    msg.title,
-                )
+                table.add_row(*msg.get_table_row())
             report_console.print(table)
         if not result:
             report_console.print("All checks OK")

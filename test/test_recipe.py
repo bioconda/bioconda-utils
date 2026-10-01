@@ -80,7 +80,7 @@ def test_stub():
     r = Recipe(Path("recipes/sina"), Path("recipes/"))
     assert r.path == Path("recipes/sina/meta.yaml")
     assert r.relpath == Path("sina/meta.yaml")
-    assert r.reldir == "sina"
+    assert r.reldir == Path("sina")
     assert str(r) == "sina"
 
 

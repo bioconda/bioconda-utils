@@ -52,7 +52,7 @@ class JinjaSilentUndefined(jinja2.Undefined):
 jinja_silent_undef = Environment(undefined=JinjaSilentUndefined)
 
 
-def load_all_meta(recipe, config=None, finalize=True):
+def load_all_meta(recipe: Path, config=None, finalize=True):
     """
     For each environment, yield the rendered meta.yaml.
 
@@ -100,7 +100,7 @@ def load_all_meta(recipe, config=None, finalize=True):
     return metas
 
 
-def load_meta_fast(recipe: str, env=None):
+def load_meta_fast(recipe: Path, env=None):
     """
     Given a recipe path, find the current meta.yaml file, parse it, and return
     the dict.

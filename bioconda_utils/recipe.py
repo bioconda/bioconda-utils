@@ -40,7 +40,7 @@ from ruamel.yaml.constructor import DuplicateKeyError
 from ._types import ALL_PACKAGE_SUBDIRS, PackageSubdir, ensure_list
 from .aiopipe import EndProcessingItem
 from .conda.conda_build_bridge import jinja_silent_undef
-from .conda.recipes import get_recipes
+from .recipes import get_recipes
 from .support.parallel import parallel_iter
 
 yaml = YAML(typ="rt")  # pylint: disable=invalid-name
@@ -171,7 +171,9 @@ class Recipe:
         #: path to folder containing recipes
         self.basedir: Path = recipe_folder
         #: relative path to recipe dir from folder containing recipes
-        self.reldir = os.fspath(relative_dir)
+        # TODO (rb): keeping reldir as Path instead of str. Requires fewer conversions.
+        # Should this be changed?
+        self.reldir: Path = relative_dir
 
         # Filled in by render()
         #: Parsed recipe YAML
@@ -204,7 +206,7 @@ class Recipe:
     @property
     def relpath(self) -> Path:
         """Relative path to ``meta.yaml`` (from ``basedir``)"""
-        return Path(self.reldir) / "meta.yaml"
+        return self.reldir / "meta.yaml"
 
     @property
     def dir(self) -> Path:
@@ -212,10 +214,10 @@ class Recipe:
         return self.basedir / self.reldir
 
     def __str__(self) -> str:
-        return self.reldir
+        return self.reldir.as_posix()
 
     def __repr__(self) -> str:
-        return f'{self.__class__.__name__} "{self.reldir}"'
+        return f'{self.__class__.__name__} "{self.reldir.as_posix}"'
 
     def load_from_string(self, data) -> Recipe:
         """Load and `render` recipe contents from disk"""
@@ -272,7 +274,7 @@ class Recipe:
 
     @classmethod
     def from_file(
-        cls, recipe_dir: Path, recipe_fname: Path, return_exceptions=False
+        cls, recipe_dir: Path | str, recipe_fname: Path | str, return_exceptions=False
     ) -> Recipe | Exception:
         """Create new `Recipe` object from file
 

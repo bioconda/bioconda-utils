@@ -12,6 +12,7 @@ from typer.main import get_command
 from typer.testing import CliRunner
 
 from bioconda_utils import cli
+from bioconda_utils._types import CONDA, RecipePath
 from bioconda_utils.containers.artifacts import UploadResult
 from bioconda_utils.containers.pkg_test import CREATE_ENV_IMAGE
 from bioconda_utils.githandler import GitRange
@@ -205,7 +206,9 @@ def test_dag_hides_singletons(monkeypatch, tmp_path):
     config.write_text("{}")
     package_dag = nx.DiGraph([("dependency", "package")])
     package_dag.add_node("singleton")
-    name2recipes = {name: {Path("recipes") / name} for name in package_dag.nodes}
+    name2recipes = {
+        name: {RecipePath(Path("recipes") / name, CONDA)} for name in package_dag.nodes
+    }
     monkeypatch.setattr("bioconda_utils.config.load_config", lambda _: {})
     monkeypatch.setattr(cli, "get_recipes", lambda *_: [])
     monkeypatch.setattr(
@@ -237,8 +240,8 @@ def test_dag_text_output_does_not_wrap_recipe_paths(monkeypatch, tmp_path):
     long_recipe = Path("recipes") / ("very-long-recipe-name-" * 6)
     package_dag = nx.DiGraph([("dependency", "package")])
     name2recipes = {
-        "dependency": {Path("recipes/dependency")},
-        "package": {long_recipe},
+        "dependency": {RecipePath(Path("recipes/dependency"), CONDA)},
+        "package": {RecipePath(long_recipe, CONDA)},
     }
     monkeypatch.setattr("bioconda_utils.config.load_config", lambda _: {})
     monkeypatch.setattr(cli, "get_recipes", lambda *_: [])

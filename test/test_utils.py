@@ -10,25 +10,38 @@ import sys
 import tempfile
 import uuid
 from collections import namedtuple
+from collections.abc import Generator
 from pathlib import Path
 from textwrap import dedent
+from typing import Any
 from unittest.mock import Mock
 
 import pandas as pd
 import pytest
 from conda_build import api, exceptions, metadata
-from helpers import Recipes, ensure_missing
+from helpers import Recipes, ensure_missing, get_rattler_params
 from jsonschema import ValidationError
 
 from bioconda_utils import __version__, build
-from bioconda_utils._types import Config, ContainerPlatform, PackageSubdir
-from bioconda_utils.conda import conda_build_bridge, recipes
+from bioconda_utils import recipes as _recipes
+from bioconda_utils._types import (
+    BuildSystem,
+    Config,
+    ContainerPlatform,
+    PackageSubdir,
+    RecipePath,
+)
+from bioconda_utils.conda import conda_build_bridge
+from bioconda_utils.conda import recipes as conda_recipes
 from bioconda_utils.conda.repodata import RepoData, _CachedRepoData
 from bioconda_utils.config import load_config, normalize_config, validate_config
 from bioconda_utils.containers import docker_utils, pkg_test, upload
 from bioconda_utils.support import subproc
 
 logger = logging.getLogger(__name__)
+
+CONDA = BuildSystem.CONDA
+RATTLER = BuildSystem.RATTLER
 
 # TODO: need channel order tests. Could probably do this by adding different
 # file:// channels with different variants of the same package
@@ -101,7 +114,7 @@ def recipes_fixture():
     rcp.write_recipes()
     rcp.pkgs = {}
     for key, val in rcp.recipe_dirs.items():
-        rcp.pkgs[key] = recipes.built_package_paths(val)
+        rcp.pkgs[key] = conda_recipes.built_package_paths(val)
     yield rcp
     for pkgs in rcp.pkgs.values():
         for pkg in pkgs:
@@ -117,8 +130,17 @@ def config_fixture():
     yield config
 
 
+@pytest.fixture(scope="module")
+def config_path_fixture() -> Generator[Path]:
+    """Returns config path"""
+    config: Path = Path(__file__).parent / "test-config.yaml"
+    yield config
+
+
+# config_fixture must be loaded here, otherwise utils.RepoData.config is not set
+# and this test will fail
 @pytest.fixture(scope="function", params=PARAMS, ids=IDS)
-def single_build(request, recipes_fixture):
+def single_build(request, recipes_fixture, config_fixture):
     """
     Builds the "one" recipe.
     """
@@ -136,9 +158,22 @@ def single_build(request, recipes_fixture):
         "Fixture: Building 'one' %s",
         "within docker" if docker_builder else "locally",
     )
+    pkg_paths: list[Path] = [Path(p) for p in recipes_fixture.pkgs["one"]]
+
+    recipe_path, global_variants, tool_config, render_config, rattler_output_dir = (
+        get_rattler_params(
+            Path(recipes_fixture.recipe_dirs["one"]), CONDA, docker_builder
+        )
+    )
+
     build.build(
-        recipe=recipes_fixture.recipe_dirs["one"],
-        pkg_paths=recipes_fixture.pkgs["one"],
+        recipe=recipe_path,
+        global_variants=global_variants,
+        tool_config=tool_config,
+        render_config=render_config,
+        rattler_output_dir=rattler_output_dir,
+        force=True,
+        pkg_paths=pkg_paths,
         docker_builder=docker_builder,
         mulled_build_and_test=mulled_build_and_test,
     )
@@ -168,10 +203,15 @@ def multi_build(request, recipes_fixture, config_fixture):
         "Fixture: Building one/two/three %s",
         "within docker" if docker_builder else "locally",
     )
+    recipe_folder: Path = Path(recipes_fixture.basedir)
+    config: dict[str, Any] = config_fixture
+    recipes: list[RecipePath] = [
+        RecipePath(path=p, build_system=CONDA) for p in recipes_fixture.recipe_dirnames
+    ]
     build.build_recipes(
-        recipes_fixture.basedir,
-        config_fixture,
-        recipes_fixture.recipe_dirnames,
+        recipe_folder,
+        config,
+        recipes,
         docker_builder=docker_builder,
         mulled_build_and_test=mulled_build_and_test,
     )
@@ -204,10 +244,15 @@ def multi_build_exclude(request, recipes_fixture, config_fixture):
         "Fixture: Building one/two (and not three) %s",
         "within docker" if docker_builder else "locally",
     )
+    recipe_folder: Path = Path(recipes_fixture.basedir)
+    config: dict[str, Any] = config_fixture
+    recipes: list[RecipePath] = [
+        RecipePath(path=p, build_system=CONDA) for p in recipes_fixture.recipe_dirnames
+    ]
     build.build_recipes(
-        recipes_fixture.basedir,
-        config_fixture,
-        recipes_fixture.recipe_dirnames,
+        recipe_folder,
+        config,
+        recipes,
         docker_builder=docker_builder,
         mulled_build_and_test=mulled_build_and_test,
         exclude=["three"],
@@ -243,15 +288,26 @@ def single_upload(request):
     )
     r.write_recipes()
     r.pkgs = {}
-    r.pkgs[name] = recipes.built_package_paths(r.recipe_dirs[name])
+    r.pkgs[name] = conda_recipes.built_package_paths(r.recipe_dirs[name])
 
     pkg = r.pkgs[name][0]
     ensure_missing(pkg)
     request.addfinalizer(lambda: ensure_missing(pkg))
 
+    recipe_path, global_variants, tool_config, render_config, rattler_output_dir = (
+        get_rattler_params(Path(r.recipe_dirs[name]), CONDA, None)
+    )
+
+    pkg_paths: list[Path] = [Path(p) for p in r.pkgs[name]]
+
     build_result = build.build(
-        recipe=Path(r.recipe_dirs[name]),
-        pkg_paths=r.pkgs[name],
+        recipe=recipe_path,
+        global_variants=global_variants,
+        tool_config=tool_config,
+        render_config=render_config,
+        rattler_output_dir=rattler_output_dir,
+        force=True,
+        pkg_paths=pkg_paths,
         docker_builder=None,
         mulled_build_and_test=False,
     )
@@ -326,9 +382,23 @@ def test_single_build_pkg_dir(recipes_fixture):
     mulled_build_and_test = False
     logger.error("DONE")
     logger.error("Fixture: Building 'one' within docker with pkg_dir")
+
+    recipe_path, global_variants, tool_config, render_config, rattler_output_dir = (
+        get_rattler_params(
+            Path(recipes_fixture.recipe_dirs["one"]), CONDA, docker_builder
+        )
+    )
+
+    pkg_paths: list[Path] = [Path(p) for p in recipes_fixture.pkgs["one"]]
+
     res = build.build(
-        recipe=recipes_fixture.recipe_dirs["one"],
-        pkg_paths=recipes_fixture.pkgs["one"],
+        recipe=recipe_path,
+        global_variants=global_variants,
+        tool_config=tool_config,
+        render_config=render_config,
+        rattler_output_dir=rattler_output_dir,
+        force=True,
+        pkg_paths=pkg_paths,
         docker_builder=docker_builder,
         mulled_build_and_test=mulled_build_and_test,
     )
@@ -381,7 +451,9 @@ with open("{self.container_staging}/version", "w") as version_file:
     )
     temp_dir = docker_builder.pkg_dir
     # Set recipe_dir to any temporary directory, e.g., docker_builder.pkg_dir.
-    docker_builder.build_recipe(temp_dir, build_args="", env={})
+    docker_builder.build_recipe(
+        temp_dir, build_args="", rattler_args="", env={}, build_system=CONDA
+    )
     with open(os.path.join(temp_dir, "version")) as container_version_file:
         assert container_version_file.read() == __version__
 
@@ -396,7 +468,11 @@ def test_docker_builder_build(recipes_fixture):
     )
     pkgs = recipes_fixture.pkgs["one"]
     docker_builder.build_recipe(
-        recipes_fixture.recipe_dirs["one"], build_args="", env={}
+        recipes_fixture.recipe_dirs["one"],
+        build_args="",
+        rattler_args="",
+        env={},
+        build_system=CONDA,
     )
     for pkg in pkgs:
         assert os.path.exists(pkg)
@@ -412,10 +488,15 @@ def test_docker_build_fails(recipes_fixture, config_fixture):
         docker_base_image=BUILD_ENV_IMAGE, build_script_template="exit 1"
     )
     assert docker_builder.build_script_template == "exit 1"
+    recipe_folder: Path = Path(recipes_fixture.basedir)
+    config: dict[str, Any] = config_fixture
+    recipes: list[RecipePath] = [
+        RecipePath(path=p, build_system=CONDA) for p in recipes_fixture.recipe_dirnames
+    ]
     result = build.build_recipes(
-        recipes_fixture.basedir,
-        config_fixture,
-        recipes_fixture.recipe_dirnames,
+        recipe_folder,
+        config,
+        recipes,
         docker_builder=docker_builder,
         mulled_build_and_test=True,
     )
@@ -462,9 +543,9 @@ def test_get_deps():
         from_string=True,
     )
     r.write_recipes()
-    assert list(recipes.get_deps(r.recipe_dirs["two"])) == ["one"]
-    assert list(recipes.get_deps(r.recipe_dirs["three"], build=True)) == ["one"]
-    assert list(recipes.get_deps(r.recipe_dirs["three"], build=False)) == ["two"]
+    assert list(conda_recipes.get_deps(r.recipe_dirs["two"])) == ["one"]
+    assert list(conda_recipes.get_deps(r.recipe_dirs["three"], build=True)) == ["one"]
+    assert list(conda_recipes.get_deps(r.recipe_dirs["three"], build=False)) == ["two"]
 
 
 @pytest.mark.long_running_1
@@ -495,19 +576,23 @@ def test_conda_as_dep(config_fixture, mulled_build_and_test):
         from_string=True,
     )
     r.write_recipes()
+    recipe_folder: Path = Path(r.basedir)
+    config: dict[str, Any] = config_fixture
+    recipes: list[RecipePath] = [
+        RecipePath(path=p, build_system=CONDA) for p in r.recipe_dirnames
+    ]
     build_result = build.build_recipes(
-        Path(r.basedir),
-        config_fixture,
-        r.recipe_dirnames,
-        testonly=False,
+        recipe_folder,
+        config,
+        recipes,
+        mulled_build_and_test=mulled_build_and_test,
         force=False,
         docker_builder=docker_builder,
-        mulled_build_and_test=mulled_build_and_test,
     )
     assert build_result
 
     for v in r.recipe_dirs.values():
-        for i in recipes.built_package_paths(v):
+        for i in conda_recipes.built_package_paths(v):
             assert os.path.exists(i)
             ensure_missing(i)
 
@@ -519,29 +604,29 @@ def test_recipe_requires_finalized_render(tmp_path):
         (recipe / "meta.yaml").write_text(meta)
         return str(recipe)
 
-    assert not recipes.recipe_requires_finalized_render(
+    assert not conda_recipes.recipe_requires_finalized_render(
         _write("package:\n  name: pure-python\n  version: '1.0'\n")
     )
-    assert recipes.recipe_requires_finalized_render(
+    assert conda_recipes.recipe_requires_finalized_render(
         _write("requirements:\n  build:\n    - {{ stdlib('c') }}\n")
     )
-    assert recipes.recipe_requires_finalized_render(
+    assert conda_recipes.recipe_requires_finalized_render(
         _write("requirements:\n  build:\n    - {{ compiler('c') }}\n")
     )
-    assert recipes.recipe_requires_finalized_render(
+    assert conda_recipes.recipe_requires_finalized_render(
         _write("requirements:\n  run:\n    - {{ pin_compatible('foo') }}\n")
     )
     # ignore if within comments
-    assert not recipes.recipe_requires_finalized_render(
+    assert not conda_recipes.recipe_requires_finalized_render(
         _write("requirements:\n  run:\n    - foo  # {{ pin_compatible('foo') }}\n")
     )
     # Missing meta.yaml -> False (don't crash)
     missing = tmp_path / "missing"
     missing.mkdir()
-    assert not recipes.recipe_requires_finalized_render(str(missing))
+    assert not conda_recipes.recipe_requires_finalized_render(str(missing))
 
 
-# TODO replace the filter tests with tests for recipes.get_package_paths()
+# TODO replace the filter tests with tests for conda_recipes.get_package_paths()
 # def test_filter_recipes_no_skipping():
 #     """
 #     No recipes have skip so make sure none are filtered out.
@@ -729,13 +814,13 @@ def test_built_package_paths():
     h = metadata._hash_dependencies(d, 7)
 
     assert (
-        os.path.basename(recipes.built_package_paths(r.recipe_dirs["one"])[0])
+        os.path.basename(conda_recipes.built_package_paths(r.recipe_dirs["one"])[0])
         == f"one-0.1-py36{h}_0.conda"
     )
 
 
 def test_string_or_float_to_integer_python():
-    f = recipes._string_or_float_to_integer_python
+    f = conda_recipes._string_or_float_to_integer_python
     assert f(27) == f("27") == f(2.7) == f("2.7") == 27
 
 
@@ -772,9 +857,25 @@ def test_rendering_sandboxing():
 
     if "GITHUB_TOKEN" in os.environ:
         with pytest.raises(sp.CalledProcessError) as excinfo:
-            pkg_paths = recipes.built_package_paths(r.recipe_dirs["one"])
+            (
+                recipe_path,
+                global_variants,
+                tool_config,
+                render_config,
+                rattler_output_dir,
+            ) = get_rattler_params(Path(r.recipe_dirs["one"]), CONDA, None)
+
+            pkg_paths = [
+                Path(p) for p in conda_recipes.built_package_paths(r.recipe_dirs["one"])
+            ]
+
             build.build(
-                recipe=Path(r.recipe_dirs["one"]),
+                recipe=recipe_path,
+                global_variants=global_variants,
+                tool_config=tool_config,
+                render_config=render_config,
+                rattler_output_dir=rattler_output_dir,
+                force=False,
                 pkg_paths=pkg_paths,
                 mulled_build_and_test=False,
                 raise_error=True,
@@ -783,9 +884,27 @@ def test_rendering_sandboxing():
     else:
         # recipe for "one" should fail because GITHUB_TOKEN is not a jinja var.
         with pytest.raises(exceptions.CondaBuildUserError) as excinfo:
-            pkg_paths = recipes.built_package_paths(r.recipe_dirs["one"])
+            pkg_paths = conda_recipes.built_package_paths(r.recipe_dirs["one"])
+
+            (
+                recipe_path,
+                global_variants,
+                tool_config,
+                render_config,
+                rattler_output_dir,
+            ) = get_rattler_params(Path(r.recipe_dirs["one"]), CONDA, None)
+
+            pkg_paths = [
+                Path(p) for p in conda_recipes.built_package_paths(r.recipe_dirs["one"])
+            ]
+
             build.build(
-                recipe=Path(r.recipe_dirs["one"]),
+                recipe=recipe_path,
+                global_variants=global_variants,
+                tool_config=tool_config,
+                render_config=render_config,
+                rattler_output_dir=rattler_output_dir,
+                force=False,
                 pkg_paths=pkg_paths,
                 mulled_build_and_test=False,
             )
@@ -828,11 +947,22 @@ def test_env_sandboxing():
         from_string=True,
     )
     r.write_recipes()
-    pkg_paths = recipes.built_package_paths(r.recipe_dirs["one"])
+    pkg_paths = conda_recipes.built_package_paths(r.recipe_dirs["one"])
 
     with subproc.temp_env({"GITHUB_TOKEN": "token_here"}):
+        recipe_path, global_variants, tool_config, render_config, rattler_output_dir = (
+            get_rattler_params(Path(r.recipe_dirs["one"]), CONDA, None)
+        )
+
+        pkg_paths = [Path(p) for p in pkg_paths]
+
         build.build(
-            recipe=Path(r.recipe_dirs["one"]),
+            recipe=recipe_path,
+            global_variants=global_variants,
+            tool_config=tool_config,
+            render_config=render_config,
+            rattler_output_dir=rattler_output_dir,
+            force=False,
             pkg_paths=pkg_paths,
             mulled_build_and_test=False,
         )
@@ -875,17 +1005,22 @@ def test_skip_dependencies(config_fixture):
     r.write_recipes()
     pkgs = {}
     for k, v in r.recipe_dirs.items():
-        pkgs[k] = recipes.built_package_paths(v)
+        pkgs[k] = conda_recipes.built_package_paths(v)
 
     for _pkgs in pkgs.values():
         for pkg in _pkgs:
             ensure_missing(pkg)
 
+    recipe_folder: Path = Path(r.basedir)
+    config: dict[str, Any] = config_fixture
+    recipes: list[RecipePath] = [
+        RecipePath(path=p, build_system=CONDA) for p in r.recipe_dirnames
+    ]
+
     build.build_recipes(
-        Path(r.basedir),
-        config_fixture,
-        r.recipe_dirnames,
-        testonly=False,
+        recipe_folder,
+        config,
+        recipes,
         force=False,
         mulled_build_and_test=False,
     )
@@ -904,10 +1039,17 @@ def test_skip_dependencies(config_fixture):
 
 class TestSubdags:
     def _build(self, recipes_fixture, config_fixture, n_workers, worker_offset):
+        recipe_folder: Path = Path(recipes_fixture.basedir)
+        config: dict[str, Any] = config_fixture
+        recipes: list[RecipePath] = [
+            RecipePath(path=p, build_system=CONDA)
+            for p in recipes_fixture.recipe_dirnames
+        ]
+
         build.build_recipes(
-            recipes_fixture.basedir,
-            config_fixture,
-            recipes_fixture.recipe_dirnames,
+            recipe_folder,
+            config,
+            recipes,
             n_workers=n_workers,
             worker_offset=worker_offset,
             mulled_build_and_test=False,
@@ -934,11 +1076,21 @@ def test_build_empty_extra_container():
         from_string=True,
     )
     r.write_recipes()
-    pkgs = recipes.built_package_paths(r.recipe_dirs["one"])
+    pkgs = conda_recipes.built_package_paths(r.recipe_dirs["one"])
+    recipe_path, global_variants, tool_config, render_config, rattler_output_dir = (
+        get_rattler_params(Path(r.recipe_dirs["one"]), CONDA, None)
+    )
+
+    pkg_paths = [Path(p) for p in pkgs]
 
     build_result = build.build(
-        recipe=Path(r.recipe_dirs["one"]),
-        pkg_paths=pkgs,
+        recipe=recipe_path,
+        global_variants=global_variants,
+        tool_config=tool_config,
+        render_config=render_config,
+        force=False,
+        rattler_output_dir=rattler_output_dir,
+        pkg_paths=pkg_paths,
         mulled_build_and_test=True,
     )
     assert build_result.success
@@ -983,9 +1135,21 @@ def test_build_container_no_default_gcc(tmpdir):
         image_build_dir=image_build_dir,
     )
 
-    pkg_paths = recipes.built_package_paths(r.recipe_dirs["one"])
+    pkg_paths = [
+        Path(p) for p in conda_recipes.built_package_paths(r.recipe_dirs["one"])
+    ]
+
+    recipe_path, global_variants, tool_config, render_config, rattler_output_dir = (
+        get_rattler_params(Path(r.recipe_dirs["one"]), CONDA, docker_builder)
+    )
+
     build_result = build.build(
-        recipe=Path(r.recipe_dirs["one"]),
+        recipe=recipe_path,
+        global_variants=global_variants,
+        tool_config=tool_config,
+        render_config=render_config,
+        rattler_output_dir=rattler_output_dir,
+        force=False,
         pkg_paths=pkg_paths,
         docker_builder=docker_builder,
         mulled_build_and_test=False,
@@ -993,7 +1157,7 @@ def test_build_container_no_default_gcc(tmpdir):
     assert build_result.success
 
     for v in r.recipe_dirs.values():
-        for i in recipes.built_package_paths(v):
+        for i in conda_recipes.built_package_paths(v):
             assert os.path.exists(i)
             ensure_missing(i)
 
@@ -1017,18 +1181,24 @@ def test_bioconda_pins(caplog, config_fixture):
         from_string=True,
     )
     r.write_recipes()
+
+    recipe_folder: Path = Path(r.basedir)
+    config: dict[str, Any] = config_fixture
+    recipes: list[RecipePath] = [
+        RecipePath(path=p, build_system=CONDA) for p in r.recipe_dirnames
+    ]
+
     build_result = build.build_recipes(
-        Path(r.basedir),
-        config_fixture,
-        r.recipe_dirnames,
-        testonly=False,
+        recipe_folder,
+        config,
+        recipes,
         force=False,
         mulled_build_and_test=False,
     )
     assert build_result
 
     for v in r.recipe_dirs.values():
-        for i in recipes.built_package_paths(v):
+        for i in conda_recipes.built_package_paths(v):
             assert os.path.exists(i)
             ensure_missing(i)
 
@@ -1051,7 +1221,7 @@ def test_load_meta_skipping():
     )
     r.write_recipes()
     recipe = r.recipe_dirs["one"]
-    assert conda_build_bridge.load_all_meta(recipe) == []
+    assert conda_build_bridge.load_all_meta(Path(recipe)) == []
 
 
 @pytest.mark.parametrize(
@@ -1077,8 +1247,8 @@ def test_load_platform_metas_preserves_complete_target_platform(
     )
     rcp.write_recipes()
 
-    subdir, metas = recipes._load_platform_metas(
-        rcp.recipe_dirs["one"],
+    subdir, metas = conda_recipes._load_platform_metas(
+        Path(rcp.recipe_dirs["one"]),
         finalize=False,
         target_platform=target_platform,
     )
@@ -1272,7 +1442,7 @@ def test_filter_existing_packages_queries_rendered_target_subdir(monkeypatch):
     monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
     monkeypatch.setattr(RepoData, "get_package_data", get_package_data)
 
-    assert recipes._filter_existing_packages([meta], ["bioconda"]) == (
+    assert conda_recipes._filter_existing_packages([meta], ["bioconda"]) == (
         [meta],
         [],
         set(),
@@ -1301,7 +1471,7 @@ def test_get_package_paths_force_builds_existing_and_logs_force(caplog, monkeypa
 
     monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
     monkeypatch.setattr(
-        recipes,
+        conda_recipes,
         "_load_platform_metas",
         lambda *_a, **_k: (PackageSubdir.LINUX_64, [meta]),
     )
@@ -1316,24 +1486,31 @@ def test_get_package_paths_force_builds_existing_and_logs_force(caplog, monkeypa
         ),
     )
     monkeypatch.setattr(
-        recipes.api, "get_output_file_paths", lambda m: [f"/tmp/{m.pkg_fn()}.tar.bz2"]
+        conda_recipes.api,
+        "get_output_file_paths",
+        lambda m: [f"/tmp/{m.pkg_fn()}.tar.bz2"],
     )
 
     caplog.set_level(logging.INFO, logger="bioconda_utils.conda.recipes")
-    paths = recipes.get_package_paths("recipes/samtools", ["bioconda"], force=True)
-    assert paths == ["/tmp/samtools-1.24-h391949c_1.tar.bz2"]
+    paths = conda_recipes.get_package_paths(
+        Path("recipes/samtools"), ["bioconda"], force=True
+    )
+    assert paths == [Path("/tmp/samtools-1.24-h391949c_1.tar.bz2")]
     assert "FORCE: building samtools-1.24-h391949c_1" in caplog.text
     assert "channel(s) [bioconda]" in caplog.text
     assert "it is not forced" not in caplog.text
 
     caplog.clear()
-    paths = recipes.get_package_paths("recipes/samtools", ["bioconda"], force=False)
+    paths = conda_recipes.get_package_paths(
+        Path("recipes/samtools"), ["bioconda"], force=False
+    )
     assert paths == []
     assert "channel(s) [bioconda]" in caplog.text
     assert "it is not forced" in caplog.text
 
 
-def test_check_recipe_skippable_queries_requested_target(monkeypatch):
+# must import config_fixture, otherwise this test fails because RepoData can't be instantiated.
+def test_check_recipe_skippable_queries_requested_target(monkeypatch, config_fixture):
     meta = Mock()
     meta.name.return_value = "samtools"
     meta.version.return_value = "1.24"
@@ -1353,11 +1530,11 @@ def test_check_recipe_skippable_queries_requested_target(monkeypatch):
         queried_platforms.append(kwargs["platform"])
         return []
 
-    monkeypatch.setattr(recipes, "_load_platform_metas", load_platform_metas)
+    monkeypatch.setattr(conda_recipes, "_load_platform_metas", load_platform_metas)
     monkeypatch.setattr(RepoData, "get_package_data", get_package_data)
 
-    assert not recipes.check_recipe_skippable(
-        "samtools", ["bioconda"], target_platform=ContainerPlatform.LINUX_ARM64
+    assert not conda_recipes.check_recipe_skippable(
+        Path("samtools"), ["bioconda"], target_platform=ContainerPlatform.LINUX_ARM64
     )
     assert loaded_targets == [(False, ContainerPlatform.LINUX_ARM64)]
     assert queried_platforms == [[PackageSubdir.LINUX_AARCH64, "noarch"]]
@@ -1374,7 +1551,7 @@ def test_check_recipe_skippable_logs_channels_with_build(caplog, monkeypatch):
     meta.config.host_subdir = PackageSubdir.LINUX_64
 
     monkeypatch.setattr(
-        recipes,
+        conda_recipes,
         "_load_platform_metas",
         lambda *_a, **_k: (PackageSubdir.LINUX_64, [meta]),
     )
@@ -1387,8 +1564,8 @@ def test_check_recipe_skippable_logs_channels_with_build(caplog, monkeypatch):
     )
 
     caplog.set_level(logging.INFO, logger="bioconda_utils.conda.recipes")
-    assert recipes.check_recipe_skippable(
-        "samtools", ["bioconda", "conda-forge"], target_platform=None
+    assert conda_recipes.check_recipe_skippable(
+        Path("samtools"), ["bioconda", "conda-forge"], target_platform=None
     )
     assert "channel(s) [conda-forge]" in caplog.text
     assert "[bioconda" not in caplog.text
@@ -1462,10 +1639,13 @@ def test_native_platform_skipping(config_fixture):
     r.write_recipes()
     for recipe_name, platform, result in expections:
         recipe_folder = os.path.dirname(r.recipe_dirs[recipe_name])
+        recipe_path: RecipePath = RecipePath(
+            path=Path(r.recipe_dirs[recipe_name]), build_system=CONDA
+        )
         assert (
             build.should_skip_platform(
                 Path(recipe_folder),
-                Path(r.recipe_dirs[recipe_name]),
+                recipe_path,
                 PackageSubdir(platform),
             )
             == result
@@ -1474,13 +1654,13 @@ def test_native_platform_skipping(config_fixture):
     # When osx-64 is not in primary_platforms, it requires opt-in
     assert build.should_skip_platform(
         Path(os.path.dirname(r.recipe_dirs["one"])),
-        Path(r.recipe_dirs["one"]),
+        RecipePath(path=Path(r.recipe_dirs["one"]), build_system=CONDA),
         PackageSubdir.OSX_64,
         primary_platforms=[PackageSubdir.LINUX_64],
     )
     assert not build.should_skip_platform(
         Path(os.path.dirname(r.recipe_dirs["one"])),
-        Path(r.recipe_dirs["one"]),
+        RecipePath(path=Path(r.recipe_dirs["one"]), build_system=CONDA),
         PackageSubdir.LINUX_64,
         primary_platforms=[PackageSubdir.LINUX_64],
     )
@@ -1501,7 +1681,7 @@ def test_native_platform_skipping(config_fixture):
     r_osx_optin.write_recipes()
     assert not build.should_skip_platform(
         Path(os.path.dirname(r_osx_optin.recipe_dirs["osx_pkg"])),
-        Path(r_osx_optin.recipe_dirs["osx_pkg"]),
+        RecipePath(path=Path(r_osx_optin.recipe_dirs["osx_pkg"]), build_system=CONDA),
         PackageSubdir.OSX_64,
         primary_platforms=[PackageSubdir.LINUX_64],
     )
@@ -1541,7 +1721,7 @@ def test_variants():
     config = conda_build_bridge.load_conda_build_config()
     config.exclusive_config_files = [tmp]
 
-    assert len(conda_build_bridge.load_all_meta(recipe, config)) == 2
+    assert len(conda_build_bridge.load_all_meta(Path(recipe), config)) == 2
 
 
 def test_load_conda_build_config_reads_pinnings_from_env_root(monkeypatch, tmp_path):
@@ -1583,18 +1763,23 @@ def test_cb3_outputs(config_fixture):
     r.write_recipes()
     r.recipe_dirs["one"]
 
+    recipe_folder: Path = Path(r.basedir)
+    config: dict[str, Any] = config_fixture
+    recipes: list[RecipePath] = [
+        RecipePath(path=p, build_system=CONDA) for p in r.recipe_dirnames
+    ]
+
     build_result = build.build_recipes(
-        Path(r.basedir),
-        config_fixture,
-        r.recipe_dirnames,
-        testonly=False,
+        recipe_folder,
+        config,
+        recipes,
         force=False,
         mulled_build_and_test=False,
     )
     assert build_result
 
     for v in r.recipe_dirs.values():
-        for i in recipes.built_package_paths(v):
+        for i in conda_recipes.built_package_paths(v):
             assert os.path.exists(i)
             ensure_missing(i)
 
@@ -1619,18 +1804,24 @@ def test_compiler(config_fixture):
         from_string=True,
     )
     r.write_recipes()
+
+    recipe_folder: Path = Path(r.basedir)
+    config: dict[str, Any] = config_fixture
+    recipes: list[RecipePath] = [
+        RecipePath(path=p, build_system=CONDA) for p in r.recipe_dirnames
+    ]
+
     build_result = build.build_recipes(
-        Path(r.basedir),
-        config_fixture,
-        r.recipe_dirnames,
-        testonly=False,
+        recipe_folder,
+        config,
+        recipes,
         force=False,
         mulled_build_and_test=False,
     )
     assert build_result
 
     for v in r.recipe_dirs.values():
-        for i in recipes.built_package_paths(v):
+        for i in conda_recipes.built_package_paths(v):
             assert os.path.exists(i)
             ensure_missing(i)
 
@@ -1693,20 +1884,25 @@ def test_nested_recipes(config_fixture):
     )
     r.write_recipes()
 
+    recipe_folder: Path = Path(r.basedir)
+    config: dict[str, Any] = config_fixture
+    recipes: list[RecipePath] = [
+        RecipePath(path=p, build_system=CONDA) for p in r.recipe_dirnames
+    ]
+
     build_results = build.build_recipes(
-        Path(r.basedir),
-        config_fixture,
-        r.recipe_dirnames,
-        testonly=False,
+        recipe_folder,
+        config,
+        recipes,
         force=False,
         mulled_build_and_test=False,
     )
     assert build_results
 
-    assert len(list(recipes.get_recipes(Path(r.basedir)))) == 4
+    assert len(list(_recipes.get_recipes(Path(r.basedir)))) == 4
 
     for v in r.recipe_dirs.values():
-        for i in recipes.built_package_paths(v):
+        for i in conda_recipes.built_package_paths(v):
             assert os.path.exists(i)
             ensure_missing(i)
 
@@ -1743,18 +1939,24 @@ def test_conda_build_sysroot(config_fixture):
         from_string=True,
     )
     r.write_recipes()
+
+    recipe_folder: Path = Path(r.basedir)
+    config: dict[str, Any] = config_fixture
+    recipes: list[RecipePath] = [
+        RecipePath(path=p, build_system=CONDA) for p in r.recipe_dirnames
+    ]
+
     build_result = build.build_recipes(
-        Path(r.basedir),
-        config_fixture,
-        r.recipe_dirnames,
-        testonly=False,
+        recipe_folder,
+        config,
+        recipes,
         force=False,
         mulled_build_and_test=False,
     )
     assert build_result
 
     for v in r.recipe_dirs.values():
-        for i in recipes.built_package_paths(v):
+        for i in conda_recipes.built_package_paths(v):
             assert os.path.exists(i)
             ensure_missing(i)
 
@@ -1792,16 +1994,19 @@ def test_skip_unsatisfiable_pin_compatible(config_fixture):
         from_string=True,
     )
     r.write_recipes()
+
+    recipe_folder: Path = Path(r.basedir)
+    config: dict[str, Any] = config_fixture
+
     build_result = build.build_recipes(
-        Path(r.basedir),
-        config_fixture,
-        [Path(r.recipe_dirs["one"])],
-        testonly=False,
+        recipe_folder,
+        config,
+        [RecipePath(path=Path(r.recipe_dirs["one"]), build_system=CONDA)],
         force=False,
         mulled_build_and_test=False,
     )
     assert build_result
-    assert len(conda_build_bridge.load_all_meta(r.recipe_dirs["two"])) == 1
+    assert len(conda_build_bridge.load_all_meta(Path(r.recipe_dirs["two"]))) == 1
 
 
 @pytest.mark.parametrize("mulled_build_and_test", PARAMS, ids=IDS)
@@ -1863,20 +2068,81 @@ def test_pkg_test_conda_package_format(
             docker_base_image=BUILD_ENV_IMAGE,
             build_script_template=build_script_template,
         )
+
+    recipe_folder: Path = Path(r.basedir)
+    config: dict[str, Any] = config_fixture
+    recipes: list[RecipePath] = [
+        RecipePath(path=p, build_system=CONDA) for p in r.recipe_dirnames
+    ]
+
     build_result = build.build_recipes(
-        Path(r.basedir),
-        config_fixture,
-        r.recipe_dirnames,
+        recipe_folder,
+        config,
+        recipes,
         docker_builder=docker_builder,
         mulled_build_and_test=mulled_build_and_test,
     )
     assert build_result
 
     for recipe_dir in r.recipe_dirnames:
-        for pkg_file in recipes.built_package_paths(recipe_dir):
+        for pkg_file in conda_recipes.built_package_paths(recipe_dir.as_posix()):
             assert pkg_file.endswith({"1": ".tar.bz2", "2": ".conda"}[pkg_format])
             assert os.path.exists(pkg_file)
             ensure_missing(pkg_file)
+
+
+def test_rattler_recipe(config_fixture):
+    r = Recipes(
+        """
+        one:
+          recipe.yaml: |
+            context:
+              version: "1.0.0"
+
+            package:
+              name: hello-world
+              version: ${{ version }}
+
+            build:
+              number: 0
+              script:
+                - mkdir -p $PREFIX/bin
+                - echo '#!/bin/bash' > $PREFIX/bin/hello
+                - echo 'echo "Hello, World!"' >> $PREFIX/bin/hello
+                - chmod +x $PREFIX/bin/hello
+
+            tests:
+              - script:
+                  - hello
+
+            about:
+              summary: A simple hello world package
+              license: MIT
+        """,
+        from_string=True,
+    )
+    r.write_recipes()
+    docker_builder = None
+
+    recipe_folder: Path = Path(r.basedir)
+    config: dict[str, Any] = config_fixture
+    recipes: list[RecipePath] = [
+        RecipePath(path=Path(p), build_system=RATTLER) for p in r.recipe_dirnames
+    ]
+
+    build_result = build.build_recipes(
+        recipe_folder,
+        config,
+        recipes,
+        docker_builder=docker_builder,
+        mulled_build_and_test=False,
+    )
+    assert build_result
+
+    # for recipe_dir in r.recipe_dirnames:
+    #     for pkg_file in utils.built_package_paths_conda_build(recipe_dir):
+    #         assert os.path.exists(pkg_file)
+    #         ensure_missing(pkg_file)
 
 
 def test_validate_config_smoke():
@@ -1961,7 +2227,11 @@ def test_build_recipes_normalizes_raw_config_at_boundary(monkeypatch):
     monkeypatch.setattr(build, "Skiplist", observe_config)
 
     with pytest.raises(NormalizationObserved):
-        build.build_recipes(Path("recipes"), {"channels": []}, [Path("example")])
+        build.build_recipes(
+            Path("recipes"),
+            {"channels": []},
+            [RecipePath(Path("example"), BuildSystem.CONDA)],
+        )
 
 
 def test_load_config_registers_config_after_resolving_paths(monkeypatch, tmp_path):
@@ -2003,7 +2273,7 @@ def test_load_meta_fast_allows_duplicate_keys(tmp_path):
         "  skip: true  # [win]\n",
         encoding="utf-8",
     )
-    meta, loaded_recipe = conda_build_bridge.load_meta_fast(str(recipe_dir))
+    meta, loaded_recipe = conda_build_bridge.load_meta_fast(Path(recipe_dir))
     assert meta["package"]["name"] == "test-pkg"
     assert meta["build"]["number"] == 0
-    assert loaded_recipe == str(recipe_dir)
+    assert loaded_recipe == recipe_dir

@@ -40,7 +40,7 @@ class folder_and_package_name_must_match(LintCheck):
     """
 
     def check_recipe(self, recipe: Recipe) -> None:
-        recipe_base_folder, _, _ = recipe.reldir.partition("/")
+        recipe_base_folder, _, _ = recipe.reldir.as_posix().partition("/")
         if recipe.name != recipe_base_folder:
             self.message(section="package/name")
 

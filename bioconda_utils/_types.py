@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import platform
-from collections.abc import Sequence
+from abc import ABC, abstractmethod
+from collections.abc import Iterator, Sequence
+from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import Path
 from typing import (
     Any,
     Literal,
@@ -11,6 +14,104 @@ from typing import (
     Protocol,
     TypedDict,
 )
+
+
+@dataclass(slots=True)
+class RattlerDictList:
+    recipes: list[dict[str, Any]]
+    is_multi: bool
+
+    def __iter__(self) -> Iterator[dict[str, Any]]:
+        return iter(self.recipes)
+
+
+class BuildSystem(StrEnum):
+    CONDA = "conda"
+    RATTLER = "rattler"
+
+
+CONDA = BuildSystem.CONDA
+RATTLER = BuildSystem.RATTLER
+
+
+class RecipePath(NamedTuple):
+    path: Path
+    build_system: BuildSystem
+
+    def __fspath__(self) -> str:
+        return self.path.__fspath__()
+
+
+class QueryableRecipe(ABC):
+    def __init__(self, path: RecipePath) -> None:
+        self.path = path
+
+    @abstractmethod
+    def get_package_name(self) -> str: ...
+
+    @abstractmethod
+    def get_dependencies(
+        self, section: Literal["build", "host", "run"]
+    ) -> list[str]: ...
+
+
+class QueryableV0Recipe(QueryableRecipe):
+    def __init__(self, path: RecipePath, meta: dict[str, Any]) -> None:
+        super().__init__(path)
+        self.meta = meta
+
+    def get_package_name(self) -> str:
+        if self.meta.get("outputs"):
+            return self.path.path.name
+        else:
+            return self.meta["package"]["name"]
+
+    def get_dependencies(self, section: Literal["build", "host", "run"]) -> list[str]:
+        requirements = self.meta.get("requirements")
+        if not requirements:
+            return []
+
+        deps = requirements.get(section)
+
+        if not deps:
+            return []
+        return [dep.split()[0] for dep in deps if dep]
+
+
+class QueryableV1Recipe(QueryableRecipe):
+    def __init__(self, path: RecipePath, recipe: RattlerDictList) -> None:
+        super().__init__(path)
+        self.recipe = recipe
+
+    def get_package_name(self) -> str:
+        if self.recipe.is_multi:
+            return self.path.path.name
+        else:
+            return self.recipe.recipes[0]["package"]["name"]
+
+    def get_dependencies(self, section: Literal["build", "host", "run"]) -> list[str]:
+        result: list[str] = []
+
+        # return the dependencies of all variants as dependencies of this
+        # package. If this should be able to be split by variants, that behaviour
+        # needs to be implemented separately
+        for variant in self.recipe:
+            requirements = variant.get("requirements")
+            if not requirements:
+                return []
+            deps = requirements.get(section)
+            if not deps:
+                return []
+
+            for dep in deps:
+                if isinstance(dep, str):
+                    result.append(dep)
+                elif isinstance(dep, dict) and "pin_subpackage" in dep:
+                    result.append(dep["pin_subpackage"]["name"])
+                else:
+                    raise ValueError(f"Failed to parse dependency: {dep}")
+
+        return result
 
 
 class Config(dict[str, Any]):
@@ -25,6 +126,9 @@ class ContainerPlatform(StrEnum):
     LINUX_AMD64 = "linux/amd64"
     LINUX_ARM64 = "linux/arm64"
     LINUX_RISCV64 = "linux/riscv64"
+
+    def to_subdir(self) -> PackageSubdir:
+        return CONTAINER_PLATFORM_TO_PACKAGE_SUBDIR[self]
 
 
 ALL_CONTAINER_PLATFORMS: tuple[ContainerPlatform, ...] = tuple(ContainerPlatform)

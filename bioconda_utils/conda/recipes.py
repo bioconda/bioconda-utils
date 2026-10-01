@@ -8,28 +8,24 @@ skipped because they already exist in the target channels.
 
 from __future__ import annotations
 
-import fnmatch
-import glob
 import logging
 import os
 import re
 from collections import Counter, defaultdict
-from collections.abc import Iterator, Sequence
 from itertools import chain
 from pathlib import Path
 
 from conda_build import api
 
-from .._types import (
-    container_platform_to_package_subdir,
-)
+from .._types import ContainerPlatform, container_platform_to_package_subdir
 from .conda_build_bridge import load_all_meta, load_conda_build_config
 from .repodata import RepoData
 
 logger = logging.getLogger(__name__)
 
 
-def get_deps(recipe, build=True):
+# TODO: change to Path only
+def get_deps(recipe: Path | str, build=True):
     """
     Generator of dependencies for a single recipe
 
@@ -47,7 +43,7 @@ def get_deps(recipe, build=True):
     build : bool
         If True yield build dependencies, if False yield run dependencies.
     """
-    assert isinstance(recipe, str)
+    recipe = Path(recipe)
     metadata = load_all_meta(recipe, finalize=False)
 
     all_deps = set()
@@ -58,57 +54,6 @@ def get_deps(recipe, build=True):
             deps = meta.get_value("requirements/run", [])
         all_deps.update(dep.split()[0] for dep in deps)
     return all_deps
-
-
-def get_recipes(
-    recipe_folder: Path,
-    package_patterns: Sequence[str] = ("*",),
-    exclude_patterns: Sequence[str] = (),
-) -> Iterator[Path]:
-    """
-    Generator of recipes.
-
-    Finds (possibly nested) directories containing a ``meta.yaml`` file.
-
-    Parameters
-    ----------
-    recipe_folder : Path
-        Top-level dir of the recipes
-
-    package_patterns : sequence of str
-        Pattern or patterns to restrict the results.
-
-    exclude_patterns : sequence of str
-        Patterns to exclude from the results.
-    """
-    recipe_folder_text = os.fspath(recipe_folder)
-    for pattern in package_patterns:
-        logger.debug(
-            "get_recipes(%s, package_patterns=%s): %s",
-            recipe_folder,
-            package_patterns,
-            pattern,
-        )
-        path = os.path.join(recipe_folder, pattern)
-        for new_dir in glob.glob(path):
-            meta_yaml_found_or_excluded = False
-            for dir_path, _, file_names in os.walk(new_dir):
-                if any(
-                    fnmatch.fnmatch(dir_path.removeprefix(recipe_folder_text), pat)
-                    for pat in exclude_patterns
-                ):
-                    meta_yaml_found_or_excluded = True
-                    continue
-                if "meta.yaml" in file_names:
-                    meta_yaml_found_or_excluded = True
-                    yield Path(dir_path)
-            if not meta_yaml_found_or_excluded and os.path.isdir(new_dir):
-                logger.warning(
-                    "No meta.yaml found in %s."
-                    " If you want to ignore this directory, add it to the blacklist.",
-                    new_dir,
-                )
-                yield Path(new_dir)
 
 
 class DivergentBuildsError(Exception):
@@ -154,7 +99,8 @@ def built_package_paths(recipe: str) -> list[str]:
 _SOLVER_DEPENDENT_JINJA = re.compile(r"\{\{\s*(stdlib|compiler|pin_compatible)\s*\(")
 
 
-def recipe_requires_finalized_render(recipe):
+# TODO change to Path only
+def recipe_requires_finalized_render(recipe: Path | str):
     """
     Return True if the recipe's rendered hash can depend on solver state and
     therefore must be rendered with ``finalize=True`` to match what conda-build
@@ -164,7 +110,7 @@ def recipe_requires_finalized_render(recipe):
     jinja functions, whose run_exports are only applied during a real solve.
     See https://github.com/bioconda/bioconda-utils/issues/1095.
     """
-    meta_path = os.path.join(recipe, "meta.yaml")
+    meta_path: Path = Path(recipe) / "meta.yaml"
     try:
         with open(meta_path, encoding="utf-8") as f:
             text = re.sub(r"#.*", "", f.read())
@@ -173,7 +119,7 @@ def recipe_requires_finalized_render(recipe):
     return bool(_SOLVER_DEPENDENT_JINJA.search(text))
 
 
-def _load_platform_metas(recipe, finalize=True, target_platform=None):
+def _load_platform_metas(recipe: Path, finalize: bool = True, target_platform=None):
     if target_platform is not None:
         subdir = container_platform_to_package_subdir(target_platform)
     else:
@@ -187,7 +133,9 @@ def _meta_subdir(meta):
     return "noarch" if meta.noarch or meta.noarch_python else meta.config.host_subdir
 
 
-def check_recipe_skippable(recipe, check_channels, target_platform=None):
+def check_recipe_skippable(
+    recipe: Path, check_channels: list[str], target_platform=None
+):
     """
     Return True if the same number of builds (per subdir) defined by the recipe
     are already in channel_packages.
@@ -300,8 +248,12 @@ def _filter_existing_packages(metas, check_channels):
 
 
 def get_package_paths(
-    recipe, check_channels, force=False, finalize=True, target_platform=None
-):
+    recipe: Path,
+    check_channels: list[str],
+    force: bool = False,
+    finalize: bool = True,
+    target_platform: ContainerPlatform | None = None,
+) -> list[Path]:
     if not force and check_recipe_skippable(
         recipe, check_channels, target_platform=target_platform
     ):
@@ -348,6 +300,7 @@ def get_package_paths(
             )
         # yield all pkgs that do not yet exist
         build_metas = new_metas
-    return list(
-        chain.from_iterable(api.get_output_file_paths(meta) for meta in build_metas)
+    package_paths: list[str] = list(
+        chain.from_iterable((api.get_output_file_paths(meta)) for meta in build_metas)
     )
+    return [Path(p) for p in package_paths]
