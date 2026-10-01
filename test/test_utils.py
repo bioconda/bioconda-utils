@@ -926,6 +926,57 @@ def test_sandboxed():
         assert "BUILDKITE_TOKEN" not in os.environ
 
 
+def test_run_shows_a_single_spinner(monkeypatch):
+    """``run`` owns its progress indicator; callers must not add another.
+
+    Rich renders every live display active on a console, so nesting a
+    ``Console.status`` around ``run`` used to draw two spinners at once.
+    """
+    opened = []
+
+    class RecordingStatus:
+        def __init__(self, message, **kwargs):
+            self.message = message
+            opened.append(message)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+    monkeypatch.setattr(subproc.err_console, "status", RecordingStatus)
+
+    subproc.run(["echo", "hello"])
+
+    assert opened == ["running"]
+
+    opened.clear()
+    subproc.run(["echo", "hello"], status="Building recipe...")
+    assert opened == ["Building recipe..."]
+
+
+def test_run_does_not_spinner_when_streaming_live(monkeypatch):
+    """With ``live`` set the streamed output is the progress indicator."""
+    opened = []
+
+    class RecordingStatus:
+        def __init__(self, message, **_kwargs):
+            opened.append(message)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+    monkeypatch.setattr(subproc.err_console, "status", RecordingStatus)
+
+    subproc.run(["echo", "hello"], live=True, status="Building recipe...")
+
+    assert opened == []
+
+
 def test_env_sandboxing():
     r = Recipes(
         r"""

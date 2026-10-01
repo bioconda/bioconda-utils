@@ -58,7 +58,6 @@ from .config import normalize_config
 from .containers import docker_utils, pkg_test, upload
 from .containers.container_manifests import write_image_record
 from .recipes import BuildSystem, get_package_paths
-from .support.logsetup import err_console
 from .support.subproc import allowed_env_var, bin_for, run, sandboxed_env
 
 logger = logging.getLogger(__name__)
@@ -328,8 +327,7 @@ def build(
                         for config_file in get_conda_build_config_files():
                             cmd += [config_file.arg, config_file.path]
                         cmd += [str(recipe.path / "meta.yaml")]
-                        with err_console.status("Building recipe..."):
-                            run(cmd, live=live_logs)
+                        run(cmd, live=live_logs, status="Building recipe...")
                 case BuildSystem.RATTLER:
                     recipe_file: Path = recipe.path / "recipe.yaml"
                     local_variants_path: Path = recipe.path / "variants.yaml"
@@ -348,12 +346,13 @@ def build(
                     rendered_variants = recipe_s0.render(variants, render_config)
 
                     for variant in rendered_variants:
-                        with err_console.status("Building recipe..."):
-                            result = variant.run_build(
-                                tool_config,
-                                channels=channels,
-                                output_dir=rattler_output_dir,
-                            )
+                        # py-rattler-build streams its own progress to the
+                        # terminal, so no spinner is wrapped around it here.
+                        result = variant.run_build(
+                            tool_config,
+                            channels=channels,
+                            output_dir=rattler_output_dir,
+                        )
                         logger.info(
                             "BUILD SUCCESS %s",
                             ", ".join(os.path.basename(p) for p in result.packages),

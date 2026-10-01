@@ -116,6 +116,7 @@ def run(
     loglevel: int = logging.INFO,
     check: bool = True,
     quiet_failure: bool = False,
+    status: str = "running",
     **kwargs: Any,
 ) -> sp.CompletedProcess:
     """
@@ -134,6 +135,12 @@ def run(
         output. A single term may be passed as a bare string.
       live: Whether output should be sent to log
       check: raise CalledProcessError on failure
+      status: Spinner text shown while output is not streamed live. `run`
+        owns this spinner, so callers must not wrap it in another
+        `Console.status`/Rich `Live`: two live displays on one console
+        render on top of each other instead of replacing one another.
+        Not shown when ``live`` is set, because streaming output is then
+        the progress indicator.
       kwargs: Additional arguments to `subprocess.Popen`
 
     Returns:
@@ -210,7 +217,7 @@ def run(
 
         output_lines = deque()
         if not live:
-            with err_console.status("running", spinner="dots"):
+            with err_console.status(status, spinner="dots"):
                 handle_output(output_lines)
         else:
             handle_output(output_lines)
