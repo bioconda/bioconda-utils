@@ -1221,7 +1221,7 @@ def test_load_meta_skipping():
     )
     r.write_recipes()
     recipe = r.recipe_dirs["one"]
-    assert conda_build_bridge.load_all_meta(recipe) == []
+    assert conda_build_bridge.load_all_meta(Path(recipe)) == []
 
 
 @pytest.mark.parametrize(
@@ -1248,7 +1248,7 @@ def test_load_platform_metas_preserves_complete_target_platform(
     rcp.write_recipes()
 
     subdir, metas = conda_recipes._load_platform_metas(
-        rcp.recipe_dirs["one"],
+        Path(rcp.recipe_dirs["one"]),
         finalize=False,
         target_platform=target_platform,
     )
@@ -1521,7 +1521,7 @@ def test_check_recipe_skippable_queries_requested_target(monkeypatch, config_fix
     monkeypatch.setattr(RepoData, "get_package_data", get_package_data)
 
     assert not conda_recipes.check_recipe_skippable(
-        "samtools", ["bioconda"], target_platform=ContainerPlatform.LINUX_ARM64
+        Path("samtools"), ["bioconda"], target_platform=ContainerPlatform.LINUX_ARM64
     )
     assert loaded_targets == [(False, ContainerPlatform.LINUX_ARM64)]
     assert queried_platforms == [[PackageSubdir.LINUX_AARCH64, "noarch"]]
@@ -1677,7 +1677,7 @@ def test_variants():
     config = conda_build_bridge.load_conda_build_config()
     config.exclusive_config_files = [tmp]
 
-    assert len(conda_build_bridge.load_all_meta(recipe, config)) == 2
+    assert len(conda_build_bridge.load_all_meta(Path(recipe), config)) == 2
 
 
 def test_load_conda_build_config_reads_pinnings_from_env_root(monkeypatch, tmp_path):
@@ -1962,7 +1962,7 @@ def test_skip_unsatisfiable_pin_compatible(config_fixture):
         mulled_build_and_test=False,
     )
     assert build_result
-    assert len(conda_build_bridge.load_all_meta(r.recipe_dirs["two"])) == 1
+    assert len(conda_build_bridge.load_all_meta(Path(r.recipe_dirs["two"]))) == 1
 
 
 @pytest.mark.parametrize("mulled_build_and_test", PARAMS, ids=IDS)
@@ -2183,7 +2183,11 @@ def test_build_recipes_normalizes_raw_config_at_boundary(monkeypatch):
     monkeypatch.setattr(build, "Skiplist", observe_config)
 
     with pytest.raises(NormalizationObserved):
-        build.build_recipes(Path("recipes"), {"channels": []}, [Path("example")])
+        build.build_recipes(
+            Path("recipes"),
+            {"channels": []},
+            [RecipePath(Path("example"), BuildSystem.CONDA)],
+        )
 
 
 def test_load_config_registers_config_after_resolving_paths(monkeypatch, tmp_path):

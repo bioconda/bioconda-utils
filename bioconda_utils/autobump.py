@@ -1074,7 +1074,7 @@ class GitLoadRecipe(GitFilter):
         recipe.set_original()
 
         if remote_branch:
-            if await self.git.branch_is_current(remote_branch, str(recipe.dir)):
+            if await self.git.branch_is_current(remote_branch, recipe.dir):
                 logger.info("Recipe %s: updating from remote %s", recipe, branch_name)
                 recipe_text = await self.pipeline.run_io(
                     self.git.read_from_branch, remote_branch, recipe.path
@@ -1270,9 +1270,7 @@ class CreatePullRequest(GitFilter):
         context = template.new_context(
             {
                 "r": recipe,
-                "recipe_relurl": self.ghub.get_file_relurl(
-                    str(recipe.dir), branch_name
-                ),
+                "recipe_relurl": self.ghub.get_file_relurl(recipe.dir, branch_name),
                 "author": author,
                 "author_is_member": await self.ghub.is_member(author)
                 if author

@@ -31,6 +31,7 @@ from ._types import (
     RATTLER,
     BuildSystem,
     ContainerPlatform,
+    PackageSubdir,
     QueryableRecipe,
     QueryableV0Recipe,
     QueryableV1Recipe,
@@ -199,7 +200,9 @@ def get_package_paths(
             )
 
 
-def load_meta_and_recipe_fast(recipe: RecipePath, env=None) -> QueryableRecipe:
+def load_meta_and_recipe_fast(
+    recipe: RecipePath, env=None, platform: PackageSubdir | None = None
+) -> QueryableRecipe:
     """
     Load recipe metadata quickly for either conda or rattler recipes.
 
@@ -209,6 +212,7 @@ def load_meta_and_recipe_fast(recipe: RecipePath, env=None) -> QueryableRecipe:
     Args:
         recipe: Recipe to load.
         env: Optional environment variables used when loading conda metadata.
+        platform: Optional target platform used when rendering rattler recipes.
 
     Returns:
         A QueryableRecipe containing the original recipe path and either the
@@ -227,7 +231,9 @@ def load_meta_and_recipe_fast(recipe: RecipePath, env=None) -> QueryableRecipe:
             # TODO (rb): is it possible to pass the global variants to the function
             # so we don't have to reload it constantly?
             # as far as I know we have to reload it, otherwise the parallelisation calls pickle on it
-            global_variants: rb.VariantConfig = load_rattler_build_global_variants()
+            global_variants: rb.VariantConfig = load_rattler_build_global_variants(
+                platform
+            )
             rattler_dicts = render_rattler_recipe_to_dicts(recipe.path, global_variants)
             return QueryableV1Recipe(path=recipe, recipe=rattler_dicts)
 

@@ -235,8 +235,8 @@ def build(
         # Even though there may be variants of the recipe that will be built, we
         # will only be checking attributes that are independent of variants (pkg
         # name, version, noarch, whether or not an extended container was used)
-        meta: api.MetaData | None = load_first_metadata(recipe.path, finalize=False)
-        package_name = meta.meta["package"]["name"] if meta is not None else ""
+        meta: api.MetaData = load_first_metadata(recipe.path, finalize=False)
+        package_name = meta.meta["package"]["name"]
 
         is_noarch = bool(meta.get_value("build/noarch", default=False))
         use_base_image = meta.get_value("extra/container", {}).get(
@@ -364,7 +364,7 @@ def build(
         if record_build_failure:
             assert dag is not None
             store_build_failure_record(
-                recipe.path.as_posix(), exc.output, package_name, dag, skiplist_leaves
+                recipe.path, exc.output, package_name, dag, skiplist_leaves
             )
         if raise_error:
             raise
@@ -443,7 +443,7 @@ def build(
 
 
 def store_build_failure_record(
-    recipe: str, output: Any, package_name: str, dag: nx.DiGraph, skiplist_leaves: bool
+    recipe: Path, output: Any, package_name: str, dag: nx.DiGraph, skiplist_leaves: bool
 ) -> None:
     """
     Write the exception to a file next to the meta.yaml
@@ -678,7 +678,7 @@ def build_recipes(
     )
     # TODO (rb): make platform_config and render_config customisable
     platform_config: rb.PlatformConfig = rb.PlatformConfig(
-        target_platform.to_subdir() if target_platform else None
+        target_platform=target_platform.to_subdir() if target_platform else None
     )
     render_config: rb.RenderConfig = rb.RenderConfig(platform=platform_config)
 

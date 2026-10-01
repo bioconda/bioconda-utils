@@ -324,7 +324,7 @@ def collect_build_failure_dataframe(
                 continue
 
             package = components[0]
-            meta = load_meta_fast(str(recipe))[0]
+            meta = load_meta_fast(recipe)[0]
             package_name = meta["package"]["name"]
             descendants = len(nx.descendants(dag, package_name))
 

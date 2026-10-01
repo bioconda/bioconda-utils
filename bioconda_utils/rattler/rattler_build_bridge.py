@@ -4,27 +4,16 @@ Bridge to py-rattler-build.
 
 import os
 import shutil
-from collections.abc import Iterator
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import conda_build.config as cb_config
 import conda_build.metadata as cb_metadata
 import platformdirs
 import rattler_build as rb
 
+from .._types import RattlerDictList
 from ..conda.conda_build_bridge import subdir_to_oslabel
 from ..conda.repodata import PackageSubdir, RepoData
-
-
-@dataclass(slots=True)
-class RattlerDictList:
-    recipes: list[dict[str, Any]]
-    is_multi: bool
-
-    def __iter__(self) -> Iterator[dict[str, Any]]:
-        return iter(self.recipes)
 
 
 def _filter_config(config_path: Path, platform: PackageSubdir | None) -> str:
