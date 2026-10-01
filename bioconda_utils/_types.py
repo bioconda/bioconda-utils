@@ -35,14 +35,6 @@ RATTLER = BuildSystem.RATTLER
 
 
 class RecipePath(NamedTuple):
-    """
-    Named tuple with the fields:
-
-    path : Path
-
-    build_system : BuildSystem
-    """
-
     path: Path
     build_system: BuildSystem
 
