@@ -1561,6 +1561,76 @@ def test_get_package_paths_force_builds_existing_and_logs_force(caplog, monkeypa
     assert "it is not forced" in caplog.text
 
 
+def test_get_package_paths_reports_channels_per_multi_output(caplog, monkeypatch):
+    """Sibling outputs of one recipe must not pool each other's channels.
+
+    ``noarch: python`` outputs of a multi-output recipe all render to the
+    ``noarch`` subdir with the same ``pyXY_0`` build string, so a channel
+    lookup keyed on ``(subdir, build)`` alone collapses them into one entry
+    and every output reports the union of the channels holding its siblings.
+    """
+    # get_package_data yields pandas itertuples rows for ["channel", "subdir", "build"]
+    ExistingBuild = namedtuple("ExistingBuild", ["channel", "subdir", "build"])
+
+    def make_output(name):
+        meta = Mock()
+        meta.name.return_value = name
+        meta.version.return_value = "5.0.0"
+        meta.build_number.return_value = 0
+        meta.build_id.return_value = "py311_0"
+        meta.pkg_fn.return_value = f"{name}-5.0.0-py311_0"
+        meta.noarch = True
+        meta.noarch_python = False
+        meta.config.host_subdir = PackageSubdir.LINUX_64
+        return meta
+
+    outputs = [make_output("r-seurat"), make_output("r-seuratdata")]
+    # Each output exists in exactly one channel, and not in the same one.
+    rows_by_name = {
+        "r-seurat": [ExistingBuild("bioconda", "noarch", "py311_0")],
+        "r-seuratdata": [ExistingBuild("conda-forge", "noarch", "py311_0")],
+    }
+
+    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda", "conda-forge"]})
+    monkeypatch.setattr(
+        conda_recipes,
+        "_load_platform_metas",
+        lambda *_a, **_k: ("noarch", outputs),
+    )
+
+    def get_package_data(_self, keys, name: str = "", **_kwargs):
+        if keys == ["channel", "subdir"]:
+            # check_recipe_skippable: no matching version + build number yet
+            return []
+        return rows_by_name[name]  # _filter_existing_packages
+
+    monkeypatch.setattr(RepoData, "get_package_data", get_package_data)
+    monkeypatch.setattr(
+        conda_recipes.api,
+        "get_output_file_paths",
+        lambda m: [f"/tmp/{m.pkg_fn()}.conda"],
+    )
+
+    caplog.set_level(logging.INFO, logger="bioconda_utils.conda.recipes")
+    paths = conda_recipes.get_package_paths(
+        Path("recipes/r-seurat"), ["bioconda", "conda-forge"], force=True
+    )
+    assert paths == [
+        Path("/tmp/r-seurat-5.0.0-py311_0.conda"),
+        Path("/tmp/r-seuratdata-5.0.0-py311_0.conda"),
+    ]
+    assert (
+        "FORCE: building r-seurat-5.0.0-py311_0 "
+        "although it is already in channel(s) [bioconda]." in caplog.text
+    )
+    assert (
+        "FORCE: building r-seuratdata-5.0.0-py311_0 "
+        "although it is already in channel(s) [conda-forge]." in caplog.text
+    )
+    # the pooled union the collision used to produce
+    assert "channel(s) [bioconda, conda-forge]" not in caplog.text
+
+
 # must import config_fixture, otherwise this test fails because RepoData can't be instantiated.
 def test_check_recipe_skippable_queries_requested_target(monkeypatch, config_fixture):
     meta = Mock()

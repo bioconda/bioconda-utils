@@ -133,6 +133,20 @@ def _meta_subdir(meta):
     return "noarch" if meta.noarch or meta.noarch_python else meta.config.host_subdir
 
 
+def _meta_pkg_key(meta):
+    """Package identity of a meta: (name, version, build_number)."""
+    return (meta.name(), meta.version(), int(meta.build_number() or 0))
+
+
+def _meta_build_key(meta):
+    """Exact build a meta produces, as (name, version, build_number, subdir, build).
+
+    Must stay in sync with the key built in :func:`_filter_existing_packages`,
+    which has the package identity split off into ``pkg_key``.
+    """
+    return (*_meta_pkg_key(meta), _meta_subdir(meta), meta.build_id())
+
+
 def check_recipe_skippable(
     recipe: Path, check_channels: list[str], target_platform=None
 ):
@@ -204,12 +218,14 @@ def _filter_existing_packages(metas, check_channels):
     new_metas = []  # MetaData instances of packages not yet in channel
     existing_metas = []  # MetaData instances of packages already in channel
     divergent_builds = set()  # set of Dist (i.e., name-version-build) strings
-    # (subdir, build) -> channels containing that build
+    # (name, version, build_number, subdir, build) -> channels containing it.
+    # The package identity is part of the key: sibling outputs of one
+    # multi-output recipe can share a (subdir, build) pair.
     pkg_build_channels = defaultdict(set)
 
     key_build_meta = defaultdict(dict)
     for meta in metas:
-        pkg_key = (meta.name(), meta.version(), int(meta.build_number() or 0))
+        pkg_key = _meta_pkg_key(meta)
         pkg_build = (_meta_subdir(meta), meta.build_id())
         key_build_meta[pkg_key][pkg_build] = meta
 
@@ -229,7 +245,7 @@ def _filter_existing_packages(metas, check_channels):
         )
         existing_pkg_builds = {(row.subdir, row.build) for row in existing_rows}
         for row in existing_rows:
-            pkg_build_channels[(row.subdir, row.build)].add(row.channel)
+            pkg_build_channels[(*pkg_key, row.subdir, row.build)].add(row.channel)
         for pkg_build, meta in build_meta.items():
             if pkg_build not in existing_pkg_builds:
                 new_metas.append(meta)
@@ -278,9 +294,7 @@ def get_package_paths(
 
     if force:
         for meta in existing_metas:
-            channels = sorted(
-                pkg_build_channels.get((_meta_subdir(meta), meta.build_id()), set())
-            )
+            channels = sorted(pkg_build_channels.get(_meta_build_key(meta), set()))
             logger.info(
                 "FORCE: building %s although it is already in channel(s) [%s].",
                 meta.pkg_fn(),
@@ -289,9 +303,7 @@ def get_package_paths(
         build_metas = new_metas + existing_metas
     else:
         for meta in existing_metas:
-            channels = sorted(
-                pkg_build_channels.get((_meta_subdir(meta), meta.build_id()), set())
-            )
+            channels = sorted(pkg_build_channels.get(_meta_build_key(meta), set()))
             logger.info(
                 "FILTER: not building %s because it is in channel(s) [%s] "
                 "and it is not forced.",
