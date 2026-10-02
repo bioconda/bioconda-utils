@@ -113,11 +113,20 @@ async def stream_download(
             async with aclosing(read_blocks()) as blocks:
                 yield blocks
     except asyncio.CancelledError:
-        logger.info("Download cancelled: %s (%s received)", desc, decimal(received))
+        logger.info(
+            "Download cancelled: %s (%s received in %.1f s)",
+            desc,
+            decimal(received),
+            monotonic() - started,
+        )
         raise
     except Exception as exc:
         logger.warning(
-            "Download failed: %s (%s received): %s", desc, decimal(received), exc
+            "Download failed: %s (%s received in %.1f s): %s",
+            desc,
+            decimal(received),
+            monotonic() - started,
+            exc,
         )
         raise
     else:
@@ -129,4 +138,9 @@ async def stream_download(
                 monotonic() - started,
             )
         else:
-            logger.info("Download stopped: %s (%s received)", desc, decimal(received))
+            logger.info(
+                "Download stopped: %s (%s received in %.1f s)",
+                desc,
+                decimal(received),
+                monotonic() - started,
+            )

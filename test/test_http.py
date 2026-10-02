@@ -18,6 +18,7 @@ from bioconda_utils.support.progress import ProgressDisplay
 def download_display(monkeypatch, caplog):
     display = ProgressDisplay(Console(file=StringIO()))
     monkeypatch.setattr(http, "progress_display", display)
+    monkeypatch.setattr(http, "monotonic", lambda: 10.0)
     caplog.set_level(logging.INFO, logger=http.__name__)
     yield display
     assert display.downloads.tasks == []
@@ -87,6 +88,21 @@ def test_empty_download_logs_zero_bytes(download_display, caplog):
     assert download_messages(caplog)[1].startswith("Downloaded empty: 0 bytes in ")
 
 
+@pytest.mark.parametrize("block_size", [0, -1])
+def test_invalid_block_size_does_not_start_download(
+    download_display, caplog, block_size
+):
+    response = cast(aiohttp.ClientResponse, ResponseBody([b"first"]))
+
+    async def run():
+        with pytest.raises(ValueError, match="block_size must be positive"):
+            async with http.stream_download(response, "artifact", block_size) as blocks:
+                _ = [block async for block in blocks]
+
+    asyncio.run(run())
+    assert download_messages(caplog) == []
+
+
 def test_truncated_download_does_not_log_success(download_display, caplog):
     error = aiohttp.ClientPayloadError("truncated response")
     response = cast(aiohttp.ClientResponse, ResponseBody([b"first", error]))
@@ -101,7 +117,7 @@ def test_truncated_download_does_not_log_success(download_display, caplog):
     asyncio.run(run())
     assert download_messages(caplog) == [
         "Downloading artifact",
-        "Download failed: artifact (5 bytes received): truncated response",
+        "Download failed: artifact (5 bytes received in 0.0 s): truncated response",
     ]
 
 
@@ -122,7 +138,7 @@ def test_consumer_failure_does_not_log_success(download_display, caplog, consume
     asyncio.run(run())
     assert (
         download_messages(caplog)[-1]
-        == "Download failed: artifact (5 bytes received): disk full"
+        == "Download failed: artifact (5 bytes received in 0.0 s): disk full"
     )
     assert not any(
         message.startswith("Downloaded ") for message in download_messages(caplog)
@@ -142,7 +158,7 @@ def test_early_stop_closes_iterator_and_task_immediately(download_display, caplo
     asyncio.run(run())
     assert download_messages(caplog) == [
         "Downloading artifact",
-        "Download stopped: artifact (5 bytes received)",
+        "Download stopped: artifact (5 bytes received in 0.0 s)",
     ]
 
 
@@ -187,7 +203,7 @@ def test_cancelled_download_is_logged_and_cleaned_up(
     size = 5 if in_consumer else 0
     assert download_messages(caplog) == [
         "Downloading artifact",
-        f"Download cancelled: artifact ({size} bytes received)",
+        f"Download cancelled: artifact ({size} bytes received in 0.0 s)",
     ]
 
 

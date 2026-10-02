@@ -313,7 +313,7 @@ class AsyncRequests:
     async def get_checksum_from_url(self, url: str, desc: str) -> str:
         """Compute sha256 checksum of content at **url**
 
-        - Shows TQDM progress monitor with label **desc**.
+        - Shows progress and logs transfer outcomes for HTTP downloads.
         - Caches result
         """
         if self.cache and url in self.cache["url_checksum"]:
