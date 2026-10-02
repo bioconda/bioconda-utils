@@ -7,7 +7,8 @@ These checks catch errors relating to the use of ``-
 
 import os
 
-from . import INFO, WARNING, LintCheck, _recipe
+from ..recipe import Recipe
+from . import INFO, WARNING, LintCheck
 
 
 class should_use_compilers(LintCheck):
@@ -95,7 +96,7 @@ class uses_setuptools(LintCheck):
 
     severity = INFO
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         if "setuptools" in recipe.get_deps("run"):
             self.message()
 
@@ -238,7 +239,7 @@ class missing_run_exports(LintCheck):
     run_exports in upstream packages as well if needed.
     """
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         build_sections = recipe.get_all_section_occurrences(
             section="build",
             outputs_exclusive=True,

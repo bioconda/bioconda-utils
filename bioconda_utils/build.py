@@ -58,7 +58,7 @@ from .config import normalize_config
 from .containers import docker_utils, pkg_test, upload
 from .containers.container_manifests import write_image_record
 from .recipes import BuildSystem, get_package_paths
-from .support.logsetup import Progress
+from .support.logsetup import format_recipes
 from .support.subproc import allowed_env_var, bin_for, run, sandboxed_env
 
 logger = logging.getLogger(__name__)
@@ -192,17 +192,24 @@ def build(
             case BuildSystem.RATTLER:
                 logger.warning(
                     "Linting is currently only implemented for conda-build recipes. Skipping rattler-build recipe: %s",
-                    recipe.path.as_posix(),
+                    recipe,
                 )
             case BuildSystem.CONDA:
-                logger.info("Linting recipe %s", recipe.path.as_posix())
+                logger.info("Linting recipe %s", recipe)
                 linter.clear_messages()
                 if linter.lint([recipe]):
+                    # One log record per finding instead of a single record
+                    # holding the whole report: each message stays attributable
+                    # and greppable, and the logger adds its own level and
+                    # timestamp per finding. The severity prefix inside the
+                    # message is the check's own severity, which is not always
+                    # ERROR (only ERROR-or-worse fails the build).
+                    for msg in linter.get_messages():
+                        logger.error("%s", msg.get_report_message())
                     logger.error(
-                        "\n\nThe recipe %s failed linting. See "
-                        "https://bioconda.github.io/contributor/linting.html for details:\n\n%s\n",
-                        recipe.path.as_posix(),
-                        linter.get_report(),
+                        "The recipe %s failed linting. See "
+                        "https://bioconda.github.io/contributor/linting.html for details.",
+                        recipe,
                     )
                     return BuildResult(False, None)
                 logger.info("Lint checks passed")
@@ -214,7 +221,7 @@ def build(
         if allowed_env_var(k, docker_builder is not None)
     }
 
-    logger.info("BUILD START %s", recipe.path.as_posix())
+    logger.info("BUILD START %s", recipe)
 
     use_base_image = None
 
@@ -321,8 +328,7 @@ def build(
                         for config_file in get_conda_build_config_files():
                             cmd += [config_file.arg, config_file.path]
                         cmd += [str(recipe.path / "meta.yaml")]
-                        with Progress():
-                            run(cmd, live=live_logs)
+                        run(cmd, live=live_logs, status="Building recipe...")
                 case BuildSystem.RATTLER:
                     recipe_file: Path = recipe.path / "recipe.yaml"
                     local_variants_path: Path = recipe.path / "variants.yaml"
@@ -341,10 +347,16 @@ def build(
                     rendered_variants = recipe_s0.render(variants, render_config)
 
                     for variant in rendered_variants:
+                        # py-rattler-build streams its own progress to the
+                        # terminal, so no spinner is wrapped around it here.
                         result = variant.run_build(
                             tool_config,
                             channels=channels,
                             output_dir=rattler_output_dir,
+                        )
+                        logger.info(
+                            "BUILD SUCCESS %s",
+                            ", ".join(os.path.basename(p) for p in result.packages),
                         )
 
         logger.info(
@@ -477,7 +489,7 @@ def remove_cycles(
             "it cyclically depends on other packages in the "
             "current build job. Failed recipes: %s",
             name,
-            [r.path.as_posix() for r in cycle_fail_recipes],
+            format_recipes(cycle_fail_recipes),
         )
         failed.extend(cycle_fail_recipes)
         for node in nx.algorithms.descendants(dag, name):
@@ -513,7 +525,7 @@ def get_worker_subdag(
             working_dag: nx.DiGraph = nx.DiGraph(dag)
             # Only build the current "root" nodes after removing
             for i in range(subdag_depth + 1):
-                print(f"{len(root_nodes)} recipes at depth {i}")
+                logger.info("%s recipes at depth %s", len(root_nodes), i)
                 if len(root_nodes) == 0:
                     break
                 if i < subdag_depth:
@@ -752,7 +764,7 @@ def build_recipes(
         ):
             logger.info(
                 "BUILD SKIP: skipping %s for additional platform %s",
-                recipe.path.as_posix(),
+                recipe,
                 platform,
             )
             continue
@@ -760,13 +772,13 @@ def build_recipes(
         if name in skip_dependent:
             logger.info(
                 "BUILD SKIP: skipping %s because it depends on %s which had a failed build.",
-                recipe.path.as_posix(),
-                skip_dependent[name],
+                recipe,
+                format_recipes(skip_dependent[name]),
             )
             skipped_recipes.append(recipe)
             continue
 
-        logger.info("Determining expected packages for %s", recipe.path.as_posix())
+        logger.info("Determining expected packages for %s", recipe)
 
         if docker_builder is not None:
             rattler_output_dir: Path = Path(docker_builder.pkg_dir)
@@ -901,7 +913,7 @@ def build_recipes(
             logger.error(
                 "BUILD SUMMARY: while the entire build failed, "
                 "the following recipes were built successfully:\n%s",
-                "\n".join([r.path.as_posix() for r in built_recipes]),
+                format_recipes(built_recipes, separator="\n"),
             )
         for recipe in failed:
             logger.error("BUILD SUMMARY: FAILED recipe %s", recipe)
@@ -909,7 +921,7 @@ def build_recipes(
             logger.error(
                 "BUILD SUMMARY: SKIPPED recipe %s due to failed dependencies %s",
                 name,
-                dep,
+                format_recipes(dep),
             )
         if failed_uploads:
             logger.error(

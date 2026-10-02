@@ -115,7 +115,7 @@ from bioconda_utils._types import BuildSystem, RecipePath
 from bioconda_utils.skiplist import Skiplist
 
 from .. import recipe as _recipe
-from ..support.logsetup import tqdm
+from ..support.logsetup import progress_display
 from ..support.subproc import run
 
 logger = logging.getLogger(__name__)
@@ -146,6 +146,10 @@ class LintMessage(Protocol):
     def get_report_message(self) -> str: ...
 
     def get_severity(self) -> Severity: ...
+
+    def get_table_row(self) -> tuple[str, str, str, str]:
+        """Return (severity, location, check, title) for tabular display."""
+        ...
 
 
 class CondaLintMessage(NamedTuple):
@@ -184,6 +188,14 @@ class CondaLintMessage(NamedTuple):
     def get_severity(self) -> Severity:
         return self.severity
 
+    def get_table_row(self) -> tuple[str, str, str, str]:
+        return (
+            self.severity.name,
+            f"{self.fname}:{self.end_line}",
+            str(self.check),
+            self.title,
+        )
+
 
 class RattlerLintMessage(NamedTuple):
     """Message issued by LintChecks for rattler build recipes"""
@@ -201,6 +213,14 @@ class RattlerLintMessage(NamedTuple):
 
     def get_severity(self) -> Severity:
         return self.severity
+
+    def get_table_row(self) -> tuple[str, str, str, str]:
+        return (
+            self.severity.name,
+            f"{self.recipe.path.name}/recipe.yaml",
+            "rattler_build",
+            self.lint_or_hint,
+        )
 
 
 class LintCheckMeta(abc.ABCMeta):
@@ -586,9 +606,6 @@ class Linter:
         """Clears the lint messages stored in linter"""
         self._messages = []
 
-    def get_report(self) -> str:
-        return "\n".join(msg.get_report_message() for msg in self.get_messages())
-
     def load_skips(self) -> dict[str, list[str]]:
         """Parses lint skips
 
@@ -631,34 +648,40 @@ class Linter:
           True if issues with errors were found
 
         """
-        for recipe_name in tqdm(sorted(recipe_names)):
-            self.order_and_load_checks()
-            assert isinstance(recipe_name, RecipePath)  # for linters/IDEs
-            try:
-                match recipe_name.build_system:
-                    case BuildSystem.CONDA:
-                        msgs = self.lint_one(recipe_name.path, fix=fix)
-                    case BuildSystem.RATTLER:
-                        msgs = self.lint_one_rattler(recipe_name, fix=fix)
-            except Exception:
-                if self.nocatch:
-                    raise
-                logger.exception("Unexpected exception in lint")
+        with progress_display.count_task("Linting", total=len(recipe_names)) as (
+            progress,
+            task,
+        ):
+            for recipe_name in progress.track(sorted(recipe_names), task_id=task):
+                self.order_and_load_checks()
+                assert isinstance(recipe_name, RecipePath)  # for linters/IDEs
+                try:
+                    match recipe_name.build_system:
+                        case BuildSystem.CONDA:
+                            msgs = self.lint_one(recipe_name.path, fix=fix)
+                        case BuildSystem.RATTLER:
+                            msgs = self.lint_one_rattler(recipe_name, fix=fix)
+                except Exception:
+                    if self.nocatch:
+                        raise
+                    logger.exception("Unexpected exception in lint")
 
-                recipe: RecipePath | _recipe.Recipe = recipe_name
-                match recipe.build_system:
-                    case BuildSystem.CONDA:
-                        recipe = _recipe.Recipe(recipe_name.path, self.recipe_folder)
-                        msgs = [linter_failure.make_conda_message(recipe=recipe)]
-                    case BuildSystem.RATTLER:
-                        msgs = [
-                            RattlerLintMessage(
-                                recipe=recipe,
-                                lint_or_hint="Unexpected exception in lint",
-                                severity=ERROR,
+                    recipe: RecipePath | _recipe.Recipe = recipe_name
+                    match recipe.build_system:
+                        case BuildSystem.CONDA:
+                            recipe = _recipe.Recipe(
+                                recipe_name.path, self.recipe_folder
                             )
-                        ]
-            self._messages.extend(msgs)
+                            msgs = [linter_failure.make_conda_message(recipe=recipe)]
+                        case BuildSystem.RATTLER:
+                            msgs = [
+                                RattlerLintMessage(
+                                    recipe=recipe,
+                                    lint_or_hint="Unexpected exception in lint",
+                                    severity=ERROR,
+                                )
+                            ]
+                self._messages.extend(msgs)
 
         return any(message.get_severity() >= ERROR for message in self._messages)
 
@@ -765,7 +788,7 @@ class Linter:
             return [
                 RattlerLintMessage(
                     recipe=recipe,
-                    lint_or_hint=f"Failed to parse YAML in recipe {recipe.path}",
+                    lint_or_hint=f"Failed to parse YAML in recipe {recipe}",
                     severity=ERROR,
                 )
             ]
@@ -773,7 +796,7 @@ class Linter:
             return [
                 RattlerLintMessage(
                     recipe=recipe,
-                    lint_or_hint=f"Error loading recipe file for {recipe.path}: {e}",
+                    lint_or_hint=f"Error loading recipe file for {recipe}: {e}",
                     severity=ERROR,
                 )
             ]

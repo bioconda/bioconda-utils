@@ -6,7 +6,8 @@ Verify that the recipe is not missing anything essential.
 import os
 from typing import Any, ClassVar
 
-from . import LintCheck, _recipe
+from ..recipe import Recipe
+from . import LintCheck
 
 
 class missing_build_number(LintCheck):
@@ -23,7 +24,7 @@ class missing_build_number(LintCheck):
 
     """
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         if not recipe.get("build/number", ""):
             self.message(section="build")
 
@@ -61,7 +62,7 @@ class missing_home(LintCheck):
 
     """
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         missing_section = recipe.check_for_missing_inherited_section("about/home")
         if missing_section:
             self.message(section=missing_section)
@@ -91,7 +92,7 @@ class missing_summary(LintCheck):
 
     """
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         missing_section = recipe.check_for_missing_inherited_section("about/summary")
         if missing_section:
             self.message(section=missing_section)
@@ -121,7 +122,7 @@ class missing_license(LintCheck):
 
     """
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         missing_section = recipe.check_for_missing_inherited_section("about/license")
         if missing_section:
             self.message(section=missing_section)
@@ -153,7 +154,7 @@ class missing_tests(LintCheck):
 
     test_files: ClassVar = ["run_test.py", "run_test.sh", "run_test.pl"]
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         if any(os.path.exists(os.path.join(recipe.dir, f)) for f in self.test_files):
             return
         # if multiple `outputs:` are specified, we check that
@@ -179,7 +180,7 @@ class missing_tests(LintCheck):
             return
         for i in range(len(packages)):
             if not tests_specified[i]:
-                if not isinstance(packages[i], _recipe.Recipe) and packages[i].get(
+                if not isinstance(packages[i], Recipe) and packages[i].get(
                     f"outputs/{i}/test", ""
                 ):
                     self.message(section=f"outputs/{i}/test")

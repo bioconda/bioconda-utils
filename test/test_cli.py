@@ -1,19 +1,56 @@
 """Tests for the Typer command-line interface."""
 
 import logging
+from io import StringIO
 from pathlib import Path
 from typing import Any, cast
 
+import click
 import networkx as nx
 import pytest
+import typer
+from rich.console import Console
 from typer.core import TyperArgument
 from typer.main import get_command
 from typer.testing import CliRunner
 
 from bioconda_utils import cli
 from bioconda_utils._types import CONDA, RecipePath
+from bioconda_utils.containers.artifacts import UploadResult
+from bioconda_utils.containers.pkg_test import CREATE_ENV_IMAGE
+from bioconda_utils.githandler import GitRange
+from bioconda_utils.support.progress import ProgressDisplay
 
 runner = CliRunner()
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_command_owns_progress_lifetime(monkeypatch, fail):
+    display = ProgressDisplay(Console(file=StringIO(), force_terminal=True))
+    monkeypatch.setattr(cli, "progress_display", display)
+
+    def callback():
+        assert display.live.is_started
+        with display.count_task("processing", total=1) as (progress, task):
+            assert not progress.live.is_started
+            progress.update(task, advance=1)
+            if fail:
+                raise ValueError("command failed")
+        cli._write_output("result\n")
+
+    command = next(
+        info for info in cli.app.registered_commands if info.name == "diagnostics"
+    )
+    monkeypatch.setattr(command, "callback", callback)
+    result = runner.invoke(cli.app, ["diagnostics"])
+    assert result.exit_code == int(fail)
+    if fail:
+        assert isinstance(result.exception, ValueError)
+    else:
+        assert result.stdout == "result\n"
+    assert display.counts.tasks == []
+    assert not display.live.is_started
+    assert display.live.console._live_stack == []
 
 
 def test_all_commands_render_help():
@@ -62,7 +99,10 @@ def test_diagnostics(monkeypatch, tmp_path):
             "exclusive_config_files": [first, second],
         },
     )()
-    monkeypatch.setattr(cli, "load_conda_build_config", lambda: config)
+    monkeypatch.setattr(
+        "bioconda_utils.conda.conda_build_bridge.load_conda_build_config",
+        lambda: config,
+    )
 
     result = runner.invoke(cli.app, ["diagnostics"])
 
@@ -178,7 +218,10 @@ def test_choices_are_enforced_before_command_execution():
     result = runner.invoke(cli.app, ["dag", "--output-format", "invalid"])
 
     assert result.exit_code == 2
-    assert "Invalid value for '--output-format'" in result.output
+    # Typer renders errors with rich and force-colors them when
+    # GITHUB_ACTIONS is set, which interleaves ANSI escapes into
+    # result.output (even splitting the option name into spans).
+    assert "Invalid value for '--output-format'" in click.unstyle(result.output)
 
 
 def test_dag_help_describes_dependency_edges():
@@ -197,12 +240,13 @@ def test_dag_hides_singletons(monkeypatch, tmp_path):
     package_dag = nx.DiGraph([("dependency", "package")])
     package_dag.add_node("singleton")
     name2recipes = {
-        name: {RecipePath((Path("recipes") / name), CONDA)}
-        for name in package_dag.nodes
+        name: {RecipePath(Path("recipes") / name, CONDA)} for name in package_dag.nodes
     }
-    monkeypatch.setattr(cli, "load_config", lambda _: {})
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda _: {})
     monkeypatch.setattr(cli, "get_recipes", lambda *_: [])
-    monkeypatch.setattr(cli.graph, "build", lambda *_: (package_dag, name2recipes))
+    monkeypatch.setattr(
+        "bioconda_utils.graph.build", lambda *_: (package_dag, name2recipes)
+    )
 
     result = runner.invoke(
         cli.app,
@@ -221,6 +265,32 @@ def test_dag_hides_singletons(monkeypatch, tmp_path):
     assert "singleton" not in result.output
 
 
+def test_dag_text_output_does_not_wrap_recipe_paths(monkeypatch, tmp_path):
+    recipe_folder = tmp_path / "recipes"
+    recipe_folder.mkdir()
+    config = tmp_path / "config.yml"
+    config.write_text("{}")
+    long_recipe = Path("recipes") / ("very-long-recipe-name-" * 6)
+    package_dag = nx.DiGraph([("dependency", "package")])
+    name2recipes = {
+        "dependency": {RecipePath(Path("recipes/dependency"), CONDA)},
+        "package": {RecipePath(long_recipe, CONDA)},
+    }
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda _: {})
+    monkeypatch.setattr(cli, "get_recipes", lambda *_: [])
+    monkeypatch.setattr(
+        "bioconda_utils.graph.build", lambda *_: (package_dag, name2recipes)
+    )
+
+    result = runner.invoke(
+        cli.app,
+        ["dag", str(recipe_folder), str(config), "--output-format", "txt"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert str(long_recipe) in result.output.splitlines()
+
+
 @pytest.mark.parametrize(
     ("spec", "base", "ref"),
     [
@@ -230,7 +300,7 @@ def test_dag_hides_singletons(monkeypatch, tmp_path):
     ],
 )
 def test_git_range_parsing(spec, base, ref):
-    parsed = cli.GitRange.parse(spec)
+    parsed = GitRange.parse(spec)
 
     assert parsed.base == base
     assert parsed.ref == ref
@@ -243,11 +313,11 @@ def test_git_range_parsing(spec, base, ref):
 )
 def test_invalid_git_ranges_are_rejected(spec):
     with pytest.raises(ValueError):
-        cli.GitRange.parse(spec)
+        GitRange.parse(spec)
 
 
 def test_cli_rejects_two_dot_git_range(monkeypatch):
-    monkeypatch.setattr(cli._lint, "get_checks", list)
+    monkeypatch.setattr("bioconda_utils.lint.get_checks", list)
 
     result = runner.invoke(
         cli.app, ["lint", "--list-checks", "--git-range", "main..HEAD"]
@@ -301,14 +371,136 @@ def test_recipe_selection_uses_range_base_and_ref(monkeypatch):
             calls.append((ref, base))
             return ["recipes/example"]
 
-    monkeypatch.setattr(cli, "BiocondaRepo", Repo)
+    monkeypatch.setattr("bioconda_utils.githandler.BiocondaRepo", Repo)
 
-    result = cli.get_recipes_to_build(
-        cli.GitRange.parse("main...feature"), Path("recipes")
-    )
+    result = cli.get_recipes_to_build(GitRange.parse("main...feature"), Path("recipes"))
 
     assert result == [Path("recipes/example")]
     assert calls == [("feature", "main")]
+
+
+def test_autobump_closes_git_handler_on_keyboard_interrupt(monkeypatch):
+    from bioconda_utils import autobump
+
+    closed = []
+
+    class RecipeSource:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+    class Scanner:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def add(self, *_args, **_kwargs):
+            pass
+
+        def run(self):
+            raise KeyboardInterrupt
+
+    class Repo:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def checkout_master(self):
+            pass
+
+        def close(self):
+            closed.append(True)
+
+    monkeypatch.setattr(cli, "_setup_runtime", lambda *_args: None)
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: {})
+    monkeypatch.setattr("bioconda_utils.githandler.BiocondaRepo", Repo)
+    monkeypatch.setattr(autobump, "RecipeSource", RecipeSource)
+    monkeypatch.setattr(autobump, "Scanner", Scanner)
+
+    with pytest.raises(KeyboardInterrupt):
+        cli.autobump(
+            no_follow_graph=True,
+            check_branch=True,
+            ignore_skiplists=True,
+            exclude_channels=["none"],
+            no_check_pinnings=True,
+            no_check_version_update=True,
+        )
+
+    assert closed == [True]
+
+
+def test_autobump_builds_all_cache_paths_from_path_prefix(monkeypatch, tmp_path):
+    from bioconda_utils import autobump
+
+    added_filters = []
+    scanner_arguments = []
+
+    class RecipeSource:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+    class Scanner:
+        def __init__(self, *_args, **kwargs):
+            scanner_arguments.append(kwargs)
+
+        def add(self, *args, **_kwargs):
+            added_filters.append(args)
+
+        def run(self):
+            pass
+
+    monkeypatch.setattr(cli, "_setup_runtime", lambda *_args: None)
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: {})
+    monkeypatch.setattr(autobump, "RecipeSource", RecipeSource)
+    monkeypatch.setattr(autobump, "Scanner", Scanner)
+
+    cache = tmp_path / "autobump-cache"
+    cli.autobump(
+        cache=cache,
+        no_follow_graph=True,
+        ignore_skiplists=True,
+        exclude_channels=["conda-forge"],
+        no_check_pinnings=True,
+        no_check_version_update=True,
+    )
+
+    assert scanner_arguments == [
+        {"cache_file": Path(f"{cache}_scan.pkl"), "status_file": None}
+    ]
+    exclude_call = next(
+        call for call in added_filters if call[0] is autobump.ExcludeOtherChannel
+    )
+    assert exclude_call[2] == Path(f"{cache}_repodata.txt")
+
+
+def test_list_build_failures_markdown_is_written_verbatim(monkeypatch, tmp_path):
+    from bioconda_utils.build_failure import BUILD_FAILURE_COLUMNS
+
+    recipe_folder = tmp_path / "recipes"
+    recipe_folder.mkdir()
+    config = tmp_path / "config.yml"
+    config.write_text("{}")
+    row = {column: f"value-{column}" for column in BUILD_FAILURE_COLUMNS}
+    row["build failures"] = "[linux-64](failures/linux-64.yaml)"
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: {})
+    monkeypatch.setattr(
+        "bioconda_utils.build_failure.collect_build_failure_records",
+        lambda *_args, **_kwargs: [row],
+    )
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "list-build-failures",
+            str(recipe_folder),
+            str(config),
+            "--output-format",
+            "markdown",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert result.output.startswith("| recipe | downloads |")
+    assert "[linux-64](failures/linux-64.yaml)" in result.output
+    assert "─" not in result.output
 
 
 def test_build_parses_typed_platform_option():
@@ -353,7 +545,8 @@ def test_build_rejects_macos_package_platform_for_docker():
     result = runner.invoke(cli.app, ["build", "--docker", "--platform", "osx-arm64"])
 
     assert result.exit_code == 2
-    assert "cannot be installed in Linux mulled containers" in result.output
+    assert "cannot be installed" in result.output
+    assert "mulled containers" in result.output
 
 
 def test_handle_merged_pr_parses_conda_platform_option(tmp_path):
@@ -397,13 +590,16 @@ def test_create_mulled_manifests_rejects_container_platform_notation():
         cli.app, ["create-mulled-manifests", "--platform", "linux/arm64"]
     )
     assert result.exit_code == 2
-    assert "is not one of 'linux-64', 'linux-aarch64', 'linux-riscv64'" in result.output
+    assert "is not one of" in result.output
+    assert "linux-64" in result.output
+    assert "linux-aarch64" in result.output
 
 
 def test_create_mulled_manifests_rejects_macos_package_platform():
     result = runner.invoke(cli.app, ["create-mulled-manifests", "--platform", "osx-64"])
     assert result.exit_code == 2
-    assert "cannot be installed in Linux mulled containers" in result.output
+    assert "cannot be installed" in result.output
+    assert "mulled containers" in result.output
 
 
 def test_annotate_build_failures_parses_conda_platform_option():
@@ -436,11 +632,11 @@ def test_build_uses_environment_aware_mulled_image_default():
     command = cast(Any, get_command(cli.app)).commands["build"]
     parameter = next(p for p in command.params if p.name == "mulled_conda_image")
 
-    assert parameter.default == cli.pkg_test.CREATE_ENV_IMAGE
+    assert parameter.default == CREATE_ENV_IMAGE
 
 
 def test_lint_list_checks_allows_missing_paths(monkeypatch):
-    monkeypatch.setattr(cli._lint, "get_checks", lambda: ["first", "second"])
+    monkeypatch.setattr("bioconda_utils.lint.get_checks", lambda: ["first", "second"])
 
     result = runner.invoke(
         cli.app,
@@ -454,8 +650,7 @@ def test_lint_list_checks_allows_missing_paths(monkeypatch):
 def test_lint_logs_exceptions_without_pdb(monkeypatch, caplog, tmp_path):
     monkeypatch.setattr(cli, "_setup_runtime", lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        cli,
-        "load_config",
+        "bioconda_utils.config.load_config",
         lambda path: (_ for _ in ()).throw(RuntimeError("bad")),
     )
 
@@ -465,13 +660,58 @@ def test_lint_logs_exceptions_without_pdb(monkeypatch, caplog, tmp_path):
     assert "Lint command failed" in caplog.text
 
 
+def test_lint_exit_is_not_reported_as_a_command_failure(monkeypatch, caplog, tmp_path):
+    """Lint errors are an exit code, not a crash to trace back.
+
+    ``typer.Exit`` derives from ``RuntimeError``, so the command's own
+    ``except Exception`` used to log a traceback (and offer a post-mortem)
+    whenever a recipe had lint errors.
+    """
+    monkeypatch.setattr(cli, "_setup_runtime", lambda *args, **kwargs: None)
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda _path: {})
+    monkeypatch.setattr(cli, "get_recipes", lambda *_args, **_kwargs: [])
+
+    class ErroringLinter:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def lint(self, *_args, **_kwargs):
+            return True
+
+        def get_messages(self):
+            return []
+
+    monkeypatch.setattr("bioconda_utils.lint.Linter", ErroringLinter)
+
+    with caplog.at_level(logging.ERROR), pytest.raises(typer.Exit) as exc_info:
+        cli.lint(tmp_path, tmp_path)
+
+    assert exc_info.value.exit_code == 1
+    assert "Lint command failed" not in caplog.text
+
+
+def test_lint_bad_parameter_is_not_reported_as_a_command_failure(
+    monkeypatch, caplog, tmp_path
+):
+    """A mistyped path is a usage error, so click renders it without a traceback."""
+    monkeypatch.setattr(cli, "_setup_runtime", lambda *args, **kwargs: None)
+
+    with caplog.at_level(logging.ERROR):
+        result = runner.invoke(
+            cli.app, ["lint", str(tmp_path / "missing"), str(tmp_path / "config.yml")]
+        )
+
+    assert result.exit_code == 2
+    assert "does not exist" in click.unstyle(result.output)
+    assert "Lint command failed" not in caplog.text
+
+
 def test_handle_merged_pr_accepts_single_git_ref(monkeypatch):
     calls = []
     monkeypatch.setattr(cli, "_setup_runtime", lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        cli,
-        "upload_pr_artifacts",
-        lambda repo, ref, **kwargs: calls.append(ref) or cli.UploadResult.SUCCESS,
+        "bioconda_utils.containers.artifacts.upload_pr_artifacts",
+        lambda repo, ref, **kwargs: calls.append(ref) or UploadResult.SUCCESS,
     )
 
     with pytest.raises(SystemExit) as exc_info:
@@ -485,7 +725,9 @@ def test_shared_runtime_options_are_applied(monkeypatch):
     logger_calls = []
     thread_calls = []
     monkeypatch.setattr(cli, "setup_logger", lambda *args: logger_calls.append(args))
-    monkeypatch.setattr(cli, "set_max_threads", thread_calls.append)
+    monkeypatch.setattr(
+        "bioconda_utils.support.parallel.set_max_threads", thread_calls.append
+    )
     cli._setup_runtime(
         loglevel="warning",
         log_command_max_lines=12,

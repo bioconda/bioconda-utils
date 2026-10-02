@@ -21,10 +21,8 @@ mamba = "2.5.*"
 
 # CLI
 typer = "0.26.*"
-# Logging
-colorlog = "6.*"
-tqdm = "4.67.*"  # Progress monitor
-yaspin = "3.*"
+# Terminal output (single stack: logging + progress + tables)
+rich = "15.*"
 # Recipe YAML parsing
 "ruamel.yaml" = "0.18.*"
 networkx = "3.6.*"  # (networkx>3.3 needs python>=3.10)
@@ -77,9 +75,6 @@ pygithub = "*"
 diskcache = "5.*"
 platformdirs = "4.*"
 
-# build failure output
-tabulate = "0.10.*"
-
 # resource reporting for builds
 psutil = "*"
 py-rattler-build = ">=0.67.0,<0.68"
@@ -112,8 +107,8 @@ cmd = "ruff format ."
 description = "Format Python files"
 
 [tasks.install]
-cmd = "python -m pip install --no-deps --no-build-isolation ."
-description = "Build and install bioconda-utils into the Pixi environment"
+cmd = "python -m pip install --no-deps --no-build-isolation -e ."
+description = "Build and install bioconda-utils into the Pixi environment (editable, so tests and the CLI always run the working tree)"
 
 [tasks.global-install]
 cmd = """

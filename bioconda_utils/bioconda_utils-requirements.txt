@@ -13,9 +13,7 @@ conda-index=0.12.*
 conda-package-streaming=0.13.*
 mamba=2.5.*
 typer=0.26.*
-colorlog=6.*
-tqdm=4.67.*
-yaspin=3.*
+rich=15.*
 ruamel.yaml=0.18.*
 networkx=3.6.*
 pandas=3.0.*
@@ -46,7 +44,6 @@ requests=2.33.*
 pygithub
 diskcache=5.*
 platformdirs=4.*
-tabulate=0.10.*
 psutil
 py-rattler-build>=0.67.0,<0.68
 conda-smithy>=2026.8.5,<2027

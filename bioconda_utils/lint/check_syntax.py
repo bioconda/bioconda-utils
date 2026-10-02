@@ -10,7 +10,8 @@ from typing import Any, ClassVar
 
 from bioconda_utils._types import ALL_PACKAGE_SUBDIRS
 
-from . import LintCheck, _recipe
+from ..recipe import Recipe
+from . import LintCheck
 
 
 class version_constraints_missing_whitespace(LintCheck):
@@ -23,7 +24,7 @@ class version_constraints_missing_whitespace(LintCheck):
 
     """
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         check_paths = []
         for section in ("build", "run", "host"):
             check_paths.append(f"requirements/{section}")
@@ -65,7 +66,7 @@ class extra_identifiers_not_list(LintCheck):
 
     """
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         identifiers_sections = recipe.get_all_section_occurrences("extra/identifiers")
         for identifiers in identifiers_sections:
             if not isinstance(identifiers_sections[identifiers], list):
@@ -87,7 +88,7 @@ class extra_identifiers_not_string(LintCheck):
 
     requires: ClassVar = [extra_identifiers_not_list]
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         identifiers_sections = recipe.get_all_section_occurrences("extra/identifiers")
         for identifiers in identifiers_sections:
             for n, identifier in enumerate(identifiers_sections[identifiers]):
@@ -108,7 +109,7 @@ class extra_identifiers_missing_colon(LintCheck):
 
     requires: ClassVar = [extra_identifiers_not_string]
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         identifiers_sections = recipe.get_all_section_occurrences("extra/identifiers")
         for identifiers in identifiers_sections:
             for n, identifier in enumerate(identifiers_sections[identifiers]):
@@ -127,7 +128,7 @@ class extra_skip_lints_not_list(LintCheck):
 
     """
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         identifiers_sections = recipe.get_all_section_occurrences("extra/skip-lints")
         for identifiers in identifiers_sections:
             if not isinstance(identifiers_sections[identifiers], list):
@@ -146,7 +147,7 @@ class extra_additional_platforms_not_list(LintCheck):
 
     """
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         sections = recipe.get_all_section_occurrences("extra/additional-platforms")
         for section in sections:
             if not isinstance(sections[section], list):
@@ -169,7 +170,7 @@ class extra_additional_platforms_invalid(LintCheck):
 
     requires: ClassVar = [extra_additional_platforms_not_list]
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         valid_subdirs = set(ALL_PACKAGE_SUBDIRS)
         sections = recipe.get_all_section_occurrences("extra/additional-platforms")
         for section in sections:

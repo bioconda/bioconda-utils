@@ -291,7 +291,6 @@ class GitHandlerBase:
         """Reads contents of file **file_name** from git branch **branch**"""
         abs_file_name = Path(file_name).resolve()
         abs_repo_root = Path(self.repo.working_dir).resolve()
-
         if not abs_file_name.is_relative_to(abs_repo_root):
             raise RuntimeError(f"File {abs_file_name} not inside {abs_repo_root}")
 

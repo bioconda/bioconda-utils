@@ -12,7 +12,6 @@ from typing import (
     NamedTuple,
     NewType,
     Protocol,
-    TypeAlias,
     TypedDict,
 )
 
@@ -38,6 +37,12 @@ RATTLER = BuildSystem.RATTLER
 class RecipePath(NamedTuple):
     path: Path
     build_system: BuildSystem
+
+    def __str__(self) -> str:
+        # ``__str__`` is what ``%s`` and f-strings use, so log messages show
+        # ``recipes/samtools/1.7`` instead of the tuple repr.  ``__repr__``
+        # keeps both fields for debugging.
+        return self.path.as_posix()
 
     def __fspath__(self) -> str:
         return self.path.__fspath__()
@@ -154,12 +159,17 @@ DEFAULT_PRIMARY_PLATFORMS: tuple[PackageSubdir, ...] = (
     PackageSubdir.LINUX_64,
     PackageSubdir.OSX_64,
 )
+#: Application hosting the CI build artifacts a merged pull request produced.
+ArtifactSource = Literal["azure", "circleci", "github-actions"]
+#: Presentation/serialization modes for the build-failure report.
+BuildFailureOutputFormat = Literal["table", "markdown"]
+
 #: Conda repodata subdir notation, including ``noarch``.
-Subdir: TypeAlias = PackageSubdir | Literal["noarch"]
+type Subdir = PackageSubdir | Literal["noarch"]
 #: A two-part OS label -- the form conda-build's ``config.platform`` and its
 #: ``DEFAULT_COMPILERS`` table require (see ``conda_build.variants``). This is
 #: *not* a subdir: ``"linux-64"`` is not a valid ``OsLabel``.
-OsLabel: TypeAlias = Literal["linux", "osx"]
+type OsLabel = Literal["linux", "osx"]
 QuayUploadTarget = NewType("QuayUploadTarget", str)
 
 #: Architecture-equivalent Linux package/container platforms. Keep this as the

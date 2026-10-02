@@ -5,36 +5,22 @@ from __future__ import annotations
 import abc
 import asyncio
 import logging
-import os
 import pickle
-import signal
-from concurrent.futures import ProcessPoolExecutor
-from pathlib import Path
-
-try:
-    from concurrent.futures import BrokenExecutor
-except ImportError:
-    # BrokenExecutor is new in Py3.7, 3.6 only has one of its
-    # subclasses, the BrokenProcessPool RuntimeError.
-    from concurrent.futures.process import BrokenProcessPool as BrokenExecutor
-
+from concurrent.futures import BrokenExecutor, ProcessPoolExecutor
 from hashlib import sha256
-from typing import Any, Generic, TypeVar
+from pathlib import Path
+from typing import Any, Self
 from urllib.parse import urlparse
 
 import aiofiles
 import aioftp
 import aiohttp
-from typing_extensions import Self
 
 from .support import http
-from .support.logsetup import tqdm
+from .support.logsetup import progress_display
 from .support.parallel import threads_to_use
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
-
-
-ITEM = TypeVar("ITEM")
 
 
 class EndProcessing(BaseException):
@@ -42,13 +28,21 @@ class EndProcessing(BaseException):
 
 
 class EndProcessingItem(Exception):
-    """Raised to indicate that an item should not be processed further"""
+    """Raised to indicate that an item should not be processed further
+
+    This is the carrier of the per-item skip reason (e.g. the subclasses
+    in :mod:`bioconda_utils.autobump` recording why a recipe was not
+    updated). ``AsyncPipeline.process`` logs and re-raises it; a subclass
+    that wants to record the reason must catch it in its ``process``
+    override (see ``autobump.Scanner.process``). Letting it escape
+    uncaught aborts the whole run.
+    """
 
     __slots__ = ["args", "item"]
     template = "broken: %s"
     level = logging.INFO
 
-    def __init__(self, item: ITEM, *args) -> None:
+    def __init__(self, item: Any, *args) -> None:
         super().__init__(item, *args)
         self.item = item
         self.args = args
@@ -68,15 +62,19 @@ class EndProcessingItem(Exception):
         return self.__class__.__name__
 
 
-class AsyncFilter(abc.ABC, Generic[ITEM]):
+class AsyncFilter[ITEM](abc.ABC):
     """Function object type called by Scanner"""
 
-    def __init__(self, pipeline: AsyncPipeline, *_args, **_kwargs) -> None:
+    def __init__(self, pipeline: AsyncPipeline[ITEM], *_args, **_kwargs) -> None:
         self.pipeline = pipeline
 
     @abc.abstractmethod
     async def apply(self, recipe: ITEM):
-        """Process a recipe. Returns False if processing should stop"""
+        """Process a recipe
+
+        Raise ``EndProcessingItem`` to skip this item (with a reason),
+        or ``EndProcessing`` to terminate the whole run.
+        """
 
     def get_info(self) -> str:
         """Return description of filter for logging"""
@@ -91,16 +89,10 @@ class AsyncFilter(abc.ABC, Generic[ITEM]):
         """Called at the end of a run"""
 
 
-class AsyncPipeline(Generic[ITEM]):
+class AsyncPipeline[ITEM]:
     """Processes items in an asyncio pipeline"""
 
     def __init__(self, threads: int | None = None) -> None:
-        try:  # get or create loop (threads don't have one)
-            #: our asyncio loop
-            self.loop = asyncio.get_event_loop()
-        except RuntimeError:
-            self.loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self.loop)
         #: number of threads to use
         self.threads = threads or threads_to_use()
         #: semaphore to limit io parallelism
@@ -109,7 +101,7 @@ class AsyncPipeline(Generic[ITEM]):
         #: (used by PyPi when running skeleton)
         self.conda_sem: asyncio.Semaphore = asyncio.Semaphore(1)
         #: the filters successively applied to each item
-        self.filters: list[AsyncFilter] = []
+        self.filters: list[AsyncFilter[ITEM]] = []
         #: executor running things in separate python processes
         self.proc_pool_executor = ProcessPoolExecutor(self.threads)
 
@@ -119,37 +111,35 @@ class AsyncPipeline(Generic[ITEM]):
         """Adds `Filter` to this `Scanner`"""
         self.filters.append(filt(self, *args, **kwargs))
 
-    async def shutdown(self, sig=None) -> None:
-        self._shutting_down = True
-        if sig == signal.SIGINT:
-            logger.error("Ctrl-C pressed - aborting...")
-        self.proc_pool_executor.shutdown()
-        tasks = [t for t in asyncio.all_tasks() if t != asyncio.current_task()]
-        for t in tasks:
-            t.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-        self.loop.stop()
-
     def run(self) -> None:
-        """Enters the asyncio loop and manages shutdown."""
-        # We need to handle KeyboardInterrupt "manually" to get clean shutdown
-        # for the ProcessPoolExecutor
-        self.loop.add_signal_handler(
-            signal.SIGINT,
-            lambda: asyncio.ensure_future(self.shutdown(signal.SIGINT)),
-        )
-        try:
-            task = asyncio.ensure_future(self._async_run())
-            self.loop.run_until_complete(task)
-            logger.warning("Finished update")
-        except asyncio.CancelledError:
-            pass
-        except EndProcessing:
-            logger.error("Terminating...")
-            self.loop.run_until_complete(self.shutdown())
+        """Enters the asyncio loop and manages shutdown.
 
-        for filt in self.filters:
-            filt.finalize()
+        KeyboardInterrupt (Ctrl-C) and fatal worker errors propagate to
+        the caller, so the process exits with a non-zero status. Only
+        ``EndProcessing`` -- the filters' deliberate "stop here" signal
+        -- terminates the run with a success status.
+        """
+        try:
+            asyncio.run(self._async_run())
+            logger.warning("Finished update")
+        except* KeyboardInterrupt as eg:
+            # asyncio.Runner (used by asyncio.run) turns SIGINT into
+            # cancellation of the pipeline, then raises KeyboardInterrupt
+            # once everything has unwound. Re-raise the naked exception
+            # (bare raise inside except* would wrap it in a group) so
+            # plain KeyboardInterrupt handlers keep working and the
+            # interpreter exits non-zero instead of reporting success.
+            self._shutting_down = True
+            logger.error("Ctrl-C pressed - aborting...")
+            (interrupt,) = eg.exceptions
+            raise interrupt
+        except* EndProcessing:
+            self._shutting_down = True
+            logger.error("Terminating...")
+        finally:
+            self.proc_pool_executor.shutdown(cancel_futures=True)
+            for filt in self.filters:
+                filt.finalize()
 
     @abc.abstractmethod
     async def queue_items(self, send_q, return_q):
@@ -160,63 +150,87 @@ class AsyncPipeline(Generic[ITEM]):
 
     async def _async_run(self) -> None:
         """Runner within async loop"""
-        # call init functions on filters
-        await asyncio.gather(*(filt.async_init() for filt in self.filters))
-
-        # setup queues
-        source_q = asyncio.Queue()
-        progress_q = asyncio.Queue()
-        return_q = asyncio.Queue()
-
-        # setup progress monitor
-        tasks = []
-        tasks.append(asyncio.ensure_future(self.show_progress(progress_q, return_q)))
-
-        # setup workers
-        tasks.extend(
-            asyncio.ensure_future(self.worker(source_q, progress_q))
-            for n in range(self.threads)
-        )
-
-        # send items
-        await self.queue_items(source_q, return_q)
-
-        # wait for all items done
-        await source_q.join()
-        await progress_q.join()
-        await return_q.join()
-
-        for task in tasks:
-            task.cancel()
         try:
-            await asyncio.gather(*tasks)
-        except asyncio.CancelledError:
-            pass
+            # call init functions on filters
+            async with asyncio.TaskGroup() as tg:
+                for filt in self.filters:
+                    tg.create_task(filt.async_init())
 
-    async def show_progress(self, in_q, out_q) -> None:
-        with tqdm(total=self.get_item_count()) as progress:
+            # setup queues
+            source_q: asyncio.Queue[ITEM] = asyncio.Queue()
+            progress_q: asyncio.Queue[ITEM] = asyncio.Queue()
+            return_q: asyncio.Queue[ITEM] = asyncio.Queue()
+
+            async with asyncio.TaskGroup() as tg:
+                # setup progress monitor
+                tg.create_task(self.show_progress(progress_q, return_q))
+
+                # setup workers and produce items from this task while
+                # the workers process concurrently. The producer consumes
+                # return_q to schedule dependent work, so returning from
+                # it means all items were sent and all results handed back
+                async with asyncio.TaskGroup() as workers:
+                    for _n in range(self.threads):
+                        workers.create_task(self.worker(source_q, progress_q))
+                    await self.queue_items(source_q, return_q)
+                    # tell workers to exit once the queue has drained
+                    source_q.shutdown()
+
+                # all items processed; tell the progress monitor to exit
+                progress_q.shutdown()
+        except asyncio.CancelledError:
+            self._shutting_down = True
+            raise
+
+    async def show_progress(
+        self, in_q: asyncio.Queue[ITEM], out_q: asyncio.Queue[ITEM]
+    ) -> None:
+        with progress_display.count_task("processing", total=self.get_item_count()) as (
+            progress,
+            task,
+        ):
             while True:
-                item = await in_q.get()
-                progress.update(1)
+                try:
+                    item = await in_q.get()
+                except asyncio.QueueShutDown:
+                    return
+                progress.update(task, advance=1)
                 await out_q.put(item)
                 in_q.task_done()
 
-    async def worker(self, in_q, out_q) -> None:
+    async def worker(
+        self, in_q: asyncio.Queue[ITEM], out_q: asyncio.Queue[ITEM]
+    ) -> None:
         try:
             while True:
-                item = await in_q.get()
+                try:
+                    item = await in_q.get()
+                except asyncio.QueueShutDown:
+                    return
                 await self.process(item)
                 await out_q.put(item)
                 in_q.task_done()
         except asyncio.CancelledError:
-            return
+            # flag before the unwind continues, so concurrent workers
+            # suppress their error logging during the abort (see process)
+            self._shutting_down = True
+            raise
 
     async def process(self, item: ITEM) -> bool:
-        """Applies the filters to an item"""
+        """Applies the filters to an item
+
+        Returns True if the item passed all filters, False if it failed
+        one (logged) or was skipped via EndProcessingItem. Exceptions are
+        propagated -- EndProcessingItem (skip reason, handled by process
+        overrides), EndProcessing / BrokenExecutor (abort the run).
+        """
         try:
             for filt in self.filters:
                 await filt.apply(item)
         except asyncio.CancelledError:
+            raise
+        except EndProcessing:
+            self._shutting_down = True
             raise
         except EndProcessingItem as item_error:
             item_error.log(logger)
@@ -232,53 +246,48 @@ class AsyncPipeline(Generic[ITEM]):
         return True
 
     async def run_io(self, func, *args):
-        """Run **func** in thread pool executor using **args**"""
+        """Run **func** in a thread using **args**"""
         async with self.io_sem:
-            return await self.loop.run_in_executor(None, func, *args)
+            return await asyncio.to_thread(func, *args)
 
     async def run_sp(self, func, *args):
         """Run **func** in process pool executor using **args**"""
-        return await self.loop.run_in_executor(self.proc_pool_executor, func, *args)
+        return await asyncio.get_running_loop().run_in_executor(
+            self.proc_pool_executor, func, *args
+        )
 
 
 class AsyncRequests:
     """Provides helpers for async access to URLs"""
 
-    #: Used as user agent in http requests and as requester in github API requests
-    USER_AGENT = http.USER_AGENT
-
-    def __init__(self, cache_fn: str | None = None) -> None:
+    def __init__(self, cache_file: Path | None = None) -> None:
         #: aiohttp session (only exists while running)
         self.session: aiohttp.ClientSession | None = None
-        self.cache_fn = cache_fn
+        self.cache_file = cache_file
         #: cache
         self.cache: dict[str, dict[str, Any]] | None = None
 
     async def __aenter__(self) -> Self:
-        session = http.make_session(user_agent=self.USER_AGENT)
+        session = http.make_session()
         await session.__aenter__()
         self.session = session
-        if self.cache_fn:
-            if os.path.exists(self.cache_fn):
-                cache_data = await asyncio.to_thread(Path(self.cache_fn).read_bytes)
+        if self.cache_file is not None:
+            if self.cache_file.exists():
+                cache_data = await asyncio.to_thread(self.cache_file.read_bytes)
                 self.cache = pickle.loads(cache_data)
             else:
                 self.cache = {}
-            if "url_text" not in self.cache:
-                self.cache["url_text"] = {}
-            if "url_checksum" not in self.cache:
-                self.cache["url_checksum"] = {}
-            if "ftp_list" not in self.cache:
-                self.cache["ftp_list"] = {}
+            for key in ("url_text", "url_checksum", "ftp_list"):
+                self.cache.setdefault(key, {})
         return self
 
     async def __aexit__(self, ext_type, exc, trace):
         assert self.session is not None
         await self.session.__aexit__(ext_type, exc, trace)
         self.session = None
-        if self.cache_fn:
+        if self.cache_file is not None:
             cache_data = pickle.dumps(self.cache)
-            await asyncio.to_thread(Path(self.cache_fn).write_bytes, cache_data)
+            await asyncio.to_thread(self.cache_file.write_bytes, cache_data)
 
     @http.retry_on_transient
     async def get_text_from_url(self, url: str) -> str:
@@ -304,7 +313,7 @@ class AsyncRequests:
     async def get_checksum_from_url(self, url: str, desc: str) -> str:
         """Compute sha256 checksum of content at **url**
 
-        - Shows TQDM progress monitor with label **desc**.
+        - Shows progress and logs transfer outcomes for HTTP downloads.
         - Caches result
         """
         if self.cache and url in self.cache["url_checksum"]:
@@ -331,8 +340,9 @@ class AsyncRequests:
         assert self.session is not None
         async with self.session.get(url) as resp:
             resp.raise_for_status()
-            async for block in http.stream_download(resp, desc, leave=False):
-                checksum.update(block)
+            async with http.stream_download(resp, desc) as blocks:
+                async for block in blocks:
+                    checksum.update(block)
         return checksum.hexdigest()
 
     @http.retry_on_transient
@@ -344,8 +354,11 @@ class AsyncRequests:
         assert self.session is not None
         async with self.session.get(url) as resp:
             resp.raise_for_status()
-            async with aiofiles.open(fname, "wb") as out:
-                async for block in http.stream_download(resp, desc, leave=False):
+            async with (
+                aiofiles.open(fname, "wb") as out,
+                http.stream_download(resp, desc) as blocks,
+            ):
+                async for block in blocks:
                     await out.write(block)
 
     async def get_ftp_listing(self, url):
@@ -356,7 +369,7 @@ class AsyncRequests:
 
         parsed = urlparse(url)
         async with aioftp.Client.context(
-            parsed.netloc, password=self.USER_AGENT + "@", trust_env=True
+            parsed.netloc, password=http.USER_AGENT + "@", trust_env=True
         ) as client:
             res = [str(path) for path, _info in await client.list(parsed.path)]
         if self.cache:
@@ -373,7 +386,7 @@ class AsyncRequests:
         checksum = sha256()
         async with (
             aioftp.Client.context(
-                parsed.netloc, password=self.USER_AGENT + "@", trust_env=True
+                parsed.netloc, password=http.USER_AGENT + "@", trust_env=True
             ) as client,
             client.download_stream(parsed.path) as stream,
         ):

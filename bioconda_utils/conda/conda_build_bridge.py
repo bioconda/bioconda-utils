@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 from collections import namedtuple
 from importlib.resources import files
 from itertools import chain
@@ -29,6 +28,7 @@ from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
 from .._types import OsLabel, PackageSubdir
+from ..support.env import env_root
 from .repodata import RepoData
 
 cast(Any, conda.gateways.logging).initialize_logging = lambda: None
@@ -139,18 +139,6 @@ def subdir_to_oslabel(subdir: PackageSubdir) -> OsLabel:
     return "linux" if subdir.startswith("linux") else "osx"
 
 
-def _env_root() -> Path:
-    """Return the conda prefix this installation lives in.
-
-    ``conda-forge-pinning`` installs its ``conda_build_config.yaml`` directly
-    into ``$PREFIX``, i.e. into the same environment that also provides the
-    ``bioconda-utils`` entry point. The prefix of the running interpreter is
-    therefore the right place to look, independent of ``PATH`` and of any
-    environment that happens to be activated in the shell.
-    """
-    return Path(sys.prefix)
-
-
 def load_conda_build_config(
     subdir: PackageSubdir | None = None, trim_skip: bool = True
 ):
@@ -166,7 +154,7 @@ def load_conda_build_config(
         config_kwargs["channel_urls"] = tuple(RepoData.config["channels"])
     config = api.Config(**config_kwargs)
 
-    pinnings = _env_root() / "conda_build_config.yaml"
+    pinnings = env_root() / "conda_build_config.yaml"
     # set path to pinnings from conda forge package
     packaged_config = files("bioconda_utils") / "bioconda_utils-conda_build_config.yaml"
     config.exclusive_config_files = [

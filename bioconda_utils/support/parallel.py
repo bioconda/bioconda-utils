@@ -8,7 +8,7 @@ import os
 from functools import partial
 from multiprocessing import Pool
 
-from .logsetup import tqdm
+from .logsetup import progress_display
 
 _max_threads = 1
 
@@ -27,7 +27,14 @@ def threads_to_use():
     return min(_max_threads, cores)
 
 
-def parallel_iter(func, items, desc, *args, **kwargs):
+def parallel_iter(func, items, description, *args, **kwargs):
     pfunc = partial(func, *args, **kwargs)
-    with Pool(threads_to_use()) as pool:
-        yield from tqdm(pool.imap_unordered(pfunc, items), desc=desc, total=len(items))
+    with (
+        Pool(threads_to_use()) as pool,
+        progress_display.count_task(description, total=len(items)) as (progress, task),
+    ):
+        yield from progress.track(
+            pool.imap_unordered(pfunc, items),
+            total=len(items),
+            task_id=task,
+        )

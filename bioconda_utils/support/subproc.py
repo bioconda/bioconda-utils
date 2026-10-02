@@ -20,8 +20,7 @@ from collections.abc import Sequence
 from threading import Thread
 from typing import Any
 
-from yaspin import Spinner, yaspin
-from yaspin.spinners import Spinners
+from .logsetup import progress_display
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +116,7 @@ def run(
     loglevel: int = logging.INFO,
     check: bool = True,
     quiet_failure: bool = False,
+    status: str = "running",
     **kwargs: Any,
 ) -> sp.CompletedProcess:
     """
@@ -135,6 +135,12 @@ def run(
         output. A single term may be passed as a bare string.
       live: Whether output should be sent to log
       check: raise CalledProcessError on failure
+      status: Spinner text shown while output is not streamed live. `run`
+        owns this spinner, so callers must not wrap it in another
+        `Console.status`/Rich `Live`: two live displays on one console
+        render on top of each other instead of replacing one another.
+        Not shown when ``live`` is set, because streaming output is then
+        the progress indicator.
       kwargs: Additional arguments to `subprocess.Popen`
 
     Returns:
@@ -211,8 +217,7 @@ def run(
 
         output_lines = deque()
         if not live:
-            spinner = Spinner(interval=5000, frames=Spinners.dots.frames)
-            with yaspin(spinner, text="running", timer=True):
+            with progress_display.status(status):
                 handle_output(output_lines)
         else:
             handle_output(output_lines)

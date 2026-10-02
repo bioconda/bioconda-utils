@@ -9,12 +9,19 @@ monitor used while streaming response bodies.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+import asyncio
+import logging
+from collections.abc import AsyncGenerator, AsyncIterator
+from contextlib import aclosing, asynccontextmanager
+from time import monotonic
 
 import aiohttp
 import backoff
+from rich.filesize import decimal
 
-from .logsetup import tqdm
+from .logsetup import progress_display
+
+logger = logging.getLogger(__name__)
 
 # Used as user agent in http requests and as requester in github API requests
 USER_AGENT = "bioconda/bioconda-utils"
@@ -59,36 +66,81 @@ def make_session(
     )
 
 
+@asynccontextmanager
 async def stream_download(
     resp: aiohttp.ClientResponse,
     desc: str,
     block_size: int = 1024 * 1024,
-    leave: bool = True,
-    disable: bool | None = None,
-) -> AsyncIterator[bytes]:
-    """Stream the body of **resp** in blocks, showing a progress monitor
+) -> AsyncIterator[AsyncIterator[bytes]]:
+    """Scope a streamed response body, its progress task, and its outcome log.
 
-    Args:
-      resp: Response to read from
-      desc: Progress monitor label
-      block_size: Size of the blocks yielded
-      leave: Keep the progress monitor visible after completion
-      disable: Disable the progress monitor
+    Use ``async with stream_download(response, description) as blocks:`` and
+    iterate ``blocks`` inside that scope. The caller owns the response itself.
+    Leaving the scope closes the iterator and removes the progress task even
+    after an early break, consumer error, or cancellation. Only consuming EOF
+    successfully produces a "Downloaded" record.
+
+    Byte counts describe the body yielded by aiohttp, which decompresses HTTP
+    content by default. An encoded Content-Length cannot describe that body.
     """
-    size = int(resp.headers.get("Content-Length", 0))
-    with tqdm(
-        total=size,
-        unit="B",
-        unit_scale=True,
-        unit_divisor=1024,
-        desc=desc,
-        miniters=1,
-        leave=leave,
-        disable=disable,
-    ) as progress:
-        while True:
-            block = await resp.content.read(block_size)
-            if not block:
-                break
-            progress.update(len(block))
-            yield block
+    if block_size <= 0:
+        raise ValueError("block_size must be positive")
+    length = resp.headers.get("Content-Length")
+    size = (
+        int(length)
+        if length is not None
+        and resp.headers.get("Content-Encoding", "identity") == "identity"
+        else None
+    )
+    received = 0
+    complete = False
+    started = monotonic()
+    logger.info("Downloading %s", desc)
+    try:
+        with progress_display.download_task(desc, total=size) as (progress, task):
+
+            async def read_blocks() -> AsyncGenerator[bytes]:
+                nonlocal received, complete
+                while True:
+                    block = await resp.content.read(block_size)
+                    if not block:
+                        complete = True
+                        return
+                    received += len(block)
+                    progress.update(task, advance=len(block))
+                    yield block
+
+            async with aclosing(read_blocks()) as blocks:
+                yield blocks
+    except asyncio.CancelledError:
+        logger.info(
+            "Download cancelled: %s (%s received in %.1f s)",
+            desc,
+            decimal(received),
+            monotonic() - started,
+        )
+        raise
+    except Exception as exc:
+        logger.warning(
+            "Download failed: %s (%s received in %.1f s): %s",
+            desc,
+            decimal(received),
+            monotonic() - started,
+            exc,
+        )
+        raise
+    else:
+        if complete:
+            logger.info(
+                "Downloaded %s: %s in %.1f s",
+                desc,
+                decimal(received),
+                monotonic() - started,
+            )
+        else:
+            logger.info(
+                "Download stopped: %s (%s received in %.1f s)",
+                desc,
+                decimal(received),
+                monotonic() - started,
+            )

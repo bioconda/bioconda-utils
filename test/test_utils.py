@@ -37,6 +37,7 @@ from bioconda_utils.conda.repodata import RepoData, _CachedRepoData
 from bioconda_utils.config import load_config, normalize_config, validate_config
 from bioconda_utils.containers import docker_utils, pkg_test, upload
 from bioconda_utils.support import subproc
+from bioconda_utils.support.logsetup import format_recipes
 
 logger = logging.getLogger(__name__)
 
@@ -926,6 +927,57 @@ def test_sandboxed():
         assert "BUILDKITE_TOKEN" not in os.environ
 
 
+def test_run_shows_a_single_spinner(monkeypatch):
+    """``run`` owns its progress indicator; callers must not add another.
+
+    Rich renders every live display active on a console, so nesting a
+    ``Console.status`` around ``run`` used to draw two spinners at once.
+    """
+    opened = []
+
+    class RecordingStatus:
+        def __init__(self, message, **kwargs):
+            self.message = message
+            opened.append(message)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+    monkeypatch.setattr(subproc.progress_display, "status", RecordingStatus)
+
+    subproc.run(["echo", "hello"])
+
+    assert opened == ["running"]
+
+    opened.clear()
+    subproc.run(["echo", "hello"], status="Building recipe...")
+    assert opened == ["Building recipe..."]
+
+
+def test_run_does_not_spinner_when_streaming_live(monkeypatch):
+    """With ``live`` set the streamed output is the progress indicator."""
+    opened = []
+
+    class RecordingStatus:
+        def __init__(self, message, **_kwargs):
+            opened.append(message)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+    monkeypatch.setattr(subproc.progress_display, "status", RecordingStatus)
+
+    subproc.run(["echo", "hello"], live=True, status="Building recipe...")
+
+    assert opened == []
+
+
 def test_env_sandboxing():
     r = Recipes(
         r"""
@@ -1439,19 +1491,21 @@ def test_filter_existing_packages_queries_rendered_target_subdir(monkeypatch):
         queried_platforms.append(kwargs["platform"])
         return []
 
+    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
     monkeypatch.setattr(RepoData, "get_package_data", get_package_data)
 
     assert conda_recipes._filter_existing_packages([meta], ["bioconda"]) == (
         [meta],
         [],
         set(),
+        {},
     )
     assert queried_platforms == [[PackageSubdir.LINUX_AARCH64, "noarch"]]
 
 
 def test_get_package_paths_force_builds_existing_and_logs_force(caplog, monkeypatch):
-    # get_package_data yields pandas itertuples rows for ["subdir", "build"]
-    ExistingBuild = namedtuple("ExistingBuild", ["subdir", "build"])
+    # get_package_data yields pandas itertuples rows for ["channel", "subdir", "build"]
+    ExistingBuild = namedtuple("ExistingBuild", ["channel", "subdir", "build"])
     meta = Mock()
     meta.name.return_value = "samtools"
     meta.version.return_value = "1.24"
@@ -1461,7 +1515,11 @@ def test_get_package_paths_force_builds_existing_and_logs_force(caplog, monkeypa
     meta.noarch = False
     meta.noarch_python = False
     meta.config.host_subdir = PackageSubdir.LINUX_64
-    existing_builds = [ExistingBuild(subdir=PackageSubdir.LINUX_64, build="h391949c_1")]
+    existing_builds = [
+        ExistingBuild(
+            channel="bioconda", subdir=PackageSubdir.LINUX_64, build="h391949c_1"
+        )
+    ]
 
     monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
     monkeypatch.setattr(
@@ -1472,7 +1530,12 @@ def test_get_package_paths_force_builds_existing_and_logs_force(caplog, monkeypa
     monkeypatch.setattr(
         RepoData,
         "get_package_data",
-        lambda _self, _keys, **_k: existing_builds,
+        lambda _self, keys, **_k: (
+            []
+            if keys == ["channel", "subdir"]
+            # check_recipe_skippable: no matching version + build number yet
+            else existing_builds  # _filter_existing_packages
+        ),
     )
     monkeypatch.setattr(
         conda_recipes.api,
@@ -1486,6 +1549,7 @@ def test_get_package_paths_force_builds_existing_and_logs_force(caplog, monkeypa
     )
     assert paths == [Path("/tmp/samtools-1.24-h391949c_1.tar.bz2")]
     assert "FORCE: building samtools-1.24-h391949c_1" in caplog.text
+    assert "channel(s) [bioconda]" in caplog.text
     assert "it is not forced" not in caplog.text
 
     caplog.clear()
@@ -1493,7 +1557,78 @@ def test_get_package_paths_force_builds_existing_and_logs_force(caplog, monkeypa
         Path("recipes/samtools"), ["bioconda"], force=False
     )
     assert paths == []
+    assert "channel(s) [bioconda]" in caplog.text
     assert "it is not forced" in caplog.text
+
+
+def test_get_package_paths_reports_channels_per_multi_output(caplog, monkeypatch):
+    """Sibling outputs of one recipe must not pool each other's channels.
+
+    ``noarch: python`` outputs of a multi-output recipe all render to the
+    ``noarch`` subdir with the same ``pyXY_0`` build string, so a channel
+    lookup keyed on ``(subdir, build)`` alone collapses them into one entry
+    and every output reports the union of the channels holding its siblings.
+    """
+    # get_package_data yields pandas itertuples rows for ["channel", "subdir", "build"]
+    ExistingBuild = namedtuple("ExistingBuild", ["channel", "subdir", "build"])
+
+    def make_output(name):
+        meta = Mock()
+        meta.name.return_value = name
+        meta.version.return_value = "5.0.0"
+        meta.build_number.return_value = 0
+        meta.build_id.return_value = "py311_0"
+        meta.pkg_fn.return_value = f"{name}-5.0.0-py311_0"
+        meta.noarch = True
+        meta.noarch_python = False
+        meta.config.host_subdir = PackageSubdir.LINUX_64
+        return meta
+
+    outputs = [make_output("r-seurat"), make_output("r-seuratdata")]
+    # Each output exists in exactly one channel, and not in the same one.
+    rows_by_name = {
+        "r-seurat": [ExistingBuild("bioconda", "noarch", "py311_0")],
+        "r-seuratdata": [ExistingBuild("conda-forge", "noarch", "py311_0")],
+    }
+
+    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda", "conda-forge"]})
+    monkeypatch.setattr(
+        conda_recipes,
+        "_load_platform_metas",
+        lambda *_a, **_k: ("noarch", outputs),
+    )
+
+    def get_package_data(_self, keys, name: str = "", **_kwargs):
+        if keys == ["channel", "subdir"]:
+            # check_recipe_skippable: no matching version + build number yet
+            return []
+        return rows_by_name[name]  # _filter_existing_packages
+
+    monkeypatch.setattr(RepoData, "get_package_data", get_package_data)
+    monkeypatch.setattr(
+        conda_recipes.api,
+        "get_output_file_paths",
+        lambda m: [f"/tmp/{m.pkg_fn()}.conda"],
+    )
+
+    caplog.set_level(logging.INFO, logger="bioconda_utils.conda.recipes")
+    paths = conda_recipes.get_package_paths(
+        Path("recipes/r-seurat"), ["bioconda", "conda-forge"], force=True
+    )
+    assert paths == [
+        Path("/tmp/r-seurat-5.0.0-py311_0.conda"),
+        Path("/tmp/r-seuratdata-5.0.0-py311_0.conda"),
+    ]
+    assert (
+        "FORCE: building r-seurat-5.0.0-py311_0 "
+        "although it is already in channel(s) [bioconda]." in caplog.text
+    )
+    assert (
+        "FORCE: building r-seuratdata-5.0.0-py311_0 "
+        "although it is already in channel(s) [conda-forge]." in caplog.text
+    )
+    # the pooled union the collision used to produce
+    assert "channel(s) [bioconda, conda-forge]" not in caplog.text
 
 
 # must import config_fixture, otherwise this test fails because RepoData can't be instantiated.
@@ -1525,6 +1660,37 @@ def test_check_recipe_skippable_queries_requested_target(monkeypatch, config_fix
     )
     assert loaded_targets == [(False, ContainerPlatform.LINUX_ARM64)]
     assert queried_platforms == [[PackageSubdir.LINUX_AARCH64, "noarch"]]
+
+
+def test_check_recipe_skippable_logs_channels_with_build(caplog, monkeypatch):
+    meta = Mock()
+    meta.name.return_value = "samtools"
+    meta.version.return_value = "1.24"
+    meta.build_number.return_value = 1
+    meta.get_value.return_value = None
+    meta.noarch = False
+    meta.noarch_python = False
+    meta.config.host_subdir = PackageSubdir.LINUX_64
+
+    monkeypatch.setattr(
+        conda_recipes,
+        "_load_platform_metas",
+        lambda *_a, **_k: (PackageSubdir.LINUX_64, [meta]),
+    )
+    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda", "conda-forge"]})
+    # conda-forge already has samtools 1.24 build_number 1, bioconda does not
+    monkeypatch.setattr(
+        RepoData,
+        "get_package_data",
+        lambda _self, _keys, **_k: [("conda-forge", PackageSubdir.LINUX_64)],
+    )
+
+    caplog.set_level(logging.INFO, logger="bioconda_utils.conda.recipes")
+    assert conda_recipes.check_recipe_skippable(
+        Path("samtools"), ["bioconda", "conda-forge"], target_platform=None
+    )
+    assert "channel(s) [conda-forge]" in caplog.text
+    assert "[bioconda" not in caplog.text
 
 
 def test_native_platform_skipping(config_fixture):
@@ -1684,7 +1850,7 @@ def test_load_conda_build_config_reads_pinnings_from_env_root(monkeypatch, tmp_p
     env_root = tmp_path / "env"
     env_root.mkdir()
     (env_root / "conda_build_config.yaml").write_text("{}\n")
-    monkeypatch.setattr(conda_build_bridge, "_env_root", lambda: env_root)
+    monkeypatch.setattr(conda_build_bridge, "env_root", lambda: env_root)
 
     config = conda_build_bridge.load_conda_build_config()
 
@@ -2210,6 +2376,32 @@ def test_load_config_registers_config_after_resolving_paths(monkeypatch, tmp_pat
     assert config["channels"] == ["conda-forge", "bioconda"]
     assert config["primary_platforms"] == [PackageSubdir.LINUX_64, PackageSubdir.OSX_64]
     assert registered == [config]
+
+
+def test_recipe_path_renders_as_path_in_logs(caplog):
+    """RecipePath must not leak its tuple repr into log messages."""
+    recipe = RecipePath(path=Path("recipes/samtools/1.7"), build_system=CONDA)
+
+    with caplog.at_level(logging.INFO):
+        logging.getLogger("test").info("Nothing to be done for recipe %s", recipe)
+
+    assert "Nothing to be done for recipe recipes/samtools/1.7" in caplog.text
+    assert "build_system" not in caplog.text
+    # the tuple repr is still available for debugging
+    assert "build_system" in repr(recipe)
+
+
+def test_format_recipes_renders_collections():
+    recipes = [
+        RecipePath(path=Path("recipes/htslib/1.19"), build_system=CONDA),
+        RecipePath(path=Path("recipes/samtools/1.7"), build_system=RATTLER),
+    ]
+
+    assert format_recipes(recipes) == "recipes/htslib/1.19, recipes/samtools/1.7"
+    assert format_recipes(recipes, separator="\n") == (
+        "recipes/htslib/1.19\nrecipes/samtools/1.7"
+    )
+    assert format_recipes([]) == ""
 
 
 def test_load_meta_fast_allows_duplicate_keys(tmp_path):
