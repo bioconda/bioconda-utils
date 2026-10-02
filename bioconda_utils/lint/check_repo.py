@@ -4,6 +4,7 @@ These checks verify consistency with the repository (blacklisting,
 other channels, existing versions).
 """
 
+from pathlib import Path
 from typing import Any, ClassVar
 
 from bioconda_utils.build_failure import BuildFailureRecord
@@ -96,7 +97,7 @@ class recipe_is_blacklisted(LintCheck):
     def __init__(self, linter: Any) -> None:
         super().__init__(linter)
         self.skiplist = linter.get_skiplist()
-        self.blacklists = linter.config.get("blacklists")
+        self.blacklists: list[Path] = linter.config.get("blacklists", [])
 
     def check_recipe(self, recipe: _recipe.Recipe) -> None:
         if self.skiplist.is_skiplisted(recipe):
@@ -107,16 +108,14 @@ class recipe_is_blacklisted(LintCheck):
         if failure_record.exists() and failure_record.skiplist:
             failure_record.remove()
         for blacklist in self.blacklists:
-            with open(blacklist) as fdes:
-                data = fdes.readlines()
+            data = blacklist.read_text().splitlines(keepends=True)
             for num, line in enumerate(data):
                 if self.recipe.name in line:
                     break
             else:
                 continue
             del data[num]
-            with open(blacklist, "w") as fdes:
-                fdes.write("".join(data))
+            blacklist.write_text("".join(data))
             break
         else:
             return False

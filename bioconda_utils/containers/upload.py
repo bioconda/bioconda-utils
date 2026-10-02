@@ -27,13 +27,13 @@ logger = logging.getLogger(__name__)
 
 
 def anaconda_upload(
-    package: str | Path, token: str | None = None, label: str | None = None
+    package: Path, token: str | None = None, label: str | None = None
 ) -> bool:
     """
     Upload a package to anaconda.
 
     Args:
-      package: Filename to built package
+      package: Path to built package
       token: If None, use the environment variable ``ANACONDA_TOKEN``,
              otherwise, use this as the token for authenticating the
              anaconda client.
@@ -45,7 +45,6 @@ def anaconda_upload(
       ValueError
     """
     label_arg = []
-    package = Path(package)
     if label is not None:
         label_arg = ["--label", label]
 

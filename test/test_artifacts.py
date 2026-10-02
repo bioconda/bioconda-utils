@@ -14,6 +14,28 @@ from bioconda_utils.containers.container_manifests import MulledImageRecord
 BIOCONTAINERS = _types.QuayUploadTarget("biocontainers")
 
 
+@pytest.mark.parametrize("artifact_source", ["azure", "github-actions", "circleci"])
+def test_download_artifact_ignores_url_query_and_fragment(
+    monkeypatch, tmp_path, artifact_source
+):
+    url = "https://example.test/job/packages/linux-64/artifact.zip?sv=token#fragment"
+    downloaded = []
+
+    def download_artifact(source_url, destination, source):
+        assert source_url == url
+        assert source == artifact_source
+        downloaded.append(destination)
+        with zipfile.ZipFile(destination, "w") as archive:
+            archive.writestr("contents.txt", "contents")
+
+    monkeypatch.setattr(artifacts, "download_artifact", download_artifact)
+    artifacts._download_artifact_contents(url, artifact_source, tmp_path)
+
+    assert downloaded[0].name == "artifact.zip"
+    if artifact_source != "circleci":
+        assert (downloaded[0].parent / "contents.txt").read_text() == "contents"
+
+
 class _TotalList(list):
     @property
     def totalCount(self):

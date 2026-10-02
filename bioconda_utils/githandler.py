@@ -2,13 +2,12 @@
 
 import asyncio
 import logging
-import os
 import re
 import subprocess
-from collections.abc import Iterable
+from collections.abc import Collection, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import BinaryIO, Protocol
+from typing import BinaryIO, ClassVar, Protocol
 
 import git
 from ruamel.yaml import YAML
@@ -287,9 +286,9 @@ class GitHandlerBase:
     def get_latest_master(self):
         return self.home_remote.fetch("master")[0].commit
 
-    def read_from_branch(self, branch, file_name: str | Path) -> str:
+    def read_from_branch(self, branch, file_name: Path) -> str:
         """Reads contents of file **file_name** from git branch **branch**"""
-        abs_file_name = Path(file_name).resolve()
+        abs_file_name = file_name.resolve()
         abs_repo_root = Path(self.repo.working_dir).resolve()
 
         if not abs_file_name.is_relative_to(abs_repo_root):
@@ -367,7 +366,7 @@ class GitHandlerBase:
             )
         return merge_bases[0]
 
-    def list_changed_files(self, ref=None, other=None):
+    def list_changed_files(self, ref=None, other=None) -> Iterator[Path]:
         """Lists files that would be added/modified by merge of **other** into **ref**
 
         See also `get_merge_base()`.
@@ -384,13 +383,18 @@ class GitHandlerBase:
         merge_base = self.get_merge_base(ref, other)
         for diffobj in merge_base.diff(ref):
             if not diffobj.deleted_file:
-                yield diffobj.b_path
+                yield Path(diffobj.b_path)
 
-    def list_modified_files(self):
+    def list_modified_files(self) -> Iterator[Path]:
         """Lists files modified in working directory"""
-        seen = set()
+        seen: set[Path] = set()
         for diffobj in self.repo.index.diff(None):
-            for fname in (diffobj.a_path, diffobj.b_path):
+            # Either side may be absent (additions have no a_path, removals no
+            # b_path); only the present ones are real working-tree paths.
+            for raw_fname in (diffobj.a_path, diffobj.b_path):
+                if raw_fname is None:
+                    continue
+                fname = Path(raw_fname)
                 if fname not in seen:
                     seen.add(fname)
                     yield fname
@@ -407,7 +411,7 @@ class GitHandlerBase:
 
     def commit_and_push_changes(
         self,
-        files: list[str] | list[Path],
+        files: Sequence[Path],
         branch_name: str | None,
         msg: str,
         sign=False,
@@ -422,9 +426,7 @@ class GitHandlerBase:
         if not files:
             files = list(self.list_modified_files())
 
-        files_str = [str(file) for file in files]
-
-        self.repo.index.add(files_str)
+        self.repo.index.add([file.as_posix() for file in files])
         if not self.repo.index.diff("HEAD"):
             return False
 
@@ -474,41 +476,43 @@ class BiocondaRepoMixin(GitHandlerBase):
     """Githandler with logic specific to Bioconda Repo"""
 
     #: location of recipes folder within repo
-    recipes_folder = "recipes"
+    recipes_folder: ClassVar[Path] = Path("recipes")
 
     #: location of configuration file within repo
-    config_file = "config.yml"
+    config_file: ClassVar[Path] = Path("config.yml")
 
     def get_changed_recipes(
         self,
         ref: str | None = None,
         other: str | None = None,
-        files: Iterable[str] | None = None,
+        files: Collection[Path] | None = None,
     ) -> list[Path]:
         """Returns list of modified recipes
 
         Args:
           ref: See `get_merge_base`. Defaults to HEAD
           other: See `get_merge_base`. Defaults to origin/master
-          files: List of files to consider. Defaults to ``meta.yaml``
-                 and ``build.sh``
+          files: File *names* to consider. Defaults to ``meta.yaml``,
+                 ``recipe.yaml`` and ``build.sh``
         Result:
           List of unique recipe folders with changes. Path is from repo
           root (e.g. ``recipes/blast``). Recipes outside of
           ``recipes_folder`` are ignored.
         """
         if files is None:
-            files = ["meta.yaml", "recipe.yaml", "build.sh"]
+            files = [Path("meta.yaml"), Path("recipe.yaml"), Path("build.sh")]
+        # ``files`` names files within a recipe, whereas the paths from
+        # list_changed_files() are rooted at the repo ("recipes/blast/meta.yaml"),
+        # so membership has to be tested on the file name rather than the path.
+        wanted_names: set[str] = {f.name for f in files}
 
         changed: set[Path] = set()
 
-        for path_str in self.list_changed_files(ref, other):
-            path: Path = Path(path_str)
-
+        for path in self.list_changed_files(ref, other):
             if not path.is_relative_to(self.recipes_folder):
                 continue  # skip things outside the recipes folder
 
-            if path.name in files:
+            if path.name in wanted_names:
                 changed.add(path.parent)
         return list(changed)
 
@@ -532,9 +536,9 @@ class BiocondaRepoMixin(GitHandlerBase):
         config_data = self.read_from_branch(branch, self.config_file)
         config = YAML(typ="safe").load(config_data)
         blacklists = config["blacklists"]
-        blacklisted = set()
+        blacklisted: set[str] = set()
         for blacklist in blacklists:
-            blacklist_data = self.read_from_branch(branch, blacklist)
+            blacklist_data = self.read_from_branch(branch, Path(blacklist))
             for line in blacklist_data.splitlines():
                 if line.startswith("#") or not line.strip():
                     continue
@@ -594,15 +598,15 @@ class GitHandler(GitHandlerBase):
         allow_dirty=True,
         depth=1,
     ) -> None:
-        if os.path.exists(folder):
+        if folder.exists():
             repo = git.Repo(folder, search_parent_directories=True)
         else:
             try:
-                os.mkdir(folder)
+                folder.mkdir()
                 logger.error("cloning %s into %s", home, folder)
                 repo = git.Repo.clone_from(home, folder, depth=depth)
             except git.GitCommandError:
-                os.rmdir(folder)
+                folder.rmdir()
                 raise
         super().__init__(repo, dry_run, home, fork, allow_dirty)
 

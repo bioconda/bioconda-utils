@@ -282,7 +282,7 @@ def build(
         if docker_builder is not None:
             report_resources(f"Starting build for {recipe}", docker_builder is not None)
             docker_builder.build_recipe(
-                recipe_dir=recipe.path.resolve().as_posix(),
+                recipe_dir=recipe.path.resolve(),
                 build_args=" ".join(args),
                 rattler_args=" ".join(rattler_args),
                 env=whitelisted_env,
@@ -347,9 +347,7 @@ def build(
                             output_dir=rattler_output_dir,
                         )
 
-        logger.info(
-            "BUILD SUCCESS %s", " ".join(os.path.basename(p) for p in pkg_paths)
-        )
+        logger.info("BUILD SUCCESS %s", " ".join(p.name for p in pkg_paths))
         if record_build_failure and build_failure_record_existed_before_build:
             # The obsolete record is already removed; commit that removal.
             build_failure_record.commit_and_push_changes()

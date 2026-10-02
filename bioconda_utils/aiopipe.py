@@ -5,7 +5,6 @@ from __future__ import annotations
 import abc
 import asyncio
 import logging
-import os
 import pickle
 import signal
 from concurrent.futures import ProcessPoolExecutor
@@ -247,7 +246,7 @@ class AsyncRequests:
     #: Used as user agent in http requests and as requester in github API requests
     USER_AGENT = http.USER_AGENT
 
-    def __init__(self, cache_fn: str | None = None) -> None:
+    def __init__(self, cache_fn: Path | None = None) -> None:
         #: aiohttp session (only exists while running)
         self.session: aiohttp.ClientSession | None = None
         self.cache_fn = cache_fn
@@ -259,8 +258,8 @@ class AsyncRequests:
         await session.__aenter__()
         self.session = session
         if self.cache_fn:
-            if os.path.exists(self.cache_fn):
-                cache_data = await asyncio.to_thread(Path(self.cache_fn).read_bytes)
+            if self.cache_fn.exists():
+                cache_data = await asyncio.to_thread(self.cache_fn.read_bytes)
                 self.cache = pickle.loads(cache_data)
             else:
                 self.cache = {}
@@ -278,7 +277,7 @@ class AsyncRequests:
         self.session = None
         if self.cache_fn:
             cache_data = pickle.dumps(self.cache)
-            await asyncio.to_thread(Path(self.cache_fn).write_bytes, cache_data)
+            await asyncio.to_thread(self.cache_fn.write_bytes, cache_data)
 
     @http.retry_on_transient
     async def get_text_from_url(self, url: str) -> str:
@@ -336,7 +335,7 @@ class AsyncRequests:
         return checksum.hexdigest()
 
     @http.retry_on_transient
-    async def get_file_from_url(self, fname: str, url: str, desc: str) -> None:
+    async def get_file_from_url(self, fname: Path, url: str, desc: str) -> None:
         """Fetch file at **url** into **fname**
 
         Shows progress monitor with label **desc**.

@@ -47,10 +47,10 @@ def test_record_roundtrip_and_deduplication(tmp_path):
     )
     dir_a = tmp_path / "a"
     dir_b = tmp_path / "b"
-    container_manifests.write_image_record(str(dir_a), record)
-    container_manifests.write_image_record(str(dir_b), record)
+    container_manifests.write_image_record(dir_a, record)
+    container_manifests.write_image_record(dir_b, record)
 
-    assert container_manifests.load_image_records([str(tmp_path)]) == [record]
+    assert container_manifests.load_image_records([tmp_path]) == [record]
 
 
 def test_multiarch_ref_strips_build_hash():
@@ -189,13 +189,13 @@ def test_write_image_record_creates_unique_file(tmp_path):
         platform_ref="quay.io/biocontainers/samtools:1.20--0-arm64",
         digest="sha256:" + "a" * 64,
     )
-    container_manifests.write_image_record(str(tmp_path), record)
+    container_manifests.write_image_record(tmp_path, record)
     assert tmp_path.is_dir()
     files = list(tmp_path.iterdir())
     assert len(files) == 1
     assert files[0].suffix == ".jsonl"
     assert files[0].name.startswith("20")
-    assert container_manifests.load_image_records([str(tmp_path)]) == [record]
+    assert container_manifests.load_image_records([tmp_path]) == [record]
 
 
 def test_load_records_from_directory_ignores_non_jsonl_files(tmp_path):
@@ -205,11 +205,11 @@ def test_load_records_from_directory_ignores_non_jsonl_files(tmp_path):
         platform_ref="quay.io/biocontainers/samtools:1.20--0-arm64",
         digest="sha256:" + "a" * 64,
     )
-    container_manifests.write_image_record(str(tmp_path), record)
+    container_manifests.write_image_record(tmp_path, record)
     (tmp_path / "README.md").write_text("not json\n", encoding="utf-8")
     (tmp_path / ".gitkeep").write_text("", encoding="utf-8")
 
-    assert container_manifests.load_image_records([str(tmp_path)]) == [record]
+    assert container_manifests.load_image_records([tmp_path]) == [record]
 
 
 def test_load_records_rejects_mismatched_platform_ref(tmp_path):
@@ -225,7 +225,7 @@ def test_load_records_rejects_mismatched_platform_ref(tmp_path):
         )
     )
     with pytest.raises(ValueError, match="Unexpected platform ref"):
-        container_manifests.load_image_records([str(path)])
+        container_manifests.load_image_records([path])
 
 
 def test_load_records_rejects_invalid_digest(tmp_path):
@@ -241,7 +241,7 @@ def test_load_records_rejects_invalid_digest(tmp_path):
         )
     )
     with pytest.raises(ValueError, match="Invalid digest"):
-        container_manifests.load_image_records([str(path)])
+        container_manifests.load_image_records([path])
 
 
 def test_reconcile_is_idempotent(monkeypatch):

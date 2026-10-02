@@ -12,13 +12,13 @@ import logging
 import os
 import sys
 from collections.abc import Collection
+from itertools import islice
 from pathlib import Path
 from threading import Event, Thread
 
 import tqdm as _tqdm
 from colorlog import ColoredFormatter
 
-from .._types import RecipePath
 from .subproc import run
 
 logger = logging.getLogger(__name__)
@@ -217,7 +217,7 @@ def setup_logger(
 
 
 def ellipsize_recipes(
-    recipes: Collection[RecipePath] | Collection[Path],
+    recipes: Collection[os.PathLike[str]],
     recipe_folder: Path,
     n: int = 5,
     m: int = 50,
@@ -233,10 +233,9 @@ def ellipsize_recipes(
     Returns:
       A string like " (htslib, samtools, ...)" or ""
     """
-    # ensure recipes are Paths
-    recipe_paths: list[Path] = [Path(recipe) for recipe in list(recipes)[:n]]
     if not recipes or len(recipes) > m:
         return ""
+    recipe_paths: list[Path] = [Path(recipe) for recipe in islice(recipes, n)]
     if len(recipes) > n:
         append = ", ..."
     else:

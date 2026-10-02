@@ -1,5 +1,3 @@
-import glob
-import os.path as op
 from pathlib import Path
 
 import pytest
@@ -14,13 +12,13 @@ yaml = YAML(typ="rt")  # pylint: disable=invalid-name
 TEST_DATA = {}
 
 # gather all linting test case YAML files from lint_cases/ subdirectory
-linting_case_files = glob.glob(op.join(op.dirname(__file__), "lint_cases", "*.yaml"))
+linting_case_files = sorted((Path(__file__).parent / "lint_cases").glob("*.yaml"))
 
 for case_file in linting_case_files:
-    with open(case_file) as data:
+    with case_file.open() as data:
         # the case YAML file name is unique by default, so we can use the
-        # basename as a unique case_name here
-        case_name = op.splitext(op.basename(case_file))[0]
+        # stem as a unique case_name here
+        case_name = case_file.stem
         case_data = yaml.load(data)
         TEST_DATA[case_name] = case_data
         # we need the case_name accessible in some cases
@@ -34,12 +32,12 @@ TEST_CASE_IDS = list(TEST_DATA.keys())
 def linter(config_file, recipes_folder):
     """Prepares a linter given config_folder and recipes_folder"""
     config = load_config(config_file)
-    yield lint.Linter(config, Path(recipes_folder), nocatch=True)
+    yield lint.Linter(config, recipes_folder, nocatch=True)
 
 
 @pytest.mark.parametrize("case", TEST_CASES, ids=TEST_CASE_IDS)
 def test_lint(linter, recipe_dirs, mock_repodata, case):
-    recipes: list[RecipePath] = [RecipePath(Path(p), CONDA) for p in recipe_dirs]
+    recipes: list[RecipePath] = [RecipePath(p, CONDA) for p in recipe_dirs]
     linter.clear_messages()
     linter.lint(recipes)
     messages = linter.get_messages()
