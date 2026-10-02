@@ -964,6 +964,11 @@ def lint(
         else:
             error_console.print("Errors were found", style="red")
             raise typer.Exit(1)
+    except (typer.Exit, typer.BadParameter):
+        # Control flow and user errors, not failures. Both derive from
+        # Exception, so without this the handler below logs a traceback and
+        # offers a post-mortem for a recipe with lint errors or a bad --config.
+        raise
     except Exception:
         if _handle_pdb_exception("Lint", pdb):
             return

@@ -8,6 +8,7 @@ from typing import Any, cast
 import click
 import networkx as nx
 import pytest
+import typer
 from rich.console import Console
 from typer.core import TyperArgument
 from typer.main import get_command
@@ -657,6 +658,52 @@ def test_lint_logs_exceptions_without_pdb(monkeypatch, caplog, tmp_path):
         cli.lint(tmp_path, tmp_path)
 
     assert "Lint command failed" in caplog.text
+
+
+def test_lint_exit_is_not_reported_as_a_command_failure(monkeypatch, caplog, tmp_path):
+    """Lint errors are an exit code, not a crash to trace back.
+
+    ``typer.Exit`` derives from ``RuntimeError``, so the command's own
+    ``except Exception`` used to log a traceback (and offer a post-mortem)
+    whenever a recipe had lint errors.
+    """
+    monkeypatch.setattr(cli, "_setup_runtime", lambda *args, **kwargs: None)
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda _path: {})
+    monkeypatch.setattr(cli, "get_recipes", lambda *_args, **_kwargs: [])
+
+    class ErroringLinter:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def lint(self, *_args, **_kwargs):
+            return True
+
+        def get_messages(self):
+            return []
+
+    monkeypatch.setattr("bioconda_utils.lint.Linter", ErroringLinter)
+
+    with caplog.at_level(logging.ERROR), pytest.raises(typer.Exit) as exc_info:
+        cli.lint(tmp_path, tmp_path)
+
+    assert exc_info.value.exit_code == 1
+    assert "Lint command failed" not in caplog.text
+
+
+def test_lint_bad_parameter_is_not_reported_as_a_command_failure(
+    monkeypatch, caplog, tmp_path
+):
+    """A mistyped path is a usage error, so click renders it without a traceback."""
+    monkeypatch.setattr(cli, "_setup_runtime", lambda *args, **kwargs: None)
+
+    with caplog.at_level(logging.ERROR):
+        result = runner.invoke(
+            cli.app, ["lint", str(tmp_path / "missing"), str(tmp_path / "config.yml")]
+        )
+
+    assert result.exit_code == 2
+    assert "does not exist" in click.unstyle(result.output)
+    assert "Lint command failed" not in caplog.text
 
 
 def test_handle_merged_pr_accepts_single_git_ref(monkeypatch):
