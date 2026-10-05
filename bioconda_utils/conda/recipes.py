@@ -167,9 +167,7 @@ def check_recipe_skippable(
         )
         return True
 
-    packages = {
-        (meta.name(), meta.version(), int(meta.build_number() or 0)) for meta in metas
-    }
+    packages = {_meta_pkg_key(meta) for meta in metas}
     rendered_subdirs = {_meta_subdir(meta) for meta in metas}
     queried_subdirs = sorted(rendered_subdirs | {"noarch"})
     r = RepoData()
@@ -190,13 +188,7 @@ def check_recipe_skippable(
         # No packages with same version + build num in channels: no need to skip
         return False
     num_new_pkg_builds = Counter(
-        (
-            meta.name(),
-            meta.version(),
-            int(meta.build_number() or 0),
-            _meta_subdir(meta),
-        )
-        for meta in metas
+        (*_meta_pkg_key(meta), _meta_subdir(meta)) for meta in metas
     )
     if num_new_pkg_builds == num_existing_pkg_builds:
         logger.info(
