@@ -1,4 +1,3 @@
-import os
 import tempfile
 from pathlib import Path
 from textwrap import dedent
@@ -15,7 +14,7 @@ from bioconda_utils.rattler.rattler_build_bridge import (
 )
 
 
-def ensure_missing(package):
+def ensure_missing(package: Path) -> None:
     """
     Delete a package if it exists and re-index the conda-bld dir.
 
@@ -26,14 +25,13 @@ def ensure_missing(package):
 
     Parameters
     ----------
-    package : str
+    package : Path
         Path to tarball of built package. If all you have is a recipe path, use
         `built_package_path()` to get the tarball path.
     """
-    if os.path.exists(package):
-        os.unlink(package)
-    assert not os.path.exists(package)
-    update_index(os.path.dirname(os.path.dirname(package)))
+    package.unlink(missing_ok=True)
+    assert not package.exists()
+    update_index(str(package.parent.parent))
 
 
 class Recipes:
@@ -104,25 +102,24 @@ class Recipes:
             self.data = dedent(data)
             self.recipes = yaml.load(self.data)
         else:
-            self.data = os.path.join(os.path.dirname(__file__), data)
-            self.recipes = yaml.load(Path(self.data).read_text())
-        self.pkgs: dict[str, list[str]] = {}
+            self.data = Path(__file__).parent / data
+            self.recipes = yaml.load(self.data.read_text())
+        self.pkgs: dict[str, list[Path]] = {}
 
     def write_recipes(self):
-        basedir = tempfile.mkdtemp()
-        self.recipe_dirs = {}
+        basedir = Path(tempfile.mkdtemp())
+        self.recipe_dirs: dict[str, Path] = {}
         for name, recipe in self.recipes.items():
-            rdir = os.path.join(basedir, name)
-            os.makedirs(rdir)
+            rdir = basedir / name
+            rdir.mkdir(parents=True)
             self.recipe_dirs[name] = rdir
             for key, value in recipe.items():
-                with open(os.path.join(rdir, key), "w") as fout:
-                    fout.write(value)
-        self.basedir = Path(basedir)
+                (rdir / key).write_text(value)
+        self.basedir = basedir
 
     @property
     def recipe_dirnames(self) -> list[Path]:
-        return [Path(p) for p in list(self.recipe_dirs.values())]
+        return list(self.recipe_dirs.values())
 
 
 def get_rattler_params(

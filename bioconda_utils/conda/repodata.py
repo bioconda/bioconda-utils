@@ -12,7 +12,6 @@ import asyncio
 import datetime
 import json
 import logging
-import os
 import platform
 import sys
 import warnings
@@ -20,6 +19,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from itertools import product, zip_longest
 from multiprocessing.pool import ThreadPool
+from pathlib import Path
 from typing import ClassVar, TypeAlias, cast
 
 import aiofiles
@@ -138,8 +138,9 @@ class AsyncRequests:
     async def _async_fetch_one(session, url, desc, cb=None, data=None, fd=None):
         result = []
         if url.startswith("file://"):
-            if os.path.exists(url[7:]):
-                async with aiofiles.open(url[7:], mode="rb") as f:
+            local_path = Path(url[7:])
+            if local_path.exists():
+                async with aiofiles.open(local_path, mode="rb") as f:
                     result.append(await f.read())
             else:
                 subdir = url.split("/")[-2]
@@ -237,7 +238,7 @@ class RepoData:
     # config object
     config = None
 
-    cache_file = None
+    cache_file: Path | None = None
     _df = None
     _df_ts = None
     _repository_cache: ClassVar[dict[RepoDataKey, _CachedRepoData]] = {}
@@ -265,7 +266,7 @@ class RepoData:
             RepoData.__instance = object.__new__(cls)
         return RepoData.__instance
 
-    def set_cache(self, cache):
+    def set_cache(self, cache: Path) -> None:
         if self._df is not None:
             warnings.warn("RepoData cache set after first use", BiocondaUtilsWarning)
         else:
@@ -314,9 +315,9 @@ class RepoData:
         return url
 
     def _load_channel_dataframe_cached(self):
-        if self.cache_file is not None and os.path.exists(self.cache_file):
+        if self.cache_file is not None and self.cache_file.exists():
             ts = datetime.datetime.fromtimestamp(
-                os.path.getmtime(self.cache_file), datetime.UTC
+                self.cache_file.stat().st_mtime, datetime.UTC
             )
             seconds = (datetime.datetime.now(datetime.UTC) - ts).total_seconds()
             if seconds <= self.cache_timeout:

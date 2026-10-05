@@ -5,8 +5,6 @@ can be mechanically checked).
 
 """
 
-import glob
-import os
 from typing import Any, ClassVar
 
 from bioconda_utils.conda.repodata import RepoData
@@ -92,8 +90,8 @@ class has_windows_bat_file(LintCheck):
     """
 
     def check_recipe(self, recipe: _recipe.Recipe) -> None:
-        for fname in glob.glob(os.path.join(recipe.dir, "*.bat")):
-            self.message(fname=fname)
+        for bat_file in sorted(recipe.dir.glob("*.bat")):
+            self.message(fname=bat_file)
 
 
 class long_summary(LintCheck):

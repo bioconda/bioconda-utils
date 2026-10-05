@@ -10,7 +10,6 @@ rendering.
 from __future__ import annotations
 
 import logging
-import os
 import sys
 from collections import namedtuple
 from importlib.resources import files
@@ -116,8 +115,9 @@ def load_meta_fast(recipe: Path, env=None):
         env = {}
 
     try:
-        pth = os.path.join(recipe, "meta.yaml")
-        template = jinja_silent_undef.from_string(Path(pth).read_text(encoding="utf-8"))
+        template = jinja_silent_undef.from_string(
+            (recipe / "meta.yaml").read_text(encoding="utf-8")
+        )
         yaml_loader = YAML(typ="safe")
         yaml_loader.allow_duplicate_keys = True
         meta = yaml_loader.load(template.render(env))
@@ -175,7 +175,7 @@ def load_conda_build_config(
     ]
     variant_config_files = getattr(config, "variant_config_files", None) or []
     for config_file in chain(config.exclusive_config_files, variant_config_files):
-        if not os.path.exists(config_file):
+        if not Path(config_file).exists():
             raise FileNotFoundError(
                 f"conda-build configuration file does not exist: {config_file}\n"
                 f"Expected the pinnings at {pinnings} (installed by the "
@@ -210,7 +210,7 @@ def get_conda_build_config_files(config=None):
         yield CondaBuildConfigFile("-m", file_path)
 
 
-def load_first_metadata(recipe, config=None, finalize=True):
+def load_first_metadata(recipe: Path, config=None, finalize=True):
     """
     Returns just the first of possibly many metadata files. Used for when you
     need to do things like check a package name or version number (which are
@@ -220,6 +220,9 @@ def load_first_metadata(recipe, config=None, finalize=True):
 
     Parameters
     ----------
+    recipe : Path
+        Path to the recipe directory.
+
     finalize : bool
         If True, do a full conda-build render. Determines exact package builds
         of build/host dependencies. It involves costly dependency resolution

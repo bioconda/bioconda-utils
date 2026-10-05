@@ -45,7 +45,6 @@ from __future__ import annotations
 import abc
 import asyncio
 import logging
-import os
 import pickle
 import random
 from collections import Counter, defaultdict
@@ -184,8 +183,8 @@ class RecipeGraphSource(RecipeSource):
         packages: list[str],
         exclude: list[str],
         shuffle: bool,
-        config: dict[str, str],
-        cache_fn: str | None = None,
+        config: dict[str, Any],
+        cache_fn: Path | None = None,
     ) -> None:
         super().__init__(recipe_base, packages, exclude, shuffle)
         self.config = config
@@ -221,7 +220,7 @@ class RecipeGraphSource(RecipeSource):
         return len(self.dag)
 
     def load_graph(self) -> nx.DiGraph:
-        if self.cache_fn and os.path.exists(self.cache_fn):
+        if self.cache_fn and self.cache_fn.exists():
             with open(self.cache_fn, "rb") as stream:
                 dag = pickle.load(stream)
         else:
@@ -242,14 +241,14 @@ class Scanner(AsyncPipeline[Recipe]):
 
     Arguments:
       recipe_source: Iteratable providing Recipe stubs
-      cache_fn: Filename prefix for caching
-      status_fn: Filename for status output
+      cache_fn: Path of the scan cache file
+      status_fn: Path for status output
     """
 
     def __init__(
         self,
         recipe_source: RecipeSource,
-        cache_fn: str | None = None,
+        cache_fn: Path | None = None,
         status_fn: Path | None = None,
     ) -> None:
         super().__init__()
@@ -337,7 +336,9 @@ class ExcludeOtherChannel(Filter):
         template = "builds package found in other channel(s)"
         level = logging.DEBUG
 
-    def __init__(self, scanner: Scanner, channels: Sequence[str], cache: str) -> None:
+    def __init__(
+        self, scanner: Scanner, channels: Sequence[str], cache: Path | None
+    ) -> None:
         super().__init__(scanner)
         self.channels = channels
         logger.info("Loading package lists for %s", channels)
@@ -429,7 +430,7 @@ class ExcludeBlacklisted(Filter):
         self, scanner: Scanner, recipe_base: Path, config: dict[str, Any]
     ) -> None:
         super().__init__(scanner)
-        self.blacklists = config.get("blacklists")
+        self.blacklists: list[Path] = config.get("blacklists", [])
         self.skiplist = Skiplist(config, recipe_base)
         logger.warning("Excluding blacklisted recipes")
 

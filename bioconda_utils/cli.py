@@ -438,7 +438,7 @@ def build(
         ),
     ] = None,
     package_dir: Annotated[
-        str | None,
+        Path | None,
         typer.Option(
             "--package-dir",
             help="Specifies the directory to which container-built\n     packages should be stored on the host. Default is to use the host's\n     conda-bld dir. If --docker is not specified, then this argument is\n     ignored.",
@@ -588,7 +588,7 @@ def build(
     ] = None,
     threads: ThreadsOpt = 16,
     repodata_cache: Annotated[
-        str | None,
+        Path | None,
         typer.Option(
             "--repodata-cache",
             help="To speed up startup, use repodata cached locally in\n     the provided filename. If the file does not exist, it will be created the\n     first time. The cache is refreshed when it is older than 8 hours.",
@@ -668,9 +668,7 @@ def build(
             build_image=build_image,
             docker_base_image=docker_base_image,
             target_platform=target_platform,
-            container_pkgs_cache=(
-                str(container_pkgs_cache) if container_pkgs_cache else None
-            ),
+            container_pkgs_cache=container_pkgs_cache,
         )
     else:
         docker_builder = None
@@ -761,20 +759,20 @@ def dag(
                 continue
             print(f"# subdag {i}")
             subdag = dag.subgraph(s)
-            recipes: list[str] = [
-                recipe.path.as_posix()
+            recipes: list[Path] = [
+                recipe.path
                 for package in nx.topological_sort(subdag)
                 for recipe in name2recipes[package]
             ]
-            print("\n".join(map(os.fspath, recipes)) + "\n")
+            print("\n".join(os.fspath(recipe) for recipe in recipes) + "\n")
         if not hide_singletons:
             print("# singletons")
-            recipes: list[str] = [
-                recipe.path.as_posix()
+            recipes: list[Path] = [
+                recipe.path
                 for package in singletons
                 for recipe in name2recipes[package]
             ]
-            print("\n".join(map(os.fspath, recipes)) + "\n")
+            print("\n".join(os.fspath(recipe) for recipe in recipes) + "\n")
 
 
 @app.command("dependent")
@@ -837,7 +835,7 @@ def lint(
     config: LintConfigArg = Path("config.yml"),
     packages: PackagesOpt = None,
     cache: Annotated[
-        str | None,
+        Path | None,
         typer.Option(
             "--cache",
             help="To speed up debugging, use repodata cached locally in\n     the provided filename. If the file does not exist, it will be created the\n     first time.",
@@ -1047,7 +1045,7 @@ def update_pinning(
         ),
     ] = False,
     cache: Annotated[
-        str | None,
+        Path | None,
         typer.Option(
             "--cache",
             help="To speed up debugging, use repodata cached locally in\n     the provided filename. If the file does not exist, it will be created the\n     first time.",
@@ -1151,7 +1149,7 @@ def bioconductor_skeleton(
         ),
     ] = False,
     bioc_data_packages: Annotated[
-        str | None,
+        Path | None,
         typer.Option(
             "--bioc-data-packages",
             help="Path to folder containing the recipe for the bioconductor-data-packages\n     (default: recipes/bioconductor-data-packages)",
@@ -1233,7 +1231,7 @@ def bioconductor_skeleton(
     )
     seen_dependencies = set()
     if bioc_data_packages is None:
-        bioc_data_packages = os.path.join(recipe_folder, "bioconductor-data-packages")
+        bioc_data_packages = recipe_folder / "bioconductor-data-packages"
     if update_all:
         if not bioc_version:
             bioc_version = _bioconductor_skeleton.latest_bioconductor_release_version()
@@ -1287,7 +1285,7 @@ def bioconductor_skeleton(
 
 @app.command("clean-cran-skeleton")
 def clean_cran_skeleton(
-    recipe: Annotated[str, typer.Argument(help="Path to recipe to be cleaned")],
+    recipe: Annotated[Path, typer.Argument(help="Path to recipe to be cleaned")],
     no_windows: Annotated[
         bool,
         typer.Option(
@@ -1324,7 +1322,7 @@ def autobump(
         ),
     ] = None,
     cache: Annotated[
-        str | None,
+        Path | None,
         typer.Option(
             "--cache",
             help="To speed up debugging, use repodata cached locally in\n     the provided filename. If the file does not exist, it will be created\n     the first time. Caution: The cache will not be updated if\n     exclude-channels is changed",
@@ -1465,12 +1463,12 @@ def autobump(
                 exclude or [],
                 not no_shuffle,
                 config_dict,
-                cache_fn=cache and cache + "_dag.pkl",
+                cache_fn=cache.with_name(f"{cache.name}_dag.pkl") if cache else None,
             )
         # Setup scanning pipeline
         scanner = autobump.Scanner(
             recipe_source,
-            cache_fn=cache and cache + "_scan.pkl",
+            cache_fn=cache.with_name(f"{cache.name}_scan.pkl") if cache else None,
             status_fn=recipe_status,
         )
 
@@ -1528,7 +1526,7 @@ def autobump(
             scanner.add(
                 autobump.ExcludeOtherChannel,
                 excluded_channels,
-                cache and cache + "_repodata.txt",
+                cache.with_name(f"{cache.name}_repodata.txt") if cache else None,
             )
         # Test if due to pinnings, the package hash would change and a rebuild
         # has become necessary. If so, bump the buildnumber.

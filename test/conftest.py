@@ -1,11 +1,8 @@
 import datetime
-import os
 import shutil
 from copy import deepcopy
-from pathlib import Path
 
 import pandas as pd
-import py
 import pytest
 from ruamel.yaml import YAML
 
@@ -84,11 +81,12 @@ def mock_repodata(case):
 
 
 @pytest.fixture
-def recipes_folder(tmpdir: py.path.local):
+def recipes_folder(tmp_path, monkeypatch):
     """Prepares a temp dir with '/recipes' folder as configured"""
-    orig_cwd = tmpdir.chdir()
-    yield tmpdir.mkdir(TEST_RECIPES_FOLDER)
-    orig_cwd.chdir()
+    monkeypatch.chdir(tmp_path)
+    folder = tmp_path / TEST_RECIPES_FOLDER
+    folder.mkdir()
+    return folder
 
 
 def dict_merge(base, add):
@@ -104,17 +102,17 @@ def dict_merge(base, add):
 
 
 @pytest.fixture
-def config_file(tmpdir: py.path.local, case):
+def config_file(tmp_path, case):
     """Prepares Bioconda config.yaml"""
     if "add_root_files" in case:
         for fname, data in case["add_root_files"].items():
-            with tmpdir.join(fname).open("w") as fdes:
+            with (tmp_path / fname).open("w") as fdes:
                 fdes.write(data)
 
     data = deepcopy(TEST_CONFIG_YAML)
     if "config" in case:
         dict_merge(data, case["config"])
-    config_fname = Path(os.path.join(str(tmpdir), TEST_CONFIG_YAML_FNAME))
+    config_fname = tmp_path / TEST_CONFIG_YAML_FNAME
     with config_fname.open("w") as fdes:
         yaml.dump(data, fdes)
 
@@ -122,7 +120,7 @@ def config_file(tmpdir: py.path.local, case):
 
 
 @pytest.fixture
-def recipe_dirs(recipes_folder: py.path.local, tmpdir: py.path.local, case):
+def recipe_dirs(recipes_folder, case):
     """Prepares a recipe from recipe_data in recipes_folder"""
     recipe_dirs = []
     recipes = case.get("recipes")
@@ -132,9 +130,10 @@ def recipe_dirs(recipes_folder: py.path.local, tmpdir: py.path.local, case):
         )
     for recipe_name in case.get("recipes", []):
         recipe = deepcopy(case.get("recipes").get(recipe_name))
-        recipe_dir = recipes_folder.mkdir(recipe_name)
+        recipe_dir = recipes_folder / recipe_name
+        recipe_dir.mkdir()
 
-        with recipe_dir.join("meta.yaml").open("w") as fdes:
+        with (recipe_dir / "meta.yaml").open("w") as fdes:
             yaml.dump(
                 recipe,
                 fdes,
@@ -145,19 +144,19 @@ def recipe_dirs(recipes_folder: py.path.local, tmpdir: py.path.local, case):
 
         if "add_files" in case:
             for fname, data in case["add_files"].items():
-                with recipe_dir.join(fname).open("w") as fdes:
+                with (recipe_dir / fname).open("w") as fdes:
                     fdes.write(data)
 
         if "move_files" in case:
             for src, dest in case["move_files"].items():
-                src_path = recipe_dir.join(src)
+                src_path = recipe_dir / src
                 if not dest:
-                    if os.path.isdir(src_path):
+                    if src_path.is_dir():
                         shutil.rmtree(src_path)
                     else:
-                        os.remove(src_path)
+                        src_path.unlink()
                 else:
-                    dest_path = recipe_dir.join(dest)
+                    dest_path = recipe_dir / dest
                     shutil.move(src_path, dest_path)
 
         recipe_dirs.append(recipe_dir)

@@ -1,13 +1,13 @@
 import asyncio
 import json
-import os.path as op
+from pathlib import Path
 
 import pytest
 from ruamel.yaml import YAML
 
 from bioconda_utils.hosters import Hoster
 
-with open(op.join(op.dirname(__file__), "hoster_cases.yaml")) as data:
+with (Path(__file__).parent / "hoster_cases.yaml").open() as data:
     TEST_CASES = YAML(typ="safe").load(data)
 
 TEST_CASE_LIST = [
@@ -112,7 +112,7 @@ class TestHoster:
     async def get_ftp_listing(self, url):
         return self.case["release_links"]
 
-    async def get_file_from_url(self, fname: str, url: str, desc: str) -> None:
+    async def get_file_from_url(self, fname: Path, url: str, desc: str) -> None:
         pass
 
     @pytest.mark.asyncio

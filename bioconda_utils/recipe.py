@@ -171,8 +171,6 @@ class Recipe:
         #: path to folder containing recipes
         self.basedir: Path = recipe_folder
         #: relative path to recipe dir from folder containing recipes
-        # TODO (rb): keeping reldir as Path instead of str. Requires fewer conversions.
-        # Should this be changed?
         self.reldir: Path = relative_dir
 
         # Filled in by render()
@@ -217,7 +215,7 @@ class Recipe:
         return self.reldir.as_posix()
 
     def __repr__(self) -> str:
-        return f'{self.__class__.__name__} "{self.reldir.as_posix}"'
+        return f'{self.__class__.__name__}("{self.reldir.as_posix()}")'
 
     def load_from_string(self, data) -> Recipe:
         """Load and `render` recipe contents from disk"""
@@ -274,7 +272,7 @@ class Recipe:
 
     @classmethod
     def from_file(
-        cls, recipe_dir: Path | str, recipe_fname: Path | str, return_exceptions=False
+        cls, recipe_dir: Path, recipe_fname: Path, return_exceptions=False
     ) -> Recipe | Exception:
         """Create new `Recipe` object from file
 
@@ -282,12 +280,6 @@ class Recipe:
            recipe_dir: Path to recipes folder
            recipe_fname: Relative path to recipe (folder or meta.yaml)
         """
-        # Recipe paths are loosely typed across the codebase: get_recipes()
-        # yields Path, but load_meta_fast() and helpers pass str. Coerce both
-        # arguments so callers may pass either — the operations below
-        # (.name/.parent/.relative_to) require real Path objects.
-        recipe_dir = Path(recipe_dir)
-        recipe_fname = Path(recipe_fname)
         if recipe_fname.name == "meta.yaml":
             recipe_fname = recipe_fname.parent
         recipe = cls(recipe_fname, recipe_dir)
@@ -892,7 +884,7 @@ class Recipe:
 
         self._conda_tempdir = tempfile.TemporaryDirectory()
 
-        with open(os.path.join(self._conda_tempdir.name, "meta.yaml"), "w") as tmpfile:
+        with open(Path(self._conda_tempdir.name) / "meta.yaml", "w") as tmpfile:
             tmpfile.write(self.dump())
 
         if self.conda_build_config:
@@ -957,7 +949,9 @@ class Recipe:
 def load_parallel_iter(
     recipe_folder: Path, package_patterns: Sequence[str]
 ) -> Iterator[Recipe]:
-    recipes = list(get_recipes(recipe_folder, package_patterns))
+    # from_file() takes a Path, so unwrap the RecipePath wrappers that
+    # get_recipes() yields.
+    recipes = [recipe.path for recipe in get_recipes(recipe_folder, package_patterns)]
     for recipe in parallel_iter(
         Recipe.from_file,
         recipes,

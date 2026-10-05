@@ -48,7 +48,11 @@ from .rattler.recipes import get_package_paths as rattler_get_package_paths
 logger = logging.getLogger(__name__)
 
 
-def _load_platform_metas(recipe, finalize=True, target_platform=None):
+def _load_platform_metas(
+    recipe: Path,
+    finalize: bool = True,
+    target_platform: ContainerPlatform | None = None,
+):
     """
     Load conda recipe metas for a single target platform.
 
@@ -56,7 +60,7 @@ def _load_platform_metas(recipe, finalize=True, target_platform=None):
     Otherwise, the native platform subdir is used.
 
     Args:
-        recipe: Recipe to load.
+        recipe: Path to the recipe directory to load.
         finalize: Whether to finalize the loaded metas.
         target_platform: Optional target platform to target.
 
@@ -85,13 +89,15 @@ def _meta_subdir(meta):
     return "noarch" if meta.noarch or meta.noarch_python else meta.config.host_subdir
 
 
-def check_recipe_skippable(recipe, check_channels, target_platform=None):
+def check_recipe_skippable(
+    recipe: Path, check_channels, target_platform: ContainerPlatform | None = None
+):
     """
     Return True if the same number of builds (per subdir) defined by the recipe
     are already in channel_packages.
 
     Args:
-        recipe: Recipe to check.
+        recipe: Path to the recipe directory to check.
         check_channels: Channels to search for existing package builds.
         target_platform: Optional target platform used when loading metas.
 

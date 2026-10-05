@@ -12,9 +12,10 @@ import tarfile
 import tempfile
 from datetime import UTC, datetime
 from io import StringIO
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from textwrap import dedent
 from typing import Any
+from urllib.parse import urlparse
 
 import networkx as nx
 import requests
@@ -171,8 +172,6 @@ SysReqs = {
     "ViennaRNA (>= 2.4.1)": ["viennarna >=2.4.1"],
     "xml2": ["libxml2"],
 }
-
-HERE = os.path.abspath(os.path.dirname(__file__))
 
 
 class PackageNotFoundError(Exception):
@@ -637,8 +636,9 @@ class BioCProjectPage:
         return self._tarball_url
 
     @property
-    def tarball_basename(self):
-        return os.path.basename(self.tarball_url)
+    def tarball_basename(self) -> str:
+        # The tarball URL is a URL, so parse it rather than treating it as a path.
+        return PurePosixPath(urlparse(self.tarball_url).path).name
 
     @property
     def cached_tarball(self):
@@ -651,11 +651,10 @@ class BioCProjectPage:
         """
         if self._cached_tarball:
             return self._cached_tarball
-        cache_dir = os.path.join(tempfile.gettempdir(), "cached_bioconductor_tarballs")
-        if not os.path.exists(cache_dir):
-            os.makedirs(cache_dir)
-        fn = os.path.join(cache_dir, self.tarball_basename)
-        if os.path.exists(fn):
+        cache_dir = Path(tempfile.gettempdir()) / "cached_bioconductor_tarballs"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        fn = cache_dir / self.tarball_basename
+        if fn.exists():
             self._cached_tarball = fn
             return fn
         with tempfile.NamedTemporaryFile(delete=False) as fout:
@@ -997,9 +996,9 @@ class BioCProjectPage:
         return None
 
     @property
-    def meta_yaml(self):
+    def meta_yaml(self) -> Path:
         """
-        Build the meta.yaml string based on discovered values.
+        Render the meta.yaml to a temporary file and return its path.
 
         All meta.yaml files created by this script have consistent structure.
         We use ruamel.yaml directly for formatting.
@@ -1206,18 +1205,18 @@ class BioCProjectPage:
         for k, v in self._cb3_build_reqs.items():
             rendered = rendered.replace(k + "_" + "PLACEHOLDER", v)
 
-        tmpdir = tempfile.mkdtemp()
-        with open(os.path.join(tmpdir, "meta.yaml"), "w") as fout:
-            fout.write(rendered)
-        return fout.name
+        tmpdir = Path(tempfile.mkdtemp())
+        meta_yaml_path: Path = tmpdir / "meta.yaml"
+        meta_yaml_path.write_text(rendered)
+        return meta_yaml_path
 
 
 def write_recipe_recursive(
     proj,
     seen_dependencies,
-    recipe_dir,
+    recipe_dir: Path,
     config,
-    bioc_data_packages,
+    bioc_data_packages: Path,
     force,
     bioc_version,
     pkg_version,
@@ -1233,13 +1232,13 @@ def write_recipe_recursive(
     seen_dependencies : list
         Dependencies to ignore
 
-    recipe_dir : str
+    recipe_dir : Path
         Path to recipe dir
 
-    config : str
-        Path to recipes config file
+    config : dict
+        Parsed Bioconda configuration
 
-    bioc_data_packages : str
+    bioc_data_packages : Path
         Path to the bioc_data_packages recipe, which stores the URL and MD5 of
         all bioconductor packages across versions
 
@@ -1281,7 +1280,9 @@ def write_recipe_recursive(
         )
 
 
-def updateDataPackages(bioc_data_packages, pkg, urls, md5, tarball):
+def updateDataPackages(
+    bioc_data_packages: Path, pkg: str, urls: list[str], md5: str, tarball: str
+) -> None:
     """
     Update the bioc_data_packages json file, adding/updating:
     pkg: {
@@ -1290,22 +1291,22 @@ def updateDataPackages(bioc_data_packages, pkg, urls, md5, tarball):
         fn: tarball
     }
     """
-    jsPath = os.path.join(bioc_data_packages, "dataURLs.json")
-    jsContent = {}
-    if os.path.exists(jsPath):
-        with open(jsPath) as fin:
+    jsPath = bioc_data_packages / "dataURLs.json"
+    jsContent: dict[str, Any] = {}
+    if jsPath.exists():
+        with jsPath.open() as fin:
             jsContent = json.load(fin)
     jsContent[pkg] = {"urls": urls, "md5": md5, "fn": tarball}
-    os.makedirs(bioc_data_packages, exist_ok=True)
-    with open(jsPath, "w") as fout:
+    bioc_data_packages.mkdir(parents=True, exist_ok=True)
+    with jsPath.open("w") as fout:
         json.dump(jsContent, fout)
 
 
 def write_recipe(
     package,
-    recipe_dir,
+    recipe_dir: Path,
     config: dict[str, Any],
-    bioc_data_packages=None,
+    bioc_data_packages: Path | None = None,
     force=False,
     bioc_version=None,
     pkg_version=None,
@@ -1328,12 +1329,12 @@ def write_recipe(
     package : str
         Bioconductor package name (case-sensitive)
 
-    recipe_dir : str
+    recipe_dir : Path
 
     config : dict
         Parsed Bioconda configuration.
 
-    bioc_data_packages : str
+    bioc_data_packages : Path
         Path to the bioc_data_packages recipe, which stores the URL and MD5 of
         all bioconductor packages across versions
 
@@ -1376,7 +1377,7 @@ def write_recipe(
     logger.info(f"Making recipe for: {package}")
 
     if bioc_data_packages is None:
-        bioc_data_packages = os.path.join(recipe_dir, "bioconductor-data-packages")
+        bioc_data_packages = recipe_dir / "bioconductor-data-packages"
 
     if seen_dependencies is None:
         seen_dependencies = set()
@@ -1411,22 +1412,20 @@ def write_recipe(
     logger.debug("%s==%s, BioC==%s", proj.package, proj.version, proj.bioc_version)
     logger.info("Using tarball from %s", proj.tarball_url)
     if versioned:
-        recipe_dir = os.path.join(
-            recipe_dir, "bioconductor-" + proj.package.lower(), proj.version
-        )
+        recipe_dir = recipe_dir / f"bioconductor-{proj.package.lower()}" / proj.version
     else:
-        recipe_dir = os.path.join(recipe_dir, "bioconductor-" + proj.package.lower())
-    if os.path.exists(recipe_dir) and not force:
+        recipe_dir = recipe_dir / f"bioconductor-{proj.package.lower()}"
+    if recipe_dir.exists() and not force:
         raise ValueError(f"{recipe_dir} already exists, aborting")
     else:
-        if not os.path.exists(recipe_dir):
+        if not recipe_dir.exists():
             logger.info(f"creating {recipe_dir}")
-            os.makedirs(recipe_dir)
+            recipe_dir.mkdir(parents=True)
 
     # If the version number has not changed but something else in the recipe
     # *has* changed, then bump the version number.
-    meta_file = os.path.join(recipe_dir, "meta.yaml")
-    if os.path.exists(meta_file):
+    meta_file = recipe_dir / "meta.yaml"
+    if meta_file.exists():
         updated_meta = load_first_metadata(proj.meta_yaml, finalize=False).meta
         current_meta = load_first_metadata(meta_file, finalize=False).meta
 
@@ -1461,11 +1460,10 @@ def write_recipe(
                 x: y for x, y in current_meta["extra"].items() if x not in exclude
             }
 
-    with open(os.path.join(recipe_dir, "meta.yaml"), "w") as fout:
-        fout.write(Path(proj.meta_yaml).read_text())
+    meta_file.write_text(proj.meta_yaml.read_text())
 
     if not proj.is_data_package:
-        with open(os.path.join(recipe_dir, "build.sh"), "w") as fout:
+        with open(recipe_dir / "build.sh", "w") as fout:
             fout.write(
                 dedent(
                     """\
@@ -1510,12 +1508,12 @@ def write_recipe(
             """
         )
 
-        with open(os.path.join(recipe_dir, "post-link.sh"), "w") as fout:
+        with open(recipe_dir / "post-link.sh", "w") as fout:
             fout.write(dedent(post_link_template))
         pre_unlink_template = (
             f"R CMD REMOVE --library=$PREFIX/lib/R/library/ {package}\n"
         )
-        with open(os.path.join(recipe_dir, "pre-unlink.sh"), "w") as fout:
+        with open(recipe_dir / "pre-unlink.sh", "w") as fout:
             fout.write(pre_unlink_template)
         updateDataPackages(
             bioc_data_packages,
