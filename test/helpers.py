@@ -111,7 +111,7 @@ class Recipes:
         self.recipe_dirs: dict[str, Path] = {}
         for name, recipe in self.recipes.items():
             rdir = basedir / name
-            rdir.mkdir()
+            rdir.mkdir(parents=True)
             self.recipe_dirs[name] = rdir
             for key, value in recipe.items():
                 (rdir / key).write_text(value)
