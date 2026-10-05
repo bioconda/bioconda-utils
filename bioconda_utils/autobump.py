@@ -184,7 +184,7 @@ class RecipeGraphSource(RecipeSource):
         packages: list[str],
         exclude: list[str],
         shuffle: bool,
-        config: dict[str, str],
+        config: dict[str, Any],
         cache_file: Path | None = None,
     ) -> None:
         super().__init__(recipe_base, packages, exclude, shuffle)
@@ -430,7 +430,7 @@ class ExcludeBlacklisted(Filter):
         self, scanner: Scanner, recipe_base: Path, config: dict[str, Any]
     ) -> None:
         super().__init__(scanner)
-        self.blacklists = config.get("blacklists")
+        self.blacklists: list[Path] = config.get("blacklists", [])
         self.skiplist = Skiplist(config, recipe_base)
         logger.warning("Excluding blacklisted recipes")
 

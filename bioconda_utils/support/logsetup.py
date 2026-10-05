@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Collection, Iterable
+from itertools import islice
 from pathlib import Path
 
 from rich.console import Console
@@ -178,7 +179,7 @@ def format_recipes(recipes: Iterable[RecipePath | Path], separator: str = ", ") 
 
 
 def ellipsize_recipes(
-    recipes: Collection[RecipePath] | Collection[Path],
+    recipes: Collection[os.PathLike[str]],
     recipe_folder: Path,
     n: int = 5,
     m: int = 50,
@@ -194,10 +195,9 @@ def ellipsize_recipes(
     Returns:
       A string like " (htslib, samtools, ...)" or ""
     """
-    # ensure recipes are Paths
-    recipe_paths: list[Path] = [Path(recipe) for recipe in list(recipes)[:n]]
     if not recipes or len(recipes) > m:
         return ""
+    recipe_paths: list[Path] = [Path(recipe) for recipe in islice(recipes, n)]
     if len(recipes) > n:
         append = ", ..."
     else:

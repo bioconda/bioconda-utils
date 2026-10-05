@@ -3,7 +3,6 @@
 Verify that the recipe is not missing anything essential.
 """
 
-import os
 from typing import Any, ClassVar
 
 from ..recipe import Recipe
@@ -155,7 +154,7 @@ class missing_tests(LintCheck):
     test_files: ClassVar = ["run_test.py", "run_test.sh", "run_test.pl"]
 
     def check_recipe(self, recipe: Recipe) -> None:
-        if any(os.path.exists(os.path.join(recipe.dir, f)) for f in self.test_files):
+        if any((recipe.dir / f).exists() for f in self.test_files):
             return
         # if multiple `outputs:` are specified, we check that
         # all subpackages have `test:` specified, but ignore

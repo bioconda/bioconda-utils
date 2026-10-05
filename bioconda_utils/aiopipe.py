@@ -346,7 +346,7 @@ class AsyncRequests:
         return checksum.hexdigest()
 
     @http.retry_on_transient
-    async def get_file_from_url(self, fname: str, url: str, desc: str) -> None:
+    async def get_file_from_url(self, fname: Path, url: str, desc: str) -> None:
         """Fetch file at **url** into **fname**
 
         Shows progress monitor with label **desc**.

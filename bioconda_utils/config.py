@@ -28,8 +28,15 @@ def validate_config(config: dict[str, Any]) -> None:
     validate(config, schema)
 
 
-def normalize_config(config: dict[str, Any]) -> Config:
-    """Validate and apply defaults without mutating parsed configuration data."""
+def normalize_config(config: dict[str, Any], *, base_dir: Path | None = None) -> Config:
+    """Validate and apply defaults without mutating parsed configuration data.
+
+    Blacklist entries are file paths and are converted to :class:`Path` here so
+    that consumers can rely on the type. Relative entries are resolved against
+    **base_dir** when given -- the directory holding the config file -- and
+    otherwise left as-is for the caller to interpret relative to the working
+    directory.
+    """
     if isinstance(config, Config):
         return config
 
@@ -53,7 +60,10 @@ def normalize_config(config: dict[str, Any]) -> Config:
     )
     default_config.update(config)
     if "blacklists" in config:
-        default_config["blacklists"] = list(get_list("blacklists"))
+        default_config["blacklists"] = [
+            base_dir / item if base_dir is not None else Path(item)
+            for item in get_list("blacklists")
+        ]
     if "channels" in config:
         default_config["channels"] = list(get_list("channels"))
     if "primary_platforms" in config:
@@ -68,7 +78,6 @@ def load_config(path: Path) -> Config:
     """Load and normalize a YAML configuration file."""
     with path.open(encoding="utf-8") as fh:
         config = YAML(typ="safe").load(fh)
-    config = normalize_config(config)
-    config["blacklists"] = [str(path.parent / item) for item in config["blacklists"]]
+    config = normalize_config(config, base_dir=path.parent)
     RepoData.register_config(config)
     return config

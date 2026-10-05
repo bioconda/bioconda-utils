@@ -1,4 +1,3 @@
-import glob
 import json
 import logging
 import os
@@ -8,7 +7,7 @@ import tempfile
 import zipfile
 from collections.abc import Iterator
 from enum import Enum
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from urllib.parse import urlparse
 
 import backoff
@@ -72,7 +71,9 @@ def _download_artifact_contents(
     """Download a CI artifact and normalize its extracted contents under artifact_dir."""
     match artifact_source:
         case "azure":
-            artifact_path = artifact_dir / os.path.basename(artifact_url)
+            artifact_path = (
+                artifact_dir / PurePosixPath(urlparse(artifact_url).path).name
+            )
             download_artifact(artifact_url, artifact_path, artifact_source)
             zipfile.ZipFile(artifact_path).extractall(artifact_dir)
         case "circleci":
@@ -84,7 +85,9 @@ def _download_artifact_contents(
             download_artifact(artifact_url, artifact_path, artifact_source)
         case "github-actions":
             extract_dir = artifact_dir / "artifacts"
-            artifact_path = extract_dir / os.path.basename(artifact_url)
+            artifact_path = (
+                extract_dir / PurePosixPath(urlparse(artifact_url).path).name
+            )
             extract_dir.mkdir(parents=True, exist_ok=True)
             download_artifact(artifact_url, artifact_path, artifact_source)
             zipfile.ZipFile(artifact_path).extractall(extract_dir)
@@ -103,12 +106,12 @@ def _package_platform_patterns(package_platform: PackageSubdir) -> list[str]:
 
 def _iter_package_paths(
     artifact_dir: Path, package_platform: PackageSubdir
-) -> Iterator[str]:
+) -> Iterator[Path]:
     for platform_pattern in _package_platform_patterns(package_platform):
         for ext in (".tar.bz2", ".conda"):
-            pattern = f"{artifact_dir!s}/*/packages/{platform_pattern}/*{ext}"
-            logger.info(f"Checking for packages at {pattern}.")
-            yield from glob.glob(pattern)
+            pattern = f"*/packages/{platform_pattern}/*{ext}"
+            logger.info(f"Checking for packages at {artifact_dir}/{pattern}.")
+            yield from artifact_dir.glob(pattern)
 
 
 def _upload_packages(
@@ -130,13 +133,13 @@ def _upload_packages(
 
 
 def _canonical_image_ref(
-    img: str,
+    img: Path,
     target_platform: ContainerPlatform,
     mulled_upload_target: QuayUploadTarget,
     label: str | None,
 ) -> str:
     """Build the canonical Quay image ref parsed from an artifact filename."""
-    m = IMAGE_RE.match(os.path.basename(img))
+    m = IMAGE_RE.match(img.name)
     assert m, f"Could not parse image name from {img}"
     name, tag = m.groups()
     suffix = docker_platform_tag_suffix(target_platform)
@@ -159,17 +162,18 @@ def _upload_mulled_images(
 ) -> list[bool]:
     """Upload matching mulled image archives and report per-image success."""
     success = []
-    pattern = f"{artifact_dir!s}/*/images/*.tar.gz"
-    logger.info(f"Checking for images at {pattern}.")
+    pattern = "*/images/*.tar.gz"
+    logger.info(f"Checking for images at {artifact_dir}/{pattern}.")
     image_seen = False
     image_matched = False
-    for img in glob.glob(pattern):
+    for img in sorted(artifact_dir.glob(pattern)):
         image_seen = True
         # Skopeo can't handle a : in the file name
-        fixed_img_name = img.replace(":", "_")
-        if ":" in img:
-            os.rename(img, fixed_img_name)
-        source_ref = f"docker-archive:{fixed_img_name}"
+        archive_path = img
+        if ":" in img.name:
+            archive_path = img.with_name(img.name.replace(":", "_"))
+            img.rename(archive_path)
+        source_ref = f"docker-archive:{archive_path}"
         # Use the archive's manifest, not the filename, as the platform source of truth.
         source_platform = inspect_image_platform(source_ref)
         if source_platform != target_platform:

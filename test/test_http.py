@@ -270,7 +270,7 @@ def test_download_callers_retry_truncated_bodies(
                         )
                     else:
                         path = tmp_path / "artifact"
-                        await requests.get_file_from_url(str(path), url, "artifact")
+                        await requests.get_file_from_url(path, url, "artifact")
                         assert path.read_bytes() == b"firstsecond"
             assert attempts == 2
         finally:

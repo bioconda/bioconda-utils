@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 CREATE_ENV_IMAGE = os.getenv("CREATE_ENV_IMAGE", "quay.io/bioconda/create-env:latest")
 
 
-def get_test_command(path: Path | str) -> str:
+def get_test_command(path: Path) -> str:
     """Extract tests from a built package"""
     # Deferred: conda-build/conda-package-streaming are heavy imports that the
     # CLI should not pay for at startup (this module is imported for
@@ -68,18 +68,17 @@ def get_test_command(path: Path | str) -> str:
     return f"bash -c {shlex.quote(tests)}"
 
 
-def get_image_name(path: Path | str) -> PkgBuildRef:
+def get_image_name(path: Path) -> PkgBuildRef:
     """
     Returns a package build reference parsed from a built package filename.
 
     Parameters
     ----------
 
-    path : Path | str
+    path : Path
         Path to .tar.bz2 or .conda package built by conda-build
 
     """
-    path = Path(path)
     if path.name.endswith(".tar.bz2"):
         ext = ".tar.bz2"
     elif path.name.endswith(".conda"):
@@ -284,12 +283,11 @@ fi
 
 
 def _test_inputs(
-    path: Path | str,
+    path: Path,
     channels: Sequence[str] = ("conda-forge", "local", "bioconda"),
     update_local_index: bool = True,
 ) -> tuple[Path, PkgBuildRef, list[str], str]:
     """Return shared inputs needed for package container tests."""
-    path = Path(path)
     assert path.name.endswith((".tar.bz2", ".conda")), f"Unrecognized path {path}"
 
     conda_bld_dir = path.resolve().parent.parent
@@ -318,7 +316,7 @@ def _test_inputs(
 
 
 def test_package_in_temporary_container(
-    path: Path | str,
+    path: Path,
     channels: Sequence[str] = ("conda-forge", "local", "bioconda"),
     base_image: str | None = None,
     conda_image: str = CREATE_ENV_IMAGE,
@@ -334,7 +332,7 @@ def test_package_in_temporary_container(
 
     Parameters
     ----------
-    path : Path | str
+    path : Path
         Path to a .tar.bz2 or .conda package built by conda-build
 
     channels : list
@@ -375,7 +373,7 @@ def test_package_in_temporary_container(
 
 
 def build_and_test_mulled_image(
-    path: Path | str,
+    path: Path,
     name_override: str | None = None,
     channels: Sequence[str] = ("conda-forge", "local", "bioconda"),
     mulled_args: str = "",
@@ -393,7 +391,7 @@ def build_and_test_mulled_image(
 
     Parameters
     ----------
-    path : Path | str
+    path : Path
         Path to a .tar.bz2 or .conda package built by conda-build
 
     name_override : str

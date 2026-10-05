@@ -272,7 +272,7 @@ def test_test_package_passes_target_platform(monkeypatch, tmp_path):
     )
 
     pkg_test.build_and_test_mulled_image(
-        str(package),
+        package,
         target_platform=ContainerPlatform.LINUX_ARM64,
     )
 
@@ -286,7 +286,7 @@ def test_test_package_passes_target_platform(monkeypatch, tmp_path):
 def test_recipe_builder_build_image_passes_target_platform(monkeypatch, tmp_path):
     commands = []
     builder = docker_utils.RecipeBuilder.__new__(docker_utils.RecipeBuilder)
-    builder.image_build_dir = str(tmp_path)
+    builder.image_build_dir = tmp_path
     builder.requirements = None
     builder.docker_temp_image = "tmp-bioconda-builder"
     builder.docker_base_image = "quay.io/bioconda/build-env:latest"

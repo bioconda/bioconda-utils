@@ -5,7 +5,7 @@ These checks catch errors relating to the use of ``-
 
 """
 
-import os
+from pathlib import Path
 
 from ..recipe import Recipe
 from . import INFO, WARNING, LintCheck
@@ -128,11 +128,12 @@ class setup_py_install_args(LintCheck):
         if not self._check_line(self.recipe.get("build/script", "")):
             self.message(section="build/script")
 
+        build_sh: Path = self.recipe.dir / "build.sh"
         try:
-            with open(os.path.join(self.recipe.dir, "build.sh")) as buildsh:
+            with open(build_sh) as buildsh:
                 for num, line in enumerate(buildsh):
                     if not self._check_line(line):
-                        self.message(fname="build.sh", line=num)
+                        self.message(fname=build_sh, line=num)
         except FileNotFoundError:
             pass
 

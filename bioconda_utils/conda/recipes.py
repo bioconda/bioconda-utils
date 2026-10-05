@@ -12,7 +12,6 @@ import logging
 import os
 import re
 from collections import Counter, defaultdict
-from itertools import chain
 from pathlib import Path
 
 from conda_build import api
@@ -24,26 +23,23 @@ from .repodata import RepoData
 logger = logging.getLogger(__name__)
 
 
-# TODO: change to Path only
-def get_deps(recipe: Path | str, build=True):
+def get_deps(recipe: Path, build: bool = True) -> set[str]:
     """
-    Generator of dependencies for a single recipe
+    Names of the dependencies of a single recipe.
 
-    Only names (not versions) of dependencies are yielded.
+    Only names (not versions) of dependencies are returned.
 
     If the variant/version matrix yields multiple instances of the metadata,
     the union of these dependencies is returned.
 
     Parameters
     ----------
-    recipe : str or MetaData
-        If string, it is a path to the recipe; otherwise assume it is a parsed
-        conda_build.metadata.MetaData instance.
+    recipe : Path
+        Path to the recipe directory.
 
     build : bool
-        If True yield build dependencies, if False yield run dependencies.
+        If True return build dependencies, if False return run dependencies.
     """
-    recipe = Path(recipe)
     metadata = load_all_meta(recipe, finalize=False)
 
     all_deps = set()
@@ -79,9 +75,9 @@ def _string_or_float_to_integer_python(s: str | float) -> int:
     return s
 
 
-def built_package_paths(recipe: str) -> list[str]:
+def built_package_paths(recipe: Path) -> list[Path]:
     """
-    Returns the path to which a recipe would be built.
+    Returns the paths to which a recipe would be built.
 
     Does not necessarily exist; equivalent to ``conda build --output recipename``
     but without the subprocess.
@@ -90,7 +86,7 @@ def built_package_paths(recipe: str) -> list[str]:
     # NB: Setting bypass_env_check disables ``pin_compatible`` parsing, which
     #     these days does not change the package build string, so should be fine.
     paths = api.get_output_file_paths(recipe, config=config, bypass_env_check=True)
-    return paths
+    return [Path(p) for p in paths]
 
 
 # Recipe patterns whose rendered hash depends on solver state (run_exports from
@@ -99,8 +95,7 @@ def built_package_paths(recipe: str) -> list[str]:
 _SOLVER_DEPENDENT_JINJA = re.compile(r"\{\{\s*(stdlib|compiler|pin_compatible)\s*\(")
 
 
-# TODO change to Path only
-def recipe_requires_finalized_render(recipe: Path | str):
+def recipe_requires_finalized_render(recipe: Path) -> bool:
     """
     Return True if the recipe's rendered hash can depend on solver state and
     therefore must be rendered with ``finalize=True`` to match what conda-build
@@ -110,7 +105,7 @@ def recipe_requires_finalized_render(recipe: Path | str):
     jinja functions, whose run_exports are only applied during a real solve.
     See https://github.com/bioconda/bioconda-utils/issues/1095.
     """
-    meta_path: Path = Path(recipe) / "meta.yaml"
+    meta_path: Path = recipe / "meta.yaml"
     try:
         with open(meta_path, encoding="utf-8") as f:
             text = re.sub(r"#.*", "", f.read())
@@ -312,7 +307,8 @@ def get_package_paths(
             )
         # yield all pkgs that do not yet exist
         build_metas = new_metas
-    package_paths: list[str] = list(
-        chain.from_iterable((api.get_output_file_paths(meta)) for meta in build_metas)
-    )
-    return [Path(p) for p in package_paths]
+    return [
+        Path(package_path)
+        for meta in build_metas
+        for package_path in api.get_output_file_paths(meta)
+    ]

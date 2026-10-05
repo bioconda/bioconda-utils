@@ -1,5 +1,3 @@
-import os
-import os.path as op
 from pathlib import Path
 
 import pytest
@@ -67,7 +65,7 @@ RECIPES = yaml.load(RECIPE_DATA)
 def recipes(recipe_dirs, recipes_folder):
     recipes = []
     for recipe_dir in recipe_dirs:
-        recipes.append(Recipe.from_file(Path(recipes_folder), Path(recipe_dir)))
+        recipes.append(Recipe.from_file(recipes_folder, recipe_dir))
     yield recipes
 
 
@@ -84,15 +82,27 @@ def test_stub():
     assert str(r) == "sina"
 
 
-def test_empty_recipe(tmpdir):
+def test_stub_repr_renders_reldir_not_a_method():
+    """repr() must show the recipe name.
+
+    A missing call parens after reldir.as_posix rendered the bound method's
+    repr instead of the path.
+    """
+    r = Recipe(Path("recipes/sina"), Path("recipes/"))
+    assert repr(r) == 'Recipe("sina")'
+    assert "built-in method" not in repr(r)
+    assert "as_posix" not in repr(r)
+
+
+def test_empty_recipe(tmp_path):
     r = Recipe(Path("recipes/sina"), Path("recipes/"))
     with pytest.raises(EmptyRecipe):
         r.load_from_string("")
-    with open(op.join(tmpdir, "meta.yaml"), "w"):
+    with open(tmp_path / "meta.yaml", "w"):
         pass
     with pytest.raises(EmptyRecipe):
-        Recipe.from_file(Path(tmpdir), Path(tmpdir))
-    res = Recipe.from_file(Path(tmpdir), Path(tmpdir), return_exceptions=True)
+        Recipe.from_file(tmp_path, tmp_path)
+    res = Recipe.from_file(tmp_path, tmp_path, return_exceptions=True)
     assert isinstance(res, EmptyRecipe)
 
 
@@ -120,7 +130,7 @@ def test_save(recipes):
     for recipe in recipes:
         with open(recipe.path) as fdes:
             data = fdes.read()
-        os.remove(recipe.path)
+        recipe.path.unlink()
         recipe.save()
         with open(recipe.path) as fdes:
             assert data == fdes.read()

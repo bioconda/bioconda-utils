@@ -26,6 +26,7 @@ import sys
 from contextlib import redirect_stderr, redirect_stdout
 from html.parser import HTMLParser
 from itertools import chain
+from pathlib import Path
 from re import Match, Pattern
 from typing import Any, ClassVar, Protocol
 from urllib.parse import urljoin
@@ -42,7 +43,7 @@ class Requester(Protocol):
 
     async def get_text_from_url(self, url: str) -> str: ...
     async def get_ftp_listing(self, url: str) -> list[str]: ...
-    async def get_file_from_url(self, fname: str, url: str, desc: str) -> None: ...
+    async def get_file_from_url(self, fname: Path, url: str, desc: str) -> None: ...
 
 
 #: Matches named capture groups
@@ -685,8 +686,8 @@ class PyPi(JSONHoster):
         req = pipeline.req
         # We download ourselves to get async benefits
         target_file = rel["filename"]
-        target_path = os.path.join(build_config.src_cache, target_file)
-        if not os.path.exists(target_path):
+        target_path = Path(build_config.src_cache) / target_file
+        if not target_path.exists():
             await req.get_file_from_url(target_path, rel["link"], target_file)
 
         python_version = self._get_python_version(rel)
