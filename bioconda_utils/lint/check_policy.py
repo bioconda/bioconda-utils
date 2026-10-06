@@ -92,7 +92,7 @@ class has_windows_bat_file(LintCheck):
 
     def check_recipe(self, recipe: Recipe) -> None:
         for bat_file in sorted(recipe.dir.glob("*.bat")):
-            self.message(fname=bat_file)
+            self.message(path=bat_file)
 
 
 class long_summary(LintCheck):

@@ -133,7 +133,7 @@ class setup_py_install_args(LintCheck):
             with open(build_sh) as buildsh:
                 for num, line in enumerate(buildsh):
                     if not self._check_line(line):
-                        self.message(fname=build_sh, line=num)
+                        self.message(path=build_sh, line=num)
         except FileNotFoundError:
             pass
 

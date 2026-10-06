@@ -60,7 +60,7 @@ Briefly, each class becomes a check by:
   If a check never calls ``self.message()``, it is assumed to have
   passed (=no errors generated).
 
-  You can also provide an alternate filename (``fname``) and/or
+  You can also provide an alternate file path (``path``) and/or
   specify the line number directly (``line``).
 
 
@@ -163,7 +163,7 @@ class CondaLintMessage(NamedTuple):
 
     #: Path of the file in which the problem was found. Always identifies the
     #: offending recipe, since a single lint run covers many recipes at once.
-    fname: Path
+    path: Path
 
     #: The severity of the message
     severity: Severity = ERROR
@@ -185,7 +185,7 @@ class CondaLintMessage(NamedTuple):
 
     def get_report_message(self) -> str:
         return (
-            f"{self.severity.name}: {self.fname.as_posix()}:{self.end_line}: "
+            f"{self.severity.name}: {self.path.as_posix()}:{self.end_line}: "
             f"{self.check}: {self.title}"
         )
 
@@ -195,7 +195,7 @@ class CondaLintMessage(NamedTuple):
     def get_table_row(self) -> tuple[str, str, str, str]:
         return (
             self.severity.name,
-            f"{self.fname}:{self.end_line}",
+            f"{self.path}:{self.end_line}",
             str(self.check),
             self.title,
         )
@@ -380,7 +380,7 @@ class LintCheck(metaclass=LintCheckMeta):
     def message(
         self,
         section: str | None = None,
-        fname: Path | None = None,
+        path: Path | None = None,
         line: int | None = None,
         data: Any = None,
     ) -> None:
@@ -392,7 +392,7 @@ class LintCheck(metaclass=LintCheckMeta):
           section: If specified, a lint location within the recipe
                    meta.yaml pointing to this section/subsection will
                    be added to the message
-          fname: If specified, the message applies to this file rather than
+          path: If specified, the message applies to this file rather than
                  to the recipe's meta.yaml. Must be a path that identifies the
                  offending recipe (e.g. ``self.recipe.dir / "build.sh"``) so the
                  report stays unambiguous when many recipes are linted at once.
@@ -401,7 +401,7 @@ class LintCheck(metaclass=LintCheckMeta):
                 something other than None.
         """
         message = self.make_conda_message(
-            self.recipe, section, fname, line, data is not None
+            self.recipe, section, path, line, data is not None
         )
         if data is not None and self.try_fix and self.fix(message, data):
             return
@@ -412,7 +412,7 @@ class LintCheck(metaclass=LintCheckMeta):
         cls,
         recipe: _recipe.Recipe,
         section: str | None = None,
-        fname: Path | None = None,
+        path: Path | None = None,
         line: int | None = None,
         canfix: bool = False,
     ) -> LintMessage:
@@ -422,7 +422,7 @@ class LintCheck(metaclass=LintCheckMeta):
           section: If specified, a lint location within the recipe
                    meta.yaml pointing to this section/subsection will
                    be added to the message. Not implemented for rattler recipes
-          fname: If specified, the message applies to this file rather than
+          path: If specified, the message applies to this file rather than
                  to the recipe's meta.yaml. Should identify the offending
                  recipe. Not implemented for rattler recipes
           line: If specified, sets the line number for the message directly
@@ -446,7 +446,7 @@ class LintCheck(metaclass=LintCheckMeta):
         return CondaLintMessage(
             recipe=recipe,
             check=cls,
-            fname=recipe.path if fname is None else fname,
+            path=recipe.path if path is None else path,
             severity=cls.severity,
             title=title.strip(),
             body=body,
@@ -739,7 +739,7 @@ class Linter:
                     CondaLintMessage(
                         recipe=recipe,
                         check=check,
-                        fname=recipe.path,
+                        path=recipe.path,
                         severity=ERROR,
                         title="Check raised an unexpected exception",
                     )
