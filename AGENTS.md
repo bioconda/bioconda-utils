@@ -9,3 +9,6 @@ Run `just format` frequently and `just check` after a moderate amount of changes
 
 Read `./justfile` for commands frequently useful during development. These
 commands are thin wrappers around tasks declared in `pixi.toml`.
+
+This is a CLI tool, not a library which means for example renaming a function is
+allowed and not considered a breaking change
