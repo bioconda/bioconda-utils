@@ -746,3 +746,14 @@ def test_help_preserves_literal_brackets(command, literal):
     result = runner.invoke(cli.app, [command, "--help"])
     assert result.exit_code == 0
     assert literal in result.output
+
+
+@pytest.mark.parametrize("args", [["--help"], ["bulk-trigger-ci", "--help"]])
+def test_help_keeps_rich_rendering(monkeypatch, args):
+    monkeypatch.setenv("FORCE_COLOR", "1")
+    monkeypatch.setenv("TERM", "xterm-256color")
+    result = runner.invoke(cli.app, args, color=True)
+    assert result.exit_code == 0
+    assert "\x1b[" in result.output
+    assert "╭" in result.output
+    assert "╰" in result.output

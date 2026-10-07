@@ -73,7 +73,7 @@ app = typer.Typer(
     help="Utilities for building and maintaining Bioconda recipes.",
     no_args_is_help=True,
     pretty_exceptions_show_locals=False,
-    rich_markup_mode=None,
+    rich_markup_mode="markdown",
 )
 logger = logging.getLogger(__name__)
 
