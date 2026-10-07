@@ -150,3 +150,32 @@ class TestHoster:
         assert sorted(versions) == sorted(self.case["parsed_versions"]), self.msg(
             "Incorrect versions found on page"
         )
+
+
+@pytest.mark.parametrize("requires_python", ["invalid", ">=99"])
+def test_pypi_get_deps_skips_unsupported_python(tmp_path, caplog, requires_python):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    filename = "example.tar.gz"
+    (tmp_path / filename).touch()
+    pipeline = SimpleNamespace(req=None, run_sp=AsyncMock())
+    release = {"filename": filename, "requires_python": requires_python}
+
+    async def resolve():
+        async with asyncio.TaskGroup() as group:
+            group.create_task(
+                PyPi.get_deps(
+                    object.__new__(PyPi),
+                    pipeline,
+                    SimpleNamespace(src_cache=tmp_path),
+                    "example",
+                    release,
+                )
+            )
+
+    with caplog.at_level("INFO"):
+        asyncio.run(resolve())
+    pipeline.run_sp.assert_not_called()
+    assert "depends" not in release
+    assert "Skipping depends" in caplog.text

@@ -736,3 +736,13 @@ def test_shared_runtime_options_are_applied(monkeypatch):
 
     assert logger_calls == [("bioconda_utils", "warning", None, "debug", 12)]
     assert thread_calls == [4]
+
+
+@pytest.mark.parametrize(
+    ("command", "literal"),
+    [("bulk-trigger-ci", "[ci run]"), ("autobump", "package[s]")],
+)
+def test_help_preserves_literal_brackets(command, literal):
+    result = runner.invoke(cli.app, [command, "--help"])
+    assert result.exit_code == 0
+    assert literal in result.output

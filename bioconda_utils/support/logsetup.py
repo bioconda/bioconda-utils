@@ -26,40 +26,22 @@ err_console = Console(stderr=True)
 progress_display = ProgressDisplay(err_console)
 
 
-class LogFuncFilter:
-    """Logging filter capping the number of messages emitted from given function
-
-    Arguments:
-      func: The function for which to filter log messages
-      trunc_msg: The message to emit when logging is truncated, to inform user that
-                  messages will from now on be hidden.
-      max_lines: Max number of log messages to allow to pass
-      consecutive: If true, filter applies to consecutive messages and resets
-                      if a message from a different source is encountered.
-
-    Fixme:
-      The implementation  assumes that **func** uses a logger initialized with
-      ``getLogger(__name__)``.
-    """
+class CommandOutputFilter:
+    """Cap consecutive subprocess output records, regardless of their logger."""
 
     def __init__(
         self,
-        func,
         trunc_msg: str | None = None,
         max_lines: int = 0,
         consecutive: bool = True,
     ) -> None:
-        self.func = func
         self.max_lines = max_lines + 1
         self.cur_max_lines = max_lines + 1
         self.consecutive = consecutive
         self.trunc_msg = trunc_msg
 
     def filter(self, record: logging.LogRecord) -> bool:
-        if (
-            record.name == self.func.__module__
-            and record.funcName == self.func.__name__
-        ):
+        if getattr(record, "command_output", False):
             if self.cur_max_lines > 1:
                 self.cur_max_lines -= 1
                 return True
@@ -141,10 +123,8 @@ def setup_logger(
     root_logger.addHandler(rich_handler)
 
     if log_command_max_lines is not None:
-        from .subproc import run
-
-        log_filter = LogFuncFilter(
-            run, "Command output truncated", log_command_max_lines
+        log_filter = CommandOutputFilter(
+            "Command output truncated", log_command_max_lines
         )
         rich_handler.addFilter(log_filter)
 

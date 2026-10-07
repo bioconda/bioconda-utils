@@ -306,3 +306,22 @@ def test_async_requests_cache_init_uses_setdefault(tmp_path) -> None:
             assert req.cache["ftp_list"] == {}
 
     asyncio.run(check())
+
+
+@pytest.mark.parametrize("nested", [False, True])
+def test_run_unwraps_multiple_keyboard_interrupts(monkeypatch, nested):
+    first = KeyboardInterrupt("first")
+    interrupts = BaseExceptionGroup("interrupts", [first, KeyboardInterrupt("second")])
+    if nested:
+        interrupts = BaseExceptionGroup("outer", [interrupts])
+
+    def interrupted_run(coro):
+        coro.close()
+        raise interrupts
+
+    monkeypatch.setattr(asyncio, "run", interrupted_run)
+    pipeline = ListPipeline([])
+    with pytest.raises(KeyboardInterrupt) as caught:
+        pipeline.run()
+    assert caught.value is first
+    assert pipeline._shutting_down

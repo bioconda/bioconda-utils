@@ -690,7 +690,11 @@ class PyPi(JSONHoster):
         if not target_path.exists():
             await req.get_file_from_url(target_path, rel["link"], target_file)
 
-        python_version = self._get_python_version(rel)
+        try:
+            python_version = self._get_python_version(rel)
+        except ValueError as exc:
+            logger.info("Skipping depends for PyPi %s: %s", target_file, exc)
+            return
 
         # Run code from conda_build.skeletons in ProcessPoolExecutor
         async with pipeline.conda_sem:

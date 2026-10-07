@@ -209,7 +209,13 @@ def run(
                                 prefix = "OUT"
                             else:
                                 prefix = "ERR"
-                            mylogger.log(loglevel, "(%s) %s", prefix, line)
+                            mylogger.log(
+                                loglevel,
+                                "(%s) %s",
+                                prefix,
+                                line,
+                                extra={"command_output": True},
+                            )
             except Exception:
                 proc.kill()
                 proc.wait()

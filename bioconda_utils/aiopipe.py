@@ -131,8 +131,16 @@ class AsyncPipeline[ITEM]:
             # interpreter exits non-zero instead of reporting success.
             self._shutting_down = True
             logger.error("Ctrl-C pressed - aborting...")
-            (interrupt,) = eg.exceptions
-            raise interrupt
+
+            def first_interrupt(group: BaseExceptionGroup) -> KeyboardInterrupt:
+                for exc in group.exceptions:
+                    if isinstance(exc, KeyboardInterrupt):
+                        return exc
+                    if isinstance(exc, BaseExceptionGroup):
+                        return first_interrupt(exc)
+                raise AssertionError("KeyboardInterrupt subgroup is empty")
+
+            raise first_interrupt(eg)
         except* EndProcessing:
             self._shutting_down = True
             logger.error("Terminating...")
