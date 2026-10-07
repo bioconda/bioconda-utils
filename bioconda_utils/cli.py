@@ -181,12 +181,6 @@ LogfileOpt = Annotated[Path | None, typer.Option("--logfile", help="Write log to
 LogfileLevelOpt = Annotated[
     LogLevel, typer.Option("--logfile-level", help="Log level for log file")
 ]
-LogCommandMaxLinesOpt = Annotated[
-    int | None,
-    typer.Option(
-        "--log-command-max-lines", help="Limit lines emitted for commands executed"
-    ),
-]
 RecipeFolderArg = Annotated[
     Path,
     typer.Argument(
@@ -340,12 +334,10 @@ def _setup_runtime(
     loglevel="info",
     logfile=None,
     logfile_level="debug",
-    log_command_max_lines=None,
+    *,
     threads=None,
 ):
-    setup_logger(
-        "bioconda_utils", loglevel, logfile, logfile_level, log_command_max_lines
-    )
+    setup_logger("bioconda_utils", loglevel, logfile, logfile_level)
     if threads is not None:
         from .support.parallel import set_max_threads
 
@@ -623,7 +615,6 @@ def build(
     loglevel: LoglevelOpt = "info",
     logfile: LogfileOpt = None,
     logfile_level: LogfileLevelOpt = "debug",
-    log_command_max_lines: LogCommandMaxLinesOpt = None,
 ) -> None:
     """Build and test Bioconda recipes."""
     if test_only:
@@ -634,7 +625,7 @@ def build(
         logger.error("--testonly is deprecated. Rerun without this flag.")
         sys.exit(1)
 
-    _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines, threads)
+    _setup_runtime(loglevel, logfile, logfile_level, threads=threads)
     target_platform = _container_platform_for_build(platform, docker)
     parsed_upload_target = _parse_quay_upload_target(container_upload_target)
     image_records_dir = _resolve_image_records_dir(
@@ -764,14 +755,13 @@ def dag(
     loglevel: LoglevelOpt = "info",
     logfile: LogfileOpt = None,
     logfile_level: LogfileLevelOpt = "debug",
-    log_command_max_lines: LogCommandMaxLinesOpt = None,
 ) -> None:
     """Export the dependency DAG among selected packages.
 
     Nodes are packages. An edge from A to B means that B has A as a build,
     host, or run dependency.
     """
-    _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines)
+    _setup_runtime(loglevel, logfile, logfile_level)
     package_patterns: PackagePatterns = packages or ["*"]
     import networkx as nx
 
@@ -847,10 +837,9 @@ def dependent(
     loglevel: LoglevelOpt = "info",
     logfile: LogfileOpt = None,
     logfile_level: LogfileLevelOpt = "debug",
-    log_command_max_lines: LogCommandMaxLinesOpt = None,
 ) -> None:
     """Print recipes dependent on a package"""
-    _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines)
+    _setup_runtime(loglevel, logfile, logfile_level)
     if dependencies and reverse_dependencies:
         raise typer.BadParameter(
             "`dependencies` and `reverse_dependencies` are mutually exclusive"
@@ -913,12 +902,11 @@ def lint(
     loglevel: LoglevelOpt = "info",
     logfile: LogfileOpt = None,
     logfile_level: LogfileLevelOpt = "debug",
-    log_command_max_lines: LogCommandMaxLinesOpt = None,
 ) -> None:
     """Lint recipes
 
     Reports linting results to stdout."""
-    _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines)
+    _setup_runtime(loglevel, logfile, logfile_level)
     package_patterns: PackagePatterns = packages or ["*"]
     from . import lint as _lint
     from .conda.repodata import RepoData
@@ -1001,11 +989,10 @@ def duplicates(
     loglevel: LoglevelOpt = "info",
     logfile: LogfileOpt = None,
     logfile_level: LogfileLevelOpt = "debug",
-    log_command_max_lines: LogCommandMaxLinesOpt = None,
 ) -> None:
     """Detect packages in bioconda that have duplicates in the other defined
     channels."""
-    _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines)
+    _setup_runtime(loglevel, logfile, logfile_level)
     if remove and (not strict_build):
         raise ValueError(
             "Removing packages is only supported in case of --strict-build."
@@ -1134,11 +1121,10 @@ def update_pinning(
     loglevel: LoglevelOpt = "info",
     logfile: LogfileOpt = None,
     logfile_level: LogfileLevelOpt = "debug",
-    log_command_max_lines: LogCommandMaxLinesOpt = None,
 ) -> None:
     """Bump a package build number and all dependencies as required due
     to a change in pinnings"""
-    _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines, threads)
+    _setup_runtime(loglevel, logfile, logfile_level, threads=threads)
     package_patterns: PackagePatterns = packages or ["*"]
     import networkx as nx
 
@@ -1291,7 +1277,6 @@ def bioconductor_skeleton(
     loglevel: LoglevelOpt = "debug",
     logfile: LogfileOpt = None,
     logfile_level: LogfileLevelOpt = "debug",
-    log_command_max_lines: LogCommandMaxLinesOpt = None,
 ) -> None:
     """Build Bioconductor recipes. Recipes will be created in the 'recipes'
     directory and will be prefixed by "bioconductor-". If --recursive is set,
@@ -1313,7 +1298,7 @@ def bioconductor_skeleton(
         bioconda-utils bioconductor-skeleton --packages DESeq2
         bioconda-utils bioconductor-skeleton --packages DESeq2 --packages edgeR --recursive
         bioconda-utils bioconductor-skeleton --update-all"""
-    _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines)
+    _setup_runtime(loglevel, logfile, logfile_level)
     import requests
 
     from . import bioconductor_skeleton as _bioconductor_skeleton
@@ -1395,7 +1380,6 @@ def clean_cran_skeleton(
     loglevel: LoglevelOpt = "info",
     logfile: LogfileOpt = None,
     logfile_level: LogfileLevelOpt = "debug",
-    log_command_max_lines: LogCommandMaxLinesOpt = None,
 ) -> None:
     """Cleans skeletons created by ``conda skeleton cran``.
 
@@ -1404,7 +1388,7 @@ def clean_cran_skeleton(
     other linting.
 
     Use --no-windows for a Bioconda submission."""
-    _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines)
+    _setup_runtime(loglevel, logfile, logfile_level)
     from . import cran_skeleton
 
     cran_skeleton.clean_skeleton_files(recipe, no_windows=no_windows)
@@ -1541,10 +1525,9 @@ def autobump(
     loglevel: LoglevelOpt = "info",
     logfile: LogfileOpt = None,
     logfile_level: LogfileLevelOpt = "debug",
-    log_command_max_lines: LogCommandMaxLinesOpt = None,
 ) -> None:
     """Updates recipes in recipe_folder"""
-    _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines, threads)
+    _setup_runtime(loglevel, logfile, logfile_level, threads=threads)
     package_patterns: PackagePatterns = packages or ["*"]
     excluded_channels = exclude_channels or ["conda-forge"]
     use_default_signing_key = sign and sign_key is None
@@ -1741,10 +1724,9 @@ def handle_merged_pr(
     loglevel: LoglevelOpt = "info",
     logfile: LogfileOpt = None,
     logfile_level: LogfileLevelOpt = "debug",
-    log_command_max_lines: LogCommandMaxLinesOpt = None,
 ) -> None:
     """Upload artifacts from a merged pull request."""
-    _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines)
+    _setup_runtime(loglevel, logfile, logfile_level)
     label = os.getenv("BIOCONDA_LABEL", None) or None
     parsed_git_range = _parse_git_range(git_range)
     parsed_upload_target = _parse_quay_upload_target(container_upload_target)
@@ -1818,10 +1800,9 @@ def create_mulled_manifests(
     loglevel: LoglevelOpt = "info",
     logfile: LogfileOpt = None,
     logfile_level: LogfileLevelOpt = "debug",
-    log_command_max_lines: LogCommandMaxLinesOpt = None,
 ) -> None:
     """Create or update canonical manifests for uploaded mulled images."""
-    _setup_runtime(loglevel, logfile, logfile_level, log_command_max_lines)
+    _setup_runtime(loglevel, logfile, logfile_level)
     try:
         target_platforms = (
             [package_subdir_to_container_platform(p) for p in platform]

@@ -26,37 +26,12 @@ err_console = Console(stderr=True)
 progress_display = ProgressDisplay(err_console)
 
 
-class CommandOutputFilter:
-    """Cap consecutive subprocess output records, regardless of their logger."""
+class _ConsoleHandler(RichHandler):
+    """Console handler owned by setup_logger."""
 
-    def __init__(
-        self,
-        trunc_msg: str | None = None,
-        max_lines: int = 0,
-        consecutive: bool = True,
-    ) -> None:
-        self.max_lines = max_lines + 1
-        self.cur_max_lines = max_lines + 1
-        self.consecutive = consecutive
-        self.trunc_msg = trunc_msg
 
-    def filter(self, record: logging.LogRecord) -> bool:
-        if getattr(record, "command_output", False):
-            if self.cur_max_lines > 1:
-                self.cur_max_lines -= 1
-                return True
-            if self.cur_max_lines == 1 and self.trunc_msg:
-                self.cur_max_lines -= 1
-                # Replacing ``msg`` while leaving the original ``args`` in
-                # place makes ``record.getMessage()`` fail on the leftover
-                # interpolation, so drop the arguments along with it.
-                record.msg = self.trunc_msg
-                record.args = ()
-                return True
-            return False
-        if self.consecutive:
-            self.cur_max_lines = self.max_lines
-        return True
+class _FileHandler(logging.FileHandler):
+    """File handler owned by setup_logger."""
 
 
 def setup_logger(
@@ -64,7 +39,6 @@ def setup_logger(
     loglevel: str | int = logging.INFO,
     logfile: Path | None = None,
     logfile_level: str | int = logging.DEBUG,
-    log_command_max_lines=None,
 ) -> logging.Logger:
     """Set up logging for bioconda-utils using Rich on stderr.
 
@@ -73,21 +47,25 @@ def setup_logger(
       loglevel: Log level, can be name or int level
       logfile: File to log to as well
       logfile_level: Log level for file logging
-      log_command_max_lines: Truncate ``support.subproc.run`` output after
-        this many lines.
 
     Returns:
       A new logger
     """
     new_logger = logging.getLogger(name)
     root_logger = logging.getLogger()
-    if root_logger.hasHandlers():
-        root_logger.handlers.clear()
+    for handler in root_logger.handlers[:]:
+        if isinstance(handler, (_ConsoleHandler, _FileHandler)):
+            root_logger.removeHandler(handler)
+            handler.close()
+
+    if isinstance(loglevel, str):
+        loglevel = getattr(logging, loglevel.upper())
+    if isinstance(logfile_level, str):
+        logfile_level = getattr(logging, logfile_level.upper())
+    root_logger.setLevel(min(loglevel, logfile_level) if logfile else loglevel)
 
     if logfile:
-        if isinstance(logfile_level, str):
-            logfile_level = getattr(logging, logfile_level.upper())
-        log_file_handler = logging.FileHandler(logfile)
+        log_file_handler = _FileHandler(logfile)
         log_file_handler.setLevel(logfile_level)
         log_file_handler.setFormatter(
             logging.Formatter(
@@ -96,17 +74,7 @@ def setup_logger(
             )
         )
         root_logger.addHandler(log_file_handler)
-    else:
-        logfile_level = logging.FATAL
-
-    if isinstance(loglevel, str):
-        loglevel = getattr(logging, loglevel.upper())
-    if isinstance(logfile_level, str):
-        logfile_level = getattr(logging, logfile_level.upper())
-
-    root_logger.setLevel(min(loglevel, logfile_level))
-
-    rich_handler = RichHandler(
+    rich_handler = _ConsoleHandler(
         console=err_console,
         rich_tracebacks=True,
         # Log records contain recipe metadata and subprocess output, so they
@@ -121,12 +89,6 @@ def setup_logger(
     )
     rich_handler.setLevel(loglevel)
     root_logger.addHandler(rich_handler)
-
-    if log_command_max_lines is not None:
-        log_filter = CommandOutputFilter(
-            "Command output truncated", log_command_max_lines
-        )
-        rich_handler.addFilter(log_filter)
 
     return new_logger
 

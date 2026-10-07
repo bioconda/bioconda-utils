@@ -201,27 +201,19 @@ def run(
                     for pipe, line in iter(logq.get, None):
                         line = redact_secrets(line.decode(errors="replace").rstrip())
                         output_lines.append(line)
-                        # only keep the last 1000 lines to avoid memory issues
-                        if len(output_lines) > 1000:
-                            output_lines.popleft()
                         if live:
                             if pipe == proc.stdout:
                                 prefix = "OUT"
                             else:
                                 prefix = "ERR"
-                            mylogger.log(
-                                loglevel,
-                                "(%s) %s",
-                                prefix,
-                                line,
-                                extra={"command_output": True},
-                            )
+                            mylogger.log(loglevel, "(%s) %s", prefix, line)
             except Exception:
                 proc.kill()
                 proc.wait()
                 raise
 
-        output_lines = deque()
+        # Bound captured output without limiting live logs or the log file.
+        output_lines = deque(maxlen=1000)
         if not live:
             with progress_display.status(status):
                 handle_output(output_lines)

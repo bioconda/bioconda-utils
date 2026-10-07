@@ -285,6 +285,7 @@ def build(
         # remove record to avoid that it is leaked into the package
         build_failure_record.remove()
 
+    built_package_names: list[str] | None = None
     try:
         if docker_builder is not None:
             report_resources(f"Starting build for {recipe}", docker_builder is not None)
@@ -346,6 +347,7 @@ def build(
                     # rendering recipe
                     rendered_variants = recipe_s0.render(variants, render_config)
 
+                    built_package_names = []
                     for variant in rendered_variants:
                         # py-rattler-build streams its own progress to the
                         # terminal, so no spinner is wrapped around it here.
@@ -354,12 +356,18 @@ def build(
                             channels=channels,
                             output_dir=rattler_output_dir,
                         )
-                        logger.info(
-                            "BUILD SUCCESS %s",
-                            ", ".join(os.path.basename(p) for p in result.packages),
+                        built_package_names.extend(
+                            Path(p).name for p in result.packages
                         )
 
-        logger.info("BUILD SUCCESS %s", " ".join(p.name for p in pkg_paths))
+        logger.info(
+            "BUILD SUCCESS %s",
+            " ".join(
+                built_package_names
+                if built_package_names is not None
+                else [p.name for p in pkg_paths]
+            ),
+        )
         if record_build_failure and build_failure_record_existed_before_build:
             # The obsolete record is already removed; commit that removal.
             build_failure_record.commit_and_push_changes()

@@ -228,7 +228,7 @@ class AsyncPipeline[ITEM]:
         """Applies the filters to an item
 
         Returns True if the item passed all filters, False if it failed
-        one (logged) or was skipped via EndProcessingItem. Exceptions are
+        one with an unexpected exception (logged). Control-flow exceptions are
         propagated -- EndProcessingItem (skip reason, handled by process
         overrides), EndProcessing / BrokenExecutor (abort the run).
         """

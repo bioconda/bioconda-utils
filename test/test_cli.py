@@ -408,7 +408,7 @@ def test_autobump_closes_git_handler_on_keyboard_interrupt(monkeypatch):
         def close(self):
             closed.append(True)
 
-    monkeypatch.setattr(cli, "_setup_runtime", lambda *_args: None)
+    monkeypatch.setattr(cli, "_setup_runtime", lambda *_args, **_kwargs: None)
     monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: {})
     monkeypatch.setattr("bioconda_utils.githandler.BiocondaRepo", Repo)
     monkeypatch.setattr(autobump, "RecipeSource", RecipeSource)
@@ -447,7 +447,7 @@ def test_autobump_builds_all_cache_paths_from_path_prefix(monkeypatch, tmp_path)
         def run(self):
             pass
 
-    monkeypatch.setattr(cli, "_setup_runtime", lambda *_args: None)
+    monkeypatch.setattr(cli, "_setup_runtime", lambda *_args, **_kwargs: None)
     monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: {})
     monkeypatch.setattr(autobump, "RecipeSource", RecipeSource)
     monkeypatch.setattr(autobump, "Scanner", Scanner)
@@ -730,11 +730,10 @@ def test_shared_runtime_options_are_applied(monkeypatch):
     )
     cli._setup_runtime(
         loglevel="warning",
-        log_command_max_lines=12,
         threads=4,
     )
 
-    assert logger_calls == [("bioconda_utils", "warning", None, "debug", 12)]
+    assert logger_calls == [("bioconda_utils", "warning", None, "debug")]
     assert thread_calls == [4]
 
 

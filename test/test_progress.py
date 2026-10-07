@@ -213,3 +213,13 @@ def test_process_worker_leaves_terminal_progress_to_parent(start_method, display
         with get_context(start_method).Pool(1) as pool:
             assert pool.apply(worker_progress) == (True, False, "")
         assert display.live.is_started
+
+
+@pytest.mark.parametrize("kind", ["count_task", "download_task", "status"])
+@pytest.mark.parametrize(
+    "description",
+    ["target [linux-64]", "target [/something]", "target [bold]literal[/bold]"],
+)
+def test_task_descriptions_are_literal(display, kind, description):
+    with getattr(display, kind)(description):
+        assert description in rendered(display)

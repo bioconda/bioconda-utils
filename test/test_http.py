@@ -379,3 +379,23 @@ def test_logger_treats_subprocess_output_as_literal_text():
     # second one. Logging arbitrary command output must never interpret either.
     logger.info("[not-a-style]")
     logger.info("unmatched closing tag [/bold]")
+
+
+@pytest.mark.parametrize("descriptions", [[], ["first"], ["", "second"]])
+def test_async_fetch_defaults_missing_descriptions(monkeypatch, descriptions):
+    from bioconda_utils.conda import repodata
+
+    seen = {}
+
+    async def fetch_one(session, url, description, **kwargs):
+        seen[url] = description
+        return b"data"
+
+    monkeypatch.setattr(repodata, "_async_fetch_one", fetch_one)
+    urls = ["https://example.com/first", "https://example.com/second"]
+    results = asyncio.run(repodata.async_fetch(urls, descriptions))
+    assert results == [b"data", b"data"]
+    assert seen == {
+        url: descriptions[i] or url if i < len(descriptions) else url
+        for i, url in enumerate(urls)
+    }

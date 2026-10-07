@@ -1520,7 +1520,7 @@ def test_get_package_paths_force_builds_existing_and_logs_force(caplog, monkeypa
         "get_package_data",
         lambda _self, keys, **_k: (
             []
-            if keys == ["channel", "subdir"]
+            if keys == ["channel", "build", "subdir"]
             # check_recipe_skippable: no matching version + build number yet
             else existing_builds  # _filter_existing_packages
         ),
@@ -1587,7 +1587,7 @@ def test_get_package_paths_reports_channels_per_multi_output(caplog, monkeypatch
     )
 
     def get_package_data(_self, keys, name: str = "", **_kwargs):
-        if keys == ["channel", "subdir"]:
+        if keys == ["channel", "build", "subdir"]:
             # check_recipe_skippable: no matching version + build number yet
             return []
         return rows_by_name[name]  # _filter_existing_packages
@@ -1650,7 +1650,10 @@ def test_check_recipe_skippable_queries_requested_target(monkeypatch, config_fix
     assert queried_platforms == [[PackageSubdir.LINUX_AARCH64, "noarch"]]
 
 
-def test_check_recipe_skippable_logs_channels_with_build(caplog, monkeypatch):
+@pytest.mark.parametrize("duplicate_channel", [False, True])
+def test_check_recipe_skippable_logs_channels_with_build(
+    caplog, monkeypatch, duplicate_channel
+):
     meta = Mock()
     meta.name.return_value = "samtools"
     meta.version.return_value = "1.24"
@@ -1666,19 +1669,27 @@ def test_check_recipe_skippable_logs_channels_with_build(caplog, monkeypatch):
         lambda *_a, **_k: (PackageSubdir.LINUX_64, [meta]),
     )
     monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda", "conda-forge"]})
-    # conda-forge already has samtools 1.24 build_number 1, bioconda does not
+    rows = [("conda-forge", "h123_1", PackageSubdir.LINUX_64)]
+    if duplicate_channel:
+        rows.append(("bioconda", "h123_1", PackageSubdir.LINUX_64))
     monkeypatch.setattr(
         RepoData,
         "get_package_data",
-        lambda _self, _keys, **_k: [("conda-forge", PackageSubdir.LINUX_64)],
+        lambda _self, _keys, **_k: rows,
     )
 
     caplog.set_level(logging.INFO, logger="bioconda_utils.conda.recipes")
     assert conda_recipes.check_recipe_skippable(
         Path("samtools"), ["bioconda", "conda-forge"], target_platform=None
     )
-    assert "channel(s) [conda-forge]" in caplog.text
-    assert "[bioconda" not in caplog.text
+    expected_channels = "bioconda, conda-forge" if duplicate_channel else "conda-forge"
+    assert f"channel(s) [{expected_channels}]" in caplog.text
+
+    # A second distinct build remains a second variant, even in the same subdir.
+    rows.append(("conda-forge", "h456_1", PackageSubdir.LINUX_64))
+    assert not conda_recipes.check_recipe_skippable(
+        Path("samtools"), ["bioconda", "conda-forge"]
+    )
 
 
 def test_native_platform_skipping(config_fixture):

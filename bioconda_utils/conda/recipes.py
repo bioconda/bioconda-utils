@@ -174,8 +174,9 @@ def check_recipe_skippable(
     existing_channels = set()
     num_existing_pkg_builds = Counter()
     for name, version, build_number in packages:
-        for channel, subdir in r.get_package_data(
-            ["channel", "subdir"],
+        existing_builds = set()
+        for channel, build, subdir in r.get_package_data(
+            ["channel", "build", "subdir"],
             name=name,
             version=version,
             build_number=build_number,
@@ -183,6 +184,8 @@ def check_recipe_skippable(
             platform=queried_subdirs,
         ):
             existing_channels.add(channel)
+            existing_builds.add((build, subdir))
+        for build, subdir in existing_builds:
             num_existing_pkg_builds[(name, version, build_number, subdir)] += 1
     if num_existing_pkg_builds == Counter():
         # No packages with same version + build num in channels: no need to skip

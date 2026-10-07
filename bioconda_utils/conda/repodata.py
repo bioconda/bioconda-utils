@@ -116,7 +116,7 @@ async def async_fetch(
                 _async_fetch_one(
                     session,
                     url,
-                    description,
+                    description or url,
                     transform=transform,
                     metadata=datum,
                 )

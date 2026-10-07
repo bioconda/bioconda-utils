@@ -32,7 +32,9 @@ class ProgressDisplay:
     def __init__(self, console: Console) -> None:
         self.counts = Progress(
             SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
+            TextColumn(
+                "{task.description}", style="progress.description", markup=False
+            ),
             BarColumn(),
             MofNCompleteColumn(),
             TaskProgressColumn(),
@@ -42,7 +44,9 @@ class ProgressDisplay:
         )
         self.downloads = Progress(
             SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
+            TextColumn(
+                "{task.description}", style="progress.description", markup=False
+            ),
             BarColumn(),
             TaskProgressColumn(),
             DownloadColumn(),
