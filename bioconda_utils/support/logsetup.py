@@ -65,26 +65,15 @@ class LogFuncFilter:
                 return True
             if self.cur_max_lines == 1 and self.trunc_msg:
                 self.cur_max_lines -= 1
+                # Replacing ``msg`` while leaving the original ``args`` in
+                # place makes ``record.getMessage()`` fail on the leftover
+                # interpolation, so drop the arguments along with it.
                 record.msg = self.trunc_msg
+                record.args = ()
                 return True
             return False
         if self.consecutive:
             self.cur_max_lines = self.max_lines
-        return True
-
-
-class LoggingSourceRenameFilter:
-    """Logging filter for abbreviating module name in logs
-
-    Maps ``bioconda_utils`` to ``BIOCONDA`` and for everything else
-    to just the top level package uppercased.
-    """
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        if record.name.startswith("bioconda_utils"):
-            record.name = "BIOCONDA"
-        else:
-            record.name = record.name.split(".")[0].upper()
         return True
 
 
@@ -149,7 +138,6 @@ def setup_logger(
         log_time_format="[%H:%M:%S]",
     )
     rich_handler.setLevel(loglevel)
-    rich_handler.addFilter(LoggingSourceRenameFilter())
     root_logger.addHandler(rich_handler)
 
     if log_command_max_lines is not None:
