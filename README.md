@@ -74,7 +74,6 @@ without loading whole repositories into each worker. Database page caches are
 bounded, and refreshes build one repository at a time across processes to limit
 peak JSON parsing memory. Cache files are disposable. The previous repodata
 pickle store is not used; the first run with the new format repopulates the cache.
-See [repodata benchmarks](benchmarks/repodata.md) for memory and timing results.
 
 `lint`, `update-pinning`, and `autobump` still accept `--cache PREFIX` for existing
 scripts. The application cache root becomes `PREFIX.d`, with separate
@@ -99,7 +98,7 @@ Cookie-bearing archive requests always revalidate stored digests. `no-store`
 and authenticated text responses are not persisted; FTP reuse stays within a
 run. The HTTP store has a 256 MiB disk budget and removes entries older than
 seven days during periodic maintenance. The former indefinite snapshots are
-not used. See [cache benchmarks](benchmarks/autobump-caches.md).
+not used.
 
 Process workers use `spawn` with explicit configuration and send log records
 to the parent. Only the parent renders terminal output, so workers never inherit
