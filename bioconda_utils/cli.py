@@ -1390,7 +1390,13 @@ def clean_cran_skeleton(
 
 @app.command("autobump")
 def autobump(
-    recipe_folder: RecipeFolderArg = Path("recipes/"),
+    recipe_folder: Annotated[
+        Path,
+        typer.Argument(
+            help="Recipe collection root (default: recipes/). Select recipes with --packages, e.g. recipes --packages samtools.",
+            callback=_validate_path_exists,
+        ),
+    ] = Path("recipes/"),
     config: ConfigArg = Path("config.yml"),
     packages: PackagesOpt = None,
     exclude: Annotated[
@@ -1422,7 +1428,7 @@ def autobump(
         Literal["always", "never"] | None,
         typer.Option(
             "--exclude-subrecipes",
-            help="By default, only subrecipes explicitly\n     enabled for watch in meta.yaml are considered. Set to 'always' to\n     exclude all subrecipes.  Set to 'never' to include all subrecipes",
+            help="By default, only subrecipes explicitly\n     enabled with extra.autobump.enable in meta.yaml are considered. Set to 'always' to\n     exclude all subrecipes.  Set to 'never' to include all subrecipes",
         ),
     ] = None,
     exclude_channels: Annotated[
@@ -1515,7 +1521,19 @@ def autobump(
     logfile: LogfileOpt = None,
     logfile_level: LogfileLevelOpt = "debug",
 ) -> None:
-    """Updates recipes in recipe_folder"""
+    """Update recipes from upstream releases and pinning changes.
+
+    Pass the collection root, not an individual recipe directory. Historical
+    version subdirectories are excluded unless explicitly enabled.
+    """
+    if any((recipe_folder / name).is_file() for name in ("meta.yaml", "recipe.yaml")):
+        raise typer.BadParameter(
+            "This directory contains a recipe. Pass the recipe collection root "
+            "and select recipes with --packages, e.g. "
+            "bioconda-utils autobump recipes --packages samtools. "
+            "Using a recipe as the root would bypass historical-version exclusion.",
+            param_hint="recipe_folder",
+        )
     _setup_runtime(loglevel, logfile, logfile_level, threads=threads)
     package_patterns: PackagePatterns = packages or ["*"]
     excluded_channels = exclude_channels or ["conda-forge"]

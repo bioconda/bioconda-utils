@@ -379,6 +379,91 @@ def test_recipe_selection_uses_range_base_and_ref(monkeypatch):
     assert calls == [("feature", "main")]
 
 
+@pytest.mark.parametrize("filename", ["meta.yaml", "recipe.yaml"])
+def test_autobump_rejects_individual_recipe_root_before_loading_config(
+    tmp_path, filename
+):
+    recipe = tmp_path / "recipes" / "samtools"
+    recipe.mkdir(parents=True)
+    (recipe / filename).write_text("package: {}\n")
+    config = tmp_path / "config.yml"
+    config.write_text("invalid: [\n")
+
+    result = runner.invoke(cli.app, ["autobump", str(recipe), str(config)])
+
+    assert result.exit_code == 2, result.output
+    assert "This directory contains a recipe" in result.output
+    assert "--packages" in result.output
+    assert "historical-version exclusion" in result.output
+
+
+@pytest.mark.parametrize("follow_graph", [False, True])
+def test_autobump_updates_selected_main_recipe_and_preserves_history(
+    monkeypatch, tmp_path, follow_graph
+):
+    from bioconda_utils import autobump
+    from bioconda_utils.aiopipe import AsyncRequests
+
+    root = tmp_path / "recipes"
+    originals = {}
+    for name, version in (
+        ("samtools", "1.0"),
+        ("samtools/0.1.18", "0.1.18"),
+        ("samtools/1.3.1", "1.3.1"),
+        ("other", "1.0"),
+    ):
+        folder = root / name
+        folder.mkdir(parents=True)
+        text = (
+            '{% set version = "' + version + '" %}\n'
+            "package:\n  name: " + name.split("/")[0] + "\n"
+            "  version: {{ version }}\n"
+            "source:\n  url: https://example.org/{{ version }}.tar.gz\n"
+            '  sha256: "' + "a" * 64 + '"\n'
+            "build:\n  number: 0\n"
+        )
+        path = folder / "meta.yaml"
+        path.write_text(text)
+        originals[name] = text
+    config = tmp_path / "config.yml"
+    config.write_text("channels: []\n")
+
+    async def versions(self, recipe):
+        assert recipe.reldir.as_posix() == "samtools"
+        return {"1.0": {}, "2.0": {}}
+
+    async def checksum(self, url, desc):
+        assert url == "https://example.org/2.0.tar.gz"
+        return "b" * 64
+
+    monkeypatch.setattr(autobump.UpdateVersion, "get_version_map", versions)
+    monkeypatch.setattr(AsyncRequests, "get_checksum_from_url", checksum)
+    result = runner.invoke(
+        cli.app,
+        [
+            "autobump",
+            str(root),
+            str(config),
+            "--packages",
+            "samtools",
+            *([] if follow_graph else ["--no-follow-graph"]),
+            "--no-check-pinnings",
+            "--ignore-skiplists",
+            "--exclude-channels",
+            "none",
+            "--threads",
+            "1",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    updated = (root / "samtools/meta.yaml").read_text()
+    assert 'set version = "2.0"' in updated
+    assert "b" * 64 in updated
+    for name in ("samtools/0.1.18", "samtools/1.3.1", "other"):
+        assert (root / name / "meta.yaml").read_text() == originals[name]
+
+
 def test_autobump_closes_git_handler_on_keyboard_interrupt(monkeypatch):
     from bioconda_utils import autobump
 

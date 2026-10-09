@@ -53,6 +53,14 @@ Or use the Just wrappers around the Pixi tasks:
 just global-install
 ```
 
+To update selected recipes, pass the recipe collection root and select packages:
+`bioconda-utils autobump recipes --packages samtools`. Autobump updates upstream
+versions and checksums and checks whether pinning changes require rebuilding.
+Historical version subdirectories are excluded by default. Passing an individual
+recipe directory as the collection root is rejected because it would bypass
+that exclusion. Use `--exclude-subrecipes never` to explicitly include historical
+recipes, or enable an individual subrecipe with `extra.autobump.enable: true`.
+
 Repodata is cached automatically per channel and subdirectory for eight hours.
 On Linux the default directory is
 `$XDG_CACHE_HOME/bioconda-utils/repodata-v1`, or

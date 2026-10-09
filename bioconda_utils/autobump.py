@@ -369,7 +369,7 @@ class ExcludeSubrecipe(Filter, AutoBumpConfigMixin):
     """Exclude sub-recipes
 
     Unless **always** is True, subrecipes specifically enabled via
-    ``extra: watch: enable: yes`` will not be filtered.
+    ``extra.autobump.enable: true`` will not be filtered.
     """
 
     class IsSubRecipe(EndProcessingItem):
