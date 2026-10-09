@@ -963,9 +963,7 @@ def lint(
 
 @app.command("duplicates")
 def duplicates(
-    config: Annotated[
-        str, typer.Argument(help="Path to yaml file specifying the configuration")
-    ],
+    config: ConfigArg = Path("config.yml"),
     strict_version: Annotated[
         bool,
         typer.Option("--strict-version", help="Require version to strictly match."),
@@ -1000,7 +998,7 @@ def duplicates(
     from .conda.repodata import RepoData
     from .config import load_config
 
-    config_data = load_config(Path(config))
+    config_data = load_config(config)
     if channel not in config_data["channels"]:
         raise ValueError("Channel given with --channel must be in config channels")
     our_channel = channel
