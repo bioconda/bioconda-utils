@@ -14,6 +14,7 @@ import hashlib
 import inspect
 import logging
 import os
+import uuid
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from time import monotonic
@@ -73,7 +74,7 @@ def make_session(
 
 def _parse_content_length(resp: aiohttp.ClientResponse) -> int | None:
     """Return the uncompressed body size, or None if unknown, invalid, or encoded."""
-    if resp.headers.get("Content-Encoding", "identity") != "identity":
+    if resp.headers.get("Content-Encoding", "identity").lower() != "identity":
         return None
     length = resp.headers.get("Content-Length")
     if length is None:
@@ -156,9 +157,13 @@ async def download_to_file(
     renamed into place only after a complete transfer. A failed or cancelled
     download therefore never leaves a truncated file at **fname** (callers
     treat an existing file as a complete cache entry).
+
+    The temporary file gets a unique name so that concurrent downloads of
+    the same destination (e.g. duplicate sources sharing the source cache)
+    cannot stream into the same file.
     """
     fname = Path(fname)
-    tmp = fname.with_name(fname.name + ".part")
+    tmp = fname.with_name(f"{fname.name}.{uuid.uuid4().hex}.part")
     try:
         async with aiofiles.open(tmp, "wb") as f:
             written = await stream_to_sink(resp, desc, f.write, block_size=block_size)

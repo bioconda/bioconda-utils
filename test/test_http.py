@@ -363,6 +363,30 @@ def test_failed_download_to_file_keeps_existing_target(tmp_path):
     assert not (tmp_path / "out.txt.part").exists()
 
 
+def test_concurrent_downloads_to_same_target(tmp_path):
+    """Concurrent workers may fetch the same destination (shared src cache)."""
+    dest = tmp_path / "out.txt"
+
+    class YieldingBody(ResponseBody):
+        """Body that lets the other download run between reads."""
+
+        async def read(self, _size):
+            await asyncio.sleep(0)
+            return await super().read(_size)
+
+    async def run():
+        first = cast(aiohttp.ClientResponse, YieldingBody([b"hello ", b"world"]))
+        second = cast(aiohttp.ClientResponse, YieldingBody([b"hello ", b"world"]))
+        return await asyncio.gather(
+            http.download_to_file(first, dest, "first"),
+            http.download_to_file(second, dest, "second"),
+        )
+
+    assert asyncio.run(run()) == [11, 11]
+    assert dest.read_bytes() == b"hello world"
+    assert list(tmp_path.iterdir()) == [dest]
+
+
 def test_download_to_checksum():
     response = cast(aiohttp.ClientResponse, ResponseBody([b"hello ", b"world"]))
     digest = asyncio.run(http.download_to_checksum(response, "hash download"))
