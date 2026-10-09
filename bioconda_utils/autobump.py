@@ -661,7 +661,9 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
         latest = self.select_version(recipe.version, versions.keys())
 
         # add data for respective versions to recipe and recipe.orig
-        recipe.version_data = versions[latest] or {}
+        # Keeping the current version does not imply that its exact spelling
+        # is present upstream (e.g. 1.0 versus 1.0.0, or a pruned release).
+        recipe.version_data = versions.get(latest) or {}
         if recipe.orig.version in versions:
             recipe.orig.version_data = versions[recipe.orig.version] or {}
         else:
