@@ -72,3 +72,29 @@ def test_setup_replaces_owned_handlers_and_preserves_external_handlers(
                 handler.close()
         root.handlers[:] = handlers
         root.setLevel(level)
+
+
+def test_report_console_preserves_literal_cells_and_explicit_styles():
+    from rich.table import Table
+    from rich.text import Text
+
+    table = Table("Result", header_style="bold cyan")
+    table.add_row("[make] [/path]")
+    with logsetup.console.capture() as captured:
+        logsetup.console.print(table)
+        logsetup.console.print("Heading", style="bold")
+    output = captured.get()
+    assert "[make] [/path]" in output
+    assert "Heading" in output
+    header = next(
+        segment
+        for segment in logsetup.console.render(table)
+        if "Result" in segment.text
+    )
+    assert header.style is not None
+    assert header.style.bold
+    assert header.style.color is not None
+    assert header.style.color.name == "cyan"
+    heading = next(iter(logsetup.console.render(Text("Heading", style="bold"))))
+    assert heading.style is not None
+    assert heading.style.bold

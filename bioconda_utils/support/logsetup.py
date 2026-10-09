@@ -21,7 +21,9 @@ from .progress import ProgressDisplay
 
 logger = logging.getLogger(__name__)
 
-console = Console()
+# Report strings are data; intentional styling belongs on renderables or
+# explicit style arguments, rather than being parsed from their contents.
+console = Console(markup=False)
 err_console = Console(stderr=True)
 progress_display = ProgressDisplay(err_console)
 

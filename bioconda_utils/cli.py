@@ -386,7 +386,7 @@ def diagnostics() -> None:
         Text.assemble(("conda-build root: ", "bold cyan"), str(config.croot)),
         soft_wrap=True,
     )
-    report_console.print("[bold]Conda-build configuration files[/bold]")
+    report_console.print("Conda-build configuration files", style="bold")
     for filename in config.exclusive_config_files or []:
         path = Path(filename)
         report_console.print(Text(f"{path}:", style="bold blue"), soft_wrap=True)

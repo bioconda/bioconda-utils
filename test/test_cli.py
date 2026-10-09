@@ -823,3 +823,53 @@ def test_help_keeps_rich_rendering(monkeypatch, args):
     assert "\x1b[" in result.output
     assert "╭" in result.output
     assert "╰" in result.output
+
+
+@pytest.mark.parametrize(
+    "literal",
+    [
+        "gcc: error: [/usr/lib/libz.so] not found",
+        "see [make] failed",
+        "[linux-64] failed",
+    ],
+)
+def test_build_failure_table_preserves_literal_text(monkeypatch, tmp_path, literal):
+    from bioconda_utils.build_failure import BUILD_FAILURE_COLUMNS
+
+    monkeypatch.setattr(cli.report_console, "width", 300)
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: {})
+    row = dict.fromkeys(BUILD_FAILURE_COLUMNS, "value")
+    row["reason"] = literal
+    monkeypatch.setattr(
+        "bioconda_utils.build_failure.collect_build_failure_records",
+        lambda *_args, **_kwargs: [row],
+    )
+    result = runner.invoke(
+        cli.app, ["list-build-failures", str(tmp_path), str(tmp_path)]
+    )
+    assert result.exit_code == 0, result.output
+    assert literal in result.output
+
+
+@pytest.mark.parametrize(
+    "literal",
+    ["[/recipe/path]", "see [make] failed", "[Docs](https://example.com/docs)"],
+)
+def test_lint_table_preserves_literal_text(monkeypatch, tmp_path, literal):
+    from unittest.mock import Mock
+
+    monkeypatch.setattr(cli.report_console, "width", 300)
+    monkeypatch.setattr(cli, "_setup_runtime", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: {})
+    monkeypatch.setattr(cli, "get_recipes", lambda *_args, **_kwargs: [])
+    message = Mock()
+    message.get_table_row.return_value = ("ERROR", "recipe", "check", literal)
+    linter = Mock()
+    linter.lint.return_value = True
+    linter.get_messages.return_value = [message]
+    monkeypatch.setattr("bioconda_utils.lint.Linter", lambda *_args: linter)
+
+    result = runner.invoke(cli.app, ["lint", str(tmp_path), str(tmp_path)])
+    assert result.exit_code == 1
+    assert literal in result.output
+    assert "MarkupError" not in result.output
