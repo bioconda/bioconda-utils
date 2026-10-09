@@ -29,7 +29,6 @@ from typing import ClassVar, cast
 import aiofiles
 import aiohttp
 import pandas as pd
-import platformdirs
 import requests
 
 from .._types import (
@@ -40,7 +39,7 @@ from .._types import (
     native_container_platform,
 )
 from ..support import http
-from ..support.caching import disk_cache, file_lock
+from ..support.caching import disk_cache, file_lock, get_cache_root
 from ..support.logsetup import progress_display
 
 logger = logging.getLogger(__name__)
@@ -274,10 +273,7 @@ class RepoData:
 
     @classmethod
     def get_cache_dir(cls) -> Path:
-        return (
-            cls.cache_dir
-            or platformdirs.user_cache_path("bioconda-utils") / "repodata-v1"
-        )
+        return cls.cache_dir or get_cache_root() / "repodata-v1"
 
     @property
     def channels(self):

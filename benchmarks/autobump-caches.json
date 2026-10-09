@@ -1,0 +1,170 @@
+{
+  "date": "2026-10-09",
+  "baseline_commit": "8361ad4",
+  "current": "working tree based on cc42cf0",
+  "recipe_head": "b66803ba0bd529c4edea239d74223954b60f17cb",
+  "baseline_and_uncached_graph": [
+    {
+      "implementation": "baseline-warm",
+      "run": 0,
+      "seconds": 10.152238099952228,
+      "nodes": 11437,
+      "edges": 39916,
+      "module": "/tmp/bioconda-cache-benchmark/baseline/bioconda_utils/__init__.py"
+    },
+    {
+      "implementation": "current",
+      "run": 0,
+      "seconds": 25.474148390989285,
+      "nodes": 11437,
+      "edges": 39916,
+      "module": "/home/benjamin/.herdr/worktrees/bioconda-utils/fix-path/bioconda_utils/__init__.py"
+    },
+    {
+      "implementation": "baseline-warm",
+      "run": 0,
+      "seconds": 10.34942320000846,
+      "nodes": 11437,
+      "edges": 39916,
+      "module": "/tmp/bioconda-cache-benchmark/baseline/bioconda_utils/__init__.py"
+    },
+    {
+      "implementation": "current",
+      "run": 0,
+      "seconds": 25.793267103959806,
+      "nodes": 11437,
+      "edges": 39916,
+      "module": "/home/benjamin/.herdr/worktrees/bioconda-utils/fix-path/bioconda_utils/__init__.py"
+    }
+  ],
+  "new_warm_graph": [
+    {
+      "implementation": "final-warm-1",
+      "run": 0,
+      "seconds": 4.8224651259952225,
+      "nodes": 11264,
+      "edges": 39319,
+      "module": "/home/benjamin/.herdr/worktrees/bioconda-utils/fix-path/bioconda_utils/__init__.py"
+    },
+    {
+      "implementation": "final-warm-2",
+      "run": 0,
+      "seconds": 5.308473379001953,
+      "nodes": 11264,
+      "edges": 39319,
+      "module": "/home/benjamin/.herdr/worktrees/bioconda-utils/fix-path/bioconda_utils/__init__.py"
+    }
+  ],
+  "new_graph_equivalence": {
+    "nodes": 11264,
+    "edges": 39319,
+    "cached_seconds": 30.083624023012817,
+    "fresh_seconds": 36.02561702003004,
+    "exact_edges_match": true
+  },
+  "upstream_before": [
+    {
+      "implementation": "baseline",
+      "run": 0,
+      "seconds": 4.6846602850127965,
+      "requests": 2,
+      "listing_bytes": 501504,
+      "checksum": "89b2a440123eeaa400392ce1736e7d60ce9041843027d76819753c5a8246bfdd",
+      "module": "/tmp/bioconda-cache-benchmark/baseline/bioconda_utils/__init__.py"
+    },
+    {
+      "implementation": "baseline",
+      "run": 1,
+      "seconds": 0.0036291530122980475,
+      "requests": 0,
+      "listing_bytes": 501504,
+      "checksum": "89b2a440123eeaa400392ce1736e7d60ce9041843027d76819753c5a8246bfdd",
+      "module": "/tmp/bioconda-cache-benchmark/baseline/bioconda_utils/__init__.py"
+    },
+    {
+      "implementation": "baseline",
+      "run": 2,
+      "seconds": 0.002800811023917049,
+      "requests": 0,
+      "listing_bytes": 501504,
+      "checksum": "89b2a440123eeaa400392ce1736e7d60ce9041843027d76819753c5a8246bfdd",
+      "module": "/tmp/bioconda-cache-benchmark/baseline/bioconda_utils/__init__.py"
+    },
+    {
+      "implementation": "current",
+      "run": 0,
+      "seconds": 4.475535578967538,
+      "requests": 2,
+      "listing_bytes": 501504,
+      "checksum": "89b2a440123eeaa400392ce1736e7d60ce9041843027d76819753c5a8246bfdd",
+      "module": "/home/benjamin/.herdr/worktrees/bioconda-utils/fix-path/bioconda_utils/__init__.py"
+    },
+    {
+      "implementation": "current",
+      "run": 1,
+      "seconds": 3.5126719290274195,
+      "requests": 2,
+      "listing_bytes": 501504,
+      "checksum": "89b2a440123eeaa400392ce1736e7d60ce9041843027d76819753c5a8246bfdd",
+      "module": "/home/benjamin/.herdr/worktrees/bioconda-utils/fix-path/bioconda_utils/__init__.py"
+    },
+    {
+      "implementation": "current",
+      "run": 2,
+      "seconds": 3.5748013019911014,
+      "requests": 2,
+      "listing_bytes": 501504,
+      "checksum": "89b2a440123eeaa400392ce1736e7d60ce9041843027d76819753c5a8246bfdd",
+      "module": "/home/benjamin/.herdr/worktrees/bioconda-utils/fix-path/bioconda_utils/__init__.py"
+    }
+  ],
+  "upstream_after": [
+    {
+      "implementation": "final",
+      "run": 0,
+      "seconds": 4.638577861012891,
+      "requests": 2,
+      "listing_bytes": 501504,
+      "checksum": "89b2a440123eeaa400392ce1736e7d60ce9041843027d76819753c5a8246bfdd",
+      "module": "/home/benjamin/.herdr/worktrees/bioconda-utils/fix-path/bioconda_utils/__init__.py"
+    },
+    {
+      "implementation": "final",
+      "run": 1,
+      "seconds": 0.21953630400821567,
+      "requests": 2,
+      "listing_bytes": 501504,
+      "checksum": "89b2a440123eeaa400392ce1736e7d60ce9041843027d76819753c5a8246bfdd",
+      "module": "/home/benjamin/.herdr/worktrees/bioconda-utils/fix-path/bioconda_utils/__init__.py"
+    },
+    {
+      "implementation": "final",
+      "run": 2,
+      "seconds": 0.20906106301117688,
+      "requests": 2,
+      "listing_bytes": 501504,
+      "checksum": "89b2a440123eeaa400392ce1736e7d60ce9041843027d76819753c5a8246bfdd",
+      "module": "/home/benjamin/.herdr/worktrees/bioconda-utils/fix-path/bioconda_utils/__init__.py"
+    }
+  ],
+  "recipe_fingerprinting": [
+    {
+      "run": 0,
+      "seconds": 0.992426434007939,
+      "recipes": 11437,
+      "bytes": 17218344
+    },
+    {
+      "run": 1,
+      "seconds": 0.9910625620395876,
+      "recipes": 11437,
+      "bytes": 17218344
+    },
+    {
+      "run": 2,
+      "seconds": 0.9989699720172212,
+      "recipes": 11437,
+      "bytes": 17218344
+    }
+  ]
+}

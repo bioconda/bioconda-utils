@@ -1,5 +1,7 @@
+import os
 import shutil
 from copy import deepcopy
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -81,7 +83,17 @@ def mock_repodata(case, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def isolated_repodata_cache(monkeypatch, tmp_path):
-    """Tests never read or write the user's persistent repodata cache."""
+    """Tests never read or write the user's persistent caches."""
+    from bioconda_utils.support import caching
+
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache-home"))
+    # Isolate the platform provider on macOS too, where XDG is not consulted.
+    monkeypatch.setattr(
+        caching.platformdirs,
+        "user_cache_path",
+        lambda app: Path(os.environ["XDG_CACHE_HOME"]) / app,
+    )
+    monkeypatch.setattr(caching, "_cache_root", None)
     monkeypatch.setattr(repodata.RepoData, "_repository_cache", {})
     monkeypatch.setattr(repodata.RepoData, "cache_dir", tmp_path / "repodata")
     monkeypatch.setattr(repodata.RepoData, "refresh_after", None)

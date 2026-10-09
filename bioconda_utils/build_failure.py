@@ -65,7 +65,7 @@ class BuildFailureRecord:
         self, recipe: Path | Recipe, platform: PackageSubdir | None = None
     ) -> None:
         if isinstance(recipe, Recipe):
-            self.recipe_path = Path(recipe.path)
+            self.recipe_path = recipe.dir
         else:
             self.recipe_path = Path(recipe)
         if platform is None:

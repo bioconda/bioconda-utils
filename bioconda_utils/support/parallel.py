@@ -45,13 +45,16 @@ def _initialize_worker(
     queue,
     config,
     cache_dir: Path,
+    cache_root: Path,
     cache_timeout: float,
     refresh_after,
     threads: int,
     loglevel: int,
 ) -> None:
     from ..conda.repodata import RepoData
+    from .caching import configure_cache_root
 
+    configure_cache_root(cache_root)
     # Ctrl-C belongs to the parent. Workers never render Rich output or inherit
     # parent threads/locks: both process pools use a fresh spawn context.
     signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -69,6 +72,7 @@ def _initialize_worker(
 def worker_pool(workers: int) -> Iterator[ProcessPoolExecutor]:
     """Start independent workers with explicit configuration and parent logging."""
     from ..conda.repodata import RepoData
+    from .caching import get_cache_root
 
     context = get_context("spawn")
     queue = context.Queue()
@@ -83,6 +87,7 @@ def worker_pool(workers: int) -> Iterator[ProcessPoolExecutor]:
                 queue,
                 RepoData.config,
                 RepoData.get_cache_dir(),
+                get_cache_root(),
                 RepoData.cache_timeout,
                 RepoData.refresh_after,
                 workers,

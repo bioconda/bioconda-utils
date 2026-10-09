@@ -188,12 +188,39 @@ RepodataCacheOpt = Annotated[
         help="Repodata cache directory (default: platform/XDG cache directory). Entries expire after 8 hours.",
     ),
 ]
+LegacyCacheOpt = Annotated[
+    Path | None,
+    typer.Option(
+        "--cache",
+        help="Cache filename prefix (compatible with older scripts). Caches are stored under PREFIX.d; --repodata-cache overrides only the repodata directory.",
+    ),
+]
 RefreshRepodataOpt = Annotated[
     bool,
     typer.Option(
         "--refresh-repodata", help="Refresh the cached repositories needed by this run."
     ),
 ]
+
+
+def _configure_caches(
+    directory: Path | None, refresh: bool, legacy_prefix: Path | None = None
+) -> None:
+    from .conda.repodata import RepoData
+    from .support.caching import configure_cache_root
+
+    configure_cache_root(None)
+    if legacy_prefix is not None:
+        if directory is not None:
+            raise typer.BadParameter("Use either --cache or --repodata-cache, not both")
+        configure_cache_root(legacy_prefix.with_name(legacy_prefix.name + ".d"))
+    elif directory is not None and directory.is_file():
+        # Older build scripts passed a pickle filename to --repodata-cache.
+        # Leave that file intact and use a sibling directory for current entries.
+        directory = directory.with_name(directory.name + ".d")
+    RepoData.configure_cache(directory, refresh=refresh)
+
+
 RecipeFolderArg = Annotated[
     Path,
     typer.Argument(
@@ -642,7 +669,6 @@ def build(
     package_patterns: PackagePatterns = packages or ["*"]
     parsed_git_range = _parse_git_range_if_needed(git_range)
     from .build import build_recipes
-    from .conda.repodata import RepoData
     from .config import load_config
     from .containers import docker_utils
     from .rattler.rattler_build_bridge import (
@@ -662,7 +688,7 @@ def build(
     # TODO: should we also load the rattler variants config here?
     # currently it is loaded by rattler.ratter_build_bridge.load_rattler_build_global_variants
     # using a semi-hardcoded path
-    RepoData.configure_cache(repodata_cache, refresh=refresh_repodata)
+    _configure_caches(repodata_cache, refresh_repodata)
     setup = cfg.get("setup", None)
     if setup:
         logger.debug("Running setup: %s", setup)
@@ -881,6 +907,7 @@ def lint(
     config: LintConfigArg = Path("config.yml"),
     packages: PackagesOpt = None,
     repodata_cache: RepodataCacheOpt = None,
+    cache: LegacyCacheOpt = None,
     refresh_repodata: RefreshRepodataOpt = False,
     list_checks: Annotated[
         bool,
@@ -911,7 +938,6 @@ def lint(
     _setup_runtime(loglevel, logfile, logfile_level)
     package_patterns: PackagePatterns = packages or ["*"]
     from . import lint as _lint
-    from .conda.repodata import RepoData
     from .config import load_config
 
     try:
@@ -922,7 +948,7 @@ def lint(
         _validate_path_exists(recipe_folder)
         _validate_path_exists(config)
         config_data = load_config(config)
-        RepoData.configure_cache(repodata_cache, refresh=refresh_repodata)
+        _configure_caches(repodata_cache, refresh_repodata, cache)
         recipes: list[RecipePath] = get_recipes(
             config_data,
             Path(recipe_folder),
@@ -1111,6 +1137,7 @@ def update_pinning(
         ),
     ] = False,
     repodata_cache: RepodataCacheOpt = None,
+    cache: LegacyCacheOpt = None,
     refresh_repodata: RefreshRepodataOpt = False,
     pdb: PdbOpt = False,
     threads: ThreadsOpt = 16,
@@ -1126,7 +1153,6 @@ def update_pinning(
 
     from . import graph, update_pinnings
     from .conda.conda_build_bridge import load_conda_build_config
-    from .conda.repodata import RepoData
     from .config import load_config
     from .skiplist import Skiplist
     from .support.parallel import parallel_iter
@@ -1136,7 +1162,7 @@ def update_pinning(
         if skip_additional_channels:
             config_data["channels"] += skip_additional_channels
         variant_keys = frozenset(skip_variants or ())
-        RepoData.configure_cache(repodata_cache, refresh=refresh_repodata)
+        _configure_caches(repodata_cache, refresh_repodata, cache)
         build_config = load_conda_build_config()
         skiplist = Skiplist(config_data, recipe_folder)
         from . import recipe
@@ -1407,6 +1433,7 @@ def autobump(
         ),
     ] = None,
     repodata_cache: RepodataCacheOpt = None,
+    cache: LegacyCacheOpt = None,
     refresh_repodata: RefreshRepodataOpt = False,
     failed_urls: Annotated[
         Path | None,
@@ -1545,9 +1572,8 @@ def autobump(
     try:
         # load and register config
         config_dict = load_config(config)
-        from .conda.repodata import RepoData
 
-        RepoData.configure_cache(repodata_cache, refresh=refresh_repodata)
+        _configure_caches(repodata_cache, refresh_repodata, cache)
         from . import autobump, githubhandler
 
         if no_follow_graph:

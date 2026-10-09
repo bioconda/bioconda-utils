@@ -17,6 +17,7 @@ import aiohttp
 from .support import http
 from .support.logsetup import progress_display
 from .support.parallel import threads_to_use, worker_pool
+from .support.upstreamcache import fetch_cached
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -275,13 +276,20 @@ class AsyncRequests:
 
     def __init__(self) -> None:
         self.session: aiohttp.ClientSession | None = None
-        # Upstream listings can change at any time. Reuse within this run only.
+        # Reuse within a scan; persistent entries are validated by the HTTP cache.
         self.cache: dict[str, dict[str, Any]] = {
             key: {} for key in ("url_text", "url_checksum", "ftp_list")
         }
 
     async def __aenter__(self) -> Self:
         self.session = http.make_session()
+        # Explicit defaults make Vary matching deterministic before sending a request.
+        for name, value in {
+            "User-Agent": http.USER_AGENT,
+            "Accept": "*/*",
+            "Accept-Encoding": "gzip, deflate",
+        }.items():
+            self.session.headers.setdefault(name, value)
         await self.session.__aenter__()
         return self
 
@@ -303,9 +311,7 @@ class AsyncRequests:
             return self.cache["url_text"][url]
 
         assert self.session is not None
-        async with self.session.get(url) as resp:
-            resp.raise_for_status()
-            res = await resp.text()
+        res = await fetch_cached(self.session, url, "text")
 
         self.cache["url_text"][url] = res
 
@@ -337,9 +343,7 @@ class AsyncRequests:
         Shows progress monitor with label **desc**.
         """
         assert self.session is not None
-        async with self.session.get(url) as resp:
-            resp.raise_for_status()
-            return await http.download_to_checksum(resp, desc)
+        return await fetch_cached(self.session, url, "checksum", desc)
 
     @http.retry_on_transient
     async def get_file_from_url(self, fname: Path, url: str, desc: str) -> None:

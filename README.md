@@ -71,10 +71,30 @@ and `--refresh-repodata` to refresh entries needed by the current run.
 Concurrent commands and workers share entries and coordinate downloads; local
 `file://` channels are always read afresh. Cache files are disposable.
 
-The former `--cache` pickle snapshots have been removed. Autobump rebuilds its
-dependency graph from current recipes and caches upstream responses only within
-a run. Existing repodata cache **files** are not imported; `--repodata-cache`
-now takes a directory.
+`lint`, `update-pinning`, and `autobump` still accept `--cache PREFIX` for existing
+scripts. The application cache root becomes `PREFIX.d`, with separate
+`repodata-v1`, `graph-v1`, and `upstream-v1` stores. Old pickle files are left
+intact and are not imported. Existing files passed to
+`--repodata-cache FILE` likewise use `FILE.d`. New invocations can specify a cache
+directory directly with `--repodata-cache DIRECTORY`. The two options cannot be
+combined.
+
+Autobump caches parsed recipe metadata by file contents and parser version,
+then rebuilds dependency edges from current metadata. Changed and new recipes
+are reparsed; deleted recipes disappear. Skiplists, build scripts, and pinning
+configuration are read afresh. Graph and upstream caches default to the same
+platform application cache root as repodata.
+
+Upstream HTTP responses and archive checksums are cached with ETag/Last-Modified
+validation and request-header matching for `Vary`. Server freshness is capped
+at ten minutes for listings and one hour for checksums. Listings without
+freshness headers use ten minutes; checksums without freshness headers are
+revalidated every run, or downloaded again when no usable validator exists.
+Cookie-bearing archive requests always revalidate stored digests. `no-store`
+and authenticated text responses are not persisted; FTP reuse stays within a
+run. The HTTP store has a 256 MiB disk budget and removes entries older than
+seven days during periodic maintenance. The former indefinite snapshots are
+not used. See [cache benchmarks](benchmarks/autobump-caches.md).
 
 Process workers use `spawn` with explicit configuration and send log records
 to the parent. Only the parent renders terminal output, so workers never inherit

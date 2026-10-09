@@ -78,9 +78,9 @@ from .githandler import GitHandler
 from .githubhandler import GitHubHandler
 from .hosters import Hoster
 from .recipe import Recipe
-from .recipe import load_parallel_iter as recipes_load_parallel_iter
 from .recipes import get_recipes
 from .support import http
+from .support.graphcache import load_graph_recipes
 
 #: Jinja environment used to render PR titles, descriptions and comments
 #: from the packaged templates.
@@ -221,7 +221,7 @@ class RecipeGraphSource(RecipeSource):
         blacklist = Skiplist(self.config, self.recipe_base)
         dag = graph.build_from_recipes(
             recipe
-            for recipe in recipes_load_parallel_iter(self.recipe_base, ["*"])
+            for recipe in load_graph_recipes(self.recipe_base)
             if not blacklist.is_skiplisted(recipe)
         )
         return dag
