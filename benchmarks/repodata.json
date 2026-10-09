@@ -1,0 +1,482 @@
+{
+  "cold": {
+    "pandas": [
+      {
+        "seconds": 18.46700628194958,
+        "peak_rss_kib": 2707840,
+        "cache_bytes": 184411838
+      },
+      {
+        "seconds": 18.03361176303588,
+        "peak_rss_kib": 2706832,
+        "cache_bytes": 184411838
+      }
+    ],
+    "sqlite": [
+      {
+        "seconds": 11.248576415004209,
+        "peak_rss_kib": 2545816,
+        "cache_bytes": 248643584
+      },
+      {
+        "seconds": 11.83418939798139,
+        "peak_rss_kib": 2546080,
+        "cache_bytes": 248643584
+      }
+    ]
+  },
+  "targeted": {
+    "pandas": [
+      [
+        {
+          "pid": 1641300,
+          "seconds": 14.250879640050698,
+          "rows": 20562,
+          "digest": "1e26a7b32249812f394b3024311fef8bc3bf064f69e45b9671ee26bac9cf75c1",
+          "memory_kib": {
+            "Rss": 2578820,
+            "Pss": 2556990,
+            "Private_Dirty": 2541084
+          },
+          "peak_rss_kib": 2635856
+        }
+      ],
+      [
+        {
+          "pid": 1641935,
+          "seconds": 14.600238117971458,
+          "rows": 20562,
+          "digest": "1e26a7b32249812f394b3024311fef8bc3bf064f69e45b9671ee26bac9cf75c1",
+          "memory_kib": {
+            "Rss": 2578704,
+            "Pss": 2556945,
+            "Private_Dirty": 2541056
+          },
+          "peak_rss_kib": 2635236
+        }
+      ]
+    ],
+    "sqlite": [
+      [
+        {
+          "pid": 1642548,
+          "seconds": 0.244069523003418,
+          "rows": 20562,
+          "digest": "1e26a7b32249812f394b3024311fef8bc3bf064f69e45b9671ee26bac9cf75c1",
+          "memory_kib": {
+            "Rss": 80432,
+            "Pss": 58974,
+            "Private_Dirty": 58408
+          },
+          "peak_rss_kib": 83176
+        }
+      ],
+      [
+        {
+          "pid": 1642788,
+          "seconds": 0.2334055609535426,
+          "rows": 20562,
+          "digest": "1e26a7b32249812f394b3024311fef8bc3bf064f69e45b9671ee26bac9cf75c1",
+          "memory_kib": {
+            "Rss": 80464,
+            "Pss": 59012,
+            "Private_Dirty": 58436
+          },
+          "peak_rss_kib": 82664
+        }
+      ]
+    ]
+  },
+  "names": {
+    "pandas": [
+      [
+        {
+          "pid": 1643006,
+          "seconds": 6.346495545993093,
+          "rows": 2557255,
+          "digest": "ff312cd6d18b7ef5e92ff61a3e02e5ece52f1ba34c8030cdc174458c9a2606b3",
+          "memory_kib": {
+            "Rss": 2469060,
+            "Pss": 2447217,
+            "Private_Dirty": 2431536
+          },
+          "peak_rss_kib": 2623148
+        }
+      ],
+      [
+        {
+          "pid": 1643529,
+          "seconds": 7.2349779439973645,
+          "rows": 2557255,
+          "digest": "ff312cd6d18b7ef5e92ff61a3e02e5ece52f1ba34c8030cdc174458c9a2606b3",
+          "memory_kib": {
+            "Rss": 2470380,
+            "Pss": 2448548,
+            "Private_Dirty": 2432628
+          },
+          "peak_rss_kib": 2624196
+        }
+      ]
+    ],
+    "sqlite": [
+      [
+        {
+          "pid": 1644104,
+          "seconds": 2.0598889690008946,
+          "rows": 2557255,
+          "digest": "ff312cd6d18b7ef5e92ff61a3e02e5ece52f1ba34c8030cdc174458c9a2606b3",
+          "memory_kib": {
+            "Rss": 254764,
+            "Pss": 233142,
+            "Private_Dirty": 232572
+          },
+          "peak_rss_kib": 408324
+        }
+      ],
+      [
+        {
+          "pid": 1644425,
+          "seconds": 2.005364099983126,
+          "rows": 2557255,
+          "digest": "ff312cd6d18b7ef5e92ff61a3e02e5ece52f1ba34c8030cdc174458c9a2606b3",
+          "memory_kib": {
+            "Rss": 253448,
+            "Pss": 232334,
+            "Private_Dirty": 231388
+          },
+          "peak_rss_kib": 407600
+        }
+      ]
+    ]
+  },
+  "specs": {
+    "pandas": [
+      [
+        {
+          "pid": 1644761,
+          "seconds": 13.8431524260086,
+          "rows": 2557255,
+          "digest": "459d0326adc14377f7484c8edc4d80c4dc2105c9169181d43dd151252b6805f8",
+          "memory_kib": {
+            "Rss": 2660564,
+            "Pss": 2639250,
+            "Private_Dirty": 2622880
+          },
+          "peak_rss_kib": 2902828
+        }
+      ],
+      [
+        {
+          "pid": 1645879,
+          "seconds": 13.780398504051846,
+          "rows": 2557255,
+          "digest": "459d0326adc14377f7484c8edc4d80c4dc2105c9169181d43dd151252b6805f8",
+          "memory_kib": {
+            "Rss": 2660596,
+            "Pss": 2639170,
+            "Private_Dirty": 2622760
+          },
+          "peak_rss_kib": 2903096
+        }
+      ]
+    ],
+    "sqlite": [
+      [
+        {
+          "pid": 1646880,
+          "seconds": 5.936982835002709,
+          "rows": 2557255,
+          "digest": "459d0326adc14377f7484c8edc4d80c4dc2105c9169181d43dd151252b6805f8",
+          "memory_kib": {
+            "Rss": 736128,
+            "Pss": 715221,
+            "Private_Dirty": 714172
+          },
+          "peak_rss_kib": 979540
+        }
+      ],
+      [
+        {
+          "pid": 1647342,
+          "seconds": 5.676761753973551,
+          "rows": 2557255,
+          "digest": "459d0326adc14377f7484c8edc4d80c4dc2105c9169181d43dd151252b6805f8",
+          "memory_kib": {
+            "Rss": 736200,
+            "Pss": 715221,
+            "Private_Dirty": 714164
+          },
+          "peak_rss_kib": 979908
+        }
+      ]
+    ]
+  },
+  "targeted_16_workers": [
+    {
+      "pid": 1633421,
+      "seconds": 0.2551047229790129,
+      "rows": 20562,
+      "digest": "1e26a7b32249812f394b3024311fef8bc3bf064f69e45b9671ee26bac9cf75c1",
+      "memory_kib": {
+        "Rss": 81284,
+        "Pss": 60436,
+        "Private_Dirty": 59356
+      },
+      "peak_rss_kib": 82920
+    },
+    {
+      "pid": 1633419,
+      "seconds": 0.24072447000071406,
+      "rows": 20562,
+      "digest": "1e26a7b32249812f394b3024311fef8bc3bf064f69e45b9671ee26bac9cf75c1",
+      "memory_kib": {
+        "Rss": 80520,
+        "Pss": 59557,
+        "Private_Dirty": 58440
+      },
+      "peak_rss_kib": 83176
+    },
+    {
+      "pid": 1633423,
+      "seconds": 0.2692128850030713,
+      "rows": 20562,
+      "digest": "1e26a7b32249812f394b3024311fef8bc3bf064f69e45b9671ee26bac9cf75c1",
+      "memory_kib": {
+        "Rss": 80452,
+        "Pss": 59515,
+        "Private_Dirty": 58396
+      },
+      "peak_rss_kib": 83156
+    },
+    {
+      "pid": 1633420,
+      "seconds": 0.24308196600759402,
+      "rows": 20562,
+      "digest": "1e26a7b32249812f394b3024311fef8bc3bf064f69e45b9671ee26bac9cf75c1",
+      "memory_kib": {
+        "Rss": 80388,
+        "Pss": 59514,
+        "Private_Dirty": 58440
+      },
+      "peak_rss_kib": 82920
+    },
+    {
+      "pid": 1633427,
+      "seconds": 0.3087885740096681,
+      "rows": 20562,
+      "digest": "1e26a7b32249812f394b3024311fef8bc3bf064f69e45b9671ee26bac9cf75c1",
+      "memory_kib": {
+        "Rss": 81332,
+        "Pss": 60427,
+        "Private_Dirty": 59352
+      },
+      "peak_rss_kib": 82404
+    },
+    {
+      "pid": 1633422,
+      "seconds": 0.281081611989066,
+      "rows": 20562,
+      "digest": "1e26a7b32249812f394b3024311fef8bc3bf064f69e45b9671ee26bac9cf75c1",
+      "memory_kib": {
+        "Rss": 81340,
+        "Pss": 60428,
+        "Private_Dirty": 59348
+      },
+      "peak_rss_kib": 82916
+    },
+    {
+      "pid": 1633433,
+      "seconds": 0.26259579398902133,
+      "rows": 20562,
+      "digest": "1e26a7b32249812f394b3024311fef8bc3bf064f69e45b9671ee26bac9cf75c1",
+      "memory_kib": {
+        "Rss": 80420,
+        "Pss": 59514,
+        "Private_Dirty": 58440
+      },
+      "peak_rss_kib": 82920
+    },
+    {
+      "pid": 1633416,
+      "seconds": 0.2421000949689187,
+      "rows": 20562,
+      "digest": "1e26a7b32249812f394b3024311fef8bc3bf064f69e45b9671ee26bac9cf75c1",
+      "memory_kib": {
+        "Rss": 80532,
+        "Pss": 59519,
+        "Private_Dirty": 58436
+      },
+      "peak_rss_kib": 83176
+    },
+    {
+      "pid": 1633426,
+      "seconds": 0.24492377997376025,
+      "rows": 20562,
+      "digest": "1e26a7b32249812f394b3024311fef8bc3bf064f69e45b9671ee26bac9cf75c1",
+      "memory_kib": {
+        "Rss": 81472,
+        "Pss": 60463,
+        "Private_Dirty": 59352
+      },
+      "peak_rss_kib": 83176
+    },
+    {
+      "pid": 1633430,
+      "seconds": 0.24790898198261857,
+      "rows": 20562,
+      "digest": "1e26a7b32249812f394b3024311fef8bc3bf064f69e45b9671ee26bac9cf75c1",
+      "memory_kib": {
+        "Rss": 80480,
+        "Pss": 59517,
+        "Private_Dirty": 58428
+      },
+      "peak_rss_kib": 83176
+    },
+    {
+      "pid": 1633425,
+      "seconds": 0.2619568699738011,
+      "rows": 20562,
+      "digest": "1e26a7b32249812f394b3024311fef8bc3bf064f69e45b9671ee26bac9cf75c1",
+      "memory_kib": {
+        "Rss": 80400,
+        "Pss": 59509,
+        "Private_Dirty": 58432
+      },
+      "peak_rss_kib": 82904
+    },
+    {
+      "pid": 1633424,
+      "seconds": 0.2517355400486849,
+      "rows": 20562,
+      "digest": "1e26a7b32249812f394b3024311fef8bc3bf064f69e45b9671ee26bac9cf75c1",
+      "memory_kib": {
+        "Rss": 81480,
+        "Pss": 60433,
+        "Private_Dirty": 59344
+      },
+      "peak_rss_kib": 83176
+    },
+    {
+      "pid": 1633428,
+      "seconds": 0.2516910859849304,
+      "rows": 20562,
+      "digest": "1e26a7b32249812f394b3024311fef8bc3bf064f69e45b9671ee26bac9cf75c1",
+      "memory_kib": {
+        "Rss": 80428,
+        "Pss": 59538,
+        "Private_Dirty": 58436
+      },
+      "peak_rss_kib": 82924
+    },
+    {
+      "pid": 1633431,
+      "seconds": 0.2545717290486209,
+      "rows": 20562,
+      "digest": "1e26a7b32249812f394b3024311fef8bc3bf064f69e45b9671ee26bac9cf75c1",
+      "memory_kib": {
+        "Rss": 80400,
+        "Pss": 59503,
+        "Private_Dirty": 58432
+      },
+      "peak_rss_kib": 82400
+    },
+    {
+      "pid": 1633432,
+      "seconds": 0.28540890401927754,
+      "rows": 20562,
+      "digest": "1e26a7b32249812f394b3024311fef8bc3bf064f69e45b9671ee26bac9cf75c1",
+      "memory_kib": {
+        "Rss": 80604,
+        "Pss": 59556,
+        "Private_Dirty": 58444
+      },
+      "peak_rss_kib": 82920
+    },
+    {
+      "pid": 1633429,
+      "seconds": 0.2533745410037227,
+      "rows": 20562,
+      "digest": "1e26a7b32249812f394b3024311fef8bc3bf064f69e45b9671ee26bac9cf75c1",
+      "memory_kib": {
+        "Rss": 80448,
+        "Pss": 59530,
+        "Private_Dirty": 58436
+      },
+      "peak_rss_kib": 82920
+    }
+  ],
+  "live": {
+    "command": [
+      "/home/benjamin/.herdr/worktrees/bioconda-utils/fix-path/.pixi/envs/default/bin/bioconda-utils",
+      "autobump",
+      "/tmp/bioconda-repodata-benchmark/live/recipes",
+      "/tmp/bioconda-repodata-benchmark/live/config.yml",
+      "--threads",
+      "16",
+      "--no-check-version-update",
+      "--repodata-cache",
+      "/tmp/bioconda-repodata-benchmark/production-cache",
+      "--recipe-status",
+      "/tmp/bioconda-repodata-benchmark/live/status.tsv",
+      "--logfile",
+      "/tmp/bioconda-repodata-benchmark/live/autobump.log"
+    ],
+    "exit_code": -15,
+    "elapsed": 240.32956853602082,
+    "peak_pss": 8321696768,
+    "peak_workers": 16
+  },
+  "live-no-arb": {
+    "command": [
+      "/home/benjamin/.herdr/worktrees/bioconda-utils/fix-path/.pixi/envs/default/bin/bioconda-utils",
+      "autobump",
+      "/tmp/bioconda-repodata-benchmark/live-no-arb/recipes",
+      "/tmp/bioconda-repodata-benchmark/live-no-arb/config.yml",
+      "--threads",
+      "16",
+      "--exclude",
+      "arb-bio",
+      "--no-check-version-update",
+      "--repodata-cache",
+      "/tmp/bioconda-repodata-benchmark/production-cache",
+      "--recipe-status",
+      "/tmp/bioconda-repodata-benchmark/live-no-arb/status.tsv",
+      "--logfile",
+      "/tmp/bioconda-repodata-benchmark/live-no-arb/autobump.log"
+    ],
+    "exit_code": 0,
+    "elapsed": 13.510297193017323,
+    "peak_pss": 3451704320,
+    "peak_workers": 16
+  },
+  "notes": [
+    "Linux shared development host; two samples per case, not statistical confidence intervals.",
+    "Cold: identical downloaded 454390641-byte conda-forge/linux-64 JSON; network excluded.",
+    "Warm: identical 2781467-record snapshot across 12 repositories; result digests agree for every comparison.",
+    "Memory in KiB; PSS from /proc/self/smaps_rollup. ru_maxrss peaks include output verification allocations.",
+    "Initial live run hit 240-second timeout in arb-bio conda-build rendering; repeat explicitly excluded it."
+  ],
+  "live-herdr-repeat": {
+    "command": [
+      "/home/benjamin/.herdr/worktrees/bioconda-utils/fix-path/.pixi/envs/default/bin/bioconda-utils",
+      "autobump",
+      "/tmp/bioconda-repodata-benchmark/live-no-arb/recipes",
+      "/tmp/bioconda-repodata-benchmark/live-no-arb/config.yml",
+      "--threads",
+      "16",
+      "--exclude",
+      "arb-bio",
+      "--no-check-version-update",
+      "--repodata-cache",
+      "/tmp/bioconda-repodata-benchmark/production-cache",
+      "--recipe-status",
+      "/tmp/bioconda-repodata-benchmark/live-no-arb/status.tsv",
+      "--logfile",
+      "/tmp/bioconda-repodata-benchmark/live-no-arb/autobump.log"
+    ],
+    "exit_code": 0,
+    "elapsed": 13.059835094027221,
+    "peak_pss": 3467782144,
+    "peak_workers": 16
+  }
+}

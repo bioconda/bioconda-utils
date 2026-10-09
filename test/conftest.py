@@ -1,9 +1,11 @@
+import json
 import os
 import shutil
+import sqlite3
+from contextlib import closing, contextmanager
 from copy import deepcopy
 from pathlib import Path
 
-import pandas as pd
 import pytest
 from ruamel.yaml import YAML
 
@@ -51,11 +53,11 @@ def mock_repodata(case, monkeypatch):
              - version: 0.1
                build_number: 0
     """
-    if "repodata" in case:
-        dataframe = pd.DataFrame(
-            (
-                {
-                    "channel": channel,
+    records = {}
+    for channel, packages in case.get("repodata", {}).items():
+        for name, versions in packages.items():
+            for item in versions:
+                record = {
                     "name": name,
                     "build": "",
                     "build_number": 0,
@@ -65,20 +67,49 @@ def mock_repodata(case, monkeypatch):
                     "platform": "noarch",
                     **item,
                 }
-                for channel, packages in case["repodata"].items()
-                for name, versions in packages.items()
-                for item in versions
+                records.setdefault((channel, record["platform"]), []).append(record)
+
+    config = repodata.RepoData.config or {}
+    monkeypatch.setattr(
+        repodata.RepoData,
+        "config",
+        {
+            **config,
+            "channels": list(
+                dict.fromkeys(
+                    [
+                        *config.get("channels", []),
+                        *(channel for channel, _subdir in records),
+                    ]
+                )
             ),
-            columns=repodata.RepoData.columns,
-        )
-    else:
-        dataframe = pd.DataFrame({}, columns=repodata.RepoData.columns)
+        },
+    )
 
     monkeypatch.setattr(
         repodata.RepoData,
-        "_get_repository_dataframes",
-        lambda _self, _channels, _subdirs: [dataframe],
+        "_repositories",
+        lambda self, channels, subdirs: (
+            (c, s) for c, s in records if c in channels and s in subdirs
+        ),
     )
+
+    @contextmanager
+    def open_repository(self, channel, subdir):
+        raw = json.dumps(
+            {
+                "info": {"subdir": subdir},
+                "packages": {
+                    str(i): record
+                    for i, record in enumerate(records[(channel, subdir)])
+                },
+            }
+        ).encode()
+        with closing(sqlite3.connect(":memory:")) as connection:
+            self._populate_database(connection, raw, fetched_at=0)
+            yield connection
+
+    monkeypatch.setattr(repodata.RepoData, "_open_repository", open_repository)
 
 
 @pytest.fixture(autouse=True)
@@ -94,7 +125,6 @@ def isolated_repodata_cache(monkeypatch, tmp_path):
         lambda app: Path(os.environ["XDG_CACHE_HOME"]) / app,
     )
     monkeypatch.setattr(caching, "_cache_root", None)
-    monkeypatch.setattr(repodata.RepoData, "_repository_cache", {})
     monkeypatch.setattr(repodata.RepoData, "cache_dir", tmp_path / "repodata")
     monkeypatch.setattr(repodata.RepoData, "refresh_after", None)
 

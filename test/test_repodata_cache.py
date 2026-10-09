@@ -1,35 +1,36 @@
-"""Repository cache identity, freshness, and cross-process refreshes."""
+"""Indexed repository cache freshness, query semantics, and process coordination."""
 
-import datetime
 import json
 import logging
+import sqlite3
 import threading
 import time
+from contextlib import closing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-import pandas as pd
 import pytest
 
-from bioconda_utils.conda.repodata import RepoData, _CachedRepoData
+from bioconda_utils.conda.repodata import RepoData
 from bioconda_utils.support.parallel import worker_pool
 
 
-def dataframe(channel="bioconda", subdir="noarch", name="example"):
-    return pd.DataFrame(
-        [
-            {
-                "channel": channel,
-                "subdir": subdir,
-                "platform": subdir,
-                "name": name,
-                "version": "1",
-                "build": "0",
-                "build_number": 0,
-                "depends": [],
-            }
-        ],
-        columns=RepoData.columns,
-    )
+def repodata(name="example", version="1", subdir="noarch", records=None):
+    return json.dumps(
+        {
+            "info": {"subdir": subdir},
+            "packages": records
+            if records is not None
+            else {
+                "example.conda": {
+                    "name": name,
+                    "version": version,
+                    "build": "0",
+                    "build_number": 0,
+                    "depends": ["python >=3.10"],
+                }
+            },
+        }
+    ).encode()
 
 
 @pytest.fixture
@@ -39,91 +40,57 @@ def repository(monkeypatch):
     return RepoData()
 
 
-def test_selective_loads_and_dataframe_view_reuse_same_entries(repository, monkeypatch):
+def test_selective_loads_and_disk_reuse(repository, monkeypatch):
     loads = []
 
-    def load(repositories):
-        pairs = tuple(repositories)
-        loads.append(pairs)
-        return pd.concat([dataframe(channel, subdir) for channel, subdir in pairs])
+    def download(channel, subdir):
+        loads.append((channel, subdir))
+        return repodata(subdir=subdir)
 
-    monkeypatch.setattr(repository, "_load_channel_dataframe", load)
-    repository.get_package_data("name", channels="bioconda", platform="noarch")
-    repository.get_package_data("name", channels="bioconda", platform="noarch")
-    assert len(repository.df) == 4
-    assert len(repository.df) == 4
-    assert loads == [
-        (("bioconda", "noarch"),),
-        (
-            ("bioconda", "linux-64"),
-            ("conda-forge", "linux-64"),
-            ("conda-forge", "noarch"),
-        ),
-    ]
-    assert len(repository._repository_cache) == 4
+    monkeypatch.setattr(repository, "_download_repository", download)
+    for _ in range(2):
+        assert repository.get_package_data(
+            "name", channels="bioconda", platform="noarch"
+        ) == ["example"]
+    assert loads == [("bioconda", "noarch")]
+    assert len(repository.get_package_data("name")) == 4
+    assert len(repository.get_package_data("name")) == 4
+    assert len(loads) == 4
 
 
-def test_disk_reuse_does_not_require_inherited_memory(repository, monkeypatch):
+@pytest.mark.parametrize("age", [9 * 3600, -3600])
+def test_expired_or_future_entries_are_refreshed(repository, monkeypatch, age):
+    path = repository._cache_path(repository._make_repodata_url("bioconda", "noarch"))
+    path.parent.mkdir()
+    repository._write_cache(path, repodata(name="old"), fetched_at=time.time() - age)
     monkeypatch.setattr(
-        repository, "_load_channel_dataframe", lambda _repos: dataframe()
-    )
-    assert repository.get_package_data(
-        "name", channels="bioconda", platform="noarch"
-    ) == ["example"]
-    RepoData._repository_cache.clear()
-    monkeypatch.setattr(
-        repository,
-        "_load_channel_dataframe",
-        lambda _repos: pytest.fail("unexpected download"),
-    )
-    assert repository.get_package_data(
-        "name", channels="bioconda", platform="noarch"
-    ) == ["example"]
-
-
-@pytest.mark.parametrize("location", ["memory", "disk", "both"])
-def test_expired_entries_are_refreshed(repository, monkeypatch, location):
-    url = repository._make_repodata_url("bioconda", "noarch")
-    entry = _CachedRepoData(
-        dataframe(name="old"),
-        datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=9),
-    )
-    if location in ("memory", "both"):
-        RepoData._repository_cache[url] = entry
-    if location in ("disk", "both"):
-        repository.get_cache_dir().mkdir()
-        repository._write_cache(repository._cache_path(url), entry)
-    monkeypatch.setattr(
-        repository, "_load_channel_dataframe", lambda _repos: dataframe(name="fresh")
+        repository, "_download_repository", lambda *_args: repodata(name="fresh")
     )
     assert repository.get_package_data(
         "name", channels="bioconda", platform="noarch"
     ) == ["fresh"]
-    fresh = repository._read_cache(repository._cache_path(url))
-    assert fresh is not None
-    assert list(fresh.dataframe.name) == ["fresh"]
 
 
-def test_corrupt_disk_entry_is_replaced(repository, monkeypatch, caplog):
+@pytest.mark.parametrize("contents", [b"not a database", None])
+def test_corrupt_disk_entry_is_replaced(repository, monkeypatch, caplog, contents):
     path = repository._cache_path(repository._make_repodata_url("bioconda", "noarch"))
     path.parent.mkdir()
-    path.write_bytes(b"not a pickle")
-    monkeypatch.setattr(
-        repository, "_load_channel_dataframe", lambda _repos: dataframe()
-    )
+    if contents is None:
+        with closing(sqlite3.connect(path)) as connection:
+            connection.execute("PRAGMA user_version=2")
+    else:
+        path.write_bytes(contents)
+    monkeypatch.setattr(repository, "_download_repository", lambda *_args: repodata())
     with caplog.at_level(logging.WARNING):
         assert repository.get_package_data(
             "name", channels="bioconda", platform="noarch"
         ) == ["example"]
     assert "Ignoring unreadable repodata cache" in caplog.text
-    assert repository._read_cache(path) is not None
 
 
 def test_configuration_changes_cannot_leak_other_channels(repository, monkeypatch):
     monkeypatch.setattr(
-        repository,
-        "_load_channel_dataframe",
-        lambda repos: pd.concat([dataframe(c, s, c) for c, s in repos]),
+        repository, "_download_repository", lambda c, s: repodata(name=c, subdir=s)
     )
     assert repository.get_package_data("name", platform="noarch") == [
         "bioconda",
@@ -136,7 +103,7 @@ def test_configuration_changes_cannot_leak_other_channels(repository, monkeypatc
 
 def test_cache_identity_includes_repository_url(repository, monkeypatch):
     monkeypatch.setattr(
-        repository, "_load_channel_dataframe", lambda _repos: dataframe(name="first")
+        repository, "_download_repository", lambda *_args: repodata(name="first")
     )
     assert repository.get_package_data(
         "name", channels="bioconda", platform="noarch"
@@ -144,10 +111,10 @@ def test_cache_identity_includes_repository_url(repository, monkeypatch):
     monkeypatch.setattr(
         repository,
         "REPODATA_URL",
-        "https://another.example/{channel}/{subdir}/repodata.json",
+        "https://other.example/{channel}/{subdir}/repodata.json",
     )
     monkeypatch.setattr(
-        repository, "_load_channel_dataframe", lambda _repos: dataframe(name="second")
+        repository, "_download_repository", lambda *_args: repodata(name="second")
     )
     assert repository.get_package_data(
         "name", channels="bioconda", platform="noarch"
@@ -157,7 +124,7 @@ def test_cache_identity_includes_repository_url(repository, monkeypatch):
 def test_default_cache_respects_xdg(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
     RepoData.configure_cache()
-    assert RepoData.get_cache_dir() == tmp_path / "bioconda-utils" / "repodata-v1"
+    assert RepoData.get_cache_dir() == tmp_path / "bioconda-utils" / "repodata-v2"
 
 
 def test_local_channels_are_always_read_fresh(repository, monkeypatch, tmp_path):
@@ -188,7 +155,7 @@ def test_local_channels_are_always_read_fresh(repository, monkeypatch, tmp_path)
     assert repository.get_package_data("name", platform="noarch") == ["first"]
     write("second")
     assert repository.get_package_data("name", platform="noarch") == ["second"]
-    assert not repository._repository_cache
+    assert not repository.get_cache_dir().exists()
 
 
 def query_repository(base_url):
@@ -260,21 +227,19 @@ def test_concurrent_spawned_workers_download_repository_once(repository):
 def test_refresh_replaces_fresh_entry_once(repository, monkeypatch):
     loads = []
 
-    def load(_repos):
+    def download(*_args):
         loads.append(1)
-        return dataframe(name=f"generation-{len(loads)}")
+        return repodata(name=f"generation-{len(loads)}")
 
-    monkeypatch.setattr(repository, "_load_channel_dataframe", load)
+    monkeypatch.setattr(repository, "_download_repository", download)
     assert repository.get_package_data(
         "name", channels="bioconda", platform="noarch"
     ) == ["generation-1"]
     RepoData.configure_cache(repository.get_cache_dir(), refresh=True)
-    assert repository.get_package_data(
-        "name", channels="bioconda", platform="noarch"
-    ) == ["generation-2"]
-    assert repository.get_package_data(
-        "name", channels="bioconda", platform="noarch"
-    ) == ["generation-2"]
+    for _ in range(2):
+        assert repository.get_package_data(
+            "name", channels="bioconda", platform="noarch"
+        ) == ["generation-2"]
     assert len(loads) == 2
 
 
@@ -302,19 +267,161 @@ def test_cache_lock_is_released_when_worker_dies(tmp_path):
 def test_failed_refresh_preserves_previous_cache(repository, monkeypatch):
     path = repository._cache_path(repository._make_repodata_url("bioconda", "noarch"))
     path.parent.mkdir()
-    original = _CachedRepoData(
-        dataframe(name="previous"), datetime.datetime.now(datetime.UTC)
-    )
-    repository._write_cache(path, original)
+    repository._write_cache(path, repodata(name="previous"))
 
-    def incomplete_write(entry, target):
-        target.write_bytes(b"partial")
+    def incomplete_write(connection, raw, **kwargs):
+        connection.execute("CREATE TABLE partial (value INTEGER)")
         raise OSError("interrupted write")
 
-    monkeypatch.setattr(pd, "to_pickle", incomplete_write)
+    monkeypatch.setattr(
+        repository.__class__, "_populate_database", staticmethod(incomplete_write)
+    )
     with pytest.raises(OSError, match="interrupted write"):
-        repository._write_cache(path, original)
-    preserved = repository._read_cache(path)
-    assert preserved is not None
-    assert list(preserved.dataframe.name) == ["previous"]
-    assert not list(path.parent.glob("*.tmp"))
+        repository._write_cache(path, repodata(name="new"))
+    with closing(repository._read_cache(path)) as connection:
+        assert connection.execute("SELECT name FROM packages").fetchall() == [
+            ("previous",)
+        ]
+    assert not list(path.parent.glob("*.tmp*"))
+
+
+def test_refresh_keeps_active_readers_consistent(repository):
+    path = repository._cache_path(repository._make_repodata_url("bioconda", "noarch"))
+    path.parent.mkdir()
+    repository._write_cache(path, repodata(name="old"))
+    with closing(repository._read_cache(path)) as old:
+        repository._write_cache(path, repodata(name="new"))
+        with closing(repository._read_cache(path)) as new:
+            assert old.execute("SELECT name FROM packages").fetchall() == [("old",)]
+            assert new.execute("SELECT name FROM packages").fetchall() == [("new",)]
+
+
+@pytest.fixture
+def populated(repository, monkeypatch):
+    records = {
+        "a.tar.bz2": {
+            "name": "example",
+            "version": 1,
+            "build": "a_0",
+            "build_number": 0,
+            "depends": ["python >=3.10", "zlib"],
+        },
+        "b.conda": {
+            "name": "example",
+            "version": "2",
+            "build": "a_1",
+            "build_number": 1,
+            "depends": [],
+        },
+        "c.conda": {
+            "name": "other",
+            "version": "2",
+            "build": "b_0",
+            "build_number": 0,
+            "depends": None,
+        },
+    }
+    monkeypatch.setattr(
+        repository,
+        "_download_repository",
+        lambda c, s: repodata(subdir=s, records=records),
+    )
+    return repository
+
+
+@pytest.mark.parametrize(
+    "filters,expected",
+    [
+        ({"name": "example", "version": 1}, ["a_0"]),
+        ({"name": ["example", "other"], "build_number": [0]}, ["a_0", "b_0"]),
+        ({"name": [], "version": "1"}, []),
+        ({"name": "example", "version": [1, "2"]}, ["a_0", "a_1"]),
+        ({"build": ("b_0",)}, ["b_0"]),
+        ({"name": "example' OR 1=1 --"}, []),
+    ],
+)
+def test_parameterized_queries(populated, filters, expected):
+    assert (
+        populated.get_package_data(
+            "build", channels="bioconda", platform="noarch", **filters
+        )
+        == expected
+    )
+    assert populated.get_package_data(
+        channels="bioconda", platform="noarch", **filters
+    ) == bool(expected)
+
+
+def test_rows_preserve_dependencies_duplicates_and_named_fields(populated):
+    rows = list(
+        populated.get_package_data(
+            ["channel", "platform", "subdir", "name", "version", "depends"],
+            name="example",
+            version=1,
+        )
+    )
+    assert len(rows) == 4
+    assert {(row.channel, row.platform) for row in rows} == {
+        ("bioconda", "linux-64"),
+        ("bioconda", "noarch"),
+        ("conda-forge", "linux-64"),
+        ("conda-forge", "noarch"),
+    }
+    assert all(
+        row.depends == ["python >=3.10", "zlib"]
+        and row.version == "1"
+        and row.subdir == row.platform
+        for row in rows
+    )
+    assert populated.get_package_data(
+        "depends", name="other", platform="noarch", channels="bioconda"
+    ) == [None]
+    assert populated.get_versions("example") == {
+        "1": ["linux-64", "noarch"],
+        "2": ["linux-64", "noarch"],
+    }
+
+
+def test_native_query_only_loads_native_and_noarch(populated, monkeypatch):
+    monkeypatch.setattr(populated, "native_subdir", lambda: "linux-64")
+    assert len(populated.get_package_data("name", native=True)) == 12
+    assert populated.get_package_data("name", platform=[]) == []
+    assert populated.get_package_data("name", channels=[]) == []
+    with pytest.raises(KeyError):
+        populated.get_package_data("name; DROP TABLE packages")
+
+
+def test_conda_packages_override_same_filename(populated, monkeypatch):
+    raw = json.loads(repodata())
+    raw["packages.conda"] = {
+        "example.conda": {
+            "name": "replacement",
+            "version": "3",
+            "build": "0",
+            "build_number": 0,
+            "depends": [],
+        }
+    }
+    monkeypatch.setattr(
+        populated, "_download_repository", lambda *_args: json.dumps(raw).encode()
+    )
+    assert populated.get_package_data(
+        "name", channels="bioconda", platform="noarch"
+    ) == ["replacement"]
+
+
+def test_next_refresh_cleans_only_abandoned_builder_files(repository, monkeypatch):
+    directory = repository.get_cache_dir()
+    directory.mkdir()
+    abandoned = directory / ".repodata-aborted.tmp"
+    journal = directory / ".repodata-aborted.tmp-journal"
+    unrelated = directory / "user.tmp"
+    for path in [abandoned, journal, unrelated]:
+        path.write_bytes(b"partial")
+    monkeypatch.setattr(repository, "_download_repository", lambda *_args: repodata())
+    assert repository.get_package_data(
+        "name", channels="bioconda", platform="noarch"
+    ) == ["example"]
+    assert not abandoned.exists()
+    assert not journal.exists()
+    assert unrelated.read_bytes() == b"partial"

@@ -5,6 +5,8 @@ import os
 import threading
 from multiprocessing import get_start_method
 
+import pytest
+
 from bioconda_utils.conda.repodata import RepoData
 from bioconda_utils.support import logsetup
 from bioconda_utils.support.parallel import parallel_iter, worker_pool
@@ -102,3 +104,54 @@ def test_worker_crash_propagates():
 
     with worker_pool(1) as pool, pytest.raises(BrokenProcessPool):
         pool.submit(crash_worker).result(timeout=20)
+
+
+@pytest.mark.parametrize("kill", [False, True])
+def test_workers_exit_when_parent_is_terminated(tmp_path, kill):
+    import subprocess
+    import sys
+    import time
+
+    import psutil
+
+    marker = tmp_path / "worker.pid"
+    script = """
+import os, time
+from pathlib import Path
+from bioconda_utils.support.parallel import worker_pool
+with worker_pool(1) as pool:
+    pid = pool.submit(os.getpid).result(timeout=20)
+    Path(__import__('sys').argv[1]).write_text(str(pid))
+    pool.submit(time.sleep, 120).result()
+"""
+    parent = subprocess.Popen([sys.executable, "-c", script, str(marker)])
+    worker = None
+    try:
+        deadline = time.monotonic() + 25
+        while (
+            not marker.exists()
+            and parent.poll() is None
+            and time.monotonic() < deadline
+        ):
+            time.sleep(0.05)
+        assert marker.exists()
+        worker = psutil.Process(int(marker.read_text()))
+        (parent.kill if kill else parent.terminate)()
+        parent.wait(timeout=5)
+        deadline = time.monotonic() + 5
+        while (
+            worker.is_running()
+            and worker.status() != psutil.STATUS_ZOMBIE
+            and time.monotonic() < deadline
+        ):
+            time.sleep(0.05)
+        assert not worker.is_running() or worker.status() == psutil.STATUS_ZOMBIE
+    finally:
+        if parent.poll() is None:
+            parent.kill()
+            parent.wait(timeout=5)
+        if worker is not None and worker.is_running():
+            try:
+                worker.kill()
+            except psutil.NoSuchProcess:
+                pass

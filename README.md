@@ -63,17 +63,22 @@ recipes, or enable an individual subrecipe with `extra.autobump.enable: true`.
 
 Repodata is cached automatically per channel and subdirectory for eight hours.
 On Linux the default directory is
-`$XDG_CACHE_HOME/bioconda-utils/repodata-v1`, or
-`~/.cache/bioconda-utils/repodata-v1` when `XDG_CACHE_HOME` is unset. On macOS,
+`$XDG_CACHE_HOME/bioconda-utils/repodata-v2`, or
+`~/.cache/bioconda-utils/repodata-v2` when `XDG_CACHE_HOME` is unset. On macOS,
 the platform's user cache directory is used. `build`, `lint`, `update-pinning`,
 and `autobump` accept `--repodata-cache DIRECTORY` to choose another directory
 and `--refresh-repodata` to refresh entries needed by the current run.
 Concurrent commands and workers share entries and coordinate downloads; local
-`file://` channels are always read afresh. Cache files are disposable.
+`file://` channels are always read afresh. Indexed SQLite files are queried
+without loading whole repositories into each worker. Database page caches are
+bounded, and refreshes build one repository at a time across processes to limit
+peak JSON parsing memory. Cache files are disposable. The previous repodata
+pickle store is not used; the first run with the new format repopulates the cache.
+See [repodata benchmarks](benchmarks/repodata.md) for memory and timing results.
 
 `lint`, `update-pinning`, and `autobump` still accept `--cache PREFIX` for existing
 scripts. The application cache root becomes `PREFIX.d`, with separate
-`repodata-v1`, `graph-v1`, and `upstream-v1` stores. Old pickle files are left
+`repodata-v2`, `graph-v1`, and `upstream-v1` stores. Old pickle files are left
 intact and are not imported. Existing files passed to
 `--repodata-cache FILE` likewise use `FILE.d`. New invocations can specify a cache
 directory directly with `--repodata-cache DIRECTORY`. The two options cannot be
@@ -99,4 +104,6 @@ not used. See [cache benchmarks](benchmarks/autobump-caches.md).
 Process workers use `spawn` with explicit configuration and send log records
 to the parent. Only the parent renders terminal output, so workers never inherit
 the progress thread's locks or depend on a forked copy of the repodata cache.
+Workers monitor their parent's process sentinel and exit if it dies, including
+after SIGTERM or SIGKILL.
 HTTP operations have a five-minute deadline covering requests and retry waits.

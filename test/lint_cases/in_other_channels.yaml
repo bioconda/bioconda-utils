@@ -3,7 +3,7 @@ expected_failures:
 repodata:
   conda-forge:
     one: # offending entry
-      - version: 0.1
+      - version: "0.2"
 recipes:
   one:
     package:

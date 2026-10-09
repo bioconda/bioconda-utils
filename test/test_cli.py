@@ -598,7 +598,7 @@ def test_cache_filename_compatibility_preserves_old_snapshot(tmp_path, legacy):
     cli._configure_caches(None if legacy else old, False, old if legacy else None)
     expected = tmp_path / "cache.pkl.d"
     assert RepoData.get_cache_dir() == (
-        expected / "repodata-v1" if legacy else expected
+        expected / "repodata-v2" if legacy else expected
     )
     assert old.read_bytes() == b"old snapshot must not be loaded or overwritten"
 

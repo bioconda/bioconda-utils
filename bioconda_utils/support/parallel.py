@@ -7,12 +7,14 @@ from __future__ import annotations
 import logging
 import os
 import signal
+import threading
 from collections.abc import Iterator
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from contextlib import contextmanager
 from functools import partial
 from logging.handlers import QueueHandler, QueueListener
-from multiprocessing import get_context
+from multiprocessing import get_context, parent_process
+from multiprocessing.connection import wait
 from pathlib import Path
 
 from .logsetup import progress_display
@@ -41,6 +43,15 @@ class _ParentLogHandler(logging.Handler):
         logging.getLogger(record.name).handle(record)
 
 
+def _exit_with_parent() -> None:
+    """Do not retain a worker's memory or queued jobs after its parent dies."""
+    parent = parent_process()
+    assert parent is not None
+    wait([parent.sentinel])
+    # Finalizers can block on queues whose readers died with the parent.
+    os._exit(1)
+
+
 def _initialize_worker(
     queue,
     config,
@@ -54,6 +65,7 @@ def _initialize_worker(
     from ..conda.repodata import RepoData
     from .caching import configure_cache_root
 
+    threading.Thread(target=_exit_with_parent, daemon=True).start()
     configure_cache_root(cache_root)
     # Ctrl-C belongs to the parent. Workers never render Rich output or inherit
     # parent threads/locks: both process pools use a fresh spawn context.
