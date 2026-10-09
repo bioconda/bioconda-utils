@@ -13,6 +13,7 @@ import asyncio
 import hashlib
 import inspect
 import logging
+import os
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from time import monotonic
@@ -149,9 +150,23 @@ async def download_to_file(
     *,
     block_size: int = 1024 * 1024,
 ) -> int:
-    """Download response body to **fname** while reporting progress."""
-    async with aiofiles.open(fname, "wb") as f:
-        return await stream_to_sink(resp, desc, f.write, block_size=block_size)
+    """Download response body to **fname** while reporting progress.
+
+    The body is streamed to a temporary sibling file which is atomically
+    renamed into place only after a complete transfer. A failed or cancelled
+    download therefore never leaves a truncated file at **fname** (callers
+    treat an existing file as a complete cache entry).
+    """
+    fname = Path(fname)
+    tmp = fname.with_name(fname.name + ".part")
+    try:
+        async with aiofiles.open(tmp, "wb") as f:
+            written = await stream_to_sink(resp, desc, f.write, block_size=block_size)
+        os.replace(tmp, fname)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    return written
 
 
 async def download_to_checksum(

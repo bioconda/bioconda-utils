@@ -331,6 +331,36 @@ def test_download_to_file(tmp_path):
     bytes_count = asyncio.run(http.download_to_file(response, dest, "file download"))
     assert bytes_count == 11
     assert dest.read_bytes() == b"hello world"
+    assert not (tmp_path / "out.txt.part").exists()
+
+
+def test_failed_download_to_file_leaves_no_partial_target(tmp_path):
+    error = aiohttp.ClientPayloadError("truncated response")
+    response = cast(aiohttp.ClientResponse, ResponseBody([b"partial", error]))
+    dest = tmp_path / "out.txt"
+
+    async def run():
+        with pytest.raises(aiohttp.ClientPayloadError, match="truncated response"):
+            await http.download_to_file(response, dest, "file download")
+
+    asyncio.run(run())
+    assert not dest.exists()
+    assert not (tmp_path / "out.txt.part").exists()
+
+
+def test_failed_download_to_file_keeps_existing_target(tmp_path):
+    dest = tmp_path / "out.txt"
+    dest.write_bytes(b"previous")
+    error = aiohttp.ClientPayloadError("truncated response")
+    response = cast(aiohttp.ClientResponse, ResponseBody([b"partial", error]))
+
+    async def run():
+        with pytest.raises(aiohttp.ClientPayloadError):
+            await http.download_to_file(response, dest, "file download")
+
+    asyncio.run(run())
+    assert dest.read_bytes() == b"previous"
+    assert not (tmp_path / "out.txt.part").exists()
 
 
 def test_download_to_checksum():
