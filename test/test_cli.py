@@ -531,6 +531,45 @@ def test_duplicates_with_remove_does_not_print_table(monkeypatch, tmp_path):
     assert "Duplicate packages in bioconda" not in result.output
 
 
+def test_duplicates_url_without_strict_flags_prints_name_url(monkeypatch, tmp_path):
+    config = tmp_path / "config.yml"
+    config.write_text("channels:\n  - bioconda\n  - conda-forge\n")
+    monkeypatch.setattr(
+        "bioconda_utils.conda.repodata.RepoData.get_package_data",
+        lambda _self, _fields, _chan: [("pkg",)],
+    )
+    result = runner.invoke(
+        cli.app,
+        ["duplicates", str(config), "--url", "--channel", "bioconda"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "https://anaconda.org/bioconda/pkg\n" in result.output
+    # No version is available, so no /files?version= URL can be built.
+    assert "files?version" not in result.output
+
+
+def test_duplicates_url_with_strict_version_prints_version_url(monkeypatch, tmp_path):
+    config = tmp_path / "config.yml"
+    config.write_text("channels:\n  - bioconda\n  - conda-forge\n")
+    monkeypatch.setattr(
+        "bioconda_utils.conda.repodata.RepoData.get_package_data",
+        lambda _self, _fields, _chan: [("pkg", "1.0")],
+    )
+    result = runner.invoke(
+        cli.app,
+        [
+            "duplicates",
+            str(config),
+            "--url",
+            "--strict-version",
+            "--channel",
+            "bioconda",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "https://anaconda.org/bioconda/pkg/files?version=1.0\n" in result.output
+
+
 def test_build_parses_typed_platform_option():
     command = cast(Any, get_command(cli.app)).commands["build"]
 

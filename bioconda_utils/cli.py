@@ -1064,12 +1064,14 @@ def duplicates(
             remove_package(spec)
         elif url:
             if not strict_version and (not strict_build):
+                # Without a strict version the spec carries only the name, so
+                # there is no version to build a /files?version= URL from.
                 _write_output(f"https://anaconda.org/{our_channel}/{spec[0]}\n")
-            _write_output(
-                "https://anaconda.org/{}/{}/files?version={}\n".format(
-                    our_channel, *spec
+            else:
+                _write_output(
+                    f"https://anaconda.org/{our_channel}/{spec[0]}"
+                    f"/files?version={spec[1]}\n"
                 )
-            )
         else:
             table.add_row(*[str(part) for part in spec], ",".join(dup_channels))
     if not url and not remove:
