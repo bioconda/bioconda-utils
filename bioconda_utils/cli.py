@@ -51,7 +51,7 @@ if TYPE_CHECKING:
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 
-# Everything else a command needs -- pandas, networkx, conda-build, GitPython,
+# Everything else a command needs -- networkx, conda-build, GitPython,
 # PyGithub, aiohttp, the repo/graph/config helpers -- is imported inside the
 # command bodies below. Rendering ``--help`` only requires the command
 # callables and the parameter types above, so importing the rest eagerly made

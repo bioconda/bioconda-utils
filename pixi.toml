@@ -26,11 +26,9 @@ rich = "15.*"
 # Recipe YAML parsing
 "ruamel.yaml" = "0.18.*"
 networkx = "3.6.*"  # (networkx>3.3 needs python>=3.10)
-pandas = "3.0.*"
-# Avoid large mkl package (pulled in by pandas)
-libblas = { version = "*", build = "*openblas" }
-boltons = "25.0.*"
 jsonschema = "4.26.*"  # JSON schema verification
+pyyaml = "6.*"  # lint metadata
+packaging = "*"  # version and requirement parsing
 jinja2 = "3.1.*"
 
 # anaconda_upload
@@ -50,23 +48,18 @@ regex = "2026.*"
 
 # asyncio
 aiohttp = "3.13.*"  # HTTP lib; pinning to reflect dependabot alert
-aiohttp-jinja2 = "*"  # jinja2 renderer for aiohttp.web
-aiohttp-session = "*"
-aiohttp-security = "*"
 aiofiles = "25.*"  # async open
 aioftp = "0.27.*"  # FTP lib
 backoff = "2.2.*"  # retrying of failed API calls
-cachetools = "7.0.*"  # request caching (NEEDED?)
+cachetools = "7.0.*"  # GitHub API response cache
 
 # client API wrappers
 gitpython = "3.1.*"  # githandler
 gidgethub = "5.*"  # githubhandler
-pyjwt = ">=2.4.0"  # githubhandler (JWT signing), needs >=2.4.0, CVE-2022-29217
 
-# bioconductor-skeleton
-beautifulsoup4 = "4.*"
-# The bioconductor skeleton needs this
+# bioconductor-skeleton and HTTP API clients
 requests = "2.33.*"
+urllib3 = "2.*"  # GitHub API retry policy
 
 # merge handling
 pygithub = "*"

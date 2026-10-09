@@ -1329,7 +1329,7 @@ def test_filter_existing_packages_queries_rendered_target_subdir(monkeypatch):
 
 
 def test_get_package_paths_force_builds_existing_and_logs_force(caplog, monkeypatch):
-    # get_package_data yields pandas itertuples rows for ["channel", "subdir", "build"]
+    # get_package_data yields namedtuple rows for ["channel", "subdir", "build"]
     ExistingBuild = namedtuple("ExistingBuild", ["channel", "subdir", "build"])
     meta = Mock()
     meta.name.return_value = "samtools"
@@ -1394,7 +1394,7 @@ def test_get_package_paths_reports_channels_per_multi_output(caplog, monkeypatch
     lookup keyed on ``(subdir, build)`` alone collapses them into one entry
     and every output reports the union of the channels holding its siblings.
     """
-    # get_package_data yields pandas itertuples rows for ["channel", "subdir", "build"]
+    # get_package_data yields namedtuple rows for ["channel", "subdir", "build"]
     ExistingBuild = namedtuple("ExistingBuild", ["channel", "subdir", "build"])
 
     def make_output(name):

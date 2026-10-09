@@ -40,7 +40,7 @@ Sets single-threaded BLAS thread pools on import; see the comment below.
 import os
 from importlib.metadata import PackageNotFoundError, version
 
-# Importing numpy -- which pandas and conda-build pull in -- makes OpenBLAS
+# Importing numpy through runtime dependencies makes OpenBLAS
 # start one thread per core, and those threads busy-wait. On a 32-core host that
 # burned roughly 4s of CPU on *every* invocation while making no difference to
 # wall-clock time: bioconda-utils does no linear algebra, and its parallelism
