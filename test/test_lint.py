@@ -68,3 +68,24 @@ def test_lint(linter, recipe_dirs, mock_repodata, case):
             assert str(msg.check) not in found_postfix
         for msgstr in found_postfix:
             assert msgstr in found
+
+
+def test_rattler_lint_message_formatting():
+    from bioconda_utils._types import RATTLER
+    from bioconda_utils.lint import WARNING, RattlerLintMessage
+
+    msg = RattlerLintMessage(
+        recipe=RecipePath(Path("recipes/samtools/1.7"), RATTLER),
+        lint_or_hint="warning message",
+        severity=WARNING,
+    )
+    assert (
+        msg.get_report_message()
+        == "WARNING: recipes/samtools/1.7/recipe.yaml: warning message"
+    )
+    assert msg.get_table_row() == (
+        "WARNING",
+        "recipes/samtools/1.7/recipe.yaml",
+        "rattler_build",
+        "warning message",
+    )

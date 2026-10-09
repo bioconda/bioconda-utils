@@ -1,1 +1,25 @@
-miniconda
+# Local dependency environments and caches
+.pixi/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+**/__pycache__/
+*.py[cod]
+
+# Python build and test output
+build/
+dist/
+*.egg-info/
+.coverage
+htmlcov/
+
+# Editor and local-agent state
+.claude/
+.crush/
+.devin/
+.letta/
+.vscode/
+
+# Local development material not used to build the wheel
+bench/
+miniconda/

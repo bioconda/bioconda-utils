@@ -37,12 +37,11 @@ WORKDIR /tmp/repo
 COPY . ./
 RUN . /opt/conda/etc/profile.d/conda.sh  && conda list
 RUN . /opt/conda/etc/profile.d/conda.sh  && conda activate base && \
-    # setuptools on the builder image is too old for our pyproject.toml,
-    # previous build approaches just happened to work with what the build image
-    # shipped with, even though it violated stated dependency constraints.
-    # we extract the version constraints from requirements.txt to have a single source of truth
+    # Bootstrap the declared Python and build-tool versions before building the
+    # wheel. The base image's interpreter may be older than Requires-Python.
+    # Extract the constraints from requirements.txt to keep a single source of truth.
     sed -nE \
-    '/^(setuptools|setuptools-scm)([><!=~ ].+)?$/p' \
+    '/^(python|setuptools|setuptools-scm)([><!=~ ].+)?$/p' \
     bioconda_utils/bioconda_utils-requirements.txt \
     | xargs -r conda install --yes && \
     pip wheel --no-deps --no-build-isolation . && \

@@ -22,6 +22,7 @@ import inspect
 import json
 import logging
 import os
+import sys
 from contextlib import redirect_stderr, redirect_stdout
 from html.parser import HTMLParser
 from itertools import chain
@@ -31,8 +32,8 @@ from typing import Any, ClassVar, Protocol
 from urllib.parse import urljoin
 
 import regex as re
-from packaging.version import InvalidVersion
-from packaging.version import parse as parse_version
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.version import Version
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -641,40 +642,26 @@ class PyPi(JSONHoster):
 
     @staticmethod
     def _get_python_version(rel):
-        """Try to determine correct python version"""
-        choose_from = ("3.6", "3.5", "3.7", "2.7")
+        """Choose the newest interpreter compatible with a PyPI release."""
+        choose_from = tuple(
+            f"3.{minor}" for minor in range(sys.version_info.minor, 4, -1)
+        ) + ("2.7",)
 
         requires_python = rel.get("requires_python")
         if requires_python:
-            requires_python = requires_python.replace(" ", "")
-            checks = []
-            for check in requires_python.split(","):
-                for key, func in (
-                    ("==", lambda x, y: x == y),
-                    ("!=", lambda x, y: x != y),
-                    ("<=", lambda x, y: x <= y),
-                    (">=", lambda x, y: x >= y),
-                    (">", lambda x, y: x > y),
-                    ("<", lambda x, y: x > y),
-                    ("~=", lambda x, y: x == y),
-                ):
-                    if check.startswith(key):
-                        checks.append((func, check[len(key) :]))
-                        break
-                else:
-                    checks.append((lambda x, y: x == y, check))
-
-            for vers in choose_from:
-                try:
-                    if all(
-                        op(parse_version(vers), parse_version(check))
-                        for op, check in checks
-                    ):
-                        return vers
-                except (InvalidVersion, TypeError):
-                    logger.exception(
-                        "Failed to compare %s to %s", vers, requires_python
-                    )
+            try:
+                specifier = SpecifierSet(requires_python)
+            except InvalidSpecifier as exc:
+                raise ValueError(
+                    f"Invalid requires_python value: {requires_python!r}"
+                ) from exc
+            if version := next(
+                (vers for vers in choose_from if Version(vers) in specifier), None
+            ):
+                return version
+            raise ValueError(
+                f"No supported Python version satisfies {requires_python!r}"
+            )
 
         python_versions = [
             classifier.split("::")[-1].strip()
@@ -685,7 +672,7 @@ class PyPi(JSONHoster):
             if vers in python_versions:
                 return vers
 
-        return "2.7"
+        return choose_from[0]
 
     async def get_deps(self, pipeline, build_config, package, rel):
         """Get dependencies for **package** using version data **rel**
@@ -703,7 +690,11 @@ class PyPi(JSONHoster):
         if not target_path.exists():
             await req.get_file_from_url(target_path, rel["link"], target_file)
 
-        python_version = self._get_python_version(rel)
+        try:
+            python_version = self._get_python_version(rel)
+        except ValueError as exc:
+            logger.info("Skipping depends for PyPi %s: %s", target_file, exc)
+            return
 
         # Run code from conda_build.skeletons in ProcessPoolExecutor
         async with pipeline.conda_sem:

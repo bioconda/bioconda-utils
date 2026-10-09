@@ -60,7 +60,7 @@ Briefly, each class becomes a check by:
   If a check never calls ``self.message()``, it is assumed to have
   passed (=no errors generated).
 
-  You can also provide an alternate filename (``fname``) and/or
+  You can also provide an alternate file path (``path``) and/or
   specify the line number directly (``line``).
 
 
@@ -115,7 +115,7 @@ from bioconda_utils._types import BuildSystem, RecipePath
 from bioconda_utils.skiplist import Skiplist
 
 from .. import recipe as _recipe
-from ..support.logsetup import tqdm
+from ..support.logsetup import progress_display
 from ..support.subproc import run
 
 logger = logging.getLogger(__name__)
@@ -147,6 +147,10 @@ class LintMessage(Protocol):
 
     def get_severity(self) -> Severity: ...
 
+    def get_table_row(self) -> tuple[str, str, str, str]:
+        """Return (severity, location, check, title) for tabular display."""
+        ...
+
 
 class CondaLintMessage(NamedTuple):
     """Message issued by LintChecks for conda build recipes"""
@@ -159,7 +163,7 @@ class CondaLintMessage(NamedTuple):
 
     #: Path of the file in which the problem was found. Always identifies the
     #: offending recipe, since a single lint run covers many recipes at once.
-    fname: Path
+    path: Path
 
     #: The severity of the message
     severity: Severity = ERROR
@@ -181,12 +185,20 @@ class CondaLintMessage(NamedTuple):
 
     def get_report_message(self) -> str:
         return (
-            f"{self.severity.name}: {self.fname.as_posix()}:{self.end_line}: "
+            f"{self.severity.name}: {self.path.as_posix()}:{self.end_line}: "
             f"{self.check}: {self.title}"
         )
 
     def get_severity(self) -> Severity:
         return self.severity
+
+    def get_table_row(self) -> tuple[str, str, str, str]:
+        return (
+            self.severity.name,
+            f"{self.path}:{self.end_line}",
+            str(self.check),
+            self.title,
+        )
 
 
 class RattlerLintMessage(NamedTuple):
@@ -201,10 +213,18 @@ class RattlerLintMessage(NamedTuple):
     severity: Severity = ERROR
 
     def get_report_message(self) -> str:
-        return f"{self.severity.name}: {self.recipe.path.name}: {self.lint_or_hint}"
+        return f"{self.severity.name}: {self.recipe}/recipe.yaml: {self.lint_or_hint}"
 
     def get_severity(self) -> Severity:
         return self.severity
+
+    def get_table_row(self) -> tuple[str, str, str, str]:
+        return (
+            self.severity.name,
+            f"{self.recipe}/recipe.yaml",
+            "rattler_build",
+            self.lint_or_hint,
+        )
 
 
 class LintCheckMeta(abc.ABCMeta):
@@ -360,7 +380,7 @@ class LintCheck(metaclass=LintCheckMeta):
     def message(
         self,
         section: str | None = None,
-        fname: Path | None = None,
+        path: Path | None = None,
         line: int | None = None,
         data: Any = None,
     ) -> None:
@@ -372,7 +392,7 @@ class LintCheck(metaclass=LintCheckMeta):
           section: If specified, a lint location within the recipe
                    meta.yaml pointing to this section/subsection will
                    be added to the message
-          fname: If specified, the message applies to this file rather than
+          path: If specified, the message applies to this file rather than
                  to the recipe's meta.yaml. Must be a path that identifies the
                  offending recipe (e.g. ``self.recipe.dir / "build.sh"``) so the
                  report stays unambiguous when many recipes are linted at once.
@@ -381,7 +401,7 @@ class LintCheck(metaclass=LintCheckMeta):
                 something other than None.
         """
         message = self.make_conda_message(
-            self.recipe, section, fname, line, data is not None
+            self.recipe, section, path, line, data is not None
         )
         if data is not None and self.try_fix and self.fix(message, data):
             return
@@ -392,7 +412,7 @@ class LintCheck(metaclass=LintCheckMeta):
         cls,
         recipe: _recipe.Recipe,
         section: str | None = None,
-        fname: Path | None = None,
+        path: Path | None = None,
         line: int | None = None,
         canfix: bool = False,
     ) -> LintMessage:
@@ -402,7 +422,7 @@ class LintCheck(metaclass=LintCheckMeta):
           section: If specified, a lint location within the recipe
                    meta.yaml pointing to this section/subsection will
                    be added to the message. Not implemented for rattler recipes
-          fname: If specified, the message applies to this file rather than
+          path: If specified, the message applies to this file rather than
                  to the recipe's meta.yaml. Should identify the offending
                  recipe. Not implemented for rattler recipes
           line: If specified, sets the line number for the message directly
@@ -426,7 +446,7 @@ class LintCheck(metaclass=LintCheckMeta):
         return CondaLintMessage(
             recipe=recipe,
             check=cls,
-            fname=recipe.path if fname is None else fname,
+            path=recipe.path if path is None else path,
             severity=cls.severity,
             title=title.strip(),
             body=body,
@@ -590,9 +610,6 @@ class Linter:
         """Clears the lint messages stored in linter"""
         self._messages = []
 
-    def get_report(self) -> str:
-        return "\n".join(msg.get_report_message() for msg in self.get_messages())
-
     def load_skips(self) -> dict[str, list[str]]:
         """Parses lint skips
 
@@ -635,34 +652,40 @@ class Linter:
           True if issues with errors were found
 
         """
-        for recipe_name in tqdm(sorted(recipe_names)):
-            self.order_and_load_checks()
-            assert isinstance(recipe_name, RecipePath)  # for linters/IDEs
-            try:
-                match recipe_name.build_system:
-                    case BuildSystem.CONDA:
-                        msgs = self.lint_one(recipe_name.path, fix=fix)
-                    case BuildSystem.RATTLER:
-                        msgs = self.lint_one_rattler(recipe_name, fix=fix)
-            except Exception:
-                if self.nocatch:
-                    raise
-                logger.exception("Unexpected exception in lint")
+        with progress_display.count_task("Linting", total=len(recipe_names)) as (
+            progress,
+            task,
+        ):
+            for recipe_name in progress.track(sorted(recipe_names), task_id=task):
+                self.order_and_load_checks()
+                assert isinstance(recipe_name, RecipePath)  # for linters/IDEs
+                try:
+                    match recipe_name.build_system:
+                        case BuildSystem.CONDA:
+                            msgs = self.lint_one(recipe_name.path, fix=fix)
+                        case BuildSystem.RATTLER:
+                            msgs = self.lint_one_rattler(recipe_name, fix=fix)
+                except Exception:
+                    if self.nocatch:
+                        raise
+                    logger.exception("Unexpected exception in lint")
 
-                recipe: RecipePath | _recipe.Recipe = recipe_name
-                match recipe.build_system:
-                    case BuildSystem.CONDA:
-                        recipe = _recipe.Recipe(recipe_name.path, self.recipe_folder)
-                        msgs = [linter_failure.make_conda_message(recipe=recipe)]
-                    case BuildSystem.RATTLER:
-                        msgs = [
-                            RattlerLintMessage(
-                                recipe=recipe,
-                                lint_or_hint="Unexpected exception in lint",
-                                severity=ERROR,
+                    recipe: RecipePath | _recipe.Recipe = recipe_name
+                    match recipe.build_system:
+                        case BuildSystem.CONDA:
+                            recipe = _recipe.Recipe(
+                                recipe_name.path, self.recipe_folder
                             )
-                        ]
-            self._messages.extend(msgs)
+                            msgs = [linter_failure.make_conda_message(recipe=recipe)]
+                        case BuildSystem.RATTLER:
+                            msgs = [
+                                RattlerLintMessage(
+                                    recipe=recipe,
+                                    lint_or_hint="Unexpected exception in lint",
+                                    severity=ERROR,
+                                )
+                            ]
+                self._messages.extend(msgs)
 
         return any(message.get_severity() >= ERROR for message in self._messages)
 
@@ -716,7 +739,7 @@ class Linter:
                     CondaLintMessage(
                         recipe=recipe,
                         check=check,
-                        fname=recipe.path,
+                        path=recipe.path,
                         severity=ERROR,
                         title="Check raised an unexpected exception",
                     )
@@ -769,7 +792,7 @@ class Linter:
             return [
                 RattlerLintMessage(
                     recipe=recipe,
-                    lint_or_hint=f"Failed to parse YAML in recipe {recipe.path}",
+                    lint_or_hint=f"Failed to parse YAML in recipe {recipe}",
                     severity=ERROR,
                 )
             ]
@@ -777,7 +800,7 @@ class Linter:
             return [
                 RattlerLintMessage(
                     recipe=recipe,
-                    lint_or_hint=f"Error loading recipe file for {recipe.path}: {e}",
+                    lint_or_hint=f"Error loading recipe file for {recipe}: {e}",
                     severity=ERROR,
                 )
             ]

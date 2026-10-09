@@ -1,9 +1,9 @@
 """
 Access to the conda package directory (repodata) of anaconda.org channels.
 
-:class:`RepoData` is a singleton that loads channel/subdir repodata,
-caches it in memory and on disk, and answers package queries.
-:class:`AsyncRequests` is the parallel HTTP downloader it relies on.
+:class:`RepoData` that loads channel/subdir repodata,
+caches indexed records on disk, and answers package queries.
+:func:`fetch` is the parallel HTTP downloader it relies on.
 """
 
 from __future__ import annotations
@@ -12,19 +12,22 @@ import asyncio
 import datetime
 import json
 import logging
+import os
 import platform
+import sqlite3
 import sys
-import warnings
-from collections.abc import Iterable
-from dataclasses import dataclass
+import tempfile
+from collections import namedtuple
+from collections.abc import Callable, Iterable
+from contextlib import closing, contextmanager
+from hashlib import sha256
 from itertools import product, zip_longest
 from multiprocessing.pool import ThreadPool
 from pathlib import Path
-from typing import ClassVar, TypeAlias, cast
+from typing import Any, ClassVar, cast
 
 import aiofiles
 import aiohttp
-import pandas as pd
 import requests
 
 from .._types import (
@@ -35,147 +38,149 @@ from .._types import (
     native_container_platform,
 )
 from ..support import http
-from ..support.caching import disk_cache
-from ..support.logsetup import tqdm
+from ..support.caching import disk_cache, file_lock, get_cache_root
+from ..support.logsetup import progress_display
 
 logger = logging.getLogger(__name__)
 
 
-class BiocondaUtilsWarning(UserWarning):
-    pass
+type RepoDataKey = tuple[str, Subdir]
 
 
-RepoDataKey: TypeAlias = tuple[str, Subdir]
+#: Max connections to each server
+CONNECTIONS_PER_HOST = 4
 
 
-@dataclass
-class _CachedRepoData:
-    dataframe: pd.DataFrame
-    fetched_at: datetime.datetime
+def fetch(
+    urls: Iterable[str],
+    descriptions: Iterable[str],
+    transform: Callable[[bytes, RepoDataKey], Any] | None,
+    metadata: Iterable[RepoDataKey],
+) -> list[Any]:
+    """Fetch data from URLs.
 
+    This will use asyncio to manage a pool of connections at once, speeding
+    up download as compared to iterative use of ``requests`` significantly.
+    It will also retry on non-permanent HTTP error codes (i.e. 429, 502,
+    503 and 504).
 
-class AsyncRequests:
-    """Download a bunch of files in parallel
-
-    This is not really a class, more a name space encapsulating a bunch of calls.
+    Args:
+      urls: List of URLS
+      descriptions: Matching list of descriptions (for progress display)
+      transform: As each download completes, the raw bytes and the matching
+          entry from **metadata** are passed through this function, e.g. to
+          offload json parsing into the download loop.
+      metadata: Per-URL context handed to **transform** alongside the bytes.
     """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+    else:
+        logger.warning("Running fetch from within running loop")
+        # Workaround the fact that asyncio's loop is marked as not-reentrant
+        # (it is apparently easy to patch, but not desired by the devs,
+        with ThreadPool(1) as pool:
+            res = pool.apply(fetch, (urls, descriptions, transform, metadata))
+        return res
 
-    #: Identify ourselves
-    USER_AGENT = http.USER_AGENT
-    #: Max connections to each server
-    CONNECTIONS_PER_HOST = 4
+    # asyncio.run cancels the fetch on SIGINT before raising
+    # KeyboardInterrupt, so pending connections close cleanly
+    return cast(
+        list[Any],
+        asyncio.run(async_fetch(urls, descriptions, transform, metadata)),
+    )
 
-    @classmethod
-    def fetch(cls, urls, descs, cb, datas):
-        """Fetch data from URLs.
 
-        This will use asyncio to manage a pool of connections at once, speeding
-        up download as compared to iterative use of ``requests`` significantly.
-        It will also retry on non-permanent HTTP error codes (i.e. 429, 502,
-        503 and 504).
-
-        Args:
-          urls: List of URLS
-          descs: Matching list of descriptions (for progress display)
-          cb: As each download is completed, data is passed through this function.
-              Use to e.g. offload json parsing into download loop.
-        """
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-        if loop.is_running():
-            logger.warning("Running AsyncRequests.fetch from within running loop")
-            # Workaround the fact that asyncio's loop is marked as not-reentrant
-            # (it is apparently easy to patch, but not desired by the devs,
-            with ThreadPool(1) as pool:
-                res = pool.apply(cls.fetch, (urls, descs, cb, datas))
-            return res
-
-        task = asyncio.ensure_future(cls.async_fetch(urls, descs, cb, datas))
-
-        try:
-            loop.run_until_complete(task)
-        except KeyboardInterrupt:
-            task.cancel()
-            loop.run_forever()
-            task.exception()
-
-        return task.result()
-
-    @classmethod
-    async def async_fetch(cls, urls, descs=None, cb=None, datas=None, fds=None):
-        if descs is None:
-            descs = []
-        if datas is None:
-            datas = []
-        if fds is None:
-            fds = []
-        conn = aiohttp.TCPConnector(limit_per_host=cls.CONNECTIONS_PER_HOST)
-        async with http.make_session(
-            user_agent=cls.USER_AGENT,
-            connector=conn,
-        ) as session:
-            coros = [
-                asyncio.ensure_future(
-                    cls._async_fetch_one(session, url, desc, cb, data, fd)
+async def async_fetch(
+    urls: Iterable[str] = (),
+    descriptions: Iterable[str] = (),
+    transform: Callable[[bytes, RepoDataKey], Any] | None = None,
+    metadata: Iterable[RepoDataKey] | None = None,
+) -> list[Any | bytes]:
+    if metadata is None:
+        metadata = []
+    conn = aiohttp.TCPConnector(limit_per_host=CONNECTIONS_PER_HOST)
+    async with http.make_session(connector=conn) as session:
+        coros = [
+            asyncio.create_task(
+                _async_fetch_one(
+                    session,
+                    url,
+                    description or url,
+                    transform=transform,
+                    metadata=datum,
                 )
-                for url, desc, data, fd in zip_longest(urls, descs, datas, fds)
-            ]
-            with tqdm(
-                asyncio.as_completed(coros),
-                total=len(coros),
-                desc="Downloading",
-                unit="files",
-            ) as t:
-                result = [await coro for coro in t]
-        return result
+            )
+            for url, description, datum in zip_longest(urls, descriptions, metadata)
+            if url is not None
+        ]
+        try:
+            with progress_display.count_task("Downloading", total=len(coros)) as (
+                progress,
+                task,
+            ):
+                result = [
+                    await coro
+                    for coro in progress.track(
+                        asyncio.as_completed(coros),
+                        total=len(coros),
+                        task_id=task,
+                    )
+                ]
+        finally:
+            for coro in coros:
+                if not coro.done():
+                    coro.cancel()
+            if any(not coro.done() for coro in coros):
+                await asyncio.gather(*coros, return_exceptions=True)
+    return result
 
-    @staticmethod
-    @http.retry_on_transient
-    async def _async_fetch_one(session, url, desc, cb=None, data=None, fd=None):
-        result = []
-        if url.startswith("file://"):
-            local_path = Path(url[7:])
-            if local_path.exists():
-                async with aiofiles.open(local_path, mode="rb") as f:
-                    result.append(await f.read())
-            else:
-                subdir = url.split("/")[-2]
-                d = {
-                    "info": {"subdir": subdir},
-                    "packages": {},
-                    "packages.conda": {},
-                    "removed": [],
-                    "repodata_version": 1,
-                }
-                result.append(json.dumps(d).encode("UTF-8"))
+
+@http.retry_on_transient
+async def _async_fetch_one(
+    session: aiohttp.ClientSession,
+    url: str,
+    description: str,
+    transform: Callable[[bytes, RepoDataKey], Any] | None = None,
+    metadata: RepoDataKey | None = None,
+) -> Any | bytes:
+    if url.startswith("file://"):
+        local_path = Path(url[7:])
+        if local_path.exists():
+            async with aiofiles.open(local_path, mode="rb") as f:
+                raw = await f.read()
         else:
-            async with session.get(url, timeout=None) as resp:
-                resp.raise_for_status()
-                async for block in http.stream_download(
-                    resp,
-                    desc,
-                    block_size=1024 * 16,
-                    disable=logger.getEffectiveLevel() > logging.INFO,
-                ):
-                    if fd:
-                        fd.write(block)
-                    else:
-                        result.append(block)
-        if cb:
-            return cb(b"".join(result), data)
-        else:
-            return b"".join(result)
+            subdir = url.split("/")[-2]
+            d = {
+                "info": {"subdir": subdir},
+                "packages": {},
+                "packages.conda": {},
+                "removed": [],
+                "repodata_version": 1,
+            }
+            raw = json.dumps(d).encode("UTF-8")
+    else:
+        async with session.get(url) as resp:
+            resp.raise_for_status()
+            raw = await http.download_to_bytes(
+                resp,
+                description,
+                block_size=1024 * 16,
+            )
+    if transform is None:
+        return raw
+    assert metadata is not None
+    return transform(raw, metadata)
 
 
 class RepoData:
-    """Singleton providing access to package directory on anaconda cloud
+    """Access to the package directory on anaconda cloud
 
-    If the first call provides a filename as **cache** argument, the
-    file is used to cache the directory in CSV format.
+    Each repository is an indexed SQLite database in the user's cache directory,
+    refreshed after eight hours. Processes share disk pages rather than Python
+    tables, and coordinate refreshes with OS advisory locks.
+    Local file channels are read afresh on every query.
 
     Data structure:
 
@@ -199,8 +204,7 @@ class RepoData:
       number. Used to distinguish different builds of the same
       package/version combination.
 
-    depends: Runtime requirements for package as list of strings. We
-      do not currently load this.
+    depends: Runtime requirements for package as list of strings.
 
     arch: Architecture key (x86_64). Not used by conda and not loaded
       here.
@@ -238,67 +242,171 @@ class RepoData:
     # config object
     config = None
 
-    cache_file: Path | None = None
-    _df = None
-    _df_ts = None
-    _repository_cache: ClassVar[dict[RepoDataKey, _CachedRepoData]] = {}
+    cache_dir: ClassVar[Path | None] = None
+    refresh_after: ClassVar[datetime.datetime | None] = None
 
-    #: default lifetime for repodata cache
-    cache_timeout = 60 * 60 * 8
+    #: Repository lifetime; no full-table in-memory cache is kept.
+    cache_timeout: ClassVar[float] = 60 * 60 * 8
 
     @classmethod
     def register_config(cls, config):
-        previous_channels = tuple((cls.config or {}).get("channels", ()))
-        current_channels = tuple(config.get("channels", ()))
-        if previous_channels != current_channels:
-            cls._df = None
-            cls._df_ts = None
         cls.config = config
 
-    __instance = None
+    @classmethod
+    def configure_cache(
+        cls, directory: Path | None = None, *, refresh: bool = False
+    ) -> None:
+        """Choose a cache directory; None restores the platform/XDG default."""
+        cls.cache_dir = directory.resolve() if directory is not None else None
+        cls.refresh_after = datetime.datetime.now(datetime.UTC) if refresh else None
 
-    def __new__(cls):
-        """Makes RepoData a singleton"""
-        if RepoData.__instance is None:
-            assert RepoData.config is not None, (
-                "bug: ensure to load config before instantiating RepoData."
-            )
-            RepoData.__instance = object.__new__(cls)
-        return RepoData.__instance
-
-    def set_cache(self, cache: Path) -> None:
-        if self._df is not None:
-            warnings.warn("RepoData cache set after first use", BiocondaUtilsWarning)
-        else:
-            self.cache_file = cache
+    @classmethod
+    def get_cache_dir(cls) -> Path:
+        return cls.cache_dir or get_cache_root() / "repodata-v2"
 
     @property
     def channels(self):
-        """Return channels to load."""
-        assert self.config is not None
+        assert self.config is not None, "Load configuration before querying repodata"
         return self.config["channels"]
 
-    @property
-    def df(self):
-        """Internal Pandas DataFrame object
+    def _cache_path(self, url: str) -> Path:
+        return self.get_cache_dir() / (sha256(url.encode()).hexdigest() + ".sqlite")
 
-        Try not to use this ... the point of this class is to be able to
-        change the structure in which the data is held.
-        """
-        if self._df_ts is not None:
-            seconds = (
-                datetime.datetime.now(datetime.UTC) - self._df_ts
-            ).total_seconds()
-        else:
-            seconds = 0
+    def _is_fresh(self, fetched_at: float) -> bool:
+        now = datetime.datetime.now(datetime.UTC).timestamp()
+        return 0 <= now - fetched_at < self.cache_timeout and (
+            self.refresh_after is None or fetched_at >= self.refresh_after.timestamp()
+        )
 
-        if self._df is None or seconds > self.cache_timeout:
-            self._df = None
-            self._df_ts = None
-            self._df = self._load_channel_dataframe_cached()
-            self._df_ts = datetime.datetime.now(datetime.UTC)
-            self._repository_cache.clear()
-        return self._df
+    def _read_cache(self, path: Path) -> sqlite3.Connection | None:
+        """Open a fresh database without deserializing its package records."""
+        if not path.exists():
+            return None
+        connection = None
+        try:
+            connection = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)
+            # Bound private page caches. The OS shares file pages across workers.
+            connection.execute("PRAGMA cache_size=-512")
+            if connection.execute("PRAGMA user_version").fetchone()[0] != 2:
+                raise sqlite3.DatabaseError("incompatible repodata cache")
+            fetched_at = connection.execute(
+                "SELECT fetched_at FROM metadata"
+            ).fetchone()[0]
+            connection.execute(
+                "SELECT name, version, build, build_number, depends FROM packages LIMIT 0"
+            )
+            if self._is_fresh(fetched_at):
+                return connection
+        except (sqlite3.DatabaseError, TypeError, IndexError):
+            logger.warning("Ignoring unreadable repodata cache %s", path)
+        if connection is not None:
+            connection.close()
+        return None
+
+    @staticmethod
+    def _populate_database(
+        connection: sqlite3.Connection, raw: bytes, *, fetched_at: float
+    ) -> None:
+        data = json.loads(raw)
+        packages = data["packages"]
+        packages.update(data.get("packages.conda", {}))
+        with connection:
+            connection.execute("CREATE TABLE metadata (fetched_at REAL, subdir TEXT)")
+            connection.execute(
+                "INSERT INTO metadata VALUES (?, ?)",
+                (fetched_at, data["info"]["subdir"]),
+            )
+            connection.execute(
+                "CREATE TABLE packages (name TEXT, version TEXT, build TEXT, build_number INTEGER, depends TEXT)"
+            )
+            connection.executemany(
+                "INSERT INTO packages VALUES (?, ?, ?, ?, ?)",
+                (
+                    (
+                        record.get("name"),
+                        str(record.get("version")),
+                        record.get("build"),
+                        record.get("build_number"),
+                        json.dumps(record.get("depends")),
+                    )
+                    for record in packages.values()
+                ),
+            )
+            connection.execute(
+                "CREATE INDEX package_lookup ON packages (name, version, build_number, build)"
+            )
+            connection.execute("PRAGMA user_version=2")
+
+    @classmethod
+    def _write_cache(
+        cls, path: Path, raw: bytes, *, fetched_at: float | None = None
+    ) -> None:
+        """Build a complete replacement; readers retain a consistent old inode."""
+        with tempfile.NamedTemporaryFile(
+            dir=path.parent, prefix=".repodata-", suffix=".tmp", delete=False
+        ) as handle:
+            temporary = Path(handle.name)
+        try:
+            with closing(sqlite3.connect(temporary)) as connection:
+                cls._populate_database(
+                    connection,
+                    raw,
+                    fetched_at=datetime.datetime.now(datetime.UTC).timestamp()
+                    if fetched_at is None
+                    else fetched_at,
+                )
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+            temporary.with_name(temporary.name + "-journal").unlink(missing_ok=True)
+
+    def _download_repository(self, channel: str, subdir: Subdir) -> bytes:
+        url = self._make_repodata_url(channel, subdir)
+        return fetch([url], [f"{channel}/{subdir}"], None, [(channel, subdir)])[0]
+
+    def _repositories(self, channels: Iterable[str], subdirs: Iterable[Subdir]):
+        return (
+            (channel, subdir)
+            for channel, subdir in product(
+                dict.fromkeys(channels), dict.fromkeys(subdirs)
+            )
+            if channel in self.channels
+        )
+
+    @contextmanager
+    def _open_repository(self, channel: str, subdir: Subdir):
+        url = self._make_repodata_url(channel, subdir)
+        if url.startswith("file://"):
+            with closing(sqlite3.connect(":memory:")) as connection:
+                self._populate_database(
+                    connection,
+                    self._download_repository(channel, subdir),
+                    fetched_at=datetime.datetime.now(datetime.UTC).timestamp(),
+                )
+                yield connection
+            return
+        path = self._cache_path(url)
+        connection = self._read_cache(path)
+        if connection is None:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            # Hold only one repository lock at a time. A refresh builds one
+            # repository at a time, bounding peak JSON/table memory as well.
+            with (
+                file_lock(path.with_suffix(".lock")),
+                file_lock(path.parent / "refresh.lock"),
+            ):
+                connection = self._read_cache(path)
+                if connection is None:
+                    # The refresh lock excludes every active builder. Recover
+                    # temporary files left by SIGKILL without touching other files.
+                    for abandoned in path.parent.glob(".repodata-*.tmp*"):
+                        abandoned.unlink(missing_ok=True)
+                    self._write_cache(path, self._download_repository(channel, subdir))
+                    connection = self._read_cache(path)
+                    if connection is None:
+                        raise RuntimeError(f"New repodata cache is invalid: {path}")
+        with closing(connection):
+            yield connection
 
     def _make_repodata_url(self, channel, subdir: Subdir):
         if channel == "defaults":
@@ -313,111 +421,6 @@ class RepoData:
         else:
             url = url_template.format(channel=channel, subdir=subdir)
         return url
-
-    def _load_channel_dataframe_cached(self):
-        if self.cache_file is not None and self.cache_file.exists():
-            ts = datetime.datetime.fromtimestamp(
-                self.cache_file.stat().st_mtime, datetime.UTC
-            )
-            seconds = (datetime.datetime.now(datetime.UTC) - ts).total_seconds()
-            if seconds <= self.cache_timeout:
-                logger.info("Loading repodata from cache %s", self.cache_file)
-                return pd.read_pickle(self.cache_file)
-            else:
-                logger.info("Repodata cache file too old. Reloading")
-
-        if self.cache_file is None:
-            res = self._get_repository_dataframe(self.channels, self.platforms)
-        else:
-            res = self._load_channel_dataframe()
-
-        if self.cache_file is not None:
-            res.to_pickle(self.cache_file)
-        return res
-
-    def _load_channel_dataframe(
-        self, repositories: Iterable[tuple[str, Subdir]] | None = None
-    ):
-        repos = list(
-            product(self.channels, self.platforms)
-            if repositories is None
-            else repositories
-        )
-        urls = [self._make_repodata_url(c, p) for c, p in repos]
-        descs = [f"{c}/{p}" for c, p in repos]
-
-        def to_dataframe(json_data, meta_data):
-            channel, platform = meta_data
-            raw = json.loads(json_data)
-            subdir = raw["info"]["subdir"]
-            packages = raw["packages"]
-            packages.update(raw.get("packages.conda", {}))
-
-            df = pd.DataFrame.from_dict(packages, "index", columns=self._load_columns)
-            # Ensure that version is always a string.
-            df["version"] = df["version"].astype(str)
-            df["channel"] = channel
-            df["platform"] = platform
-            df["subdir"] = subdir
-            return df
-
-        if urls:
-            dfs = AsyncRequests.fetch(urls, descs, to_dataframe, repos)
-            res = pd.concat(dfs)
-        else:
-            res = pd.DataFrame(columns=self.columns)
-
-        for col in (
-            "channel",
-            "platform",
-            "subdir",
-            "name",
-            "version",
-            "build",
-        ):
-            res[col] = res[col].astype("category")
-        res = res.reset_index(drop=True)
-
-        return res
-
-    def _get_repository_dataframe(
-        self, channels: Iterable[str], subdirs: Iterable[Subdir]
-    ) -> pd.DataFrame:
-        """Load and cache only the requested channel/subdirectory pairs."""
-        if self._df is not None or self.cache_file is not None:
-            return self.df
-
-        configured_channels = set(self.channels)
-        requested_channels = tuple(
-            channel
-            for channel in dict.fromkeys(channels)
-            if channel in configured_channels
-        )
-        requested_subdirs = tuple(dict.fromkeys(subdirs))
-        repositories = tuple(product(requested_channels, requested_subdirs))
-        now = datetime.datetime.now(datetime.UTC)
-        missing = [
-            repository
-            for repository in repositories
-            if repository not in self._repository_cache
-            or (now - self._repository_cache[repository].fetched_at).total_seconds()
-            > self.cache_timeout
-        ]
-        if missing:
-            loaded = self._load_channel_dataframe(missing)
-            for channel, subdir in missing:
-                repository = (channel, subdir)
-                self._repository_cache[repository] = _CachedRepoData(
-                    dataframe=loaded[
-                        (loaded["channel"] == channel) & (loaded["subdir"] == subdir)
-                    ],
-                    fetched_at=now,
-                )
-
-        frames = [
-            self._repository_cache[repository].dataframe for repository in repositories
-        ]
-        return pd.concat(frames) if frames else pd.DataFrame(columns=self.columns)
 
     @staticmethod
     def native_subdir() -> PackageSubdir:
@@ -439,12 +442,12 @@ class RepoData:
           Dictionary mapping version numbers to list of subdirs
           e.g. {'0.1': ['linux-64'], '0.2': ['linux-64', 'osx-64'], '0.3': ['noarch']}
         """
-        # called from doc generator
-        packages = self.df[self.df.name == name][["version", "platform"]]
-        versions = packages.groupby("version", observed=True).agg(
-            lambda x: list(set(x))
-        )
-        return versions["platform"].to_dict()
+        versions: dict[str, set[str]] = {}
+        for version, subdir in self.get_package_data(
+            ["version", "platform"], name=name
+        ):
+            versions.setdefault(version, set()).add(subdir)
+        return {version: sorted(versions[version]) for version in sorted(versions)}
 
     def get_package_data(
         self,
@@ -467,7 +470,11 @@ class RepoData:
             platform = ["noarch", self.native_subdir()]
 
         if version is not None:
-            version = str(version)
+            version = (
+                [str(value) for value in version]
+                if isinstance(version, (list, tuple))
+                else str(version)
+            )
 
         if isinstance(channels, str):
             requested_channels = [channels]
@@ -483,37 +490,68 @@ class RepoData:
         else:
             requested_subdirs = [cast(Subdir, subdir) for subdir in platform]
 
-        df = self._get_repository_dataframe(requested_channels, requested_subdirs)
-        channel_filter = requested_channels if channels is not None else None
-        platform_filter = requested_subdirs if platform is not None else None
-        # We iteratively drill down here, starting with the (probably)
-        # most specific columns. Filtering this way on a large data frame
-        # is much faster than executing the comparisons for all values
-        # every time, in particular if we are looking at a specific package.
-        # NB: cheap, high-selectivity filters come first so that later,
-        #     expensive filters (e.g. high-cardinality categoricals such as
-        #     "build", or int comparisons that box every value) only run on
-        #     an already tiny frame. The result is identical either way.
-        for col, val in (
-            ("name", name),  # thousands of different values
-            ("version", version),  # still pretty good variety
-            ("channel", channel_filter),  # 3 values
-            ("platform", platform_filter),  # 3 values
-            ("build_number", build_number),  # most values 0
-            ("build", build),  # build string should vary a lot
+        keys = [] if key is None else [key] if isinstance(key, str) else list(key)
+        if not keys and key is not None:
+            return iter(())
+        for column in keys:
+            if column not in self.columns:
+                raise KeyError(column)
+        clauses, parameters = [], []
+        for column, value in (
+            ("name", name),
+            ("version", version),
+            ("build_number", build_number),
+            ("build", build),
         ):
-            if val is None:
+            if value is None:
                 continue
-            if isinstance(val, (list, tuple)):
-                df = df[df[col].isin(val)]
+            if isinstance(value, (list, tuple)):
+                clauses.append(f"{column} IN ({','.join('?' for _ in value)})")
+                parameters.extend(value)
             else:
-                df = df[df[col] == val]
-
+                clauses.append(f"{column} = ?")
+                parameters.append(value)
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        Package = namedtuple("Package", keys, rename=True)
+        rows = []
+        for channel, subdir in self._repositories(
+            requested_channels, requested_subdirs
+        ):
+            with self._open_repository(channel, subdir) as connection:
+                constants = {"channel": channel, "platform": subdir}
+                if "subdir" in keys:
+                    constants["subdir"] = connection.execute(
+                        "SELECT subdir FROM metadata"
+                    ).fetchone()[0]
+                projection = (
+                    ", ".join("?" if column in constants else column for column in keys)
+                    if keys
+                    else "1"
+                )
+                values = [
+                    constants[column] for column in keys if column in constants
+                ] + parameters
+                query = "SELECT " + projection + " FROM packages" + where
+                if key is None:
+                    if (
+                        connection.execute(query + " LIMIT 1", values).fetchone()
+                        is not None
+                    ):
+                        return True
+                else:
+                    for row in connection.execute(query + " ORDER BY rowid", values):
+                        decoded = [
+                            json.loads(value) if column == "depends" else value
+                            for column, value in zip(keys, row)
+                        ]
+                        rows.append(
+                            decoded[0] if isinstance(key, str) else Package(*decoded)
+                        )
         if key is None:
-            return not df.empty
+            return False
         if isinstance(key, str):
-            return list(df[key])
-        return df[key].itertuples(index=False)
+            return rows
+        return iter(rows)
 
 
 @disk_cache.memoize(expire=604800)

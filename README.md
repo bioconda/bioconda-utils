@@ -52,3 +52,57 @@ Or use the Just wrappers around the Pixi tasks:
 ```bash
 just global-install
 ```
+
+To update selected recipes, pass the recipe collection root and select packages:
+`bioconda-utils autobump recipes --packages samtools`. Autobump updates upstream
+versions and checksums and checks whether pinning changes require rebuilding.
+Historical version subdirectories are excluded by default. Passing an individual
+recipe directory as the collection root is rejected because it would bypass
+that exclusion. Use `--exclude-subrecipes never` to explicitly include historical
+recipes, or enable an individual subrecipe with `extra.autobump.enable: true`.
+
+Repodata is cached automatically per channel and subdirectory for eight hours.
+On Linux the default directory is
+`$XDG_CACHE_HOME/bioconda-utils/repodata-v2`, or
+`~/.cache/bioconda-utils/repodata-v2` when `XDG_CACHE_HOME` is unset. On macOS,
+the platform's user cache directory is used. `build`, `lint`, `update-pinning`,
+and `autobump` accept `--repodata-cache DIRECTORY` to choose another directory
+and `--refresh-repodata` to refresh entries needed by the current run.
+Concurrent commands and workers share entries and coordinate downloads; local
+`file://` channels are always read afresh. Indexed SQLite files are queried
+without loading whole repositories into each worker. Database page caches are
+bounded, and refreshes build one repository at a time across processes to limit
+peak JSON parsing memory. Cache files are disposable. The previous repodata
+pickle store is not used; the first run with the new format repopulates the cache.
+
+`lint`, `update-pinning`, and `autobump` still accept `--cache PREFIX` for existing
+scripts. The application cache root becomes `PREFIX.d`, with separate
+`repodata-v2`, `graph-v1`, and `upstream-v1` stores. Old pickle files are left
+intact and are not imported. Existing files passed to
+`--repodata-cache FILE` likewise use `FILE.d`. New invocations can specify a cache
+directory directly with `--repodata-cache DIRECTORY`. The two options cannot be
+combined.
+
+Autobump caches parsed recipe metadata by file contents and parser version,
+then rebuilds dependency edges from current metadata. Changed and new recipes
+are reparsed; deleted recipes disappear. Skiplists, build scripts, and pinning
+configuration are read afresh. Graph and upstream caches default to the same
+platform application cache root as repodata.
+
+Upstream HTTP responses and archive checksums are cached with ETag/Last-Modified
+validation and request-header matching for `Vary`. Server freshness is capped
+at ten minutes for listings and one hour for checksums. Listings without
+freshness headers use ten minutes; checksums without freshness headers are
+revalidated every run, or downloaded again when no usable validator exists.
+Cookie-bearing archive requests always revalidate stored digests. `no-store`
+and authenticated text responses are not persisted; FTP reuse stays within a
+run. The HTTP store has a 256 MiB disk budget and removes entries older than
+seven days during periodic maintenance. The former indefinite snapshots are
+not used.
+
+Process workers use `spawn` with explicit configuration and send log records
+to the parent. Only the parent renders terminal output, so workers never inherit
+the progress thread's locks or depend on a forked copy of the repodata cache.
+Workers monitor their parent's process sentinel and exit if it dies, including
+after SIGTERM or SIGKILL.
+HTTP operations have a five-minute deadline covering requests and retry waits.

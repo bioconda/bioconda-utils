@@ -10,6 +10,7 @@ from bioconda_utils import _types, build, cli
 from bioconda_utils._types import ContainerPlatform, PackageSubdir, PkgBuildRef
 from bioconda_utils.conda.repodata import RepoData
 from bioconda_utils.containers import docker_utils, pkg_test, upload
+from bioconda_utils.containers.artifacts import UploadResult
 from bioconda_utils.support.subproc import run
 
 SAMTOOLS_1_3_0 = PkgBuildRef(name="samtools", version="1.3", build_string="0")
@@ -154,9 +155,8 @@ def test_handle_merged_pr_linux_fallback_uses_docker(monkeypatch, tmp_path):
     build_calls = []
 
     monkeypatch.setattr(
-        cli,
-        "upload_pr_artifacts",
-        lambda *_args, **_kwargs: cli.UploadResult.NO_ARTIFACTS,
+        "bioconda_utils.containers.artifacts.upload_pr_artifacts",
+        lambda *_args, **_kwargs: UploadResult.NO_ARTIFACTS,
     )
     monkeypatch.setattr(
         cli,
@@ -189,9 +189,8 @@ def test_handle_merged_pr_native_macos_fallback_uses_host(monkeypatch, tmp_path)
 
     monkeypatch.setattr(RepoData, "native_subdir", lambda: PackageSubdir.OSX_ARM64)
     monkeypatch.setattr(
-        cli,
-        "upload_pr_artifacts",
-        lambda *_args, **_kwargs: cli.UploadResult.NO_ARTIFACTS,
+        "bioconda_utils.containers.artifacts.upload_pr_artifacts",
+        lambda *_args, **_kwargs: UploadResult.NO_ARTIFACTS,
     )
     monkeypatch.setattr(
         cli,
@@ -223,9 +222,8 @@ def test_handle_merged_pr_rejects_foreign_macos_fallback(monkeypatch, tmp_path):
 
     monkeypatch.setattr(RepoData, "native_subdir", lambda: PackageSubdir.OSX_64)
     monkeypatch.setattr(
-        cli,
-        "upload_pr_artifacts",
-        lambda *_args, **_kwargs: cli.UploadResult.NO_ARTIFACTS,
+        "bioconda_utils.containers.artifacts.upload_pr_artifacts",
+        lambda *_args, **_kwargs: UploadResult.NO_ARTIFACTS,
     )
     monkeypatch.setattr(
         cli,
@@ -264,7 +262,7 @@ def test_test_package_passes_target_platform(monkeypatch, tmp_path):
     package.write_bytes(b"")
 
     commands = []
-    monkeypatch.setattr(pkg_test, "update_index", lambda _path: None)
+    monkeypatch.setattr("conda_index.index.update_index", lambda _path: None)
     monkeypatch.setattr(pkg_test, "get_test_command", lambda _path: "true")
     monkeypatch.setattr(os.path, "exists", lambda path: True)
     monkeypatch.setattr(
@@ -647,3 +645,37 @@ def test_utils_run_rejects_removed_redacted_secrets_kwarg():
     # which rejects it instead of silently skipping redaction.
     with pytest.raises(TypeError):
         run(["echo", "hello"], redacted_secrets=["s3cret"])
+
+
+@pytest.mark.parametrize("target", [None, "linux-64", "linux-aarch64", "osx-arm64"])
+def test_rattler_config_selectors_preserve_target_without_native_warnings(
+    tmp_path, caplog, target
+):
+    from conda_build.config import Config
+
+    from bioconda_utils.rattler.rattler_build_bridge import _filter_config
+
+    config_path = tmp_path / "variants.yaml"
+    config_path.write_text(
+        "architecture:\n"
+        "  - amd64  # [linux64]\n"
+        "  - arm64  # [linux and aarch64]\n"
+        "  - mac_arm64  # [osx and arm64]\n"
+    )
+    native = RepoData.native_subdir()
+    resolved_target = target or native
+    with caplog.at_level(logging.WARNING):
+        filtered = _filter_config(config_path, target)
+    expected = {
+        "linux-64": "amd64",
+        "linux-aarch64": "arm64",
+        "osx-arm64": "mac_arm64",
+    }.get(resolved_target)
+    if expected:
+        assert [line.strip() for line in filtered.splitlines() if line.strip()] == [
+            "architecture:",
+            f"- {expected}",
+        ]
+    if resolved_target == Config().subdir:
+        assert "Setting build platform" not in caplog.text
+        assert "Setting build arch" not in caplog.text

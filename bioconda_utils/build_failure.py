@@ -8,19 +8,22 @@ from pathlib import Path
 from typing import Any
 
 import networkx as nx
-import pandas as pd
 import ruamel.yaml
 import ruamel.yaml.reader
 from ruamel.yaml import YAML, CommentedMap
 from ruamel.yaml.scalarstring import LiteralScalarString
 
 from bioconda_utils import graph
-from bioconda_utils._types import ALL_PACKAGE_SUBDIRS, PackageSubdir
-from bioconda_utils.conda.conda_build_bridge import load_meta_fast
+from bioconda_utils._types import (
+    ALL_PACKAGE_SUBDIRS,
+    BuildFailureOutputFormat,
+    PackageSubdir,
+    RecipePath,
+)
 from bioconda_utils.conda.repodata import RepoData, get_package_downloads
 from bioconda_utils.recipe import Recipe
-from bioconda_utils.recipes import get_recipes
-from bioconda_utils.support.logsetup import ellipsize_recipes, tqdm
+from bioconda_utils.recipes import get_recipes, load_meta_and_recipe_fast
+from bioconda_utils.support.logsetup import ellipsize_recipes, progress_display
 from bioconda_utils.support.subproc import run
 
 from .githandler import BiocondaRepo, GitRange
@@ -28,12 +31,17 @@ from .githandler import BiocondaRepo, GitRange
 logger = logging.getLogger(__name__)
 
 
-def format_link(uri, fmt: str, prefix: str = "", label: str = ""):
+def format_link(
+    uri: str,
+    fmt: BuildFailureOutputFormat,
+    prefix: str = "",
+    label: str = "",
+) -> str:
     if prefix:
         uri = f"{prefix}/{uri}"
     if fmt == "markdown":
         return f"[{label}]({uri})"
-    elif fmt == "txt":
+    elif fmt == "table":
         return uri
     else:
         raise ValueError(f"Invalid link format: {fmt}")
@@ -57,7 +65,7 @@ class BuildFailureRecord:
         self, recipe: Path | Recipe, platform: PackageSubdir | None = None
     ) -> None:
         if isinstance(recipe, Recipe):
-            self.recipe_path = Path(recipe.path)
+            self.recipe_path = recipe.dir
         else:
             self.recipe_path = Path(recipe)
         if platform is None:
@@ -105,11 +113,28 @@ class BuildFailureRecord:
         if category:
             self.category = category
 
+    def _recipe_file(self) -> Path:
+        """Return the recipe definition file (``meta.yaml`` or ``recipe.yaml``).
+
+        Rattler recipes have no ``meta.yaml``; their definition lives in
+        ``recipe.yaml``. Hashing must follow the recipe's build system so a
+        rattler recipe is not treated as missing.
+        """
+        meta = self.recipe_path / "meta.yaml"
+        if meta.is_file():
+            return meta
+        rattler = self.recipe_path / "recipe.yaml"
+        if rattler.is_file():
+            return rattler
+        raise FileNotFoundError(
+            f"No meta.yaml or recipe.yaml found in {self.recipe_path}"
+        )
+
     def get_recipe_sha(self) -> str:
         h = sha256()
-        with open(self.recipe_path / "meta.yaml", "rb") as f:
+        with open(self._recipe_file(), "rb") as f:
             h.update(f.read())
-            return h.hexdigest()
+        return h.hexdigest()
 
     def skiplists_current_recipe(self) -> bool:
         if self.skiplist:
@@ -267,14 +292,14 @@ BUILD_FAILURE_COLUMNS: list[str] = [
 ]
 
 
-def collect_build_failure_dataframe(
+def collect_build_failure_records(
     recipe_folder: Path,
     config: dict[str, Any],
     channel: str,
-    link_fmt: str = "txt",
+    link_fmt: BuildFailureOutputFormat = "table",
     link_prefix: str = "",
     git_range: GitRange | None = None,
-) -> pd.DataFrame:
+) -> list[dict[str, Any]]:
     def get_build_failure_records(recipe: Path) -> Iterator[BuildFailureRecord]:
         return filter(
             BuildFailureRecord.exists,
@@ -287,20 +312,20 @@ def collect_build_failure_dataframe(
     def has_build_failure(recipe: Path) -> bool:
         return any(get_build_failure_records(recipe))
 
-    recipes = list(get_recipes(recipe_folder))
+    recipes: list[RecipePath] = list(get_recipes(recipe_folder))
 
     if git_range:
         repo = BiocondaRepo(recipe_folder)
-        changed_recipes = [
+        changed_recipes: set[Path] = {
             Path(recipe)
             for recipe in repo.get_recipes_to_build(git_range.ref, git_range.base)
-        ]
+        }
         logger.info(
             "Constraining to %s git modified recipes%s.",
             len(changed_recipes),
             ellipsize_recipes(changed_recipes, recipe_folder),
         )
-        recipes = [recipe for recipe in recipes if recipe in set(changed_recipes)]
+        recipes = [recipe for recipe in recipes if recipe.path in changed_recipes]
         if len(recipes) != len(changed_recipes):
             logger.info(
                 "Overlap was %s recipes%s.",
@@ -311,60 +336,71 @@ def collect_build_failure_dataframe(
     dag, _ = graph.build(recipes, config)
 
     def get_data() -> Iterator[dict[str, Any]]:
-        for recipe in tqdm(recipes, desc="Checking recipes"):
-            if not has_build_failure(recipe):
-                continue
+        with progress_display.count_task("Checking recipes", total=len(recipes)) as (
+            progress,
+            task,
+        ):
+            for recipe in progress.track(recipes, task_id=task):
+                recipe_path: Path = recipe.path
+                if not has_build_failure(recipe_path):
+                    continue
 
-            rel_recipe = recipe.relative_to(recipe_folder)
-            components = rel_recipe.parts
-            is_version_subdir = len(components) == 2
+                rel_recipe = recipe_path.relative_to(recipe_folder)
+                components = rel_recipe.parts
+                is_version_subdir = len(components) == 2
 
-            if is_version_subdir and not has_build_failure(recipe.parent):
-                # Skip if the latest recipe does not have a build failure.
-                continue
+                if is_version_subdir and not has_build_failure(recipe_path.parent):
+                    # Skip if the latest recipe does not have a build failure.
+                    continue
 
-            package = components[0]
-            meta = load_meta_fast(recipe)[0]
-            package_name = meta["package"]["name"]
-            descendants = len(nx.descendants(dag, package_name))
+                package = components[0]
+                # Use the same loader as graph.build so the package name (and
+                # thus the DAG node) is derived consistently for both conda and
+                # rattler recipes.
+                package_name = load_meta_and_recipe_fast(recipe).get_package_name()
+                descendants = len(nx.descendants(dag, package_name))
 
-            downloads = get_package_downloads(channel, package_name)
-            recs = list(get_build_failure_records(recipe))
+                downloads = get_package_downloads(channel, package_name)
+                recs = list(get_build_failure_records(recipe_path))
 
-            limit = 80  # characters in last column to show before putting the rest in "<details>"
-            for rec in recs:
-                failures = format_link(
-                    str(rec.path), link_fmt, prefix=link_prefix, label=str(rec.platform)
-                )
-                categories = rec.category
-                reasons = rec.reason
-
-                if len(reasons) > limit:
-                    reasons = (
-                        reasons[:limit]
-                        + "..."
-                        + "<details>"
-                        + reasons[limit:]
-                        + "</details>"
+                limit = 80  # characters in last column to show before putting the rest in "<details>"
+                for rec in recs:
+                    failures = format_link(
+                        str(rec.path),
+                        link_fmt,
+                        prefix=link_prefix,
+                        label=str(rec.platform),
                     )
-                skiplisted = rec.skiplist
-                prs = format_link(
-                    f"https://github.com/bioconda/bioconda-recipes/pulls?q=is%3Apr+is%3Aopen+{package}",
-                    link_fmt,
-                    label="show",
-                )
+                    categories = rec.category
+                    reasons = rec.reason
 
-                yield {
-                    "recipe": str(rel_recipe),
-                    "downloads": downloads,
-                    "depending": descendants,
-                    "skiplisted": skiplisted,
-                    "category": categories,
-                    "build failures": failures,
-                    "pull requests": prs,
-                    "reason": reasons,
-                }
+                    if len(reasons) > limit:
+                        reasons = (
+                            reasons[:limit]
+                            + "..."
+                            + "<details>"
+                            + reasons[limit:]
+                            + "</details>"
+                        )
+                    skiplisted = rec.skiplist
+                    prs = format_link(
+                        f"https://github.com/bioconda/bioconda-recipes/pulls?q=is%3Apr+is%3Aopen+{package}",
+                        link_fmt,
+                        label="show",
+                    )
 
-    data = pd.DataFrame(get_data(), columns=BUILD_FAILURE_COLUMNS)
-    data.sort_values(by=["depending", "downloads"], ascending=False, inplace=True)
+                    yield {
+                        "recipe": str(rel_recipe),
+                        "downloads": downloads,
+                        "depending": descendants,
+                        "skiplisted": skiplisted,
+                        "category": categories,
+                        "build failures": failures,
+                        "pull requests": prs,
+                        "reason": reasons,
+                    }
+
+    data = sorted(
+        get_data(), key=lambda row: (row["depending"], row["downloads"]), reverse=True
+    )
     return data

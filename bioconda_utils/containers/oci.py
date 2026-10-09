@@ -6,20 +6,14 @@ from __future__ import annotations
 
 import os
 import shutil
-import sys
-from pathlib import Path
 
 from .._types import (
     ContainerPlatform,
     OCIImageConfig,
     normalize_container_platform,
 )
+from ..support.env import env_root
 from ..support.subproc import run
-
-
-def _env_root() -> Path:
-    """Return the conda prefix this installation lives in."""
-    return Path(sys.prefix)
 
 
 def skopeo_bin() -> str:
@@ -31,7 +25,7 @@ def skopeo_bin() -> str:
     activated in the shell. Installations that bundle ``skopeo`` elsewhere
     fall back to a ``PATH`` lookup.
     """
-    packaged = _env_root() / "bin" / "skopeo"
+    packaged = env_root() / "bin" / "skopeo"
     if packaged.exists():
         return str(packaged)
     if found := shutil.which("skopeo"):
@@ -45,7 +39,7 @@ def skopeo_bin() -> str:
 def skopeo_env() -> dict[str, str]:
     """Return an environment dict with SSL_CERT_DIR set for conda's skopeo."""
     env = os.environ.copy()
-    ssl_dir = _env_root() / "ssl"
+    ssl_dir = env_root() / "ssl"
     if ssl_dir.is_dir():
         env["SSL_CERT_DIR"] = str(ssl_dir)
     return env

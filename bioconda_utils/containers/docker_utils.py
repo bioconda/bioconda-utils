@@ -75,7 +75,6 @@ from ..conda.conda_build_bridge import (
 from ..rattler.rattler_build_bridge import (
     get_rattler_build_global_variants_paths,
 )
-from ..support.logsetup import Progress
 from ..support.subproc import run
 
 logger = logging.getLogger(__name__)
@@ -565,8 +564,7 @@ class RecipeBuilder:
             cmd[2:2] = ["--platform", self.target_platform]
 
         try:
-            with Progress():
-                p = run(cmd)
+            p = run(cmd)
         except sp.CalledProcessError:
             logger.error(
                 "DOCKER FAILED: Error building docker container %s. ",
@@ -726,8 +724,7 @@ class RecipeBuilder:
         cmd += ["/bin/bash", "/opt/build_script.bash"]
 
         logger.debug("DOCKER: cmd: %s", cmd)
-        with Progress():
-            p = run(cmd, live=live_logs)
+        p = run(cmd, live=live_logs)
         return p
 
     def cleanup(self) -> None:

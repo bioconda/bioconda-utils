@@ -9,7 +9,8 @@ behavior. These checks aim at getting the right settings.
 import re
 from typing import Any, ClassVar
 
-from . import LintCheck, _recipe
+from ..recipe import Recipe
+from . import LintCheck
 
 # Noarch or not checks:
 #
@@ -127,7 +128,7 @@ class should_not_be_noarch_skip(LintCheck):
 
     """
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         if self.recipe.get("build/noarch", False) is False:
             return  # no noarch, or noarch=False
         if self.recipe.get("build/skip", False) is False:
