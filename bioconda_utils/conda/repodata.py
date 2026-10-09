@@ -1,7 +1,7 @@
 """
 Access to the conda package directory (repodata) of anaconda.org channels.
 
-:class:`RepoData` is a singleton that loads channel/subdir repodata,
+:class:`RepoData` that loads channel/subdir repodata,
 caches it in memory and on disk, and answers package queries.
 :func:`fetch` is the parallel HTTP downloader it relies on.
 """
@@ -12,11 +12,15 @@ import asyncio
 import datetime
 import json
 import logging
+import os
+import pickle
 import platform
 import sys
-import warnings
+import tempfile
 from collections.abc import Callable, Iterable
+from contextlib import ExitStack
 from dataclasses import dataclass
+from hashlib import sha256
 from itertools import product, zip_longest
 from multiprocessing.pool import ThreadPool
 from pathlib import Path
@@ -25,6 +29,7 @@ from typing import ClassVar, cast
 import aiofiles
 import aiohttp
 import pandas as pd
+import platformdirs
 import requests
 
 from .._types import (
@@ -35,14 +40,10 @@ from .._types import (
     native_container_platform,
 )
 from ..support import http
-from ..support.caching import disk_cache
+from ..support.caching import disk_cache, file_lock
 from ..support.logsetup import progress_display
 
 logger = logging.getLogger(__name__)
-
-
-class BiocondaUtilsWarning(UserWarning):
-    pass
 
 
 type RepoDataKey = tuple[str, Subdir]
@@ -170,7 +171,7 @@ async def _async_fetch_one(
             }
             raw = json.dumps(d).encode("UTF-8")
     else:
-        async with session.get(url, timeout=None) as resp:
+        async with session.get(url) as resp:
             resp.raise_for_status()
             raw = await http.download_to_bytes(
                 resp,
@@ -184,10 +185,11 @@ async def _async_fetch_one(
 
 
 class RepoData:
-    """Singleton providing access to package directory on anaconda cloud
+    """Access to the package directory on anaconda cloud
 
-    If the first call provides a filename as **cache** argument, the
-    file is used to cache the directory in CSV format.
+    Each repository is cached for eight hours in memory and in the user's
+    cache directory. Processes coordinate refreshes with OS advisory locks.
+    Local file channels are read afresh on every query.
 
     Data structure:
 
@@ -250,67 +252,91 @@ class RepoData:
     # config object
     config = None
 
-    cache_file: Path | None = None
-    _df = None
-    _df_ts = None
-    _repository_cache: ClassVar[dict[RepoDataKey, _CachedRepoData]] = {}
+    cache_dir: ClassVar[Path | None] = None
+    refresh_after: ClassVar[datetime.datetime | None] = None
+    _repository_cache: ClassVar[dict[str, _CachedRepoData]] = {}
 
-    #: default lifetime for repodata cache
-    cache_timeout = 60 * 60 * 8
+    #: The same lifetime applies to memory and disk entries.
+    cache_timeout: ClassVar[float] = 60 * 60 * 8
 
     @classmethod
     def register_config(cls, config):
-        previous_channels = tuple((cls.config or {}).get("channels", ()))
-        current_channels = tuple(config.get("channels", ()))
-        if previous_channels != current_channels:
-            cls._df = None
-            cls._df_ts = None
         cls.config = config
 
-    __instance = None
+    @classmethod
+    def configure_cache(
+        cls, directory: Path | None = None, *, refresh: bool = False
+    ) -> None:
+        """Choose a cache directory; None restores the platform/XDG default."""
+        cls.cache_dir = directory.resolve() if directory is not None else None
+        cls.refresh_after = datetime.datetime.now(datetime.UTC) if refresh else None
+        cls._repository_cache.clear()
 
-    def __new__(cls):
-        """Makes RepoData a singleton"""
-        if RepoData.__instance is None:
-            assert RepoData.config is not None, (
-                "bug: ensure to load config before instantiating RepoData."
-            )
-            RepoData.__instance = object.__new__(cls)
-        return RepoData.__instance
-
-    def set_cache(self, cache: Path) -> None:
-        if self._df is not None:
-            warnings.warn("RepoData cache set after first use", BiocondaUtilsWarning)
-        else:
-            self.cache_file = cache
+    @classmethod
+    def get_cache_dir(cls) -> Path:
+        return (
+            cls.cache_dir
+            or platformdirs.user_cache_path("bioconda-utils") / "repodata-v1"
+        )
 
     @property
     def channels(self):
-        """Return channels to load."""
-        assert self.config is not None
+        assert self.config is not None, "Load configuration before querying repodata"
         return self.config["channels"]
 
     @property
-    def df(self):
-        """Internal Pandas DataFrame object
+    def df(self) -> pd.DataFrame:
+        """Assemble a view of configured repositories without a second cache."""
+        frames = self._get_repository_dataframes(self.channels, self.platforms)
+        return (
+            pd.concat(frames, ignore_index=True)
+            if frames
+            else pd.DataFrame(columns=self.columns)
+        )
 
-        Try not to use this ... the point of this class is to be able to
-        change the structure in which the data is held.
-        """
-        if self._df_ts is not None:
-            seconds = (
-                datetime.datetime.now(datetime.UTC) - self._df_ts
-            ).total_seconds()
-        else:
-            seconds = 0
+    def _cache_path(self, url: str) -> Path:
+        return self.get_cache_dir() / (sha256(url.encode()).hexdigest() + ".pkl")
 
-        if self._df is None or seconds > self.cache_timeout:
-            self._df = None
-            self._df_ts = None
-            self._df = self._load_channel_dataframe_cached()
-            self._df_ts = datetime.datetime.now(datetime.UTC)
-            self._repository_cache.clear()
-        return self._df
+    def _is_fresh(self, entry: _CachedRepoData) -> bool:
+        age = (datetime.datetime.now(datetime.UTC) - entry.fetched_at).total_seconds()
+        return 0 <= age < self.cache_timeout and (
+            self.refresh_after is None or entry.fetched_at >= self.refresh_after
+        )
+
+    def _read_cache(self, path: Path) -> _CachedRepoData | None:
+        try:
+            entry = pd.read_pickle(path)
+            if not isinstance(entry, _CachedRepoData) or not set(self.columns).issubset(
+                entry.dataframe.columns
+            ):
+                raise ValueError("incompatible repodata cache")
+            return entry if self._is_fresh(entry) else None
+        except FileNotFoundError:
+            return None
+        except (
+            pickle.UnpicklingError,
+            EOFError,
+            ValueError,
+            AttributeError,
+            ImportError,
+            TypeError,
+        ):
+            logger.warning("Ignoring unreadable repodata cache %s", path)
+            return None
+
+    @staticmethod
+    def _write_cache(path: Path, entry: _CachedRepoData) -> None:
+        # Readers never see a partial pickle. The lock serializes refreshes;
+        # atomic replacement also protects a reader if the writer is killed.
+        with tempfile.NamedTemporaryFile(
+            dir=path.parent, suffix=".tmp", delete=False
+        ) as tmp:
+            temporary = Path(tmp.name)
+        try:
+            pd.to_pickle(entry, temporary)
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
 
     def _make_repodata_url(self, channel, subdir: Subdir):
         if channel == "defaults":
@@ -325,27 +351,6 @@ class RepoData:
         else:
             url = url_template.format(channel=channel, subdir=subdir)
         return url
-
-    def _load_channel_dataframe_cached(self):
-        if self.cache_file is not None and self.cache_file.exists():
-            ts = datetime.datetime.fromtimestamp(
-                self.cache_file.stat().st_mtime, datetime.UTC
-            )
-            seconds = (datetime.datetime.now(datetime.UTC) - ts).total_seconds()
-            if seconds <= self.cache_timeout:
-                logger.info("Loading repodata from cache %s", self.cache_file)
-                return pd.read_pickle(self.cache_file)
-            else:
-                logger.info("Repodata cache file too old. Reloading")
-
-        if self.cache_file is None:
-            res = self._get_repository_dataframe(self.channels, self.platforms)
-        else:
-            res = self._load_channel_dataframe()
-
-        if self.cache_file is not None:
-            res.to_pickle(self.cache_file)
-        return res
 
     def _load_channel_dataframe(
         self, repositories: Iterable[tuple[str, Subdir]] | None = None
@@ -392,44 +397,60 @@ class RepoData:
 
         return res
 
-    def _get_repository_dataframe(
+    def _get_repository_dataframes(
         self, channels: Iterable[str], subdirs: Iterable[Subdir]
-    ) -> pd.DataFrame:
-        """Load and cache only the requested channel/subdirectory pairs."""
-        if self._df is not None or self.cache_file is not None:
-            return self.df
-
-        configured_channels = set(self.channels)
-        requested_channels = tuple(
-            channel
-            for channel in dict.fromkeys(channels)
-            if channel in configured_channels
-        )
-        requested_subdirs = tuple(dict.fromkeys(subdirs))
-        repositories = tuple(product(requested_channels, requested_subdirs))
-        now = datetime.datetime.now(datetime.UTC)
-        missing = [
-            repository
-            for repository in repositories
-            if repository not in self._repository_cache
-            or (now - self._repository_cache[repository].fetched_at).total_seconds()
-            > self.cache_timeout
-        ]
+    ) -> list[pd.DataFrame]:
+        """Reuse repository entries, fetching each missing URL once across processes."""
+        configured = set(self.channels)
+        repositories = {
+            self._make_repodata_url(channel, subdir): (channel, subdir)
+            for channel, subdir in product(
+                dict.fromkeys(channels), dict.fromkeys(subdirs)
+            )
+            if channel in configured
+        }
+        frames = {}
+        missing = {}
+        for url, repository in repositories.items():
+            if url.startswith("file://"):
+                frames[url] = self._load_channel_dataframe([repository])
+            elif (
+                entry := self._repository_cache.get(url)
+            ) is not None and self._is_fresh(entry):
+                frames[url] = entry.dataframe
+            else:
+                missing[url] = repository
         if missing:
-            loaded = self._load_channel_dataframe(missing)
-            for channel, subdir in missing:
-                repository = (channel, subdir)
-                self._repository_cache[repository] = _CachedRepoData(
-                    dataframe=loaded[
-                        (loaded["channel"] == channel) & (loaded["subdir"] == subdir)
-                    ],
-                    fetched_at=now,
-                )
-
-        frames = [
-            self._repository_cache[repository].dataframe for repository in repositories
-        ]
-        return pd.concat(frames) if frames else pd.DataFrame(columns=self.columns)
+            self.get_cache_dir().mkdir(parents=True, exist_ok=True)
+            with ExitStack() as locks:
+                # A fixed order prevents deadlocks between overlapping requests.
+                for url in sorted(missing):
+                    locks.enter_context(
+                        file_lock(self._cache_path(url).with_suffix(".lock"))
+                    )
+                to_load = {}
+                for url, repository in missing.items():
+                    entry = self._read_cache(self._cache_path(url))
+                    if entry is None:
+                        to_load[url] = repository
+                    else:
+                        self._repository_cache[url] = entry
+                        frames[url] = entry.dataframe
+                if to_load:
+                    loaded = self._load_channel_dataframe(to_load.values())
+                    fetched_at = datetime.datetime.now(datetime.UTC)
+                    for url, (channel, subdir) in to_load.items():
+                        entry = _CachedRepoData(
+                            loaded[
+                                (loaded["channel"] == channel)
+                                & (loaded["platform"] == subdir)
+                            ].reset_index(drop=True),
+                            fetched_at,
+                        )
+                        self._write_cache(self._cache_path(url), entry)
+                        self._repository_cache[url] = entry
+                        frames[url] = entry.dataframe
+        return [frames[url] for url in repositories]
 
     @staticmethod
     def native_subdir() -> PackageSubdir:
@@ -452,7 +473,10 @@ class RepoData:
           e.g. {'0.1': ['linux-64'], '0.2': ['linux-64', 'osx-64'], '0.3': ['noarch']}
         """
         # called from doc generator
-        packages = self.df[self.df.name == name][["version", "platform"]]
+        packages = pd.DataFrame(
+            self.get_package_data(["version", "platform"], name=name),
+            columns=["version", "platform"],
+        )
         versions = packages.groupby("version", observed=True).agg(
             lambda x: list(set(x))
         )
@@ -495,7 +519,7 @@ class RepoData:
         else:
             requested_subdirs = [cast(Subdir, subdir) for subdir in platform]
 
-        df = self._get_repository_dataframe(requested_channels, requested_subdirs)
+        frames = self._get_repository_dataframes(requested_channels, requested_subdirs)
         channel_filter = requested_channels if channels is not None else None
         platform_filter = requested_subdirs if platform is not None else None
         # We iteratively drill down here, starting with the (probably)
@@ -506,20 +530,31 @@ class RepoData:
         #     expensive filters (e.g. high-cardinality categoricals such as
         #     "build", or int comparisons that box every value) only run on
         #     an already tiny frame. The result is identical either way.
-        for col, val in (
-            ("name", name),  # thousands of different values
-            ("version", version),  # still pretty good variety
-            ("channel", channel_filter),  # 3 values
-            ("platform", platform_filter),  # 3 values
-            ("build_number", build_number),  # most values 0
-            ("build", build),  # build string should vary a lot
-        ):
-            if val is None:
-                continue
-            if isinstance(val, (list, tuple)):
-                df = df[df[col].isin(val)]
-            else:
-                df = df[df[col] == val]
+        filters = (
+            ("name", name),
+            ("version", version),
+            ("channel", channel_filter),
+            ("platform", platform_filter),
+            ("build_number", build_number),
+            ("build", build),
+        )
+        selected = []
+        for df in frames:
+            for col, val in filters:
+                if val is None:
+                    continue
+                df = (
+                    df[df[col].isin(val)]
+                    if isinstance(val, (list, tuple))
+                    else df[df[col] == val]
+                )
+            if not df.empty:
+                selected.append(df)
+        df = (
+            pd.concat(selected, ignore_index=True)
+            if selected
+            else pd.DataFrame(columns=self.columns)
+        )
 
         if key is None:
             return not df.empty

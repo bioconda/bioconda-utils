@@ -289,21 +289,16 @@ def test_producer_feedback_loop() -> None:
     assert sorted(seen) == list(range(10))
 
 
-def test_async_requests_cache_init_uses_setdefault(tmp_path) -> None:
-    """cache files lacking some sections are completed on load"""
-    import pickle
-
+def test_async_requests_cache_is_scoped_to_one_run() -> None:
     from bioconda_utils.aiopipe import AsyncRequests
 
-    cache_fn = tmp_path / "cache.pkl"
-    cache_fn.write_bytes(pickle.dumps({"url_text": {"u": "x"}}))
+    req = AsyncRequests()
 
     async def check():
-        async with AsyncRequests(cache_fn) as req:
-            assert req.cache is not None
-            assert req.cache["url_text"] == {"u": "x"}
-            assert req.cache["url_checksum"] == {}
-            assert req.cache["ftp_list"] == {}
+        async with req:
+            req.cache["url_text"]["u"] = "x"
+        async with req:
+            assert req.cache == {"url_text": {}, "url_checksum": {}, "ftp_list": {}}
 
     asyncio.run(check())
 

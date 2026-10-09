@@ -4,7 +4,7 @@ import asyncio
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from io import StringIO
-from multiprocessing import get_all_start_methods, get_context
+from multiprocessing import get_context
 from threading import Event
 from typing import cast
 
@@ -202,14 +202,11 @@ def worker_progress():
         return progress.disable, display.live.is_started, output.getvalue()
 
 
-@pytest.mark.parametrize("start_method", ["spawn", "fork"])
-def test_process_worker_leaves_terminal_progress_to_parent(start_method, display):
+def test_process_worker_leaves_terminal_progress_to_parent(display):
     # Spawn imports the module afresh, so this also checks that the policy does
     # not depend on inheriting the parent's renderer or console.
-    if start_method not in get_all_start_methods():
-        pytest.skip(f"{start_method} is not supported")
     with display.count_task("processing", total=1):
-        with get_context(start_method).Pool(1) as pool:
+        with get_context("spawn").Pool(1) as pool:
             assert pool.apply(worker_progress) == (True, False, "")
         assert display.live.is_started
 

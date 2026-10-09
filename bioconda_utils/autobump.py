@@ -45,7 +45,6 @@ from __future__ import annotations
 import abc
 import asyncio
 import logging
-import pickle
 import random
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
@@ -185,11 +184,9 @@ class RecipeGraphSource(RecipeSource):
         exclude: list[str],
         shuffle: bool,
         config: dict[str, Any],
-        cache_file: Path | None = None,
     ) -> None:
         super().__init__(recipe_base, packages, exclude, shuffle)
         self.config = config
-        self.cache_file = cache_file
         self.shuffle = shuffle
         self.dag = self.load_graph()
         self.dag = graph.filter_recipe_dag(self.dag, self.packages, exclude)
@@ -221,17 +218,12 @@ class RecipeGraphSource(RecipeSource):
         return len(self.dag)
 
     def load_graph(self) -> nx.DiGraph:
-        if self.cache_file is not None and self.cache_file.exists():
-            dag = pickle.loads(self.cache_file.read_bytes())
-        else:
-            blacklist = Skiplist(self.config, self.recipe_base)
-            dag = graph.build_from_recipes(
-                recipe
-                for recipe in recipes_load_parallel_iter(self.recipe_base, ["*"])
-                if not blacklist.is_skiplisted(recipe)
-            )
-            if self.cache_file is not None:
-                self.cache_file.write_bytes(pickle.dumps(dag))
+        blacklist = Skiplist(self.config, self.recipe_base)
+        dag = graph.build_from_recipes(
+            recipe
+            for recipe in recipes_load_parallel_iter(self.recipe_base, ["*"])
+            if not blacklist.is_skiplisted(recipe)
+        )
         return dag
 
 
@@ -240,14 +232,12 @@ class Scanner(AsyncPipeline[Recipe]):
 
     Arguments:
       recipe_source: Iteratable providing Recipe stubs
-      cache_file: Filename prefix for caching
       status_file: Filename for status output
     """
 
     def __init__(
         self,
         recipe_source: RecipeSource,
-        cache_file: Path | None = None,
         status_file: Path | None = None,
     ) -> None:
         super().__init__()
@@ -260,7 +250,7 @@ class Scanner(AsyncPipeline[Recipe]):
         #: filename to write statuses to
         self.status_file = status_file
         #: async requests helper
-        self.req = AsyncRequests(cache_file)
+        self.req = AsyncRequests()
 
     def run(self) -> None:
         """Runs scanner"""
@@ -336,15 +326,11 @@ class ExcludeOtherChannel(Filter):
         template = "builds package found in other channel(s)"
         level = logging.DEBUG
 
-    def __init__(
-        self, scanner: Scanner, channels: Sequence[str], cache: Path | None
-    ) -> None:
+    def __init__(self, scanner: Scanner, channels: Sequence[str]) -> None:
         super().__init__(scanner)
         self.channels = channels
         logger.info("Loading package lists for %s", channels)
         channel_data = RepoData()
-        if cache:
-            channel_data.set_cache(cache)
         self.other = set(channel_data.get_package_data("name", channels=channels))
 
     def get_info(self) -> str:

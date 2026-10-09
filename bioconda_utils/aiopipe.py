@@ -5,7 +5,6 @@ from __future__ import annotations
 import abc
 import asyncio
 import logging
-import pickle
 from concurrent.futures import BrokenExecutor, ProcessPoolExecutor
 from hashlib import sha256
 from pathlib import Path
@@ -17,7 +16,7 @@ import aiohttp
 
 from .support import http
 from .support.logsetup import progress_display
-from .support.parallel import threads_to_use
+from .support.parallel import threads_to_use, worker_pool
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -102,7 +101,7 @@ class AsyncPipeline[ITEM]:
         #: the filters successively applied to each item
         self.filters: list[AsyncFilter[ITEM]] = []
         #: executor running things in separate python processes
-        self.proc_pool_executor = ProcessPoolExecutor(self.threads)
+        self.proc_pool_executor: ProcessPoolExecutor | None = None
 
         self._shutting_down = False
 
@@ -119,7 +118,9 @@ class AsyncPipeline[ITEM]:
         -- terminates the run with a success status.
         """
         try:
-            asyncio.run(self._async_run())
+            with worker_pool(self.threads) as pool:
+                self.proc_pool_executor = pool
+                asyncio.run(self._async_run())
             logger.warning("Finished update")
         except* KeyboardInterrupt as eg:
             # asyncio.Runner (used by asyncio.run) turns SIGINT into
@@ -144,7 +145,7 @@ class AsyncPipeline[ITEM]:
             self._shutting_down = True
             logger.error("Terminating...")
         finally:
-            self.proc_pool_executor.shutdown(cancel_futures=True)
+            self.proc_pool_executor = None
             for filt in self.filters:
                 filt.finalize()
 
@@ -261,6 +262,9 @@ class AsyncPipeline[ITEM]:
 
     async def run_sp(self, func, *args):
         """Run **func** in process pool executor using **args**"""
+        assert self.proc_pool_executor is not None, (
+            "Process jobs require a running pipeline"
+        )
         return await asyncio.get_running_loop().run_in_executor(
             self.proc_pool_executor, func, *args
         )
@@ -269,34 +273,23 @@ class AsyncPipeline[ITEM]:
 class AsyncRequests:
     """Provides helpers for async access to URLs"""
 
-    def __init__(self, cache_file: Path | None = None) -> None:
-        #: aiohttp session (only exists while running)
+    def __init__(self) -> None:
         self.session: aiohttp.ClientSession | None = None
-        self.cache_file = cache_file
-        #: cache
-        self.cache: dict[str, dict[str, Any]] | None = None
+        # Upstream listings can change at any time. Reuse within this run only.
+        self.cache: dict[str, dict[str, Any]] = {
+            key: {} for key in ("url_text", "url_checksum", "ftp_list")
+        }
 
     async def __aenter__(self) -> Self:
-        session = http.make_session()
-        await session.__aenter__()
-        self.session = session
-        if self.cache_file is not None:
-            if self.cache_file.exists():
-                cache_data = await asyncio.to_thread(self.cache_file.read_bytes)
-                self.cache = pickle.loads(cache_data)
-            else:
-                self.cache = {}
-            for key in ("url_text", "url_checksum", "ftp_list"):
-                self.cache.setdefault(key, {})
+        self.session = http.make_session()
+        await self.session.__aenter__()
         return self
 
-    async def __aexit__(self, ext_type, exc, trace):
+    async def __aexit__(self, exc_type, exc, trace):
         assert self.session is not None
-        await self.session.__aexit__(ext_type, exc, trace)
+        await self.session.__aexit__(exc_type, exc, trace)
         self.session = None
-        if self.cache_file is not None:
-            cache_data = pickle.dumps(self.cache)
-            await asyncio.to_thread(self.cache_file.write_bytes, cache_data)
+        self.cache = {key: {} for key in self.cache}
 
     @http.retry_on_transient
     async def get_text_from_url(self, url: str) -> str:
@@ -306,7 +299,7 @@ class AsyncRequests:
           20 times with increasing waits according to the Fibonacci series.
         - Permanent errors raise a ClientResponseError
         """
-        if self.cache and url in self.cache["url_text"]:
+        if url in self.cache["url_text"]:
             return self.cache["url_text"][url]
 
         assert self.session is not None
@@ -314,8 +307,7 @@ class AsyncRequests:
             resp.raise_for_status()
             res = await resp.text()
 
-        if self.cache:
-            self.cache["url_text"][url] = res
+        self.cache["url_text"][url] = res
 
         return res
 
@@ -325,7 +317,7 @@ class AsyncRequests:
         - Shows progress and logs transfer outcomes for HTTP downloads.
         - Caches result
         """
-        if self.cache and url in self.cache["url_checksum"]:
+        if url in self.cache["url_checksum"]:
             return self.cache["url_checksum"][url]
 
         parsed = urlparse(url)
@@ -334,8 +326,7 @@ class AsyncRequests:
         elif parsed.scheme == "ftp":
             res = await self.get_checksum_from_ftp(url, desc)
 
-        if self.cache:
-            self.cache["url_checksum"][url] = res
+        self.cache["url_checksum"][url] = res
 
         return res
 
@@ -364,7 +355,7 @@ class AsyncRequests:
     async def get_ftp_listing(self, url):
         """Returns list of files at FTP **url**"""
         logger.debug("FTP: listing %s", url)
-        if self.cache and url in self.cache["ftp_list"]:
+        if url in self.cache["ftp_list"]:
             return self.cache["ftp_list"][url]
 
         parsed = urlparse(url)
@@ -372,8 +363,7 @@ class AsyncRequests:
             parsed.netloc, password=http.USER_AGENT + "@", trust_env=True
         ) as client:
             res = [str(path) for path, _info in await client.list(parsed.path)]
-        if self.cache:
-            self.cache["ftp_list"][url] = res
+        self.cache["ftp_list"][url] = res
         return res
 
     async def get_checksum_from_ftp(self, url, _desc=None):

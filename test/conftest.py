@@ -1,4 +1,3 @@
-import datetime
 import shutil
 from copy import deepcopy
 
@@ -31,8 +30,8 @@ def pytest_runtest_setup(item):
 
 
 @pytest.fixture
-def mock_repodata(case):
-    """Pepares RepoData singleton to contain mock data
+def mock_repodata(case, monkeypatch):
+    """Provide mock repository data
 
     Expects function to be parametrized with ``case``, where ``case`` may
     contain a ``repodata`` key. If none exists, empty repodata is generated.
@@ -73,11 +72,19 @@ def mock_repodata(case):
     else:
         dataframe = pd.DataFrame({}, columns=repodata.RepoData.columns)
 
-    backup = repodata.RepoData()._df, repodata.RepoData()._df_ts
-    repodata.RepoData()._df = dataframe
-    repodata.RepoData()._df_ts = datetime.datetime.now(datetime.UTC)
-    yield
-    repodata.RepoData()._df, repodata.RepoData()._df_ts = backup
+    monkeypatch.setattr(
+        repodata.RepoData,
+        "_get_repository_dataframes",
+        lambda _self, _channels, _subdirs: [dataframe],
+    )
+
+
+@pytest.fixture(autouse=True)
+def isolated_repodata_cache(monkeypatch, tmp_path):
+    """Tests never read or write the user's persistent repodata cache."""
+    monkeypatch.setattr(repodata.RepoData, "_repository_cache", {})
+    monkeypatch.setattr(repodata.RepoData, "cache_dir", tmp_path / "repodata")
+    monkeypatch.setattr(repodata.RepoData, "refresh_after", None)
 
 
 @pytest.fixture

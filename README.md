@@ -52,3 +52,23 @@ Or use the Just wrappers around the Pixi tasks:
 ```bash
 just global-install
 ```
+
+Repodata is cached automatically per channel and subdirectory for eight hours.
+On Linux the default directory is
+`$XDG_CACHE_HOME/bioconda-utils/repodata-v1`, or
+`~/.cache/bioconda-utils/repodata-v1` when `XDG_CACHE_HOME` is unset. On macOS,
+the platform's user cache directory is used. `build`, `lint`, `update-pinning`,
+and `autobump` accept `--repodata-cache DIRECTORY` to choose another directory
+and `--refresh-repodata` to refresh entries needed by the current run.
+Concurrent commands and workers share entries and coordinate downloads; local
+`file://` channels are always read afresh. Cache files are disposable.
+
+The former `--cache` pickle snapshots have been removed. Autobump rebuilds its
+dependency graph from current recipes and caches upstream responses only within
+a run. Existing repodata cache **files** are not imported; `--repodata-cache`
+now takes a directory.
+
+Process workers use `spawn` with explicit configuration and send log records
+to the parent. Only the parent renders terminal output, so workers never inherit
+the progress thread's locks or depend on a forked copy of the repodata cache.
+HTTP operations have a five-minute deadline covering requests and retry waits.

@@ -94,7 +94,7 @@ class ProgressDisplay:
         total: float | None = None,
     ) -> Iterator[tuple[Progress, TaskID]]:
         # Workers leave terminal output to the parent's item counter. Use a
-        # local disabled Progress so forked workers never touch inherited locks.
+        # local disabled Progress so workers never render a terminal display.
         if parent_process() is not None:
             progress = Progress(*progress.columns, auto_refresh=False, disable=True)
         task_id = progress.add_task(description, total=total)

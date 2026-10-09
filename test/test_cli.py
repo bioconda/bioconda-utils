@@ -427,7 +427,10 @@ def test_autobump_closes_git_handler_on_keyboard_interrupt(monkeypatch):
     assert closed == [True]
 
 
-def test_autobump_builds_all_cache_paths_from_path_prefix(monkeypatch, tmp_path):
+@pytest.mark.parametrize("exclude_channels", [["conda-forge"], ["none"]])
+def test_autobump_configures_repodata_cache_independently_of_filters(
+    monkeypatch, tmp_path, exclude_channels
+):
     from bioconda_utils import autobump
 
     added_filters = []
@@ -454,21 +457,26 @@ def test_autobump_builds_all_cache_paths_from_path_prefix(monkeypatch, tmp_path)
 
     cache = tmp_path / "autobump-cache"
     cli.autobump(
-        cache=cache,
+        repodata_cache=cache,
         no_follow_graph=True,
         ignore_skiplists=True,
-        exclude_channels=["conda-forge"],
+        exclude_channels=exclude_channels,
         no_check_pinnings=True,
         no_check_version_update=True,
     )
 
-    assert scanner_arguments == [
-        {"cache_file": Path(f"{cache}_scan.pkl"), "status_file": None}
-    ]
-    exclude_call = next(
+    from bioconda_utils.conda.repodata import RepoData
+
+    assert scanner_arguments == [{"status_file": None}]
+    assert RepoData.get_cache_dir() == cache
+    exclude_calls = [
         call for call in added_filters if call[0] is autobump.ExcludeOtherChannel
+    ]
+    assert exclude_calls == (
+        [(autobump.ExcludeOtherChannel, exclude_channels)]
+        if exclude_channels != ["none"]
+        else []
     )
-    assert exclude_call[2] == Path(f"{cache}_repodata.txt")
 
 
 def test_list_build_failures_markdown_is_written_verbatim(monkeypatch, tmp_path):

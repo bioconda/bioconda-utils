@@ -485,3 +485,30 @@ def test_async_fetch_ignores_excess_descriptions_and_metadata(monkeypatch):
     results = asyncio.run(repodata.async_fetch(urls, descriptions))
     assert results == [b"data"]
     assert fetched == ["https://example.com/only"]
+
+
+def test_retry_budget_includes_backoff_waits(monkeypatch, caplog):
+    monkeypatch.setattr(http, "HTTP_OPERATION_TIMEOUT", 0.02)
+    monkeypatch.setattr("random.uniform", lambda low, high: high)
+    attempts = []
+
+    @http.retry_on_transient
+    async def unavailable():
+        attempts.append(1)
+        raise aiohttp.ClientPayloadError("incomplete")
+
+    with pytest.raises(TimeoutError):
+        asyncio.run(unavailable())
+    assert len(attempts) == 1
+    assert "exceeded" in caplog.text
+
+
+def test_retry_budget_includes_unresponsive_request(monkeypatch):
+    monkeypatch.setattr(http, "HTTP_OPERATION_TIMEOUT", 0.02)
+
+    @http.retry_on_transient
+    async def unresponsive():
+        await asyncio.Event().wait()
+
+    with pytest.raises(TimeoutError):
+        asyncio.run(unresponsive())

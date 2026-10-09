@@ -181,6 +181,19 @@ LogfileOpt = Annotated[Path | None, typer.Option("--logfile", help="Write log to
 LogfileLevelOpt = Annotated[
     LogLevel, typer.Option("--logfile-level", help="Log level for log file")
 ]
+RepodataCacheOpt = Annotated[
+    Path | None,
+    typer.Option(
+        "--repodata-cache",
+        help="Repodata cache directory (default: platform/XDG cache directory). Entries expire after 8 hours.",
+    ),
+]
+RefreshRepodataOpt = Annotated[
+    bool,
+    typer.Option(
+        "--refresh-repodata", help="Refresh the cached repositories needed by this run."
+    ),
+]
 RecipeFolderArg = Annotated[
     Path,
     typer.Argument(
@@ -605,13 +618,8 @@ def build(
         ),
     ] = None,
     threads: ThreadsOpt = 16,
-    repodata_cache: Annotated[
-        Path | None,
-        typer.Option(
-            "--repodata-cache",
-            help="To speed up startup, use repodata cached locally in\n     the provided filename. If the file does not exist, it will be created the\n     first time. The cache is refreshed when it is older than 8 hours.",
-        ),
-    ] = None,
+    repodata_cache: RepodataCacheOpt = None,
+    refresh_repodata: RefreshRepodataOpt = False,
     loglevel: LoglevelOpt = "info",
     logfile: LogfileOpt = None,
     logfile_level: LogfileLevelOpt = "debug",
@@ -654,8 +662,7 @@ def build(
     # TODO: should we also load the rattler variants config here?
     # currently it is loaded by rattler.ratter_build_bridge.load_rattler_build_global_variants
     # using a semi-hardcoded path
-    if repodata_cache is not None:
-        RepoData().set_cache(repodata_cache)
+    RepoData.configure_cache(repodata_cache, refresh=refresh_repodata)
     setup = cfg.get("setup", None)
     if setup:
         logger.debug("Running setup: %s", setup)
@@ -873,13 +880,8 @@ def lint(
     recipe_folder: LintRecipeFolderArg = Path("recipes/"),
     config: LintConfigArg = Path("config.yml"),
     packages: PackagesOpt = None,
-    cache: Annotated[
-        Path | None,
-        typer.Option(
-            "--cache",
-            help="To speed up debugging, use repodata cached locally in\n     the provided filename. If the file does not exist, it will be created the\n     first time.",
-        ),
-    ] = None,
+    repodata_cache: RepodataCacheOpt = None,
+    refresh_repodata: RefreshRepodataOpt = False,
     list_checks: Annotated[
         bool,
         typer.Option(
@@ -920,8 +922,7 @@ def lint(
         _validate_path_exists(recipe_folder)
         _validate_path_exists(config)
         config_data = load_config(config)
-        if cache is not None:
-            RepoData().set_cache(cache)
+        RepoData.configure_cache(repodata_cache, refresh=refresh_repodata)
         recipes: list[RecipePath] = get_recipes(
             config_data,
             Path(recipe_folder),
@@ -1109,13 +1110,8 @@ def update_pinning(
             "--no-leaves", help="Only update recipes with dependent packages."
         ),
     ] = False,
-    cache: Annotated[
-        Path | None,
-        typer.Option(
-            "--cache",
-            help="To speed up debugging, use repodata cached locally in\n     the provided filename. If the file does not exist, it will be created the\n     first time.",
-        ),
-    ] = None,
+    repodata_cache: RepodataCacheOpt = None,
+    refresh_repodata: RefreshRepodataOpt = False,
     pdb: PdbOpt = False,
     threads: ThreadsOpt = 16,
     loglevel: LoglevelOpt = "info",
@@ -1140,9 +1136,7 @@ def update_pinning(
         if skip_additional_channels:
             config_data["channels"] += skip_additional_channels
         variant_keys = frozenset(skip_variants or ())
-        if cache:
-            RepoData().set_cache(cache)
-        _ = RepoData().df
+        RepoData.configure_cache(repodata_cache, refresh=refresh_repodata)
         build_config = load_conda_build_config()
         skiplist = Skiplist(config_data, recipe_folder)
         from . import recipe
@@ -1406,13 +1400,8 @@ def autobump(
             help="Globs for package[s] to exclude from scan. Can be specified more than once",
         ),
     ] = None,
-    cache: Annotated[
-        Path | None,
-        typer.Option(
-            "--cache",
-            help="To speed up debugging, use repodata cached locally in\n     the provided filename. If the file does not exist, it will be created\n     the first time. Caution: The cache will not be updated if\n     exclude-channels is changed",
-        ),
-    ] = None,
+    repodata_cache: RepodataCacheOpt = None,
+    refresh_repodata: RefreshRepodataOpt = False,
     failed_urls: Annotated[
         Path | None,
         typer.Option(
@@ -1538,6 +1527,9 @@ def autobump(
     try:
         # load and register config
         config_dict = load_config(config)
+        from .conda.repodata import RepoData
+
+        RepoData.configure_cache(repodata_cache, refresh=refresh_repodata)
         from . import autobump, githubhandler
 
         if no_follow_graph:
@@ -1551,12 +1543,10 @@ def autobump(
                 exclude or [],
                 not no_shuffle,
                 config_dict,
-                cache_file=Path(f"{cache}_dag.pkl") if cache is not None else None,
             )
         # Setup scanning pipeline
         scanner = autobump.Scanner(
             recipe_source,
-            cache_file=Path(f"{cache}_scan.pkl") if cache is not None else None,
             status_file=recipe_status,
         )
 
@@ -1613,7 +1603,6 @@ def autobump(
             scanner.add(
                 autobump.ExcludeOtherChannel,
                 excluded_channels,
-                Path(f"{cache}_repodata.txt") if cache is not None else None,
             )
         # Test if due to pinnings, the package hash would change and a rebuild
         # has become necessary. If so, bump the buildnumber.

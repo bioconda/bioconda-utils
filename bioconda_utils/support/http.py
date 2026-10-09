@@ -16,6 +16,7 @@ import logging
 import os
 import uuid
 from collections.abc import Awaitable, Callable
+from functools import wraps
 from pathlib import Path
 from time import monotonic
 from typing import Any
@@ -44,15 +45,43 @@ def _give_up_on_http_error(ex: Exception) -> bool:
     )
 
 
-# Retry requests on transient errors (429, 502, 503, 504), waiting according
-# to the fibonacci series, at most 20 times. Truncated transfers
-# (ClientPayloadError) are retried as well.
-retry_on_transient = backoff.on_exception(
-    backoff.fibo,
-    (aiohttp.ClientResponseError, aiohttp.ClientPayloadError),
-    max_tries=20,
-    giveup=_give_up_on_http_error,
-)
+# Bound the entire operation, including requests and backoff sleeps. A retry
+# count alone can otherwise turn a failing repository into hours of waiting.
+HTTP_OPERATION_TIMEOUT = 300
+
+
+def retry_on_transient[**P, R](
+    func: Callable[P, Awaitable[R]],
+) -> Callable[P, Awaitable[R]]:
+    retried = backoff.on_exception(
+        backoff.fibo,
+        (
+            aiohttp.ClientResponseError,
+            aiohttp.ClientPayloadError,
+            aiohttp.ClientConnectionError,
+            TimeoutError,
+        ),
+        max_tries=20,
+        max_value=30,
+        giveup=_give_up_on_http_error,
+    )(func)
+
+    @wraps(func)
+    async def bounded(*args: P.args, **kwargs: P.kwargs) -> R:
+        deadline = asyncio.timeout(HTTP_OPERATION_TIMEOUT)
+        try:
+            async with deadline:
+                return await retried(*args, **kwargs)
+        except TimeoutError:
+            if deadline.expired():
+                logger.warning(
+                    "HTTP operation %s exceeded %s seconds",
+                    getattr(func, "__qualname__", type(func).__qualname__),
+                    HTTP_OPERATION_TIMEOUT,
+                )
+            raise
+
+    return bounded
 
 
 def make_session(
