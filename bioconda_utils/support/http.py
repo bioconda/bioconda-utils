@@ -10,11 +10,15 @@ monitor used while streaming response bodies.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import inspect
 import logging
-from collections.abc import AsyncGenerator, AsyncIterator
-from contextlib import aclosing, asynccontextmanager
+from collections.abc import Awaitable, Callable
+from pathlib import Path
 from time import monotonic
+from typing import Any
 
+import aiofiles
 import aiohttp
 import backoff
 from rich.filesize import decimal
@@ -66,52 +70,51 @@ def make_session(
     )
 
 
-@asynccontextmanager
-async def stream_download(
+def _parse_content_length(resp: aiohttp.ClientResponse) -> int | None:
+    """Return the uncompressed body size, or None if unknown, invalid, or encoded."""
+    if resp.headers.get("Content-Encoding", "identity") != "identity":
+        return None
+    length = resp.headers.get("Content-Length")
+    if length is None:
+        return None
+    try:
+        size = int(length)
+        return size if size >= 0 else None
+    except (ValueError, TypeError):
+        return None
+
+
+async def stream_to_sink(
     resp: aiohttp.ClientResponse,
     desc: str,
+    sink: Callable[[bytes], Any] | Callable[[bytes], Awaitable[Any]],
+    *,
     block_size: int = 1024 * 1024,
-) -> AsyncIterator[AsyncIterator[bytes]]:
-    """Scope a streamed response body, its progress task, and its outcome log.
+) -> int:
+    """Stream response body to a sink callable while reporting progress.
 
-    Use ``async with stream_download(response, description) as blocks:`` and
-    iterate ``blocks`` inside that scope. The caller owns the response itself.
-    Leaving the scope closes the iterator and removes the progress task even
-    after an early break, consumer error, or cancellation. Only consuming EOF
-    successfully produces a "Downloaded" record.
+    The sink can be either a synchronous function (e.g. ``hasher.update``)
+    or an asynchronous coroutine function (e.g. ``aiofile.write``).
 
-    Byte counts describe the body yielded by aiohttp, which decompresses HTTP
-    content by default. An encoded Content-Length cannot describe that body.
+    Returns the total number of bytes received.
     """
     if block_size <= 0:
         raise ValueError("block_size must be positive")
-    length = resp.headers.get("Content-Length")
-    size = (
-        int(length)
-        if length is not None
-        and resp.headers.get("Content-Encoding", "identity") == "identity"
-        else None
-    )
+    size = _parse_content_length(resp)
     received = 0
-    complete = False
     started = monotonic()
     logger.info("Downloading %s", desc)
     try:
         with progress_display.download_task(desc, total=size) as (progress, task):
-
-            async def read_blocks() -> AsyncGenerator[bytes]:
-                nonlocal received, complete
-                while True:
-                    block = await resp.content.read(block_size)
-                    if not block:
-                        complete = True
-                        return
-                    received += len(block)
-                    progress.update(task, advance=len(block))
-                    yield block
-
-            async with aclosing(read_blocks()) as blocks:
-                yield blocks
+            while True:
+                block = await resp.content.read(block_size)
+                if not block:
+                    break
+                received += len(block)
+                progress.update(task, advance=len(block))
+                res = sink(block)
+                if inspect.isawaitable(res):
+                    await res
     except asyncio.CancelledError:
         logger.info(
             "Download cancelled: %s (%s received in %.1f s)",
@@ -130,17 +133,47 @@ async def stream_download(
         )
         raise
     else:
-        if complete:
-            logger.info(
-                "Downloaded %s: %s in %.1f s",
-                desc,
-                decimal(received),
-                monotonic() - started,
-            )
-        else:
-            logger.info(
-                "Download stopped: %s (%s received in %.1f s)",
-                desc,
-                decimal(received),
-                monotonic() - started,
-            )
+        logger.info(
+            "Downloaded %s: %s in %.1f s",
+            desc,
+            decimal(received),
+            monotonic() - started,
+        )
+    return received
+
+
+async def download_to_file(
+    resp: aiohttp.ClientResponse,
+    fname: Path | str,
+    desc: str,
+    *,
+    block_size: int = 1024 * 1024,
+) -> int:
+    """Download response body to **fname** while reporting progress."""
+    async with aiofiles.open(fname, "wb") as f:
+        return await stream_to_sink(resp, desc, f.write, block_size=block_size)
+
+
+async def download_to_checksum(
+    resp: aiohttp.ClientResponse,
+    desc: str,
+    *,
+    algorithm: str = "sha256",
+    block_size: int = 1024 * 1024,
+) -> str:
+    """Download response body, computing its hash digest with progress reporting."""
+    hasher = hashlib.new(algorithm)
+    await stream_to_sink(resp, desc, hasher.update, block_size=block_size)
+    return hasher.hexdigest()
+
+
+async def download_to_bytes(
+    resp: aiohttp.ClientResponse,
+    desc: str,
+    *,
+    block_size: int = 1024 * 1024,
+) -> bytes:
+    """Download response body into memory as bytes with progress reporting."""
+    chunks: list[bytes] = []
+    await stream_to_sink(resp, desc, chunks.append, block_size=block_size)
+    return b"".join(chunks)

@@ -136,10 +136,9 @@ class DownloadResponse:
 
 
 async def download(response, description):
-    async with http.stream_download(
+    return await http.download_to_bytes(
         cast(aiohttp.ClientResponse, response), description
-    ) as blocks:
-        return [block async for block in blocks]
+    )
 
 
 @pytest.mark.parametrize("cancel_second", [False, True])
@@ -152,14 +151,14 @@ def test_concurrent_downloads_cleanup_independently(display, cancel_second):
             second_task = tasks.create_task(download(second, "second download"))
             await second.started.wait()
             first.finish.set()
-            assert await first_task == [b"x"]
+            assert await first_task == b"x"
             assert "first download" not in rendered(display)
             assert "second download" in rendered(display)
             if cancel_second:
                 second_task.cancel()
             else:
                 second.finish.set()
-                assert await second_task == [b"x"]
+                assert await second_task == b"x"
         assert display.downloads.tasks == []
         assert display.live.is_started
 

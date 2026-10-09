@@ -480,6 +480,7 @@ def test_list_build_failures_markdown_is_written_verbatim(monkeypatch, tmp_path)
     config.write_text("{}")
     row = {column: f"value-{column}" for column in BUILD_FAILURE_COLUMNS}
     row["build failures"] = "[linux-64](failures/linux-64.yaml)"
+    row["recipe"] = "pkg|name\nversion"
     monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: {})
     monkeypatch.setattr(
         "bioconda_utils.build_failure.collect_build_failure_records",
@@ -500,7 +501,34 @@ def test_list_build_failures_markdown_is_written_verbatim(monkeypatch, tmp_path)
     assert result.exit_code == 0, result.output
     assert result.output.startswith("| recipe | downloads |")
     assert "[linux-64](failures/linux-64.yaml)" in result.output
+    assert "pkg\\|name<br>version" in result.output
     assert "─" not in result.output
+
+
+def test_duplicates_with_remove_does_not_print_table(monkeypatch, tmp_path):
+    config = tmp_path / "config.yml"
+    config.write_text("channels:\n  - bioconda\n  - conda-forge\n")
+    monkeypatch.setattr(
+        "bioconda_utils.conda.repodata.RepoData.get_package_data",
+        lambda _self, _fields, _chan: [("pkg", "1.0", "0")],
+    )
+    monkeypatch.setattr(
+        "bioconda_utils.support.subproc.run",
+        lambda *args, **kwargs: type("Result", (), {"stdout": "removed"})(),
+    )
+    result = runner.invoke(
+        cli.app,
+        [
+            "duplicates",
+            str(config),
+            "--strict-build",
+            "--remove",
+            "--channel",
+            "bioconda",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "Duplicate packages in bioconda" not in result.output
 
 
 def test_build_parses_typed_platform_option():

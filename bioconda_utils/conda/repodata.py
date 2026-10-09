@@ -122,19 +122,27 @@ async def async_fetch(
                 )
             )
             for url, description, datum in zip_longest(urls, descriptions, metadata)
+            if url is not None
         ]
-        with progress_display.count_task("Downloading", total=len(coros)) as (
-            progress,
-            task,
-        ):
-            result = [
-                await coro
-                for coro in progress.track(
-                    asyncio.as_completed(coros),
-                    total=len(coros),
-                    task_id=task,
-                )
-            ]
+        try:
+            with progress_display.count_task("Downloading", total=len(coros)) as (
+                progress,
+                task,
+            ):
+                result = [
+                    await coro
+                    for coro in progress.track(
+                        asyncio.as_completed(coros),
+                        total=len(coros),
+                        task_id=task,
+                    )
+                ]
+        finally:
+            for coro in coros:
+                if not coro.done():
+                    coro.cancel()
+            if any(not coro.done() for coro in coros):
+                await asyncio.gather(*coros, return_exceptions=True)
     return result
 
 
@@ -146,12 +154,11 @@ async def _async_fetch_one(
     transform: Callable[[bytes, RepoDataKey], pd.DataFrame] | None = None,
     metadata: RepoDataKey | None = None,
 ) -> pd.DataFrame | bytes:
-    chunks: list[bytes] = []
     if url.startswith("file://"):
         local_path = Path(url[7:])
         if local_path.exists():
             async with aiofiles.open(local_path, mode="rb") as f:
-                chunks.append(await f.read())
+                raw = await f.read()
         else:
             subdir = url.split("/")[-2]
             d = {
@@ -161,18 +168,15 @@ async def _async_fetch_one(
                 "removed": [],
                 "repodata_version": 1,
             }
-            chunks.append(json.dumps(d).encode("UTF-8"))
+            raw = json.dumps(d).encode("UTF-8")
     else:
         async with session.get(url, timeout=None) as resp:
             resp.raise_for_status()
-            async with http.stream_download(
+            raw = await http.download_to_bytes(
                 resp,
                 description,
                 block_size=1024 * 16,
-            ) as blocks:
-                async for block in blocks:
-                    chunks.append(block)
-    raw = b"".join(chunks)
+            )
     if transform is None:
         return raw
     assert metadata is not None

@@ -1074,7 +1074,7 @@ def duplicates(
             )
         else:
             table.add_row(*[str(part) for part in spec], ",".join(dup_channels))
-    if not url:
+    if not url and not remove:
         report_console.print(table)
 
 
@@ -1955,7 +1955,10 @@ def list_build_failures(
         for row in records:
             lines.append(
                 "| "
-                + " | ".join(str(row[column]) for column in BUILD_FAILURE_COLUMNS)
+                + " | ".join(
+                    str(row[column]).replace("\n", "<br>").replace("|", "\\|")
+                    for column in BUILD_FAILURE_COLUMNS
+                )
                 + " |"
             )
         # Markdown is a serialization format here, not terminal decoration.

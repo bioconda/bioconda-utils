@@ -213,7 +213,7 @@ class RattlerLintMessage(NamedTuple):
     severity: Severity = ERROR
 
     def get_report_message(self) -> str:
-        return f"{self.severity.name}: {self.recipe.path.name}: {self.lint_or_hint}"
+        return f"{self.severity.name}: {self.recipe}/recipe.yaml: {self.lint_or_hint}"
 
     def get_severity(self) -> Severity:
         return self.severity
@@ -221,7 +221,7 @@ class RattlerLintMessage(NamedTuple):
     def get_table_row(self) -> tuple[str, str, str, str]:
         return (
             self.severity.name,
-            f"{self.recipe.path.name}/recipe.yaml",
+            f"{self.recipe}/recipe.yaml",
             "rattler_build",
             self.lint_or_hint,
         )

@@ -49,6 +49,8 @@ def download_messages(caplog):
         ({}, None),
         ({"Content-Length": "11"}, 11),
         ({"Content-Length": "5", "Content-Encoding": "gzip"}, None),
+        ({"Content-Length": "invalid"}, None),
+        ({"Content-Length": "-1"}, None),
     ],
 )
 def test_download_logs_completion_and_actual_body_size(
@@ -61,12 +63,15 @@ def test_download_logs_completion_and_actual_body_size(
     )
 
     async def run():
-        async with http.stream_download(response, "artifact") as blocks:
+        chunks = []
+
+        def sink(block):
             assert download_display.downloads.tasks[0].total == expected_total
-            assert b"".join([block async for block in blocks]) == b"firstsecond"
-            # Reaching EOF alone does not imply successful consumption: the
-            # caller's scope must also finish without an exception.
-            assert download_messages(caplog) == ["Downloading artifact"]
+            chunks.append(block)
+
+        bytes_count = await http.stream_to_sink(response, "artifact", sink)
+        assert bytes_count == 11
+        assert b"".join(chunks) == b"firstsecond"
         assert download_display.downloads.tasks == []
 
     asyncio.run(run())
@@ -80,9 +85,8 @@ def test_empty_download_logs_zero_bytes(download_display, caplog):
     response = cast(aiohttp.ClientResponse, ResponseBody([], {"Content-Length": "0"}))
 
     async def run():
-        async with http.stream_download(response, "empty") as blocks:
-            assert download_display.downloads.tasks[0].total == 0
-            assert [block async for block in blocks] == []
+        res = await http.download_to_bytes(response, "empty")
+        assert res == b""
 
     asyncio.run(run())
     assert download_messages(caplog)[1].startswith("Downloaded empty: 0 bytes in ")
@@ -96,8 +100,7 @@ def test_invalid_block_size_does_not_start_download(
 
     async def run():
         with pytest.raises(ValueError, match="block_size must be positive"):
-            async with http.stream_download(response, "artifact", block_size) as blocks:
-                _ = [block async for block in blocks]
+            await http.download_to_bytes(response, "artifact", block_size=block_size)
 
     asyncio.run(run())
     assert download_messages(caplog) == []
@@ -109,9 +112,7 @@ def test_truncated_download_does_not_log_success(download_display, caplog):
 
     async def run():
         with pytest.raises(aiohttp.ClientPayloadError, match="truncated response"):
-            async with http.stream_download(response, "artifact") as blocks:
-                async for _block in blocks:
-                    pass
+            await http.download_to_bytes(response, "artifact")
         assert download_display.downloads.tasks == []
 
     asyncio.run(run())
@@ -121,18 +122,15 @@ def test_truncated_download_does_not_log_success(download_display, caplog):
     ]
 
 
-@pytest.mark.parametrize("consume_eof", [False, True])
-def test_consumer_failure_does_not_log_success(download_display, caplog, consume_eof):
+def test_consumer_failure_does_not_log_success(download_display, caplog):
     response = cast(aiohttp.ClientResponse, ResponseBody([b"first"]))
+
+    def failing_sink(_block):
+        raise OSError("disk full")
 
     async def run():
         with pytest.raises(OSError, match="disk full"):
-            async with http.stream_download(response, "artifact") as blocks:
-                if consume_eof:
-                    _ = [block async for block in blocks]
-                else:
-                    assert await anext(blocks) == b"first"
-                raise OSError("disk full")
+            await http.stream_to_sink(response, "artifact", failing_sink)
         assert download_display.downloads.tasks == []
 
     asyncio.run(run())
@@ -143,23 +141,6 @@ def test_consumer_failure_does_not_log_success(download_display, caplog, consume
     assert not any(
         message.startswith("Downloaded ") for message in download_messages(caplog)
     )
-
-
-def test_early_stop_closes_iterator_and_task_immediately(download_display, caplog):
-    response = cast(aiohttp.ClientResponse, ResponseBody([b"first", b"second"]))
-
-    async def run():
-        async with http.stream_download(response, "artifact") as blocks:
-            assert await anext(blocks) == b"first"
-        assert download_display.downloads.tasks == []
-        with pytest.raises(StopAsyncIteration):
-            await anext(blocks)
-
-    asyncio.run(run())
-    assert download_messages(caplog) == [
-        "Downloading artifact",
-        "Download stopped: artifact (5 bytes received in 0.0 s)",
-    ]
 
 
 @pytest.mark.parametrize("in_consumer", [False, True])
@@ -184,13 +165,16 @@ def test_cancelled_download_is_logged_and_cleaned_up(
                 started.set()
                 await never.wait()
 
+        async def sink(block):
+            started.set()
+            await never.wait()
+
         async def consume():
-            async with http.stream_download(
-                cast(aiohttp.ClientResponse, Response()), "artifact"
-            ) as blocks:
-                async for _block in blocks:
-                    started.set()
-                    await never.wait()
+            await http.stream_to_sink(
+                cast(aiohttp.ClientResponse, Response()),
+                "artifact",
+                sink if in_consumer else lambda _b: None,
+            )
 
         task = asyncio.create_task(consume())
         await started.wait()
@@ -219,8 +203,7 @@ def test_download_logs_are_permanent_with_transient_progress(
     response = cast(aiohttp.ClientResponse, ResponseBody([b"first"]))
 
     async def run():
-        async with http.stream_download(response, "artifact") as blocks:
-            _ = [block async for block in blocks]
+        await http.download_to_bytes(response, "artifact")
 
     with download_display.live:
         asyncio.run(run())
@@ -305,7 +288,7 @@ def test_make_session_defaults_to_bioconda_user_agent():
     asyncio.run(check())
 
 
-def test_stream_download_yields_blocks_and_reports_progress(monkeypatch):
+def test_stream_to_sink_reports_progress(monkeypatch):
     class Content:
         def __init__(self):
             self.blocks = [b"first", b"second", b""]
@@ -325,23 +308,35 @@ def test_stream_download_yields_blocks_and_reports_progress(monkeypatch):
     completed = []
     response = Response()
 
-    async def download():
-        blocks = []
-        async with http.stream_download(
-            cast(aiohttp.ClientResponse, response), "artifact", block_size=4
-        ) as stream:
-            async for block in stream:
-                task = display.downloads.tasks[0]
-                assert task.description == "artifact"
-                assert task.total == 11
-                completed.append(task.completed)
-                blocks.append(block)
-        return blocks
+    def sink(block):
+        task = display.downloads.tasks[0]
+        assert task.description == "artifact"
+        assert task.total == 11
+        completed.append(task.completed)
 
-    assert asyncio.run(download()) == [b"first", b"second"]
+    async def download():
+        return await http.stream_to_sink(
+            cast(aiohttp.ClientResponse, response), "artifact", sink, block_size=4
+        )
+
+    assert asyncio.run(download()) == 11
     assert response.content.block_sizes == [4, 4, 4]
     assert completed == [5, 11]
     assert display.downloads.tasks == []
+
+
+def test_download_to_file(tmp_path):
+    response = cast(aiohttp.ClientResponse, ResponseBody([b"hello ", b"world"]))
+    dest = tmp_path / "out.txt"
+    bytes_count = asyncio.run(http.download_to_file(response, dest, "file download"))
+    assert bytes_count == 11
+    assert dest.read_bytes() == b"hello world"
+
+
+def test_download_to_checksum():
+    response = cast(aiohttp.ClientResponse, ResponseBody([b"hello ", b"world"]))
+    digest = asyncio.run(http.download_to_checksum(response, "hash download"))
+    assert digest == sha256(b"hello world").hexdigest()
 
 
 def test_retry_policy_gives_up_only_on_permanent_response_errors():
@@ -399,3 +394,40 @@ def test_async_fetch_defaults_missing_descriptions(monkeypatch, descriptions):
         url: descriptions[i] or url if i < len(descriptions) else url
         for i, url in enumerate(urls)
     }
+
+
+def test_async_fetch_cancels_pending_tasks_on_failure(monkeypatch):
+    from bioconda_utils.conda import repodata
+
+    cancelled = asyncio.Event()
+
+    async def slow_fetch(session, url, description, **kwargs):
+        if url == "fail":
+            raise RuntimeError("task failed")
+        try:
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+
+    monkeypatch.setattr(repodata, "_async_fetch_one", slow_fetch)
+    with pytest.raises(RuntimeError, match="task failed"):
+        asyncio.run(repodata.async_fetch(["https://example.com/slow", "fail"]))
+    assert cancelled.is_set()
+
+
+def test_async_fetch_ignores_excess_descriptions_and_metadata(monkeypatch):
+    from bioconda_utils.conda import repodata
+
+    fetched = []
+
+    async def mock_fetch_one(session, url, description, **kwargs):
+        fetched.append(url)
+        return b"data"
+
+    monkeypatch.setattr(repodata, "_async_fetch_one", mock_fetch_one)
+    urls = ["https://example.com/only"]
+    descriptions = ["first", "excess"]
+    results = asyncio.run(repodata.async_fetch(urls, descriptions))
+    assert results == [b"data"]
+    assert fetched == ["https://example.com/only"]

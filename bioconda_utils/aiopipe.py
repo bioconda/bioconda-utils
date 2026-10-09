@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any, Self
 from urllib.parse import urlparse
 
-import aiofiles
 import aioftp
 import aiohttp
 
@@ -159,6 +158,8 @@ class AsyncPipeline[ITEM]:
     async def _async_run(self) -> None:
         """Runner within async loop"""
         try:
+            self.io_sem = asyncio.Semaphore(1)
+            self.conda_sem = asyncio.Semaphore(1)
             # call init functions on filters
             async with asyncio.TaskGroup() as tg:
                 for filt in self.filters:
@@ -344,14 +345,10 @@ class AsyncRequests:
 
         Shows progress monitor with label **desc**.
         """
-        checksum = sha256()
         assert self.session is not None
         async with self.session.get(url) as resp:
             resp.raise_for_status()
-            async with http.stream_download(resp, desc) as blocks:
-                async for block in blocks:
-                    checksum.update(block)
-        return checksum.hexdigest()
+            return await http.download_to_checksum(resp, desc)
 
     @http.retry_on_transient
     async def get_file_from_url(self, fname: Path, url: str, desc: str) -> None:
@@ -362,12 +359,7 @@ class AsyncRequests:
         assert self.session is not None
         async with self.session.get(url) as resp:
             resp.raise_for_status()
-            async with (
-                aiofiles.open(fname, "wb") as out,
-                http.stream_download(resp, desc) as blocks,
-            ):
-                async for block in blocks:
-                    await out.write(block)
+            await http.download_to_file(resp, fname, desc)
 
     async def get_ftp_listing(self, url):
         """Returns list of files at FTP **url**"""
