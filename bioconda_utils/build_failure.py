@@ -20,10 +20,9 @@ from bioconda_utils._types import (
     PackageSubdir,
     RecipePath,
 )
-from bioconda_utils.conda.conda_build_bridge import load_meta_fast
 from bioconda_utils.conda.repodata import RepoData, get_package_downloads
 from bioconda_utils.recipe import Recipe
-from bioconda_utils.recipes import get_recipes
+from bioconda_utils.recipes import get_recipes, load_meta_and_recipe_fast
 from bioconda_utils.support.logsetup import ellipsize_recipes, progress_display
 from bioconda_utils.support.subproc import run
 
@@ -114,11 +113,28 @@ class BuildFailureRecord:
         if category:
             self.category = category
 
+    def _recipe_file(self) -> Path:
+        """Return the recipe definition file (``meta.yaml`` or ``recipe.yaml``).
+
+        Rattler recipes have no ``meta.yaml``; their definition lives in
+        ``recipe.yaml``. Hashing must follow the recipe's build system so a
+        rattler recipe is not treated as missing.
+        """
+        meta = self.recipe_path / "meta.yaml"
+        if meta.is_file():
+            return meta
+        rattler = self.recipe_path / "recipe.yaml"
+        if rattler.is_file():
+            return rattler
+        raise FileNotFoundError(
+            f"No meta.yaml or recipe.yaml found in {self.recipe_path}"
+        )
+
     def get_recipe_sha(self) -> str:
         h = sha256()
-        with open(self.recipe_path / "meta.yaml", "rb") as f:
+        with open(self._recipe_file(), "rb") as f:
             h.update(f.read())
-            return h.hexdigest()
+        return h.hexdigest()
 
     def skiplists_current_recipe(self) -> bool:
         if self.skiplist:
@@ -338,8 +354,10 @@ def collect_build_failure_records(
                     continue
 
                 package = components[0]
-                meta = load_meta_fast(recipe_path)[0]
-                package_name = meta["package"]["name"]
+                # Use the same loader as graph.build so the package name (and
+                # thus the DAG node) is derived consistently for both conda and
+                # rattler recipes.
+                package_name = load_meta_and_recipe_fast(recipe).get_package_name()
                 descendants = len(nx.descendants(dag, package_name))
 
                 downloads = get_package_downloads(channel, package_name)
