@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 # Report strings are data; intentional styling belongs on renderables or
 # explicit style arguments, rather than being parsed from their contents.
 console = Console(markup=False)
-err_console = Console(stderr=True)
+err_console = Console(stderr=True, markup=False)
 progress_display = ProgressDisplay(err_console)
 
 

@@ -389,7 +389,7 @@ def diagnostics() -> None:
     report_console.print("Conda-build configuration files", style="bold")
     for filename in config.exclusive_config_files or []:
         path = Path(filename)
-        report_console.print(Text(f"{path}:", style="bold blue"), soft_wrap=True)
+        report_console.print(f"{path}:", style="bold blue", soft_wrap=True)
         contents = path.read_text(encoding="utf-8")
         report_console.print(
             Syntax(
