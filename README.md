@@ -57,7 +57,7 @@ To update selected recipes, pass the recipe collection root and select
 packages:
 
 ```bash
-bioconda-utils autobump recipes --packages samtools
+bioconda-utils autobump ./recipes --packages samtools
 ```
 
 Autobump updates upstream versions and checksums and checks whether pinning
