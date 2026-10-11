@@ -1,6 +1,7 @@
 """Tests for the Typer command-line interface."""
 
 import logging
+import re
 from io import StringIO
 from pathlib import Path
 from typing import Any, cast
@@ -22,6 +23,10 @@ from bioconda_utils.githandler import GitRange
 from bioconda_utils.support.progress import ProgressDisplay
 
 runner = CliRunner()
+
+# Rich terminal styling (forced in CI) wraps tokens like ``--packages`` in ANSI
+# codes; strip them before asserting on message text.
+ANSI_CODES = re.compile(r"\x1b\[[0-9;]*m")
 
 
 @pytest.mark.parametrize("fail", [False, True])
@@ -392,9 +397,10 @@ def test_autobump_rejects_individual_recipe_root_before_loading_config(
     result = runner.invoke(cli.app, ["autobump", str(recipe), str(config)])
 
     assert result.exit_code == 2, result.output
-    assert "This directory contains a recipe" in result.output
-    assert "--packages" in result.output
-    assert "historical-version exclusion" in result.output
+    output = ANSI_CODES.sub("", result.output)
+    assert "This directory contains a recipe" in output
+    assert "--packages" in output
+    assert "historical-version exclusion" in output
 
 
 @pytest.mark.parametrize("follow_graph", [False, True])
