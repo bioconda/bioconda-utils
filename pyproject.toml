@@ -8,6 +8,7 @@ dynamic = ["version"]
 description = "Utilities for building and managing conda packages"
 readme = "README.md"
 license = "MIT"
+requires-python = ">=3.13"
 authors = [
     {name = "Björn Grüning"},
     {name = "Andreas Sjödin"},
@@ -53,7 +54,6 @@ markers = [
     "long_running_1: mark as long-running test (may be executed separately)",
     "long_running_2: mark as long-running test (may be executed separately)",
     "successive:",
-    "asyncio:",
 ]
 python_files = ["test/test_*py"]
 

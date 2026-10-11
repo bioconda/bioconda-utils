@@ -9,7 +9,8 @@ from typing import Any, ClassVar
 
 from bioconda_utils.conda.repodata import RepoData
 
-from . import WARNING, LintCheck, _recipe
+from ..recipe import Recipe
+from . import WARNING, LintCheck
 
 
 class uses_vcs_url(LintCheck):
@@ -36,7 +37,7 @@ class folder_and_package_name_must_match(LintCheck):
     in and the name of the toplevel package should match.
     """
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         recipe_base_folder, _, _ = recipe.reldir.as_posix().partition("/")
         if recipe.name != recipe_base_folder:
             self.message(section="package/name")
@@ -58,7 +59,7 @@ class gpl_requires_license_distributed(LintCheck):
     severity = WARNING
     requires: ClassVar = ["missing_license"]
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         if "gpl" in recipe.get("about/license").lower() and not recipe.get(
             "about/license_file", ""
         ):
@@ -89,9 +90,9 @@ class has_windows_bat_file(LintCheck):
 
     """
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         for bat_file in sorted(recipe.dir.glob("*.bat")):
-            self.message(fname=bat_file)
+            self.message(path=bat_file)
 
 
 class long_summary(LintCheck):
@@ -116,7 +117,7 @@ class long_summary(LintCheck):
     severity = WARNING
     max_length = 120
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         if len(recipe.get("about/summary", "")) > self.max_length:
             self.message("about/summary")
 
@@ -153,7 +154,7 @@ class outputs_name_same_as_package_name(LintCheck):
 
     """
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         name = recipe.get("package", {}).get("name", "")
         outputs = recipe.get("outputs", "")
         if outputs:
@@ -193,6 +194,6 @@ class version_starts_with_v(LintCheck):
 
     """
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         if recipe.get("package/version", "").startswith("v"):
             self.message()

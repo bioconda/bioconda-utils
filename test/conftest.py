@@ -1,8 +1,11 @@
-import datetime
+import json
+import os
 import shutil
+import sqlite3
+from contextlib import closing, contextmanager
 from copy import deepcopy
+from pathlib import Path
 
-import pandas as pd
 import pytest
 from ruamel.yaml import YAML
 
@@ -31,8 +34,8 @@ def pytest_runtest_setup(item):
 
 
 @pytest.fixture
-def mock_repodata(case):
-    """Pepares RepoData singleton to contain mock data
+def mock_repodata(case, monkeypatch):
+    """Provide mock repository data
 
     Expects function to be parametrized with ``case``, where ``case`` may
     contain a ``repodata`` key. If none exists, empty repodata is generated.
@@ -50,11 +53,11 @@ def mock_repodata(case):
              - version: 0.1
                build_number: 0
     """
-    if "repodata" in case:
-        dataframe = pd.DataFrame(
-            (
-                {
-                    "channel": channel,
+    records = {}
+    for channel, packages in case.get("repodata", {}).items():
+        for name, versions in packages.items():
+            for item in versions:
+                record = {
                     "name": name,
                     "build": "",
                     "build_number": 0,
@@ -64,20 +67,66 @@ def mock_repodata(case):
                     "platform": "noarch",
                     **item,
                 }
-                for channel, packages in case["repodata"].items()
-                for name, versions in packages.items()
-                for item in versions
-            ),
-            columns=repodata.RepoData.columns,
-        )
-    else:
-        dataframe = pd.DataFrame({}, columns=repodata.RepoData.columns)
+                records.setdefault((channel, record["platform"]), []).append(record)
 
-    backup = repodata.RepoData()._df, repodata.RepoData()._df_ts
-    repodata.RepoData()._df = dataframe
-    repodata.RepoData()._df_ts = datetime.datetime.now(datetime.UTC)
-    yield
-    repodata.RepoData()._df, repodata.RepoData()._df_ts = backup
+    config = repodata.RepoData.config or {}
+    monkeypatch.setattr(
+        repodata.RepoData,
+        "config",
+        {
+            **config,
+            "channels": list(
+                dict.fromkeys(
+                    [
+                        *config.get("channels", []),
+                        *(channel for channel, _subdir in records),
+                    ]
+                )
+            ),
+        },
+    )
+
+    monkeypatch.setattr(
+        repodata.RepoData,
+        "_repositories",
+        lambda self, channels, subdirs: (
+            (c, s) for c, s in records if c in channels and s in subdirs
+        ),
+    )
+
+    @contextmanager
+    def open_repository(self, channel, subdir):
+        raw = json.dumps(
+            {
+                "info": {"subdir": subdir},
+                "packages": {
+                    str(i): record
+                    for i, record in enumerate(records[(channel, subdir)])
+                },
+            }
+        ).encode()
+        with closing(sqlite3.connect(":memory:")) as connection:
+            self._populate_database(connection, raw, fetched_at=0)
+            yield connection
+
+    monkeypatch.setattr(repodata.RepoData, "_open_repository", open_repository)
+
+
+@pytest.fixture(autouse=True)
+def isolated_repodata_cache(monkeypatch, tmp_path):
+    """Tests never read or write the user's persistent caches."""
+    from bioconda_utils.support import caching
+
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache-home"))
+    # Isolate the platform provider on macOS too, where XDG is not consulted.
+    monkeypatch.setattr(
+        caching.platformdirs,
+        "user_cache_path",
+        lambda app: Path(os.environ["XDG_CACHE_HOME"]) / app,
+    )
+    monkeypatch.setattr(caching, "_cache_root", None)
+    monkeypatch.setattr(repodata.RepoData, "cache_dir", tmp_path / "repodata")
+    monkeypatch.setattr(repodata.RepoData, "refresh_after", None)
 
 
 @pytest.fixture

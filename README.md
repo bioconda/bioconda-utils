@@ -52,3 +52,27 @@ Or use the Just wrappers around the Pixi tasks:
 ```bash
 just global-install
 ```
+
+To update selected recipes, pass the recipe collection root and select
+packages:
+
+```bash
+bioconda-utils autobump ./recipes --packages samtools
+```
+
+Autobump updates upstream versions and checksums and checks whether pinning
+changes require rebuilding. Historical version subdirectories are excluded by
+default; pass `--exclude-subrecipes never` to include them, or enable an
+individual subrecipe with `extra.autobump.enable: true`.
+
+Downloads and metadata are cached under the platform's user cache directory
+(`$XDG_CACHE_HOME/bioconda-utils`, falling back to
+`~/.cache/bioconda-utils` on Linux, `~/Library/Caches/bioconda-utils` on
+macOS). Repodata is refreshed after eight hours; upstream HTTP responses are
+revalidated against the server and pruned after seven days. Caches are shared
+between concurrent commands, are safe to delete, and local `file://` channels
+are always read afresh. `build`, `lint`, `update-pinning`, and `autobump`
+accept `--repodata-cache DIRECTORY` to choose another cache directory and
+`--refresh-repodata` to refresh entries needed by the current run. Older
+scripts can still pass `--cache PREFIX`, which stores caches under `PREFIX.d`;
+the two options cannot be combined.

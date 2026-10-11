@@ -35,7 +35,13 @@ def _filter_config(config_path: Path, platform: PackageSubdir | None) -> str:
     platform = platform or RepoData.native_subdir()
     os_label = subdir_to_oslabel(platform)
     arch: str = platform.removeprefix(f"{os_label}-")
-    config = cb_config.Config(platform=os_label, arch=arch)
+    config = cb_config.Config()
+    # These setters warn because overriding the build platform is unusual.
+    # Native selector filtering needs no override.
+    if config.platform != os_label:
+        config.platform = os_label
+    if str(config.arch) != arch:
+        config.arch = arch
     namespace = cb_metadata.get_selectors(config)
 
     with open(config_path, "r") as f:
