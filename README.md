@@ -72,8 +72,7 @@ Concurrent commands and workers share entries and coordinate downloads; local
 `file://` channels are always read afresh. Indexed SQLite files are queried
 without loading whole repositories into each worker. Database page caches are
 bounded, and refreshes build one repository at a time across processes to limit
-peak JSON parsing memory. Cache files are disposable. The previous repodata
-pickle store is not used; the first run with the new format repopulates the cache.
+peak JSON parsing memory. Cache files are disposable.
 
 `lint`, `update-pinning`, and `autobump` still accept `--cache PREFIX` for existing
 scripts. The application cache root becomes `PREFIX.d`, with separate
