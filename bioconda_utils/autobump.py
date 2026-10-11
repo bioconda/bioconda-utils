@@ -45,7 +45,6 @@ from __future__ import annotations
 import abc
 import asyncio
 import logging
-import pickle
 import random
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
@@ -79,8 +78,9 @@ from .githandler import GitHandler
 from .githubhandler import GitHubHandler
 from .hosters import Hoster
 from .recipe import Recipe
-from .recipe import load_parallel_iter as recipes_load_parallel_iter
 from .recipes import get_recipes
+from .support import http
+from .support.graphcache import load_graph_recipes
 
 #: Jinja environment used to render PR titles, descriptions and comments
 #: from the packaged templates.
@@ -148,7 +148,7 @@ class RecipeSource:
                 case BuildSystem.RATTLER:
                     logger.warning(
                         "Autobump not implemented for rattler build. Skipping recipe: %s",
-                        r.path,
+                        r,
                     )
         if shuffle:
             random.shuffle(self.recipe_dirs)
@@ -184,11 +184,9 @@ class RecipeGraphSource(RecipeSource):
         exclude: list[str],
         shuffle: bool,
         config: dict[str, Any],
-        cache_fn: Path | None = None,
     ) -> None:
         super().__init__(recipe_base, packages, exclude, shuffle)
         self.config = config
-        self.cache_fn = cache_fn
         self.shuffle = shuffle
         self.dag = self.load_graph()
         self.dag = graph.filter_recipe_dag(self.dag, self.packages, exclude)
@@ -220,19 +218,12 @@ class RecipeGraphSource(RecipeSource):
         return len(self.dag)
 
     def load_graph(self) -> nx.DiGraph:
-        if self.cache_fn and self.cache_fn.exists():
-            with open(self.cache_fn, "rb") as stream:
-                dag = pickle.load(stream)
-        else:
-            blacklist = Skiplist(self.config, self.recipe_base)
-            dag = graph.build_from_recipes(
-                recipe
-                for recipe in recipes_load_parallel_iter(self.recipe_base, ["*"])
-                if not blacklist.is_skiplisted(recipe)
-            )
-            if self.cache_fn:
-                with open(self.cache_fn, "wb") as stream:
-                    pickle.dump(dag, stream)
+        blacklist = Skiplist(self.config, self.recipe_base)
+        dag = graph.build_from_recipes(
+            recipe
+            for recipe in load_graph_recipes(self.recipe_base)
+            if not blacklist.is_skiplisted(recipe)
+        )
         return dag
 
 
@@ -241,15 +232,13 @@ class Scanner(AsyncPipeline[Recipe]):
 
     Arguments:
       recipe_source: Iteratable providing Recipe stubs
-      cache_fn: Path of the scan cache file
-      status_fn: Path for status output
+      status_file: Filename for status output
     """
 
     def __init__(
         self,
         recipe_source: RecipeSource,
-        cache_fn: Path | None = None,
-        status_fn: Path | None = None,
+        status_file: Path | None = None,
     ) -> None:
         super().__init__()
         #: recipe source
@@ -259,27 +248,30 @@ class Scanner(AsyncPipeline[Recipe]):
         #: collect end status for each recipe
         self.status: list[tuple[str, EndProcessingItem]] = []
         #: filename to write statuses to
-        self.status_fn = status_fn
+        self.status_file = status_file
         #: async requests helper
-        self.req = AsyncRequests(cache_fn)
+        self.req = AsyncRequests()
 
     def run(self) -> None:
         """Runs scanner"""
         logger.info("Running pipeline with these steps:")
         for n, filt in enumerate(self.filters):
             logger.info(" %i. %s", n + 1, filt.get_info())
-        res = super().run()
-        logger.info("")
-        logger.info("Recipe status statistics:")
-        for key, value in self.stats.most_common():
-            logger.info("%s: %s", key, value)
-        logger.info("SUM: %i", sum(self.stats.values()))
-        if self.status_fn:
-            with open(self.status_fn, "w") as out:
-                out.writelines(
-                    f"{rname}\t{result.name}\n" for rname, result in self.status
-                )
-        return res
+        try:
+            super().run()
+        finally:
+            # write stats even when the run was aborted (Ctrl-C or error),
+            # so partial results are not lost
+            logger.info("")
+            logger.info("Recipe status statistics:")
+            for key, value in self.stats.most_common():
+                logger.info("%s: %s", key, value)
+            logger.info("SUM: %i", sum(self.stats.values()))
+            if self.status_file is not None:
+                with open(self.status_file, "w") as out:
+                    out.writelines(
+                        f"{rname}\t{result.name}\n" for rname, result in self.status
+                    )
 
     async def queue_items(
         self, send_q: asyncio.Queue[Recipe], return_q: asyncio.Queue[Recipe]
@@ -295,19 +287,17 @@ class Scanner(AsyncPipeline[Recipe]):
             await super()._async_run()
 
     async def process(self, item: Recipe) -> bool:
-        """Applies the filters to a recipe"""
+        """Applies the filters to a recipe, recording the outcome"""
         recipe = item
         try:
-            res = False
-            if await super().process(recipe):
-                self.stats["Updated"] += 1
-                res = True
-            return False
+            updated = await super().process(recipe)
         except EndProcessingItem as recipe_error:
             self.stats[recipe_error.name] += 1
             self.status.append((recipe.reldir.as_posix(), recipe_error))
-            res = True
-        return res
+            return False
+        if updated:
+            self.stats["Updated"] += 1
+        return updated
 
 
 class Filter(AsyncFilter[Recipe]):
@@ -336,15 +326,11 @@ class ExcludeOtherChannel(Filter):
         template = "builds package found in other channel(s)"
         level = logging.DEBUG
 
-    def __init__(
-        self, scanner: Scanner, channels: Sequence[str], cache: Path | None
-    ) -> None:
+    def __init__(self, scanner: Scanner, channels: Sequence[str]) -> None:
         super().__init__(scanner)
         self.channels = channels
         logger.info("Loading package lists for %s", channels)
         channel_data = RepoData()
-        if cache:
-            channel_data.set_cache(cache)
         self.other = set(channel_data.get_package_data("name", channels=channels))
 
     def get_info(self) -> str:
@@ -383,7 +369,7 @@ class ExcludeSubrecipe(Filter, AutoBumpConfigMixin):
     """Exclude sub-recipes
 
     Unless **always** is True, subrecipes specifically enabled via
-    ``extra: watch: enable: yes`` will not be filtered.
+    ``extra.autobump.enable: true`` will not be filtered.
     """
 
     class IsSubRecipe(EndProcessingItem):
@@ -675,7 +661,9 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
         latest = self.select_version(recipe.version, versions.keys())
 
         # add data for respective versions to recipe and recipe.orig
-        recipe.version_data = versions[latest] or {}
+        # Keeping the current version does not imply that its exact spelling
+        # is present upstream (e.g. 1.0 versus 1.0.0, or a pruned release).
+        recipe.version_data = versions.get(latest) or {}
         if recipe.orig.version in versions:
             recipe.orig.version_data = versions[recipe.orig.version] or {}
         else:
@@ -826,18 +814,19 @@ class FetchUpstreamDependencies(Filter):
         self.build_config: conda_build.config.Config = load_conda_build_config()
 
     async def apply(self, recipe: Recipe) -> None:
-        await asyncio.gather(
-            *[
-                data["hoster"].get_deps(
-                    self.pipeline, self.build_config, recipe.name, data
-                )
-                for r in (recipe, recipe.orig)
-                for fn, data in r.version_data.items()
-                if "depends" not in data
-                and "hoster" in data
-                and hasattr(data["hoster"], "get_deps")
-            ]
-        )
+        async with asyncio.TaskGroup() as tg:
+            for r in (recipe, recipe.orig):
+                for data in r.version_data.values():
+                    if (
+                        "depends" not in data
+                        and "hoster" in data
+                        and hasattr(data["hoster"], "get_deps")
+                    ):
+                        tg.create_task(
+                            data["hoster"].get_deps(
+                                self.pipeline, self.build_config, recipe.name, data
+                            )
+                        )
 
 
 class UpdateChecksums(Filter):
@@ -1181,7 +1170,7 @@ class CreatePullRequest(GitFilter):
 
     async def async_init(self) -> None:
         """Create gidget GithubAPI object from session"""
-        await self.ghub.login(self.pipeline.req.session, self.pipeline.req.USER_AGENT)
+        await self.ghub.login(self.pipeline.req.session, http.USER_AGENT)
         await asyncio.sleep(1)  # let API settle
 
     @staticmethod

@@ -38,7 +38,7 @@ def get_package_paths(
         target_platform: str | None = variant.recipe.used_variant.get("target_platform")
         if not target_platform:
             raise ValueError(
-                f"Couldn't find target platform for a variant of recipe: {recipe.path.as_posix()}"
+                f"Couldn't find target platform for a variant of recipe: {recipe}"
             )
 
         # predict package file names

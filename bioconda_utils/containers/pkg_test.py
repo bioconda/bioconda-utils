@@ -11,12 +11,7 @@ import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 
-from conda_build.metadata import MetaData
-from conda_index.index import update_index
-from conda_package_streaming.package_streaming import stream_conda_info
-
 from .._types import MULLED_LOCAL_NAMESPACE, ContainerPlatform, PkgBuildRef
-from ..support.logsetup import Progress
 from ..support.subproc import run
 
 logger = logging.getLogger(__name__)
@@ -27,6 +22,13 @@ CREATE_ENV_IMAGE = os.getenv("CREATE_ENV_IMAGE", "quay.io/bioconda/create-env:la
 
 def get_test_command(path: Path) -> str:
     """Extract tests from a built package"""
+    # Deferred: conda-build/conda-package-streaming are heavy imports that the
+    # CLI should not pay for at startup (this module is imported for
+    # CREATE_ENV_IMAGE).
+    from conda_build.metadata import MetaData
+    from conda_package_streaming.package_streaming import stream_conda_info
+
+    path = Path(path)
     tmp = tempfile.mkdtemp()
     for tar, member in stream_conda_info(path):
         if member.name.startswith("info/recipe/"):
@@ -276,8 +278,7 @@ fi
         cmd += ["/bin/bash", "/opt/test_script.bash"]
 
         logger.debug("Pre-solved mulled test command: %s", cmd)
-        with Progress():
-            p = run(cmd, live=live_logs)
+        p = run(cmd, live=live_logs, status="Running container test...")
         return p
 
 
@@ -292,6 +293,9 @@ def _test_inputs(
     conda_bld_dir = path.resolve().parent.parent
 
     if update_local_index:
+        # Deferred: see get_test_command.
+        from conda_index.index import update_index
+
         # conda-index uses spawn workers, so this cannot run from a REPL or python -c.
         update_index(str(conda_bld_dir))
 
@@ -451,7 +455,7 @@ def build_and_test_mulled_image(
         raise ValueError("CONDA_IMAGE env var already exists!")
     else:
         env["CONDA_IMAGE"] = conda_image
-    with tempfile.TemporaryDirectory() as d, Progress():
-        p = run(cmd, env=env, cwd=d, live=live_logs)
+    with tempfile.TemporaryDirectory() as d:
+        p = run(cmd, env=env, cwd=d, live=live_logs, status="Building mulled image...")
 
     return p

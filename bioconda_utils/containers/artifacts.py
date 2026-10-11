@@ -8,7 +8,6 @@ import zipfile
 from collections.abc import Iterator
 from enum import Enum
 from pathlib import Path, PurePosixPath
-from typing import Literal
 from urllib.parse import urlparse
 
 import backoff
@@ -19,6 +18,7 @@ from github.Repository import Repository
 
 from bioconda_utils import githubhandler
 from bioconda_utils._types import (
+    ArtifactSource,
     ContainerPlatform,
     PackageSubdir,
     QuayUploadTarget,
@@ -38,7 +38,6 @@ from bioconda_utils.containers.upload import (
 
 logger = logging.getLogger(__name__)
 
-ArtifactSource = Literal["azure", "circleci", "github-actions"]
 IMAGE_RE = re.compile(r"(.+)(?::|%3A|---)(.+)\.tar\.gz$")
 # GitHub Actions artifact names are external workflow labels derived from, but
 # not identical to, conda package subdirs. Most package subdirs use
