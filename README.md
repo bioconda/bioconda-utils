@@ -54,7 +54,7 @@ just global-install
 ```
 
 To update selected recipes, pass the recipe collection root and select packages:
-`bioconda-utils autobump recipes --packages samtools`. Autobump updates upstream
+`bioconda-utils autobump ./recipes --packages samtools`. Autobump updates upstream
 versions and checksums and checks whether pinning changes require rebuilding.
 Historical version subdirectories are excluded by default. Passing an individual
 recipe directory as the collection root is rejected because it would bypass
