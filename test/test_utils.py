@@ -1,6 +1,4 @@
-import asyncio
 import contextlib
-import datetime
 import importlib
 import logging
 import os
@@ -11,28 +9,39 @@ import sys
 import tempfile
 import uuid
 from collections import namedtuple
+from collections.abc import Generator
 from pathlib import Path
 from textwrap import dedent
+from typing import Any
 from unittest.mock import Mock
 
-import msgpack
-import pandas as pd
 import pytest
-import zstandard
 from conda_build import api, exceptions, metadata
-from helpers import Recipes, ensure_missing
+from helpers import Recipes, ensure_missing, get_rattler_params
 from jsonschema import ValidationError
 
 from bioconda_utils import __version__, build
-from bioconda_utils._types import Config, ContainerPlatform, PackageSubdir
-from bioconda_utils.conda import conda_build_bridge, recipes
-from bioconda_utils.conda import repodata as utils
-from bioconda_utils.conda.repodata import RepoData, _CachedRepoData
+from bioconda_utils import recipes as _recipes
+from bioconda_utils._types import (
+    BuildSystem,
+    Config,
+    ContainerPlatform,
+    PackageSubdir,
+    RecipePath,
+)
+from bioconda_utils.conda import conda_build_bridge
+from bioconda_utils.conda import recipes as conda_recipes
+from bioconda_utils.conda.repodata import RepoData
 from bioconda_utils.config import load_config, normalize_config, validate_config
 from bioconda_utils.containers import docker_utils, pkg_test, upload
+from bioconda_utils.skiplist import Skiplist
 from bioconda_utils.support import subproc
+from bioconda_utils.support.logsetup import format_recipes
 
 logger = logging.getLogger(__name__)
+
+CONDA = BuildSystem.CONDA
+RATTLER = BuildSystem.RATTLER
 
 # TODO: need channel order tests. Could probably do this by adding different
 # file:// channels with different variants of the same package
@@ -110,7 +119,7 @@ def recipes_fixture():
     rcp.write_recipes()
     rcp.pkgs = {}
     for key, val in rcp.recipe_dirs.items():
-        rcp.pkgs[key] = recipes.built_package_paths(val)
+        rcp.pkgs[key] = conda_recipes.built_package_paths(val)
     yield rcp
     for pkgs in rcp.pkgs.values():
         for pkg in pkgs:
@@ -120,14 +129,21 @@ def recipes_fixture():
 @pytest.fixture(scope="module")
 def config_fixture():
     """Loads config"""
-    config = load_config(
-        Path(os.path.join(os.path.dirname(__file__), "test-config.yaml"))
-    )
+    config = load_config(Path(__file__).parent / "test-config.yaml")
     yield config
 
 
+@pytest.fixture(scope="module")
+def config_path_fixture() -> Generator[Path]:
+    """Returns config path"""
+    config: Path = Path(__file__).parent / "test-config.yaml"
+    yield config
+
+
+# config_fixture must be loaded here, otherwise utils.RepoData.config is not set
+# and this test will fail
 @pytest.fixture(scope="function", params=PARAMS, ids=IDS)
-def single_build(request, recipes_fixture):
+def single_build(request, recipes_fixture, config_fixture):
     """
     Builds the "one" recipe.
     """
@@ -145,9 +161,20 @@ def single_build(request, recipes_fixture):
         "Fixture: Building 'one' %s",
         "within docker" if docker_builder else "locally",
     )
+    pkg_paths: list[Path] = recipes_fixture.pkgs["one"]
+
+    recipe_path, global_variants, tool_config, render_config, rattler_output_dir = (
+        get_rattler_params(recipes_fixture.recipe_dirs["one"], CONDA, docker_builder)
+    )
+
     build.build(
-        recipe=recipes_fixture.recipe_dirs["one"],
-        pkg_paths=recipes_fixture.pkgs["one"],
+        recipe=recipe_path,
+        global_variants=global_variants,
+        tool_config=tool_config,
+        render_config=render_config,
+        rattler_output_dir=rattler_output_dir,
+        force=True,
+        pkg_paths=pkg_paths,
         docker_builder=docker_builder,
         mulled_build_and_test=mulled_build_and_test,
     )
@@ -177,10 +204,15 @@ def multi_build(request, recipes_fixture, config_fixture):
         "Fixture: Building one/two/three %s",
         "within docker" if docker_builder else "locally",
     )
+    recipe_folder: Path = Path(recipes_fixture.basedir)
+    config: dict[str, Any] = config_fixture
+    recipes: list[RecipePath] = [
+        RecipePath(path=p, build_system=CONDA) for p in recipes_fixture.recipe_dirnames
+    ]
     build.build_recipes(
-        recipes_fixture.basedir,
-        config_fixture,
-        recipes_fixture.recipe_dirnames,
+        recipe_folder,
+        config,
+        recipes,
         docker_builder=docker_builder,
         mulled_build_and_test=mulled_build_and_test,
     )
@@ -213,10 +245,15 @@ def multi_build_exclude(request, recipes_fixture, config_fixture):
         "Fixture: Building one/two (and not three) %s",
         "within docker" if docker_builder else "locally",
     )
+    recipe_folder: Path = Path(recipes_fixture.basedir)
+    config: dict[str, Any] = config_fixture
+    recipes: list[RecipePath] = [
+        RecipePath(path=p, build_system=CONDA) for p in recipes_fixture.recipe_dirnames
+    ]
     build.build_recipes(
-        recipes_fixture.basedir,
-        config_fixture,
-        recipes_fixture.recipe_dirnames,
+        recipe_folder,
+        config,
+        recipes,
         docker_builder=docker_builder,
         mulled_build_and_test=mulled_build_and_test,
         exclude=["three"],
@@ -252,15 +289,26 @@ def single_upload(request):
     )
     r.write_recipes()
     r.pkgs = {}
-    r.pkgs[name] = recipes.built_package_paths(r.recipe_dirs[name])
+    r.pkgs[name] = conda_recipes.built_package_paths(r.recipe_dirs[name])
 
     pkg = r.pkgs[name][0]
     ensure_missing(pkg)
     request.addfinalizer(lambda: ensure_missing(pkg))
 
+    recipe_path, global_variants, tool_config, render_config, rattler_output_dir = (
+        get_rattler_params(r.recipe_dirs[name], CONDA, None)
+    )
+
+    pkg_paths: list[Path] = r.pkgs[name]
+
     build_result = build.build(
-        recipe=Path(r.recipe_dirs[name]),
-        pkg_paths=r.pkgs[name],
+        recipe=recipe_path,
+        global_variants=global_variants,
+        tool_config=tool_config,
+        render_config=render_config,
+        rattler_output_dir=rattler_output_dir,
+        force=True,
+        pkg_paths=pkg_paths,
         docker_builder=None,
         mulled_build_and_test=False,
     )
@@ -316,7 +364,7 @@ def test_upload(single_upload):
 @pytest.mark.long_running_2
 def test_single_build_only(single_build):
     for pkg in single_build:
-        assert os.path.exists(pkg)
+        assert pkg.exists()
         ensure_missing(pkg)
 
 
@@ -329,15 +377,27 @@ def test_single_build_pkg_dir(recipes_fixture):
     logger.error("Making recipe builder")
     docker_builder = docker_utils.RecipeBuilder(
         use_host_conda_bld=True,
-        pkg_dir=os.getcwd() + "/output",
+        pkg_dir=Path.cwd() / "output",
         docker_base_image=BUILD_ENV_IMAGE,
     )
     mulled_build_and_test = False
     logger.error("DONE")
     logger.error("Fixture: Building 'one' within docker with pkg_dir")
+
+    recipe_path, global_variants, tool_config, render_config, rattler_output_dir = (
+        get_rattler_params(recipes_fixture.recipe_dirs["one"], CONDA, docker_builder)
+    )
+
+    pkg_paths: list[Path] = recipes_fixture.pkgs["one"]
+
     res = build.build(
-        recipe=recipes_fixture.recipe_dirs["one"],
-        pkg_paths=recipes_fixture.pkgs["one"],
+        recipe=recipe_path,
+        global_variants=global_variants,
+        tool_config=tool_config,
+        render_config=render_config,
+        rattler_output_dir=rattler_output_dir,
+        force=True,
+        pkg_paths=pkg_paths,
         docker_builder=docker_builder,
         mulled_build_and_test=mulled_build_and_test,
     )
@@ -355,7 +415,7 @@ def test_single_build_with_post_test(single_build):
 def test_multi_build(multi_build):
     for v in multi_build.values():
         for pkg in v:
-            assert os.path.exists(pkg)
+            assert pkg.exists()
             ensure_missing(pkg)
 
 
@@ -364,9 +424,9 @@ def test_multi_build_exclude(multi_build_exclude):
     for k, v in multi_build_exclude.items():
         for pkg in v:
             if k == "three":
-                assert not os.path.exists(pkg)
+                assert not pkg.exists()
             else:
-                assert os.path.exists(pkg)
+                assert pkg.exists()
                 ensure_missing(pkg)
 
 
@@ -390,8 +450,10 @@ with open("{self.container_staging}/version", "w") as version_file:
     )
     temp_dir = docker_builder.pkg_dir
     # Set recipe_dir to any temporary directory, e.g., docker_builder.pkg_dir.
-    docker_builder.build_recipe(temp_dir, build_args="", env={})
-    with open(os.path.join(temp_dir, "version")) as container_version_file:
+    docker_builder.build_recipe(
+        temp_dir, build_args="", rattler_args="", env={}, build_system=CONDA
+    )
+    with open(temp_dir / "version") as container_version_file:
         assert container_version_file.read() == __version__
 
 
@@ -405,10 +467,14 @@ def test_docker_builder_build(recipes_fixture):
     )
     pkgs = recipes_fixture.pkgs["one"]
     docker_builder.build_recipe(
-        recipes_fixture.recipe_dirs["one"], build_args="", env={}
+        recipes_fixture.recipe_dirs["one"],
+        build_args="",
+        rattler_args="",
+        env={},
+        build_system=CONDA,
     )
     for pkg in pkgs:
-        assert os.path.exists(pkg)
+        assert pkg.exists()
         ensure_missing(pkg)
 
 
@@ -421,10 +487,15 @@ def test_docker_build_fails(recipes_fixture, config_fixture):
         docker_base_image=BUILD_ENV_IMAGE, build_script_template="exit 1"
     )
     assert docker_builder.build_script_template == "exit 1"
+    recipe_folder: Path = Path(recipes_fixture.basedir)
+    config: dict[str, Any] = config_fixture
+    recipes: list[RecipePath] = [
+        RecipePath(path=p, build_system=CONDA) for p in recipes_fixture.recipe_dirnames
+    ]
     result = build.build_recipes(
-        recipes_fixture.basedir,
-        config_fixture,
-        recipes_fixture.recipe_dirnames,
+        recipe_folder,
+        config,
+        recipes,
         docker_builder=docker_builder,
         mulled_build_and_test=True,
     )
@@ -471,9 +542,9 @@ def test_get_deps():
         from_string=True,
     )
     r.write_recipes()
-    assert list(recipes.get_deps(r.recipe_dirs["two"])) == ["one"]
-    assert list(recipes.get_deps(r.recipe_dirs["three"], build=True)) == ["one"]
-    assert list(recipes.get_deps(r.recipe_dirs["three"], build=False)) == ["two"]
+    assert list(conda_recipes.get_deps(r.recipe_dirs["two"])) == ["one"]
+    assert list(conda_recipes.get_deps(r.recipe_dirs["three"], build=True)) == ["one"]
+    assert list(conda_recipes.get_deps(r.recipe_dirs["three"], build=False)) == ["two"]
 
 
 @pytest.mark.long_running_1
@@ -504,20 +575,24 @@ def test_conda_as_dep(config_fixture, mulled_build_and_test):
         from_string=True,
     )
     r.write_recipes()
+    recipe_folder: Path = Path(r.basedir)
+    config: dict[str, Any] = config_fixture
+    recipes: list[RecipePath] = [
+        RecipePath(path=p, build_system=CONDA) for p in r.recipe_dirnames
+    ]
     build_result = build.build_recipes(
-        Path(r.basedir),
-        config_fixture,
-        r.recipe_dirnames,
-        testonly=False,
+        recipe_folder,
+        config,
+        recipes,
+        mulled_build_and_test=mulled_build_and_test,
         force=False,
         docker_builder=docker_builder,
-        mulled_build_and_test=mulled_build_and_test,
     )
     assert build_result
 
     for v in r.recipe_dirs.values():
-        for i in recipes.built_package_paths(v):
-            assert os.path.exists(i)
+        for i in conda_recipes.built_package_paths(v):
+            assert i.exists()
             ensure_missing(i)
 
 
@@ -526,31 +601,31 @@ def test_recipe_requires_finalized_render(tmp_path):
         recipe = tmp_path / uuid.uuid4().hex
         recipe.mkdir()
         (recipe / "meta.yaml").write_text(meta)
-        return str(recipe)
+        return recipe
 
-    assert not recipes.recipe_requires_finalized_render(
+    assert not conda_recipes.recipe_requires_finalized_render(
         _write("package:\n  name: pure-python\n  version: '1.0'\n")
     )
-    assert recipes.recipe_requires_finalized_render(
+    assert conda_recipes.recipe_requires_finalized_render(
         _write("requirements:\n  build:\n    - {{ stdlib('c') }}\n")
     )
-    assert recipes.recipe_requires_finalized_render(
+    assert conda_recipes.recipe_requires_finalized_render(
         _write("requirements:\n  build:\n    - {{ compiler('c') }}\n")
     )
-    assert recipes.recipe_requires_finalized_render(
+    assert conda_recipes.recipe_requires_finalized_render(
         _write("requirements:\n  run:\n    - {{ pin_compatible('foo') }}\n")
     )
     # ignore if within comments
-    assert not recipes.recipe_requires_finalized_render(
+    assert not conda_recipes.recipe_requires_finalized_render(
         _write("requirements:\n  run:\n    - foo  # {{ pin_compatible('foo') }}\n")
     )
     # Missing meta.yaml -> False (don't crash)
     missing = tmp_path / "missing"
     missing.mkdir()
-    assert not recipes.recipe_requires_finalized_render(str(missing))
+    assert not conda_recipes.recipe_requires_finalized_render(missing)
 
 
-# TODO replace the filter tests with tests for recipes.get_package_paths()
+# TODO replace the filter tests with tests for conda_recipes.get_package_paths()
 # def test_filter_recipes_no_skipping():
 #     """
 #     No recipes have skip so make sure none are filtered out.
@@ -738,13 +813,13 @@ def test_built_package_paths():
     h = metadata._hash_dependencies(d, 7)
 
     assert (
-        os.path.basename(recipes.built_package_paths(r.recipe_dirs["one"])[0])
+        conda_recipes.built_package_paths(r.recipe_dirs["one"])[0].name
         == f"one-0.1-py36{h}_0.conda"
     )
 
 
 def test_string_or_float_to_integer_python():
-    f = recipes._string_or_float_to_integer_python
+    f = conda_recipes._string_or_float_to_integer_python
     assert f(27) == f("27") == f(2.7) == f("2.7") == 27
 
 
@@ -781,9 +856,23 @@ def test_rendering_sandboxing():
 
     if "GITHUB_TOKEN" in os.environ:
         with pytest.raises(sp.CalledProcessError) as excinfo:
-            pkg_paths = recipes.built_package_paths(r.recipe_dirs["one"])
+            (
+                recipe_path,
+                global_variants,
+                tool_config,
+                render_config,
+                rattler_output_dir,
+            ) = get_rattler_params(r.recipe_dirs["one"], CONDA, None)
+
+            pkg_paths = conda_recipes.built_package_paths(r.recipe_dirs["one"])
+
             build.build(
-                recipe=Path(r.recipe_dirs["one"]),
+                recipe=recipe_path,
+                global_variants=global_variants,
+                tool_config=tool_config,
+                render_config=render_config,
+                rattler_output_dir=rattler_output_dir,
+                force=False,
                 pkg_paths=pkg_paths,
                 mulled_build_and_test=False,
                 raise_error=True,
@@ -792,9 +881,25 @@ def test_rendering_sandboxing():
     else:
         # recipe for "one" should fail because GITHUB_TOKEN is not a jinja var.
         with pytest.raises(exceptions.CondaBuildUserError) as excinfo:
-            pkg_paths = recipes.built_package_paths(r.recipe_dirs["one"])
+            pkg_paths = conda_recipes.built_package_paths(r.recipe_dirs["one"])
+
+            (
+                recipe_path,
+                global_variants,
+                tool_config,
+                render_config,
+                rattler_output_dir,
+            ) = get_rattler_params(r.recipe_dirs["one"], CONDA, None)
+
+            pkg_paths = conda_recipes.built_package_paths(r.recipe_dirs["one"])
+
             build.build(
-                recipe=Path(r.recipe_dirs["one"]),
+                recipe=recipe_path,
+                global_variants=global_variants,
+                tool_config=tool_config,
+                render_config=render_config,
+                rattler_output_dir=rattler_output_dir,
+                force=False,
                 pkg_paths=pkg_paths,
                 mulled_build_and_test=False,
             )
@@ -814,6 +919,57 @@ def test_sandboxed():
         assert "CONDA_ARBITRARY_VAR" not in os.environ
         assert "GITHUB_TOKEN" not in os.environ
         assert "BUILDKITE_TOKEN" not in os.environ
+
+
+def test_run_shows_a_single_spinner(monkeypatch):
+    """``run`` owns its progress indicator; callers must not add another.
+
+    Rich renders every live display active on a console, so nesting a
+    ``Console.status`` around ``run`` used to draw two spinners at once.
+    """
+    opened = []
+
+    class RecordingStatus:
+        def __init__(self, message, **kwargs):
+            self.message = message
+            opened.append(message)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+    monkeypatch.setattr(subproc.progress_display, "status", RecordingStatus)
+
+    subproc.run(["echo", "hello"])
+
+    assert opened == ["running"]
+
+    opened.clear()
+    subproc.run(["echo", "hello"], status="Building recipe...")
+    assert opened == ["Building recipe..."]
+
+
+def test_run_does_not_spinner_when_streaming_live(monkeypatch):
+    """With ``live`` set the streamed output is the progress indicator."""
+    opened = []
+
+    class RecordingStatus:
+        def __init__(self, message, **_kwargs):
+            opened.append(message)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+    monkeypatch.setattr(subproc.progress_display, "status", RecordingStatus)
+
+    subproc.run(["echo", "hello"], live=True, status="Building recipe...")
+
+    assert opened == []
 
 
 def test_env_sandboxing():
@@ -837,17 +993,28 @@ def test_env_sandboxing():
         from_string=True,
     )
     r.write_recipes()
-    pkg_paths = recipes.built_package_paths(r.recipe_dirs["one"])
+    pkg_paths = conda_recipes.built_package_paths(r.recipe_dirs["one"])
 
     with subproc.temp_env({"GITHUB_TOKEN": "token_here"}):
+        recipe_path, global_variants, tool_config, render_config, rattler_output_dir = (
+            get_rattler_params(r.recipe_dirs["one"], CONDA, None)
+        )
+
+        pkg_paths = [Path(p) for p in pkg_paths]
+
         build.build(
-            recipe=Path(r.recipe_dirs["one"]),
+            recipe=recipe_path,
+            global_variants=global_variants,
+            tool_config=tool_config,
+            render_config=render_config,
+            rattler_output_dir=rattler_output_dir,
+            force=False,
             pkg_paths=pkg_paths,
             mulled_build_and_test=False,
         )
 
     for pkg in pkg_paths:
-        assert os.path.exists(pkg)
+        assert pkg.exists()
         ensure_missing(pkg)
 
 
@@ -884,26 +1051,31 @@ def test_skip_dependencies(config_fixture):
     r.write_recipes()
     pkgs = {}
     for k, v in r.recipe_dirs.items():
-        pkgs[k] = recipes.built_package_paths(v)
+        pkgs[k] = conda_recipes.built_package_paths(v)
 
     for _pkgs in pkgs.values():
         for pkg in _pkgs:
             ensure_missing(pkg)
 
+    recipe_folder: Path = Path(r.basedir)
+    config: dict[str, Any] = config_fixture
+    recipes: list[RecipePath] = [
+        RecipePath(path=p, build_system=CONDA) for p in r.recipe_dirnames
+    ]
+
     build.build_recipes(
-        Path(r.basedir),
-        config_fixture,
-        r.recipe_dirnames,
-        testonly=False,
+        recipe_folder,
+        config,
+        recipes,
         force=False,
         mulled_build_and_test=False,
     )
     for pkg in pkgs["one"]:
-        assert os.path.exists(pkg)
+        assert pkg.exists()
     for pkg in pkgs["two"]:
-        assert not os.path.exists(pkg)
+        assert not pkg.exists()
     for pkg in pkgs["three"]:
-        assert not os.path.exists(pkg)
+        assert not pkg.exists()
 
     # clean up
     for _pkgs in pkgs.values():
@@ -913,10 +1085,17 @@ def test_skip_dependencies(config_fixture):
 
 class TestSubdags:
     def _build(self, recipes_fixture, config_fixture, n_workers, worker_offset):
+        recipe_folder: Path = Path(recipes_fixture.basedir)
+        config: dict[str, Any] = config_fixture
+        recipes: list[RecipePath] = [
+            RecipePath(path=p, build_system=CONDA)
+            for p in recipes_fixture.recipe_dirnames
+        ]
+
         build.build_recipes(
-            recipes_fixture.basedir,
-            config_fixture,
-            recipes_fixture.recipe_dirnames,
+            recipe_folder,
+            config,
+            recipes,
             n_workers=n_workers,
             worker_offset=worker_offset,
             mulled_build_and_test=False,
@@ -943,23 +1122,33 @@ def test_build_empty_extra_container():
         from_string=True,
     )
     r.write_recipes()
-    pkgs = recipes.built_package_paths(r.recipe_dirs["one"])
+    pkgs = conda_recipes.built_package_paths(r.recipe_dirs["one"])
+    recipe_path, global_variants, tool_config, render_config, rattler_output_dir = (
+        get_rattler_params(r.recipe_dirs["one"], CONDA, None)
+    )
+
+    pkg_paths = [Path(p) for p in pkgs]
 
     build_result = build.build(
-        recipe=Path(r.recipe_dirs["one"]),
-        pkg_paths=pkgs,
+        recipe=recipe_path,
+        global_variants=global_variants,
+        tool_config=tool_config,
+        render_config=render_config,
+        force=False,
+        rattler_output_dir=rattler_output_dir,
+        pkg_paths=pkg_paths,
         mulled_build_and_test=True,
     )
     assert build_result.success
     for pkg in pkgs:
-        assert os.path.exists(pkg)
+        assert pkg.exists()
         ensure_missing(pkg)
 
 
 @pytest.mark.skipif(SKIP_DOCKER_TESTS, reason="skipping on osx")
 @pytest.mark.long_running_1
 @pytest.mark.xfail
-def test_build_container_no_default_gcc(tmpdir):
+def test_build_container_no_default_gcc(tmp_path):
     r = Recipes(
         """
         one:
@@ -977,14 +1166,13 @@ def test_build_container_no_default_gcc(tmpdir):
 
     # Tests with the repository's Dockerfile instead of already uploaded images.
     # Copy repository to image build directory so everything is in docker context.
-    image_build_dir = os.path.join(tmpdir, "repo")
-    src_repo_dir = os.path.join(os.path.dirname(__file__), "..")
+    image_build_dir = tmp_path / "repo"
+    src_repo_dir = Path(__file__).parent.parent
     shutil.copytree(src_repo_dir, image_build_dir)
     # Dockerfile will be recreated by RecipeBuilder => extract template and delete file
-    dockerfile = os.path.join(image_build_dir, "Dockerfile")
-    with open(dockerfile) as f:
-        dockerfile_template = f.read().replace("{", "{{").replace("}", "}}")
-    os.remove(dockerfile)
+    dockerfile = image_build_dir / "Dockerfile"
+    dockerfile_template = dockerfile.read_text().replace("{", "{{").replace("}", "}}")
+    dockerfile.unlink()
 
     docker_builder = docker_utils.RecipeBuilder(
         dockerfile_template=dockerfile_template,
@@ -992,9 +1180,19 @@ def test_build_container_no_default_gcc(tmpdir):
         image_build_dir=image_build_dir,
     )
 
-    pkg_paths = recipes.built_package_paths(r.recipe_dirs["one"])
+    pkg_paths = conda_recipes.built_package_paths(r.recipe_dirs["one"])
+
+    recipe_path, global_variants, tool_config, render_config, rattler_output_dir = (
+        get_rattler_params(r.recipe_dirs["one"], CONDA, docker_builder)
+    )
+
     build_result = build.build(
-        recipe=Path(r.recipe_dirs["one"]),
+        recipe=recipe_path,
+        global_variants=global_variants,
+        tool_config=tool_config,
+        render_config=render_config,
+        rattler_output_dir=rattler_output_dir,
+        force=False,
         pkg_paths=pkg_paths,
         docker_builder=docker_builder,
         mulled_build_and_test=False,
@@ -1002,8 +1200,8 @@ def test_build_container_no_default_gcc(tmpdir):
     assert build_result.success
 
     for v in r.recipe_dirs.values():
-        for i in recipes.built_package_paths(v):
-            assert os.path.exists(i)
+        for i in conda_recipes.built_package_paths(v):
+            assert i.exists()
             ensure_missing(i)
 
 
@@ -1026,19 +1224,25 @@ def test_bioconda_pins(caplog, config_fixture):
         from_string=True,
     )
     r.write_recipes()
+
+    recipe_folder: Path = Path(r.basedir)
+    config: dict[str, Any] = config_fixture
+    recipes: list[RecipePath] = [
+        RecipePath(path=p, build_system=CONDA) for p in r.recipe_dirnames
+    ]
+
     build_result = build.build_recipes(
-        Path(r.basedir),
-        config_fixture,
-        r.recipe_dirnames,
-        testonly=False,
+        recipe_folder,
+        config,
+        recipes,
         force=False,
         mulled_build_and_test=False,
     )
     assert build_result
 
     for v in r.recipe_dirs.values():
-        for i in recipes.built_package_paths(v):
-            assert os.path.exists(i)
+        for i in conda_recipes.built_package_paths(v):
+            assert i.exists()
             ensure_missing(i)
 
 
@@ -1060,7 +1264,7 @@ def test_load_meta_skipping():
     )
     r.write_recipes()
     recipe = r.recipe_dirs["one"]
-    assert conda_build_bridge.load_all_meta(recipe) == []
+    assert conda_build_bridge.load_all_meta(Path(recipe)) == []
 
 
 @pytest.mark.parametrize(
@@ -1086,7 +1290,7 @@ def test_load_platform_metas_preserves_complete_target_platform(
     )
     rcp.write_recipes()
 
-    subdir, metas = recipes._load_platform_metas(
+    subdir, metas = conda_recipes._load_platform_metas(
         rcp.recipe_dirs["one"],
         finalize=False,
         target_platform=target_platform,
@@ -1100,768 +1304,6 @@ def test_load_platform_metas_preserves_complete_target_platform(
     assert meta.config.target_subdir == expected_subdir
     assert meta.config.variant["target_platform"] == expected_subdir
     assert Path(api.get_output_file_paths(meta)[0]).parent.name == expected_subdir
-
-
-def test_repodata_loads_and_reuses_only_requested_repositories(monkeypatch):
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda", "conda-forge"]})
-    repodata = RepoData()
-    monkeypatch.setattr(repodata, "_df", None)
-    monkeypatch.setattr(repodata, "cache_file", None)
-    monkeypatch.setattr(repodata, "_repository_cache", {})
-    monkeypatch.setattr(repodata, "platforms", [PackageSubdir.LINUX_AARCH64, "noarch"])
-    loaded_repositories = []
-
-    def load(repositories=None):
-        assert repositories is not None
-        selected = tuple(repositories)
-        loaded_repositories.append(selected)
-        return pd.DataFrame(
-            [
-                {
-                    "name": f"package-{channel}-{subdir}",
-                    "version": "1",
-                    "build": "0",
-                    "build_number": 0,
-                    "depends": [],
-                    "channel": channel,
-                    "platform": subdir,
-                    "subdir": subdir,
-                }
-                for channel, subdir in selected
-            ],
-            columns=RepoData.columns,
-        )
-
-    monkeypatch.setattr(repodata, "_load_channel_dataframe", load)
-
-    assert set(
-        repodata.get_package_data(
-            "name",
-            channels="bioconda",
-            platform=[PackageSubdir.LINUX_AARCH64, "noarch"],
-        )
-    ) == {
-        "package-bioconda-linux-aarch64",
-        "package-bioconda-noarch",
-    }
-    assert set(
-        repodata.get_package_data(
-            "name",
-            channels=["bioconda", "conda-forge"],
-            platform=[PackageSubdir.LINUX_AARCH64],
-        )
-    ) == {
-        "package-bioconda-linux-aarch64",
-        "package-conda-forge-linux-aarch64",
-    }
-    assert not repodata.get_package_data(
-        channels="unconfigured", platform=PackageSubdir.LINUX_AARCH64
-    )
-    assert set(repodata.df["name"]) == {
-        "package-bioconda-linux-aarch64",
-        "package-bioconda-noarch",
-        "package-conda-forge-linux-aarch64",
-        "package-conda-forge-noarch",
-    }
-    assert repodata._repository_cache == {}
-
-    assert loaded_repositories == [
-        (
-            ("bioconda", PackageSubdir.LINUX_AARCH64),
-            ("bioconda", "noarch"),
-        ),
-        (("conda-forge", PackageSubdir.LINUX_AARCH64),),
-        (("conda-forge", "noarch"),),
-    ]
-
-
-def _repodata_dataframe(name):
-    return pd.DataFrame(
-        [
-            {
-                "name": name,
-                "version": "1",
-                "build": "0",
-                "build_number": 0,
-                "depends": [],
-                "channel": "bioconda",
-                "platform": PackageSubdir.LINUX_AARCH64,
-                "subdir": PackageSubdir.LINUX_AARCH64,
-            }
-        ],
-        columns=RepoData.columns,
-    )
-
-
-def test_repodata_refreshes_expired_repository(monkeypatch):
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
-    repodata = RepoData()
-    repository = ("bioconda", PackageSubdir.LINUX_AARCH64)
-    expired_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=30)
-    monkeypatch.setattr(repodata, "_df", None)
-    monkeypatch.setattr(repodata, "cache_file", None)
-    monkeypatch.setattr(
-        repodata,
-        "_repository_cache",
-        {repository: _CachedRepoData(_repodata_dataframe("old"), expired_at)},
-    )
-    loaded_repositories = []
-
-    def load(repositories=None):
-        loaded_repositories.append(tuple(repositories or ()))
-        return _repodata_dataframe("fresh")
-
-    monkeypatch.setattr(repodata, "_load_channel_dataframe", load)
-
-    assert repodata.get_package_data(
-        "name",
-        channels="bioconda",
-        platform=PackageSubdir.LINUX_AARCH64,
-    ) == ["fresh"]
-    assert loaded_repositories == [(repository,)]
-
-
-def test_repodata_refreshes_full_dataframe_older_than_one_day(monkeypatch):
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
-    repodata = RepoData()
-    monkeypatch.setattr(repodata, "_df", _repodata_dataframe("old"))
-    monkeypatch.setattr(
-        repodata,
-        "_df_ts",
-        datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=30),
-    )
-    monkeypatch.setattr(repodata, "cache_file", None)
-    monkeypatch.setattr(repodata, "_repository_cache", {})
-    monkeypatch.setattr(repodata, "platforms", [PackageSubdir.LINUX_AARCH64])
-    monkeypatch.setattr(
-        repodata,
-        "_load_channel_dataframe",
-        lambda _repositories=None: _repodata_dataframe("fresh"),
-    )
-
-    assert list(repodata.df["name"]) == ["fresh"]
-
-
-def test_repodata_refreshes_disk_cache_older_than_one_day(monkeypatch, tmp_path):
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
-    cache_file = tmp_path / "repodata.pkl"
-    _repodata_dataframe("old").to_pickle(cache_file)
-    expired_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=30)
-    os.utime(cache_file, (expired_at.timestamp(), expired_at.timestamp()))
-
-    repodata = RepoData()
-    monkeypatch.setattr(repodata, "_df", None)
-    monkeypatch.setattr(repodata, "_df_ts", None)
-    monkeypatch.setattr(repodata, "cache_file", str(cache_file))
-    monkeypatch.setattr(repodata, "_repository_cache", {})
-    monkeypatch.setattr(
-        repodata,
-        "_load_channel_dataframe",
-        lambda _repositories=None: _repodata_dataframe("fresh"),
-    )
-
-    assert list(repodata.df["name"]) == ["fresh"]
-
-
-def test_repodata_creates_configured_disk_cache(monkeypatch, tmp_path):
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
-    cache_file = tmp_path / "repodata.pkl"
-    repodata = RepoData()
-    monkeypatch.setattr(repodata, "_df", None)
-    monkeypatch.setattr(repodata, "_df_ts", None)
-    monkeypatch.setattr(repodata, "cache_file", cache_file)
-    monkeypatch.setattr(repodata, "_repository_cache", {})
-    monkeypatch.setattr(repodata, "platforms", [PackageSubdir.LINUX_AARCH64])
-
-    monkeypatch.setattr(
-        repodata,
-        "_load_channel_dataframe",
-        lambda _repositories=None: _repodata_dataframe("fresh"),
-    )
-    monkeypatch.setattr(repodata, "_is_loader_mocked", lambda: False)
-    monkeypatch.setattr(
-        repodata,
-        "_get_sharded_package_data",
-        Mock(side_effect=AssertionError("disk caches must use complete repodata")),
-    )
-
-    assert repodata.get_package_data("name", name="fresh") == ["fresh"]
-    assert cache_file.exists()
-
-
-def test_async_requests_preserves_request_order(monkeypatch):
-    async def fetch_out_of_order(_session, url, _desc, _cb, data, _fd, allow_404=False):
-        await asyncio.sleep(float(url))
-        return data
-
-    monkeypatch.setattr(utils.AsyncRequests, "_async_fetch_one", fetch_out_of_order)
-
-    result = asyncio.run(
-        utils.AsyncRequests.async_fetch(
-            ["0.02", "0"],
-            ["slow", "fast"],
-            datas=["first", "second"],
-        )
-    )
-
-    assert result == ["first", "second"]
-
-
-def test_async_requests_can_isolate_request_failures(monkeypatch):
-    async def fetch_one(_session, url, _desc, _cb, data, _fd, allow_404=False):
-        if url == "broken":
-            raise OSError("download failed")
-        return data
-
-    monkeypatch.setattr(utils.AsyncRequests, "_async_fetch_one", fetch_one)
-
-    result = asyncio.run(
-        utils.AsyncRequests.async_fetch(
-            ["working", "broken"],
-            ["working", "broken"],
-            datas=["result", None],
-            return_exceptions=True,
-        )
-    )
-
-    assert result[0] == "result"
-    assert isinstance(result[1], OSError)
-
-
-def _pack_shard(data):
-    return zstandard.ZstdCompressor().compress(msgpack.packb(data))
-
-
-@pytest.mark.parametrize(
-    "data",
-    [
-        [],
-        {},
-        {"version": 2, "info": {}, "shards": {}},
-        {"version": 1, "info": {}, "shards": None},
-        {"version": 1, "info": {}, "shards": {"pkg": {}}},
-    ],
-)
-def test_repodata_rejects_invalid_shard_indexes(data):
-    assert (
-        RepoData._parse_shard_index(
-            _pack_shard(data), ("bioconda", PackageSubdir.LINUX_64)
-        )
-        is None
-    )
-
-
-@pytest.mark.parametrize(
-    "data",
-    [
-        [],
-        {},
-        {"packages": None, "packages.conda": {}},
-        {"packages": {"pkg-1-0.tar.bz2": []}, "packages.conda": {}},
-        {
-            "packages": {"pkg-1-0.tar.bz2": {"depends": None}},
-            "packages.conda": {},
-        },
-    ],
-)
-def test_repodata_rejects_invalid_package_shards(data):
-    assert (
-        RepoData._parse_package_shard(
-            _pack_shard(data),
-            ("bioconda", PackageSubdir.LINUX_64, "pkg"),
-        )
-        is None
-    )
-
-
-@pytest.mark.parametrize(
-    ("shards_base_url", "expected"),
-    [
-        ("", "https://conda.anaconda.org/bioconda/linux-64/hash.msgpack.zst"),
-        (
-            "./shards/",
-            "https://conda.anaconda.org/bioconda/linux-64/shards/hash.msgpack.zst",
-        ),
-        ("/shards/", "https://conda.anaconda.org/shards/hash.msgpack.zst"),
-        ("https://cdn.example/shards", "https://cdn.example/shards/hash.msgpack.zst"),
-    ],
-)
-def test_repodata_resolves_shards_base_url(monkeypatch, shards_base_url, expected):
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
-    repodata = RepoData()
-    index = utils._CachedShardIndex(
-        shards={},
-        base_url="",
-        shards_base_url=shards_base_url,
-        fetched_at=datetime.datetime.now(datetime.UTC),
-    )
-
-    assert (
-        repodata._make_shard_url("bioconda", PackageSubdir.LINUX_64, index, "hash")
-        == expected
-    )
-
-
-def test_repodata_shards_get_package_data_by_name(monkeypatch):
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
-    repodata = RepoData()
-    monkeypatch.setattr(repodata, "_df", None)
-    monkeypatch.setattr(repodata, "cache_file", None)
-    monkeypatch.setattr(repodata, "platforms", [PackageSubdir.LINUX_64])
-    monkeypatch.setattr(repodata, "_package_shard_cache", {})
-
-    shard_idx = utils._CachedShardIndex(
-        shards={"pkg-a": "0123456789abcdef"},
-        base_url="",
-        shards_base_url="",
-        fetched_at=datetime.datetime.now(datetime.UTC),
-    )
-    monkeypatch.setattr(
-        repodata,
-        "_get_shard_indexes",
-        lambda repos: {("bioconda", PackageSubdir.LINUX_64): shard_idx},
-    )
-
-    fetch_calls = []
-
-    def mock_fetch(urls, descs, cb, datas, allow_404=False, return_exceptions=False):
-        fetch_calls.append((urls, datas))
-        return [
-            [
-                {
-                    "name": "pkg-a",
-                    "version": "1.0",
-                    "build": "h123_0",
-                    "build_number": 0,
-                    "depends": [],
-                    "channel": "bioconda",
-                    "platform": PackageSubdir.LINUX_64,
-                    "subdir": PackageSubdir.LINUX_64,
-                }
-            ]
-        ]
-
-    monkeypatch.setattr(utils.AsyncRequests, "fetch", mock_fetch)
-
-    # 1. Existence check
-    assert (
-        repodata.get_package_data(name="pkg-a", platform=PackageSubdir.LINUX_64) is True
-    )
-    assert len(fetch_calls) == 1
-
-    # 2. Version lookup
-    assert repodata.get_package_data(
-        "version", name="pkg-a", platform=PackageSubdir.LINUX_64
-    ) == ["1.0"]
-
-    # 3. Tuple lookup
-    records = list(
-        repodata.get_package_data(
-            ["subdir", "build"], name="pkg-a", platform=PackageSubdir.LINUX_64
-        )
-    )
-    assert len(records) == 1
-    assert records[0].subdir == PackageSubdir.LINUX_64
-    assert records[0].build == "h123_0"
-
-    # 4. Non-existent package: should not fetch shard
-    fetch_calls.clear()
-    assert (
-        repodata.get_package_data(name="pkg-b", platform=PackageSubdir.LINUX_64)
-        is False
-    )
-    assert len(fetch_calls) == 0
-
-
-def test_repodata_shards_get_package_names(monkeypatch):
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
-    repodata = RepoData()
-    monkeypatch.setattr(repodata, "_df", None)
-    monkeypatch.setattr(repodata, "cache_file", None)
-    monkeypatch.setattr(repodata, "platforms", [PackageSubdir.LINUX_64])
-    monkeypatch.setattr(repodata, "_package_shard_cache", {})
-
-    shard_idx = utils._CachedShardIndex(
-        shards={"pkg-a": "hash1", "pkg-b": "hash2"},
-        base_url="",
-        shards_base_url="",
-        fetched_at=datetime.datetime.now(datetime.UTC),
-    )
-    monkeypatch.setattr(
-        repodata,
-        "_get_shard_indexes",
-        lambda repos: {("bioconda", PackageSubdir.LINUX_64): shard_idx},
-    )
-
-    def mock_fetch(urls, descs, cb, datas, allow_404=False, return_exceptions=False):
-        records = {
-            "pkg-a": [
-                {
-                    "name": "pkg-a",
-                    "version": version,
-                    "build": "0",
-                    "build_number": 0,
-                    "depends": [],
-                    "channel": "bioconda",
-                    "platform": PackageSubdir.LINUX_64,
-                    "subdir": PackageSubdir.LINUX_64,
-                }
-                for version in ("1", "2")
-            ],
-            "pkg-b": [
-                {
-                    "name": "pkg-b",
-                    "version": "1",
-                    "build": "0",
-                    "build_number": 0,
-                    "depends": [],
-                    "channel": "bioconda",
-                    "platform": PackageSubdir.LINUX_64,
-                    "subdir": PackageSubdir.LINUX_64,
-                }
-            ],
-        }
-        return [records[package_name] for _, _, package_name in datas]
-
-    monkeypatch.setattr(utils.AsyncRequests, "fetch", mock_fetch)
-
-    names = repodata.get_package_data(
-        "name",
-        channels="bioconda",
-        name=["pkg-a", "pkg-b"],
-        platform=PackageSubdir.LINUX_64,
-    )
-    assert names == ["pkg-a", "pkg-a", "pkg-b"]
-
-
-def test_repodata_package_shard_cache_tracks_index_hash(monkeypatch):
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
-    repodata = RepoData()
-    monkeypatch.setattr(repodata, "_package_shard_cache", {})
-    repository = ("bioconda", PackageSubdir.LINUX_64)
-    old_records = [{"name": "pkg-a", "version": "1"}]
-    repodata._package_shard_cache[(*repository, "old-hash")] = (
-        utils._CachedPackageShard(records=old_records)
-    )
-    new_index = utils._CachedShardIndex(
-        shards={"pkg-a": "new-hash"},
-        base_url="",
-        shards_base_url="",
-        fetched_at=datetime.datetime.now(datetime.UTC),
-    )
-    monkeypatch.setattr(
-        repodata, "_get_shard_indexes", lambda repositories: {repository: new_index}
-    )
-    fetched = []
-
-    def mock_fetch(urls, descs, cb, datas, allow_404=False, return_exceptions=False):
-        fetched.extend(urls)
-        return [[{"name": "pkg-a", "version": "2"}]]
-
-    monkeypatch.setattr(utils.AsyncRequests, "fetch", mock_fetch)
-
-    assert repodata._get_sharded_package_data(
-        ["bioconda"], [PackageSubdir.LINUX_64], ["pkg-a"]
-    ) == [{"name": "pkg-a", "version": "2"}]
-    assert fetched[0].endswith("new-hash.msgpack.zst")
-
-
-def test_repodata_retries_expired_unavailable_shard_index(monkeypatch):
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
-    repodata = RepoData()
-    repository = ("bioconda", PackageSubdir.LINUX_64)
-    expired = datetime.datetime.now(datetime.UTC) - datetime.timedelta(
-        seconds=repodata.shards_unavailable_timeout + 1
-    )
-    monkeypatch.setattr(repodata, "_shards_unavailable", {repository: expired})
-    monkeypatch.setattr(repodata, "_shard_index_cache", {})
-    index = utils._CachedShardIndex(
-        shards={},
-        base_url="",
-        shards_base_url="",
-        fetched_at=datetime.datetime.now(datetime.UTC),
-    )
-    fetch_calls = []
-
-    def mock_fetch(urls, descs, cb, datas, allow_404=False, return_exceptions=False):
-        fetch_calls.append(urls)
-        return [index]
-
-    monkeypatch.setattr(utils.AsyncRequests, "fetch", mock_fetch)
-
-    assert repodata._get_shard_indexes([repository]) == {repository: index}
-    assert len(fetch_calls) == 1
-    assert repository not in repodata._shards_unavailable
-
-
-def test_repodata_shards_get_versions(monkeypatch):
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
-    repodata = RepoData()
-    monkeypatch.setattr(repodata, "_df", None)
-    monkeypatch.setattr(repodata, "cache_file", None)
-    monkeypatch.setattr(repodata, "platforms", [PackageSubdir.LINUX_64])
-    monkeypatch.setattr(repodata, "_package_shard_cache", {})
-
-    shard_idx = utils._CachedShardIndex(
-        shards={"pkg-a": "hash1"},
-        base_url="",
-        shards_base_url="",
-        fetched_at=datetime.datetime.now(datetime.UTC),
-    )
-    monkeypatch.setattr(
-        repodata,
-        "_get_shard_indexes",
-        lambda repos: {("bioconda", PackageSubdir.LINUX_64): shard_idx},
-    )
-
-    def mock_fetch(urls, descs, cb, datas, allow_404=False, return_exceptions=False):
-        return [
-            [
-                {
-                    "name": "pkg-a",
-                    "version": "1.0",
-                    "build": "0",
-                    "build_number": 0,
-                    "depends": [],
-                    "channel": "bioconda",
-                    "platform": PackageSubdir.LINUX_64,
-                    "subdir": PackageSubdir.LINUX_64,
-                }
-            ]
-        ]
-
-    monkeypatch.setattr(utils.AsyncRequests, "fetch", mock_fetch)
-    versions = repodata.get_versions("pkg-a")
-    assert versions == {"1.0": [PackageSubdir.LINUX_64]}
-
-
-def test_repodata_shards_fallback_on_unsharded(monkeypatch):
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
-    repodata = RepoData()
-    monkeypatch.setattr(repodata, "_df", None)
-    monkeypatch.setattr(repodata, "cache_file", None)
-    monkeypatch.setattr(repodata, "platforms", [PackageSubdir.LINUX_64])
-    monkeypatch.setattr(
-        repodata,
-        "_shards_unavailable",
-        {("bioconda", PackageSubdir.LINUX_64): datetime.datetime.now(datetime.UTC)},
-    )
-    fallback_called = []
-
-    def mock_repo_df(repositories):
-        fallback_called.append(set(repositories))
-        return pd.DataFrame(
-            [
-                {
-                    "name": "pkg-a",
-                    "version": "1.0",
-                    "build": "0",
-                    "build_number": 0,
-                    "depends": [],
-                    "channel": "bioconda",
-                    "platform": PackageSubdir.LINUX_64,
-                    "subdir": PackageSubdir.LINUX_64,
-                }
-            ],
-            columns=RepoData.columns,
-        )
-
-    monkeypatch.setattr(repodata, "_get_repository_pairs_dataframe", mock_repo_df)
-
-    assert repodata.get_package_data(
-        "version", name="pkg-a", platform=PackageSubdir.LINUX_64
-    ) == ["1.0"]
-    assert fallback_called == [{("bioconda", PackageSubdir.LINUX_64)}]
-
-
-def test_repodata_shards_fallback_on_failed_package_shard(monkeypatch):
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
-    repodata = RepoData()
-    monkeypatch.setattr(repodata, "_df", None)
-    monkeypatch.setattr(repodata, "cache_file", None)
-    monkeypatch.setattr(repodata, "platforms", [PackageSubdir.LINUX_64])
-    monkeypatch.setattr(repodata, "_package_shard_cache", {})
-    monkeypatch.setattr(repodata, "_package_shards_unavailable", {})
-    repository = ("bioconda", PackageSubdir.LINUX_64)
-    shard_idx = utils._CachedShardIndex(
-        shards={"pkg-a": "hash1"},
-        base_url="",
-        shards_base_url="",
-        fetched_at=datetime.datetime.now(datetime.UTC),
-    )
-    monkeypatch.setattr(
-        repodata, "_get_shard_indexes", lambda repos: {repository: shard_idx}
-    )
-    fetch = Mock(return_value=[None])
-    monkeypatch.setattr(utils.AsyncRequests, "fetch", fetch)
-    fallback_called = []
-
-    def fallback(repositories):
-        fallback_called.append(set(repositories))
-        return _repodata_dataframe("pkg-a").assign(
-            platform=PackageSubdir.LINUX_64,
-            subdir=PackageSubdir.LINUX_64,
-        )
-
-    monkeypatch.setattr(repodata, "_get_repository_pairs_dataframe", fallback)
-
-    assert repodata.get_package_data(
-        "version", name="pkg-a", platform=PackageSubdir.LINUX_64
-    ) == ["1"]
-    assert fallback_called == [{repository}]
-    assert ("bioconda", PackageSubdir.LINUX_64, "hash1") in (
-        repodata._package_shards_unavailable
-    )
-
-    assert repodata.get_package_data(
-        "version", name="pkg-a", platform=PackageSubdir.LINUX_64
-    ) == ["1"]
-    assert fetch.call_count == 1
-
-
-def test_repodata_shards_isolate_partial_batch_failure(monkeypatch):
-    channels = ["working", "broken"]
-    subdir = PackageSubdir.LINUX_64
-    monkeypatch.setattr(utils.RepoData, "config", {"channels": channels})
-    repodata = utils.RepoData()
-    monkeypatch.setattr(repodata, "_package_shard_cache", {})
-    monkeypatch.setattr(repodata, "_package_shards_unavailable", {})
-
-    indexes = {
-        (channel, subdir): utils._CachedShardIndex(
-            shards={"pkg-a": f"{channel}-hash"},
-            base_url="",
-            shards_base_url="",
-            fetched_at=datetime.datetime.now(datetime.UTC),
-        )
-        for channel in channels
-    }
-    monkeypatch.setattr(repodata, "_get_shard_indexes", lambda _repos: indexes)
-
-    working_record = {
-        "name": "pkg-a",
-        "version": "1",
-        "build": "0",
-        "build_number": 0,
-        "depends": [],
-        "channel": "working",
-        "platform": subdir,
-        "subdir": subdir,
-    }
-    monkeypatch.setattr(
-        utils.AsyncRequests,
-        "fetch",
-        lambda *args, **kwargs: [[working_record], OSError("download failed")],
-    )
-
-    def fallback(repositories):
-        assert tuple(repositories) == (("broken", subdir),)
-        return _repodata_dataframe("pkg-a").assign(
-            channel="broken", platform=subdir, subdir=subdir
-        )
-
-    monkeypatch.setattr(repodata, "_get_repository_pairs_dataframe", fallback)
-
-    records = repodata._get_sharded_package_data(channels, [subdir], ["pkg-a"])
-
-    assert [record["channel"] for record in records] == channels
-    assert ("working", subdir, "working-hash") in repodata._package_shard_cache
-    assert ("broken", subdir, "broken-hash") in (repodata._package_shards_unavailable)
-
-
-def test_repodata_shards_preserve_channel_order_with_fallback(monkeypatch):
-    channels = ["high-priority", "low-priority"]
-    subdir = PackageSubdir.LINUX_64
-    high_priority_repo = (channels[0], subdir)
-    low_priority_repo = (channels[1], subdir)
-    monkeypatch.setattr(RepoData, "config", {"channels": channels})
-    repodata = RepoData()
-    monkeypatch.setattr(repodata, "_package_shard_cache", {})
-
-    shard_idx = utils._CachedShardIndex(
-        shards={"pkg-a": "hash1"},
-        base_url="",
-        shards_base_url="",
-        fetched_at=datetime.datetime.now(datetime.UTC),
-    )
-    monkeypatch.setattr(
-        repodata,
-        "_get_shard_indexes",
-        lambda _repos: {low_priority_repo: shard_idx},
-    )
-
-    def record(channel):
-        return {
-            "name": "pkg-a",
-            "version": "1",
-            "build": "0",
-            "build_number": 0,
-            "depends": [],
-            "channel": channel,
-            "platform": subdir,
-            "subdir": subdir,
-        }
-
-    monkeypatch.setattr(
-        utils.AsyncRequests,
-        "fetch",
-        lambda *args, **kwargs: [[record(channels[1])]],
-    )
-    fallback_calls = []
-
-    def fallback(repositories):
-        fallback_calls.append(tuple(repositories))
-        return pd.DataFrame([record(channels[0])], columns=RepoData.columns)
-
-    monkeypatch.setattr(repodata, "_get_repository_pairs_dataframe", fallback)
-
-    records = repodata._get_sharded_package_data(channels, [subdir], ["pkg-a"])
-
-    assert fallback_calls == [(high_priority_repo,)]
-    assert [item["channel"] for item in records] == channels
-
-
-def test_repodata_exact_repository_pair_fallback(monkeypatch):
-    monkeypatch.setattr(
-        RepoData,
-        "config",
-        {"channels": ["bioconda", "conda-forge"]},
-    )
-    repodata = RepoData()
-    monkeypatch.setattr(repodata, "_df", None)
-    monkeypatch.setattr(repodata, "cache_file", None)
-    monkeypatch.setattr(repodata, "_repository_cache", {})
-    requested = (
-        ("bioconda", PackageSubdir.LINUX_64),
-        ("conda-forge", "noarch"),
-    )
-    loaded = []
-
-    def load(repositories):
-        loaded.extend(repositories)
-        return pd.DataFrame(
-            [
-                {
-                    "name": f"{channel}-{subdir}",
-                    "version": "1",
-                    "build": "0",
-                    "build_number": 0,
-                    "depends": [],
-                    "channel": channel,
-                    "platform": subdir,
-                    "subdir": subdir,
-                }
-                for channel, subdir in repositories
-            ],
-            columns=RepoData.columns,
-        )
-
-    monkeypatch.setattr(repodata, "_load_channel_dataframe", load)
-
-    result = repodata._get_repository_pairs_dataframe(requested)
-
-    assert loaded == list(requested)
-    assert set(zip(result["channel"], result["subdir"])) == set(requested)
 
 
 def test_filter_existing_packages_queries_rendered_target_subdir(monkeypatch):
@@ -1880,19 +1322,21 @@ def test_filter_existing_packages_queries_rendered_target_subdir(monkeypatch):
         queried_platforms.append(kwargs["platform"])
         return []
 
+    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
     monkeypatch.setattr(RepoData, "get_package_data", get_package_data)
 
-    assert recipes._filter_existing_packages([meta], ["bioconda"]) == (
+    assert conda_recipes._filter_existing_packages([meta], ["bioconda"]) == (
         [meta],
         [],
         set(),
+        {},
     )
     assert queried_platforms == [[PackageSubdir.LINUX_AARCH64, "noarch"]]
 
 
 def test_get_package_paths_force_builds_existing_and_logs_force(caplog, monkeypatch):
-    # get_package_data yields pandas itertuples rows for ["subdir", "build"]
-    ExistingBuild = namedtuple("ExistingBuild", ["subdir", "build"])
+    # get_package_data yields namedtuple rows for ["channel", "subdir", "build"]
+    ExistingBuild = namedtuple("ExistingBuild", ["channel", "subdir", "build"])
     meta = Mock()
     meta.name.return_value = "samtools"
     meta.version.return_value = "1.24"
@@ -1902,36 +1346,124 @@ def test_get_package_paths_force_builds_existing_and_logs_force(caplog, monkeypa
     meta.noarch = False
     meta.noarch_python = False
     meta.config.host_subdir = PackageSubdir.LINUX_64
-    existing_builds = [ExistingBuild(subdir=PackageSubdir.LINUX_64, build="h391949c_1")]
+    existing_builds = [
+        ExistingBuild(
+            channel="bioconda", subdir=PackageSubdir.LINUX_64, build="h391949c_1"
+        )
+    ]
 
     monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
     monkeypatch.setattr(
-        recipes,
+        conda_recipes,
         "_load_platform_metas",
         lambda *_a, **_k: (PackageSubdir.LINUX_64, [meta]),
     )
     monkeypatch.setattr(
         RepoData,
         "get_package_data",
-        lambda _self, _keys, **_k: existing_builds,
+        lambda _self, keys, **_k: (
+            []
+            if keys == ["channel", "build", "subdir"]
+            # check_recipe_skippable: no matching version + build number yet
+            else existing_builds  # _filter_existing_packages
+        ),
     )
     monkeypatch.setattr(
-        recipes.api, "get_output_file_paths", lambda m: [f"/tmp/{m.pkg_fn()}.tar.bz2"]
+        conda_recipes.api,
+        "get_output_file_paths",
+        lambda m: [f"/tmp/{m.pkg_fn()}.tar.bz2"],
     )
 
     caplog.set_level(logging.INFO, logger="bioconda_utils.conda.recipes")
-    paths = recipes.get_package_paths("recipes/samtools", ["bioconda"], force=True)
-    assert paths == ["/tmp/samtools-1.24-h391949c_1.tar.bz2"]
+    paths = conda_recipes.get_package_paths(
+        Path("recipes/samtools"), ["bioconda"], force=True
+    )
+    assert paths == [Path("/tmp/samtools-1.24-h391949c_1.tar.bz2")]
     assert "FORCE: building samtools-1.24-h391949c_1" in caplog.text
+    assert "channel(s) [bioconda]" in caplog.text
     assert "it is not forced" not in caplog.text
 
     caplog.clear()
-    paths = recipes.get_package_paths("recipes/samtools", ["bioconda"], force=False)
+    paths = conda_recipes.get_package_paths(
+        Path("recipes/samtools"), ["bioconda"], force=False
+    )
     assert paths == []
+    assert "channel(s) [bioconda]" in caplog.text
     assert "it is not forced" in caplog.text
 
 
-def test_check_recipe_skippable_queries_requested_target(monkeypatch):
+def test_get_package_paths_reports_channels_per_multi_output(caplog, monkeypatch):
+    """Sibling outputs of one recipe must not pool each other's channels.
+
+    ``noarch: python`` outputs of a multi-output recipe all render to the
+    ``noarch`` subdir with the same ``pyXY_0`` build string, so a channel
+    lookup keyed on ``(subdir, build)`` alone collapses them into one entry
+    and every output reports the union of the channels holding its siblings.
+    """
+    # get_package_data yields namedtuple rows for ["channel", "subdir", "build"]
+    ExistingBuild = namedtuple("ExistingBuild", ["channel", "subdir", "build"])
+
+    def make_output(name):
+        meta = Mock()
+        meta.name.return_value = name
+        meta.version.return_value = "5.0.0"
+        meta.build_number.return_value = 0
+        meta.build_id.return_value = "py311_0"
+        meta.pkg_fn.return_value = f"{name}-5.0.0-py311_0"
+        meta.noarch = True
+        meta.noarch_python = False
+        meta.config.host_subdir = PackageSubdir.LINUX_64
+        return meta
+
+    outputs = [make_output("r-seurat"), make_output("r-seuratdata")]
+    # Each output exists in exactly one channel, and not in the same one.
+    rows_by_name = {
+        "r-seurat": [ExistingBuild("bioconda", "noarch", "py311_0")],
+        "r-seuratdata": [ExistingBuild("conda-forge", "noarch", "py311_0")],
+    }
+
+    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda", "conda-forge"]})
+    monkeypatch.setattr(
+        conda_recipes,
+        "_load_platform_metas",
+        lambda *_a, **_k: ("noarch", outputs),
+    )
+
+    def get_package_data(_self, keys, name: str = "", **_kwargs):
+        if keys == ["channel", "build", "subdir"]:
+            # check_recipe_skippable: no matching version + build number yet
+            return []
+        return rows_by_name[name]  # _filter_existing_packages
+
+    monkeypatch.setattr(RepoData, "get_package_data", get_package_data)
+    monkeypatch.setattr(
+        conda_recipes.api,
+        "get_output_file_paths",
+        lambda m: [f"/tmp/{m.pkg_fn()}.conda"],
+    )
+
+    caplog.set_level(logging.INFO, logger="bioconda_utils.conda.recipes")
+    paths = conda_recipes.get_package_paths(
+        Path("recipes/r-seurat"), ["bioconda", "conda-forge"], force=True
+    )
+    assert paths == [
+        Path("/tmp/r-seurat-5.0.0-py311_0.conda"),
+        Path("/tmp/r-seuratdata-5.0.0-py311_0.conda"),
+    ]
+    assert (
+        "FORCE: building r-seurat-5.0.0-py311_0 "
+        "although it is already in channel(s) [bioconda]." in caplog.text
+    )
+    assert (
+        "FORCE: building r-seuratdata-5.0.0-py311_0 "
+        "although it is already in channel(s) [conda-forge]." in caplog.text
+    )
+    # the pooled union the collision used to produce
+    assert "channel(s) [bioconda, conda-forge]" not in caplog.text
+
+
+# must import config_fixture, otherwise this test fails because RepoData can't be instantiated.
+def test_check_recipe_skippable_queries_requested_target(monkeypatch, config_fixture):
     meta = Mock()
     meta.name.return_value = "samtools"
     meta.version.return_value = "1.24"
@@ -1951,14 +1483,56 @@ def test_check_recipe_skippable_queries_requested_target(monkeypatch):
         queried_platforms.append(kwargs["platform"])
         return []
 
-    monkeypatch.setattr(recipes, "_load_platform_metas", load_platform_metas)
+    monkeypatch.setattr(conda_recipes, "_load_platform_metas", load_platform_metas)
     monkeypatch.setattr(RepoData, "get_package_data", get_package_data)
 
-    assert not recipes.check_recipe_skippable(
-        "samtools", ["bioconda"], target_platform=ContainerPlatform.LINUX_ARM64
+    assert not conda_recipes.check_recipe_skippable(
+        Path("samtools"), ["bioconda"], target_platform=ContainerPlatform.LINUX_ARM64
     )
     assert loaded_targets == [(False, ContainerPlatform.LINUX_ARM64)]
     assert queried_platforms == [[PackageSubdir.LINUX_AARCH64, "noarch"]]
+
+
+@pytest.mark.parametrize("duplicate_channel", [False, True])
+def test_check_recipe_skippable_logs_channels_with_build(
+    caplog, monkeypatch, duplicate_channel
+):
+    meta = Mock()
+    meta.name.return_value = "samtools"
+    meta.version.return_value = "1.24"
+    meta.build_number.return_value = 1
+    meta.get_value.return_value = None
+    meta.noarch = False
+    meta.noarch_python = False
+    meta.config.host_subdir = PackageSubdir.LINUX_64
+
+    monkeypatch.setattr(
+        conda_recipes,
+        "_load_platform_metas",
+        lambda *_a, **_k: (PackageSubdir.LINUX_64, [meta]),
+    )
+    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda", "conda-forge"]})
+    rows = [("conda-forge", "h123_1", PackageSubdir.LINUX_64)]
+    if duplicate_channel:
+        rows.append(("bioconda", "h123_1", PackageSubdir.LINUX_64))
+    monkeypatch.setattr(
+        RepoData,
+        "get_package_data",
+        lambda _self, _keys, **_k: rows,
+    )
+
+    caplog.set_level(logging.INFO, logger="bioconda_utils.conda.recipes")
+    assert conda_recipes.check_recipe_skippable(
+        Path("samtools"), ["bioconda", "conda-forge"], target_platform=None
+    )
+    expected_channels = "bioconda, conda-forge" if duplicate_channel else "conda-forge"
+    assert f"channel(s) [{expected_channels}]" in caplog.text
+
+    # A second distinct build remains a second variant, even in the same subdir.
+    rows.append(("conda-forge", "h456_1", PackageSubdir.LINUX_64))
+    assert not conda_recipes.check_recipe_skippable(
+        Path("samtools"), ["bioconda", "conda-forge"]
+    )
 
 
 def test_native_platform_skipping(config_fixture):
@@ -2028,11 +1602,14 @@ def test_native_platform_skipping(config_fixture):
     )
     r.write_recipes()
     for recipe_name, platform, result in expections:
-        recipe_folder = os.path.dirname(r.recipe_dirs[recipe_name])
+        recipe_folder = r.recipe_dirs[recipe_name].parent
+        recipe_path: RecipePath = RecipePath(
+            path=r.recipe_dirs[recipe_name], build_system=CONDA
+        )
         assert (
             build.should_skip_platform(
                 Path(recipe_folder),
-                Path(r.recipe_dirs[recipe_name]),
+                recipe_path,
                 PackageSubdir(platform),
             )
             == result
@@ -2040,14 +1617,14 @@ def test_native_platform_skipping(config_fixture):
 
     # When osx-64 is not in primary_platforms, it requires opt-in
     assert build.should_skip_platform(
-        Path(os.path.dirname(r.recipe_dirs["one"])),
-        Path(r.recipe_dirs["one"]),
+        r.recipe_dirs["one"].parent,
+        RecipePath(path=r.recipe_dirs["one"], build_system=CONDA),
         PackageSubdir.OSX_64,
         primary_platforms=[PackageSubdir.LINUX_64],
     )
     assert not build.should_skip_platform(
-        Path(os.path.dirname(r.recipe_dirs["one"])),
-        Path(r.recipe_dirs["one"]),
+        r.recipe_dirs["one"].parent,
+        RecipePath(path=r.recipe_dirs["one"], build_system=CONDA),
         PackageSubdir.LINUX_64,
         primary_platforms=[PackageSubdir.LINUX_64],
     )
@@ -2067,8 +1644,8 @@ def test_native_platform_skipping(config_fixture):
     )
     r_osx_optin.write_recipes()
     assert not build.should_skip_platform(
-        Path(os.path.dirname(r_osx_optin.recipe_dirs["osx_pkg"])),
-        Path(r_osx_optin.recipe_dirs["osx_pkg"]),
+        r_osx_optin.recipe_dirs["osx_pkg"].parent,
+        RecipePath(path=r_osx_optin.recipe_dirs["osx_pkg"], build_system=CONDA),
         PackageSubdir.OSX_64,
         primary_platforms=[PackageSubdir.LINUX_64],
     )
@@ -2108,14 +1685,14 @@ def test_variants():
     config = conda_build_bridge.load_conda_build_config()
     config.exclusive_config_files = [tmp]
 
-    assert len(conda_build_bridge.load_all_meta(recipe, config)) == 2
+    assert len(conda_build_bridge.load_all_meta(Path(recipe), config)) == 2
 
 
 def test_load_conda_build_config_reads_pinnings_from_env_root(monkeypatch, tmp_path):
     env_root = tmp_path / "env"
     env_root.mkdir()
     (env_root / "conda_build_config.yaml").write_text("{}\n")
-    monkeypatch.setattr(conda_build_bridge, "_env_root", lambda: env_root)
+    monkeypatch.setattr(conda_build_bridge, "env_root", lambda: env_root)
 
     config = conda_build_bridge.load_conda_build_config()
 
@@ -2150,19 +1727,24 @@ def test_cb3_outputs(config_fixture):
     r.write_recipes()
     r.recipe_dirs["one"]
 
+    recipe_folder: Path = Path(r.basedir)
+    config: dict[str, Any] = config_fixture
+    recipes: list[RecipePath] = [
+        RecipePath(path=p, build_system=CONDA) for p in r.recipe_dirnames
+    ]
+
     build_result = build.build_recipes(
-        Path(r.basedir),
-        config_fixture,
-        r.recipe_dirnames,
-        testonly=False,
+        recipe_folder,
+        config,
+        recipes,
         force=False,
         mulled_build_and_test=False,
     )
     assert build_result
 
     for v in r.recipe_dirs.values():
-        for i in recipes.built_package_paths(v):
-            assert os.path.exists(i)
+        for i in conda_recipes.built_package_paths(v):
+            assert i.exists()
             ensure_missing(i)
 
 
@@ -2186,19 +1768,25 @@ def test_compiler(config_fixture):
         from_string=True,
     )
     r.write_recipes()
+
+    recipe_folder: Path = Path(r.basedir)
+    config: dict[str, Any] = config_fixture
+    recipes: list[RecipePath] = [
+        RecipePath(path=p, build_system=CONDA) for p in r.recipe_dirnames
+    ]
+
     build_result = build.build_recipes(
-        Path(r.basedir),
-        config_fixture,
-        r.recipe_dirnames,
-        testonly=False,
+        recipe_folder,
+        config,
+        recipes,
         force=False,
         mulled_build_and_test=False,
     )
     assert build_result
 
     for v in r.recipe_dirs.values():
-        for i in recipes.built_package_paths(v):
-            assert os.path.exists(i)
+        for i in conda_recipes.built_package_paths(v):
+            assert i.exists()
             ensure_missing(i)
 
 
@@ -2260,21 +1848,26 @@ def test_nested_recipes(config_fixture):
     )
     r.write_recipes()
 
+    recipe_folder: Path = Path(r.basedir)
+    config: dict[str, Any] = config_fixture
+    recipes: list[RecipePath] = [
+        RecipePath(path=p, build_system=CONDA) for p in r.recipe_dirnames
+    ]
+
     build_results = build.build_recipes(
-        Path(r.basedir),
-        config_fixture,
-        r.recipe_dirnames,
-        testonly=False,
+        recipe_folder,
+        config,
+        recipes,
         force=False,
         mulled_build_and_test=False,
     )
     assert build_results
 
-    assert len(list(recipes.get_recipes(Path(r.basedir)))) == 4
+    assert len(list(_recipes.get_recipes(Path(r.basedir)))) == 4
 
     for v in r.recipe_dirs.values():
-        for i in recipes.built_package_paths(v):
-            assert os.path.exists(i)
+        for i in conda_recipes.built_package_paths(v):
+            assert i.exists()
             ensure_missing(i)
 
 
@@ -2310,19 +1903,25 @@ def test_conda_build_sysroot(config_fixture):
         from_string=True,
     )
     r.write_recipes()
+
+    recipe_folder: Path = Path(r.basedir)
+    config: dict[str, Any] = config_fixture
+    recipes: list[RecipePath] = [
+        RecipePath(path=p, build_system=CONDA) for p in r.recipe_dirnames
+    ]
+
     build_result = build.build_recipes(
-        Path(r.basedir),
-        config_fixture,
-        r.recipe_dirnames,
-        testonly=False,
+        recipe_folder,
+        config,
+        recipes,
         force=False,
         mulled_build_and_test=False,
     )
     assert build_result
 
     for v in r.recipe_dirs.values():
-        for i in recipes.built_package_paths(v):
-            assert os.path.exists(i)
+        for i in conda_recipes.built_package_paths(v):
+            assert i.exists()
             ensure_missing(i)
 
 
@@ -2359,11 +1958,14 @@ def test_skip_unsatisfiable_pin_compatible(config_fixture):
         from_string=True,
     )
     r.write_recipes()
+
+    recipe_folder: Path = Path(r.basedir)
+    config: dict[str, Any] = config_fixture
+
     build_result = build.build_recipes(
-        Path(r.basedir),
-        config_fixture,
-        [Path(r.recipe_dirs["one"])],
-        testonly=False,
+        recipe_folder,
+        config,
+        [RecipePath(path=r.recipe_dirs["one"], build_system=CONDA)],
         force=False,
         mulled_build_and_test=False,
     )
@@ -2430,20 +2032,81 @@ def test_pkg_test_conda_package_format(
             docker_base_image=BUILD_ENV_IMAGE,
             build_script_template=build_script_template,
         )
+
+    recipe_folder: Path = Path(r.basedir)
+    config: dict[str, Any] = config_fixture
+    recipes: list[RecipePath] = [
+        RecipePath(path=p, build_system=CONDA) for p in r.recipe_dirnames
+    ]
+
     build_result = build.build_recipes(
-        Path(r.basedir),
-        config_fixture,
-        r.recipe_dirnames,
+        recipe_folder,
+        config,
+        recipes,
         docker_builder=docker_builder,
         mulled_build_and_test=mulled_build_and_test,
     )
     assert build_result
 
     for recipe_dir in r.recipe_dirnames:
-        for pkg_file in recipes.built_package_paths(recipe_dir):
-            assert pkg_file.endswith({"1": ".tar.bz2", "2": ".conda"}[pkg_format])
-            assert os.path.exists(pkg_file)
+        for pkg_file in conda_recipes.built_package_paths(recipe_dir):
+            assert pkg_file.name.endswith({"1": ".tar.bz2", "2": ".conda"}[pkg_format])
+            assert pkg_file.exists()
             ensure_missing(pkg_file)
+
+
+def test_rattler_recipe(config_fixture):
+    r = Recipes(
+        """
+        one:
+          recipe.yaml: |
+            context:
+              version: "1.0.0"
+
+            package:
+              name: hello-world
+              version: ${{ version }}
+
+            build:
+              number: 0
+              script:
+                - mkdir -p $PREFIX/bin
+                - echo '#!/bin/bash' > $PREFIX/bin/hello
+                - echo 'echo "Hello, World!"' >> $PREFIX/bin/hello
+                - chmod +x $PREFIX/bin/hello
+
+            tests:
+              - script:
+                  - hello
+
+            about:
+              summary: A simple hello world package
+              license: MIT
+        """,
+        from_string=True,
+    )
+    r.write_recipes()
+    docker_builder = None
+
+    recipe_folder: Path = Path(r.basedir)
+    config: dict[str, Any] = config_fixture
+    recipes: list[RecipePath] = [
+        RecipePath(path=Path(p), build_system=RATTLER) for p in r.recipe_dirnames
+    ]
+
+    build_result = build.build_recipes(
+        recipe_folder,
+        config,
+        recipes,
+        docker_builder=docker_builder,
+        mulled_build_and_test=False,
+    )
+    assert build_result
+
+    # for recipe_dir in r.recipe_dirnames:
+    #     for pkg_file in utils.built_package_paths_conda_build(recipe_dir):
+    #         assert os.path.exists(pkg_file)
+    #         ensure_missing(pkg_file)
 
 
 def test_validate_config_smoke():
@@ -2485,12 +2148,47 @@ def test_normalize_config_applies_defaults_without_mutating_input():
         "blacklists": ["blacklists/temporary.txt"],
     }
     assert normalized == {
-        "blacklists": ["blacklists/temporary.txt"],
+        "blacklists": [Path("blacklists/temporary.txt")],
         "channels": ["conda-forge", "bioconda"],
         "requirements": None,
         "upload_channel": "bioconda",
         "primary_platforms": [PackageSubdir.LINUX_64, PackageSubdir.OSX_64],
     }
+
+
+def test_normalize_config_converts_blacklists_to_paths_without_base_dir():
+    """Consumers read blacklists as Path, so normalization must produce Path
+    even for a raw config dict that has no config file to resolve against."""
+    normalized = normalize_config({"blacklists": ["blacklists/temporary.txt"]})
+
+    assert normalized["blacklists"] == [Path("blacklists/temporary.txt")]
+
+
+def test_normalize_config_resolves_blacklists_against_base_dir(tmp_path):
+    normalized = normalize_config(
+        {"blacklists": ["blacklists/temporary.txt"]}, base_dir=tmp_path
+    )
+
+    assert normalized["blacklists"] == [tmp_path / "blacklists/temporary.txt"]
+
+
+def test_skiplist_accepts_normalized_config_with_blacklists(tmp_path, monkeypatch):
+    """A raw config dict passed to build_recipes reaches Skiplist after
+    normalize_config; it must not carry str blacklist entries.
+
+    Blacklist lines are repo-relative and the recipe folder is given relative
+    too, matching how bioconda-recipes configures both.
+    """
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "recipes").mkdir()
+    blacklist = tmp_path / "blacklists.txt"
+    blacklist.write_text("recipes/one\nrecipes/two\n", encoding="utf-8")
+
+    config = normalize_config({"blacklists": ["blacklists.txt"]})
+
+    skiplist = Skiplist(config, Path("recipes"))
+
+    assert skiplist.global_list == {Path("one"), Path("two")}
 
 
 def test_normalize_config_custom_primary_platforms():
@@ -2528,7 +2226,11 @@ def test_build_recipes_normalizes_raw_config_at_boundary(monkeypatch):
     monkeypatch.setattr(build, "Skiplist", observe_config)
 
     with pytest.raises(NormalizationObserved):
-        build.build_recipes(Path("recipes"), {"channels": []}, [Path("example")])
+        build.build_recipes(
+            Path("recipes"),
+            {"channels": []},
+            [RecipePath(Path("example"), BuildSystem.CONDA)],
+        )
 
 
 def test_load_config_registers_config_after_resolving_paths(monkeypatch, tmp_path):
@@ -2547,10 +2249,36 @@ def test_load_config_registers_config_after_resolving_paths(monkeypatch, tmp_pat
 
     config = load_config(config_path)
 
-    assert config["blacklists"] == [str(tmp_path / "blacklists/temporary.txt")]
+    assert config["blacklists"] == [tmp_path / "blacklists/temporary.txt"]
     assert config["channels"] == ["conda-forge", "bioconda"]
     assert config["primary_platforms"] == [PackageSubdir.LINUX_64, PackageSubdir.OSX_64]
     assert registered == [config]
+
+
+def test_recipe_path_renders_as_path_in_logs(caplog):
+    """RecipePath must not leak its tuple repr into log messages."""
+    recipe = RecipePath(path=Path("recipes/samtools/1.7"), build_system=CONDA)
+
+    with caplog.at_level(logging.INFO):
+        logging.getLogger("test").info("Nothing to be done for recipe %s", recipe)
+
+    assert "Nothing to be done for recipe recipes/samtools/1.7" in caplog.text
+    assert "build_system" not in caplog.text
+    # the tuple repr is still available for debugging
+    assert "build_system" in repr(recipe)
+
+
+def test_format_recipes_renders_collections():
+    recipes = [
+        RecipePath(path=Path("recipes/htslib/1.19"), build_system=CONDA),
+        RecipePath(path=Path("recipes/samtools/1.7"), build_system=RATTLER),
+    ]
+
+    assert format_recipes(recipes) == "recipes/htslib/1.19, recipes/samtools/1.7"
+    assert format_recipes(recipes, separator="\n") == (
+        "recipes/htslib/1.19\nrecipes/samtools/1.7"
+    )
+    assert format_recipes([]) == ""
 
 
 def test_load_meta_fast_allows_duplicate_keys(tmp_path):
@@ -2570,7 +2298,7 @@ def test_load_meta_fast_allows_duplicate_keys(tmp_path):
         "  skip: true  # [win]\n",
         encoding="utf-8",
     )
-    meta, loaded_recipe = conda_build_bridge.load_meta_fast(str(recipe_dir))
+    meta, loaded_recipe = conda_build_bridge.load_meta_fast(Path(recipe_dir))
     assert meta["package"]["name"] == "test-pkg"
     assert meta["build"]["number"] == 0
-    assert loaded_recipe == str(recipe_dir)
+    assert loaded_recipe == recipe_dir

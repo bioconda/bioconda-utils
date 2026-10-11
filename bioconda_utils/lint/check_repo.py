@@ -4,12 +4,14 @@ These checks verify consistency with the repository (blacklisting,
 other channels, existing versions).
 """
 
+from pathlib import Path
 from typing import Any, ClassVar
 
 from bioconda_utils.build_failure import BuildFailureRecord
 
 from ..conda.repodata import RepoData
-from . import LintCheck, _recipe
+from ..recipe import Recipe
+from . import LintCheck
 
 
 class in_other_channels(LintCheck):
@@ -27,7 +29,7 @@ class in_other_channels(LintCheck):
 
     """
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         channels = RepoData().get_package_data(key="channel", name=recipe.name)
         if set(channels) - {"bioconda"}:
             self.message(section="package/name")
@@ -48,7 +50,7 @@ class build_number_needs_bump(LintCheck):
 
     requires: ClassVar = ["missing_build_number"]
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         bldnos = RepoData().get_package_data(
             key="build_number", name=recipe.name, version=recipe.version
         )
@@ -74,7 +76,7 @@ class build_number_needs_reset(LintCheck):
 
     requires: ClassVar = ["missing_build_number"]
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         bldnos = RepoData().get_package_data(
             key="build_number", name=recipe.name, version=recipe.version
         )
@@ -96,9 +98,9 @@ class recipe_is_blacklisted(LintCheck):
     def __init__(self, linter: Any) -> None:
         super().__init__(linter)
         self.skiplist = linter.get_skiplist()
-        self.blacklists = linter.config.get("blacklists")
+        self.blacklists: list[Path] = linter.config.get("blacklists", [])
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         if self.skiplist.is_skiplisted(recipe):
             self.message(section="package/name", data=True)
 
@@ -107,16 +109,14 @@ class recipe_is_blacklisted(LintCheck):
         if failure_record.exists() and failure_record.skiplist:
             failure_record.remove()
         for blacklist in self.blacklists:
-            with open(blacklist) as fdes:
-                data = fdes.readlines()
+            data = blacklist.read_text().splitlines(keepends=True)
             for num, line in enumerate(data):
                 if self.recipe.name in line:
                     break
             else:
                 continue
             del data[num]
-            with open(blacklist, "w") as fdes:
-                fdes.write("".join(data))
+            blacklist.write_text("".join(data))
             break
         else:
             return False

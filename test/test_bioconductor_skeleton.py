@@ -28,26 +28,26 @@ def test_write_recipe_normalizes_raw_config_at_boundary(monkeypatch, tmp_path):
     with pytest.raises(NormalizationObserved):
         bioconductor_skeleton.write_recipe(
             "example",
-            str(tmp_path),
+            tmp_path,
             {"channels": []},
         )
 
 
-def test_cran_write_recipe(tmpdir):
-    cran_skeleton.write_recipe("locfit", recipe_dir=str(tmpdir), recursive=False)
-    assert tmpdir.join("r-locfit", "meta.yaml").exists()
-    assert tmpdir.join("r-locfit", "build.sh").exists()
-    assert tmpdir.join("r-locfit", "bld.bat").exists()
+def test_cran_write_recipe(tmp_path):
+    cran_skeleton.write_recipe("locfit", recipe_dir=tmp_path, recursive=False)
+    assert (tmp_path / "r-locfit" / "meta.yaml").exists()
+    assert (tmp_path / "r-locfit" / "build.sh").exists()
+    assert (tmp_path / "r-locfit" / "bld.bat").exists()
 
 
-def test_cran_write_recipe_no_windows(tmpdir):
+def test_cran_write_recipe_no_windows(tmp_path):
     cran_skeleton.write_recipe(
-        "locfit", recipe_dir=str(tmpdir), recursive=False, no_windows=True
+        "locfit", recipe_dir=tmp_path, recursive=False, no_windows=True
     )
-    assert tmpdir.join("r-locfit", "meta.yaml").exists()
-    assert tmpdir.join("r-locfit", "build.sh").exists()
-    assert not tmpdir.join("r-locfit", "bld.bat").exists()
-    for line in tmpdir.join("r-locfit", "meta.yaml").readlines():
+    assert (tmp_path / "r-locfit" / "meta.yaml").exists()
+    assert (tmp_path / "r-locfit" / "build.sh").exists()
+    assert not (tmp_path / "r-locfit" / "bld.bat").exists()
+    for line in (tmp_path / "r-locfit" / "meta.yaml").read_text().splitlines():
         if "skip: True" in line:
             assert "[win]" in line
 
@@ -59,10 +59,10 @@ def bioc_fetch():
 
 
 @pytest.mark.skip(reason="Does not work since new bioconductor release?")
-def test_bioc_write_recipe_skip_in_condaforge(tmpdir, bioc_fetch):
+def test_bioc_write_recipe_skip_in_condaforge(tmp_path, bioc_fetch):
     bioconductor_skeleton.write_recipe(
         "edgeR",
-        recipe_dir=str(tmpdir),
+        recipe_dir=tmp_path,
         config=config,
         recursive=True,
         packages=bioc_fetch,
@@ -73,17 +73,17 @@ def test_bioc_write_recipe_skip_in_condaforge(tmpdir, bioc_fetch):
         "bioconductor-edger",
         "bioconductor-limma",
     ]:
-        assert tmpdir.join(pkg).exists()
+        assert (tmp_path / pkg).exists()
 
     for pkg in ["r-cpp", "r-lattice", "r-locfit"]:
-        assert not tmpdir.join(pkg).exists()
+        assert not (tmp_path / pkg).exists()
 
 
 @pytest.mark.skip(reason="Does not work since new bioconductor release?")
-def test_bioc_write_recipe_no_skipping(tmpdir, bioc_fetch):
+def test_bioc_write_recipe_no_skipping(tmp_path, bioc_fetch):
     bioconductor_skeleton.write_recipe(
         "edgeR",
-        recipe_dir=str(tmpdir),
+        recipe_dir=tmp_path,
         config=config,
         recursive=True,
         packages=bioc_fetch,
@@ -99,21 +99,21 @@ def test_bioc_write_recipe_no_skipping(tmpdir, bioc_fetch):
         # 'r-locfit',
         # 'r-lattice',
     ]:
-        assert tmpdir.join(pkg).exists()
+        assert (tmp_path / pkg).exists()
 
 
 @pytest.mark.skip(reason="Does not work since new bioconductor release?")
-def test_meta_contents(tmpdir, bioc_fetch):
+def test_meta_contents(tmp_path, bioc_fetch):
     config = {"channels": ["conda-forge", "bioconda"]}
     bioconductor_skeleton.write_recipe(
         "edgeR",
-        recipe_dir=str(tmpdir),
+        recipe_dir=tmp_path,
         config=config,
         recursive=False,
         packages=bioc_fetch,
     )
 
-    edger_meta = load_first_metadata(str(tmpdir.join("bioconductor-edger"))).meta
+    edger_meta = load_first_metadata(tmp_path / "bioconductor-edger").meta
     assert "r-rcpp" in edger_meta["requirements"]["run"]
 
     # The rendered meta has {{ compiler('c') }} filled in, so we need to check
@@ -189,44 +189,42 @@ def test_bioarchive_exists():
     )
 
 
-def test_annotation_data(tmpdir, bioc_fetch):
+def test_annotation_data(tmp_path, bioc_fetch):
     bioconductor_skeleton.write_recipe(
-        "AHCytoBands", str(tmpdir), config, recursive=False, packages=bioc_fetch
+        "AHCytoBands", tmp_path, config, recursive=False, packages=bioc_fetch
     )
-    meta = load_first_metadata(
-        str(tmpdir.join("bioconductor-ahcytobands")), finalize=False
-    ).meta
+    recipe_dir = tmp_path / "bioconductor-ahcytobands"
+    meta = load_first_metadata(recipe_dir, finalize=False).meta
     assert "curl" in {dep.split()[0] for dep in meta["requirements"]["run"]}
     assert len(meta["source"]["url"]) == 4
-    assert not tmpdir.join("bioconductor-ahcytobands", "build.sh").exists()
-    assert tmpdir.join("bioconductor-ahcytobands", "post-link.sh").exists()
-    assert tmpdir.join("bioconductor-ahcytobands", "pre-unlink.sh").exists()
+    assert not (recipe_dir / "build.sh").exists()
+    assert (recipe_dir / "post-link.sh").exists()
+    assert (recipe_dir / "pre-unlink.sh").exists()
 
 
-def test_experiment_data(tmpdir, bioc_fetch):
+def test_experiment_data(tmp_path, bioc_fetch):
     bioconductor_skeleton.write_recipe(
         "Affyhgu133A2Expr",
-        str(tmpdir),
+        tmp_path,
         config,
         recursive=False,
         packages=bioc_fetch,
     )
-    meta = load_first_metadata(
-        str(tmpdir.join("bioconductor-affyhgu133a2expr")), finalize=False
-    ).meta
+    recipe_dir = tmp_path / "bioconductor-affyhgu133a2expr"
+    meta = load_first_metadata(recipe_dir, finalize=False).meta
     assert "curl" in {dep.split()[0] for dep in meta["requirements"]["run"]}
     assert len(meta["source"]["url"]) == 4
-    assert not tmpdir.join("bioconductor-affyhgu133a2expr", "build.sh").exists()
-    assert tmpdir.join("bioconductor-affyhgu133a2expr", "post-link.sh").exists()
-    assert tmpdir.join("bioconductor-affyhgu133a2expr", "pre-unlink.sh").exists()
+    assert not (recipe_dir / "build.sh").exists()
+    assert (recipe_dir / "post-link.sh").exists()
+    assert (recipe_dir / "pre-unlink.sh").exists()
 
 
-def test_nonexistent_pkg(tmpdir, bioc_fetch):
+def test_nonexistent_pkg(tmp_path, bioc_fetch):
     # no such package exists in the current bioconductor
     with pytest.raises(bioconductor_skeleton.PackageNotFoundError):
         bioconductor_skeleton.write_recipe(
             "nonexistent",
-            str(tmpdir),
+            tmp_path,
             config,
             recursive=True,
             packages=bioc_fetch,
@@ -236,7 +234,7 @@ def test_nonexistent_pkg(tmpdir, bioc_fetch):
     with pytest.raises(bioconductor_skeleton.PackageNotFoundError):
         bioconductor_skeleton.write_recipe(
             "DESeq",
-            str(tmpdir),
+            tmp_path,
             config,
             recursive=True,
             pkg_version="5000",
@@ -245,10 +243,10 @@ def test_nonexistent_pkg(tmpdir, bioc_fetch):
 
 
 @pytest.mark.skip(reason="Does not work since new bioconductor release?")
-def test_overwrite(tmpdir, bioc_fetch):
+def test_overwrite(tmp_path, bioc_fetch):
     bioconductor_skeleton.write_recipe(
         "edgeR",
-        recipe_dir=str(tmpdir),
+        recipe_dir=tmp_path,
         config=config,
         recursive=False,
         packages=bioc_fetch,
@@ -258,7 +256,7 @@ def test_overwrite(tmpdir, bioc_fetch):
     with pytest.raises(ValueError):
         bioconductor_skeleton.write_recipe(
             "edgeR",
-            recipe_dir=str(tmpdir),
+            recipe_dir=tmp_path,
             config=config,
             recursive=False,
             packages=bioc_fetch,
@@ -267,7 +265,7 @@ def test_overwrite(tmpdir, bioc_fetch):
     # But same thing with force=True is OK
     bioconductor_skeleton.write_recipe(
         "edgeR",
-        recipe_dir=str(tmpdir),
+        recipe_dir=tmp_path,
         config=config,
         recursive=False,
         force=True,

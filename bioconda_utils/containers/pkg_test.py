@@ -11,12 +11,7 @@ import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 
-from conda_build.metadata import MetaData
-from conda_index.index import update_index
-from conda_package_streaming.package_streaming import stream_conda_info
-
 from .._types import MULLED_LOCAL_NAMESPACE, ContainerPlatform, PkgBuildRef
-from ..support.logsetup import Progress
 from ..support.subproc import run
 
 logger = logging.getLogger(__name__)
@@ -25,8 +20,14 @@ logger = logging.getLogger(__name__)
 CREATE_ENV_IMAGE = os.getenv("CREATE_ENV_IMAGE", "quay.io/bioconda/create-env:latest")
 
 
-def get_test_command(path: Path | str) -> str:
+def get_test_command(path: Path) -> str:
     """Extract tests from a built package"""
+    # Deferred: conda-build/conda-package-streaming are heavy imports that the
+    # CLI should not pay for at startup (this module is imported for
+    # CREATE_ENV_IMAGE).
+    from conda_build.metadata import MetaData
+    from conda_package_streaming.package_streaming import stream_conda_info
+
     path = Path(path)
     tmp = tempfile.mkdtemp()
     for tar, member in stream_conda_info(path):
@@ -67,18 +68,17 @@ def get_test_command(path: Path | str) -> str:
     return f"bash -c {shlex.quote(tests)}"
 
 
-def get_image_name(path: Path | str) -> PkgBuildRef:
+def get_image_name(path: Path) -> PkgBuildRef:
     """
     Returns a package build reference parsed from a built package filename.
 
     Parameters
     ----------
 
-    path : Path | str
+    path : Path
         Path to .tar.bz2 or .conda package built by conda-build
 
     """
-    path = Path(path)
     if path.name.endswith(".tar.bz2"):
         ext = ".tar.bz2"
     elif path.name.endswith(".conda"):
@@ -278,23 +278,24 @@ fi
         cmd += ["/bin/bash", "/opt/test_script.bash"]
 
         logger.debug("Pre-solved mulled test command: %s", cmd)
-        with Progress():
-            p = run(cmd, live=live_logs)
+        p = run(cmd, live=live_logs, status="Running container test...")
         return p
 
 
 def _test_inputs(
-    path: Path | str,
+    path: Path,
     channels: Sequence[str] = ("conda-forge", "local", "bioconda"),
     update_local_index: bool = True,
 ) -> tuple[Path, PkgBuildRef, list[str], str]:
     """Return shared inputs needed for package container tests."""
-    path = Path(path)
     assert path.name.endswith((".tar.bz2", ".conda")), f"Unrecognized path {path}"
 
     conda_bld_dir = path.resolve().parent.parent
 
     if update_local_index:
+        # Deferred: see get_test_command.
+        from conda_index.index import update_index
+
         # conda-index uses spawn workers, so this cannot run from a REPL or python -c.
         update_index(str(conda_bld_dir))
 
@@ -315,7 +316,7 @@ def _test_inputs(
 
 
 def test_package_in_temporary_container(
-    path: Path | str,
+    path: Path,
     channels: Sequence[str] = ("conda-forge", "local", "bioconda"),
     base_image: str | None = None,
     conda_image: str = CREATE_ENV_IMAGE,
@@ -331,7 +332,7 @@ def test_package_in_temporary_container(
 
     Parameters
     ----------
-    path : Path | str
+    path : Path
         Path to a .tar.bz2 or .conda package built by conda-build
 
     channels : list
@@ -372,7 +373,7 @@ def test_package_in_temporary_container(
 
 
 def build_and_test_mulled_image(
-    path: Path | str,
+    path: Path,
     name_override: str | None = None,
     channels: Sequence[str] = ("conda-forge", "local", "bioconda"),
     mulled_args: str = "",
@@ -390,7 +391,7 @@ def build_and_test_mulled_image(
 
     Parameters
     ----------
-    path : Path | str
+    path : Path
         Path to a .tar.bz2 or .conda package built by conda-build
 
     name_override : str
@@ -454,7 +455,7 @@ def build_and_test_mulled_image(
         raise ValueError("CONDA_IMAGE env var already exists!")
     else:
         env["CONDA_IMAGE"] = conda_image
-    with tempfile.TemporaryDirectory() as d, Progress():
-        p = run(cmd, env=env, cwd=d, live=live_logs)
+    with tempfile.TemporaryDirectory() as d:
+        p = run(cmd, env=env, cwd=d, live=live_logs, status="Building mulled image...")
 
     return p

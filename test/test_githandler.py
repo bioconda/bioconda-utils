@@ -145,7 +145,7 @@ def test_githandler_branches_and_read(sample_git_repo: Path):
 
     # Changed files
     changed = list(handler.list_changed_files("feature", "master"))
-    assert "recipes/pkg_b/meta.yaml" in changed
+    assert Path("recipes/pkg_b/meta.yaml") in changed
 
 
 class MockBiocondaRepo(GitHandler, BiocondaRepoMixin):
@@ -227,7 +227,7 @@ def test_create_local_branch_from_raw_sha(sample_git_repo: Path, monkeypatch):
         handler, "get_remote_branch", lambda *args, **kwargs: CommitSha(commit)
     )
 
-    branch = handler.create_local_branch("from-sha", commit)
+    branch = handler.create_local_branch(BranchName("from-sha"), commit)
 
     assert branch == BranchName("from-sha")
     assert handler.rev_parse(branch) == commit
@@ -293,3 +293,70 @@ def test_get_blacklisted_rejects_missing_configured_file(sample_git_repo: Path):
 
     with pytest.raises(GitHandlerFailure, match="Unable to read configured blacklist"):
         repo.get_blacklisted("HEAD")
+
+
+class FakeRepoHandler(BiocondaRepoMixin):
+    """BiocondaRepoMixin with the git-dependent listing stubbed out."""
+
+    def __init__(self, changed_files):
+        self._changed_files = [Path(p) for p in changed_files]
+
+    def list_changed_files(self, ref=None, other=None):
+        return iter(self._changed_files)
+
+
+@pytest.fixture
+def handler():
+    return FakeRepoHandler(
+        [
+            "recipes/one/meta.yaml",
+            "recipes/one/build.sh",
+            "recipes/two/recipe.yaml",
+            "recipes/three/notes.txt",
+            "docs/one/meta.yaml",
+            "recipes/nested/deep/one/meta.yaml",
+        ]
+    )
+
+
+def test_get_changed_recipes_matches_on_file_name_not_full_path(handler):
+    """list_changed_files() yields repo-relative paths, so the file names in
+    ``files`` must be matched against the path's name."""
+    assert set(handler.get_changed_recipes()) == {
+        Path("recipes/one"),
+        Path("recipes/two"),
+        Path("recipes/nested/deep/one"),
+    }
+
+
+def test_get_changed_recipes_ignores_files_outside_recipes_folder(handler):
+    """docs/one/meta.yaml is a meta.yaml but lives outside recipes_folder."""
+    assert Path("docs/one") not in handler.get_changed_recipes()
+
+
+def test_get_changed_recipes_ignores_unlisted_file_names(handler):
+    """notes.txt is under recipes/ but is not one of the watched files."""
+    assert Path("recipes/three") not in handler.get_changed_recipes()
+
+
+def test_get_changed_recipes_honors_explicit_files_argument():
+    handler = FakeRepoHandler(
+        ["recipes/one/meta.yaml", "recipes/one/build.sh", "recipes/one/notes.txt"]
+    )
+
+    changed = handler.get_changed_recipes(files=[Path("notes.txt")])
+
+    assert set(changed) == {Path("recipes/one")}
+
+
+def test_get_changed_recipes_returns_empty_when_nothing_changed():
+    assert FakeRepoHandler([]).get_changed_recipes() == []
+
+
+def test_read_from_branch_rejects_sibling_with_common_prefix(sample_git_repo):
+    handler = GitHandler(sample_git_repo, dry_run=True, allow_dirty=True)
+    with pytest.raises(RuntimeError, match="not inside"):
+        handler.read_from_branch(
+            "master",
+            sample_git_repo.with_name(sample_git_repo.name + "-sibling") / "config.yml",
+        )

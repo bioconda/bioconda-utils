@@ -459,7 +459,7 @@ class GitHandlerBase:
             raise RuntimeError(f"File {target} not inside {self._working_dir}")
         rel_path = target.relative_to(self._working_dir)
         ref = getattr(branch, "commit", getattr(branch, "name", str(branch)))
-        res = self._git(["show", f"{ref}:{rel_path}"], check=False)
+        res = self._git(["show", f"{ref}:{rel_path.as_posix()}"], check=False)
         if res.returncode == 0:
             return res.stdout
 
@@ -563,7 +563,7 @@ class GitHandlerBase:
 
     def list_changed_files(
         self, ref: GitRev | None = None, other: GitRev | None = None
-    ) -> Generator[str, None, None]:
+    ) -> Generator[Path]:
         """Lists files that would be added/modified by merge of **other** into **ref**
 
         See also `get_merge_base()`.
@@ -587,9 +587,9 @@ class GitHandlerBase:
         for path in res.stdout.splitlines():
             path = path.strip()
             if path:
-                yield path
+                yield Path(path)
 
-    def list_modified_files(self) -> Generator[str, None, None]:
+    def list_modified_files(self) -> Generator[Path]:
         """Lists files modified in working directory"""
         res = self._git(["diff", "--name-only"])
         seen = set()
@@ -597,7 +597,7 @@ class GitHandlerBase:
             fname = fname.strip()
             if fname and fname not in seen:
                 seen.add(fname)
-                yield fname
+                yield Path(fname)
 
     def prepare_branch(self, branch_name: BranchName | str) -> None:
         """Checks out **branch_name**, creating it from home remote master if needed"""
@@ -685,7 +685,7 @@ class BiocondaRepoMixin(GitHandlerBase):
         self,
         ref: GitRev | None = None,
         other: GitRev | None = None,
-        files: list[str] | None = None,
+        files: list[Path] | None = None,
     ) -> list[Path]:
         """Returns list of modified recipes
 
@@ -693,20 +693,21 @@ class BiocondaRepoMixin(GitHandlerBase):
           ref: See `get_merge_base`. Defaults to HEAD
           other: See `get_merge_base`. Defaults to origin/master
           files: List of file basenames to consider. Defaults to ``meta.yaml``
-                 and ``build.sh``
+                 ``recipe.yaml`` and ``build.sh``
         Result:
           List of unique recipe folders with changes as Paths from repo
           root (e.g. ``Path('recipes/blast')``). Recipes outside of
           ``recipes_folder`` are ignored.
         """
         if files is None:
-            files = ["meta.yaml", "build.sh"]
+            files = [Path("meta.yaml"), Path("recipe.yaml"), Path("build.sh")]
+        wanted_names = {file.name for file in files}
         changed: set[Path] = set()
         for path_str in self.list_changed_files(ref, other):
             path = Path(path_str)
             if not path.is_relative_to(self.recipes_folder):
                 continue  # skip things outside the recipes folder
-            if path.name in files:
+            if path.name in wanted_names:
                 changed.add(path.parent)
         return list(changed)
 

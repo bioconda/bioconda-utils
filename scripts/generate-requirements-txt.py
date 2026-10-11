@@ -11,10 +11,9 @@ Usage:
 """
 
 import argparse
+import tomllib
 from pathlib import Path
 from typing import cast
-
-import tomllib
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PIXI_TOML = REPO_ROOT / "pixi.toml"

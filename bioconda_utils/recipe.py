@@ -40,7 +40,7 @@ from ruamel.yaml.constructor import DuplicateKeyError
 from ._types import ALL_PACKAGE_SUBDIRS, PackageSubdir, ensure_list
 from .aiopipe import EndProcessingItem
 from .conda.conda_build_bridge import jinja_silent_undef
-from .conda.recipes import get_recipes
+from .recipes import get_recipes
 from .support.parallel import parallel_iter
 
 yaml = YAML(typ="rt")  # pylint: disable=invalid-name
@@ -171,7 +171,7 @@ class Recipe:
         #: path to folder containing recipes
         self.basedir: Path = recipe_folder
         #: relative path to recipe dir from folder containing recipes
-        self.reldir = os.fspath(relative_dir)
+        self.reldir: Path = relative_dir
 
         # Filled in by render()
         #: Parsed recipe YAML
@@ -204,7 +204,7 @@ class Recipe:
     @property
     def relpath(self) -> Path:
         """Relative path to ``meta.yaml`` (from ``basedir``)"""
-        return Path(self.reldir) / "meta.yaml"
+        return self.reldir / "meta.yaml"
 
     @property
     def dir(self) -> Path:
@@ -212,10 +212,10 @@ class Recipe:
         return self.basedir / self.reldir
 
     def __str__(self) -> str:
-        return self.reldir
+        return self.reldir.as_posix()
 
     def __repr__(self) -> str:
-        return f'{self.__class__.__name__} "{self.reldir}"'
+        return f'{self.__class__.__name__}("{self.reldir.as_posix()}")'
 
     def load_from_string(self, data) -> Recipe:
         """Load and `render` recipe contents from disk"""
@@ -280,12 +280,6 @@ class Recipe:
            recipe_dir: Path to recipes folder
            recipe_fname: Relative path to recipe (folder or meta.yaml)
         """
-        # Recipe paths are loosely typed across the codebase: get_recipes()
-        # yields Path, but load_meta_fast() and helpers pass str. Coerce both
-        # arguments so callers may pass either — the operations below
-        # (.name/.parent/.relative_to) require real Path objects.
-        recipe_dir = Path(recipe_dir)
-        recipe_fname = Path(recipe_fname)
         if recipe_fname.name == "meta.yaml":
             recipe_fname = recipe_fname.parent
         recipe = cls(recipe_fname, recipe_dir)
@@ -890,7 +884,7 @@ class Recipe:
 
         self._conda_tempdir = tempfile.TemporaryDirectory()
 
-        with open(os.path.join(self._conda_tempdir.name, "meta.yaml"), "w") as tmpfile:
+        with open(Path(self._conda_tempdir.name) / "meta.yaml", "w") as tmpfile:
             tmpfile.write(self.dump())
 
         if self.conda_build_config:
@@ -955,7 +949,9 @@ class Recipe:
 def load_parallel_iter(
     recipe_folder: Path, package_patterns: Sequence[str]
 ) -> Iterator[Recipe]:
-    recipes = list(get_recipes(recipe_folder, package_patterns))
+    # from_file() takes a Path, so unwrap the RecipePath wrappers that
+    # get_recipes() yields.
+    recipes = [recipe.path for recipe in get_recipes(recipe_folder, package_patterns)]
     for recipe in parallel_iter(
         Recipe.from_file,
         recipes,

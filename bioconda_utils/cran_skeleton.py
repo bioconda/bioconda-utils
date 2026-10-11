@@ -5,9 +5,9 @@ conda-forge requirements.
 
 import argparse
 import logging
-import os
 import re
 from itertools import zip_longest
+from pathlib import Path
 
 from conda_build.api import skeletonize
 
@@ -43,7 +43,7 @@ win32_string = "number: 0\n  skip: true  # [win32]"
 
 def write_recipe(
     package: str,
-    recipe_dir: str = ".",
+    recipe_dir: Path = Path("."),
     recursive: bool = False,
     force: bool = False,
     no_windows: bool = False,
@@ -63,7 +63,7 @@ def write_recipe(
         Package name. Can be case-sensitive CRAN name, or sanitized
         "r-pkgname" conda package name.
 
-    recipe_dir : str
+    recipe_dir : Path
         Recipe will be created as a subdirectory in ``recipe_dir``
 
     recursive : bool
@@ -83,13 +83,13 @@ def write_recipe(
     logger.debug("Building skeleton for %s", package)
     conda_version = package.startswith("r-")
     if not conda_version:
-        outdir = os.path.join(recipe_dir, "r-" + package.lower())
+        outdir = recipe_dir / f"r-{package.lower()}"
     else:
-        outdir = os.path.join(recipe_dir, package)
-    if os.path.exists(outdir):
+        outdir = recipe_dir / package
+    if outdir.exists():
         if force:
             logger.warning("Removing %s", outdir)
-            run(["rm", "-r", outdir])
+            run(["rm", "-r", str(outdir)])
         else:
             logger.warning("%s exists, skipping", outdir)
             return
@@ -98,28 +98,27 @@ def write_recipe(
         skeletonize(
             package,
             repo="cran",
-            output_dir=recipe_dir,
+            output_dir=str(recipe_dir),
             version=None,
             recursive=recursive,
         )
         clean_skeleton_files(
-            package=os.path.join(recipe_dir, "r-" + package.lower()),
+            package=recipe_dir / f"r-{package.lower()}",
             no_windows=no_windows,
         )
     except NotImplementedError:
         logger.error("%s had dependencies that specified versions: skipping.", package)
 
 
-def clean_skeleton_files(package: str, no_windows: bool = True) -> None:
+def clean_skeleton_files(package: Path, no_windows: bool = True) -> None:
     """
     Cleans output files created by ``conda skeleton cran`` to make them
     conda-forge compatible.
 
     Parameters
     ----------
-    package : str
-        Package name. Can be case-sensitive CRAN name, or sanitized
-        "r-pkgname" conda package name.
+    package : Path
+        Path to the recipe directory to clean.
 
     no_windows : bool
         If True, no bld.bat will be created and no ``[win]`` preprocess selectors
@@ -130,22 +129,22 @@ def clean_skeleton_files(package: str, no_windows: bool = True) -> None:
     clean_bld_file(package, no_windows)
 
 
-def clean_yaml_file(package: str, no_windows: bool) -> None:
+def clean_yaml_file(package: Path, no_windows: bool) -> None:
     """
     Cleans the YAML file output by ``conda skeleton cran`` to make it conda-forge
     compatible.
 
     Parameters
     ----------
-    package : str
-        Must be sanitized "r-pkgname" package name.
+    package : Path
+        Path to the recipe directory to clean.
 
     no_windows : bool
         If True, then adds a "build: skip: True # [win32]" line to skip Windows
         builds.
     """
-    path = os.path.join(package, "meta.yaml")
-    with open(path) as yaml:
+    path = package / "meta.yaml"
+    with path.open() as yaml:
         lines = list(yaml.readlines())
 
         # Remove lines consisting only of comments
@@ -171,7 +170,7 @@ def clean_yaml_file(package: str, no_windows: bool) -> None:
         # Add contents of maintainers file to the end of the recipe
         add_maintainers(lines)
 
-    with open(path, "w") as yaml:
+    with path.open("w") as yaml:
         out = "".join(lines)
         out = out.replace("{indent}", "\n    - ")
 
@@ -181,23 +180,23 @@ def clean_yaml_file(package: str, no_windows: bool) -> None:
         yaml.write(out)
 
 
-def clean_build_file(package: str, no_windows: bool = False) -> None:
+def clean_build_file(package: Path, no_windows: bool = False) -> None:
     """
     Cleans build.sh file created by ``conda skeleton cran`` to be compatible with
     conda-forge.
 
     Parameters
     ----------
-    package : str
-        Must be sanitized "r-pkgname" package name.
+    package : Path
+        Path to the recipe directory to clean.
 
     no_windows : bool
         Included for consistency with other ``clean_*`` functions; does not have
         any effect for this function.
     """
 
-    path = os.path.join(package, "build.sh")
-    with open(path) as build:
+    path = package / "build.sh"
+    with path.open() as build:
         lines = list(build.readlines())
 
         # Remove lines with mv commands
@@ -211,37 +210,37 @@ def clean_build_file(package: str, no_windows: bool = False) -> None:
 
         lines = remove_empty_lines(lines)
 
-    with open(path, "w") as build:
+    with path.open("w") as build:
         build.write("".join(lines))
 
 
-def clean_bld_file(package: str, no_windows: bool) -> None:
+def clean_bld_file(package: Path, no_windows: bool) -> None:
     """
     Cleans bld.bat file created by ``conda skeleton cran`` to be compatible with
     conda-forge.
 
     Parameters
     ----------
-    package : str
-        Must be sanitized "r-pkgname" package name.
+    package : Path
+        Path to the recipe directory to clean.
 
     no_windows : bool
         If True, then the bld.bat file will be removed.
     """
-    path = os.path.join(package, "bld.bat")
-    if not os.path.exists(path):
+    path = package / "bld.bat"
+    if not path.exists():
         return
     if no_windows:
-        os.unlink(path)
+        path.unlink()
         return
-    with open(path) as bld:
+    with path.open() as bld:
         lines = list(bld.readlines())
 
         # Removes the lines that start with @
         lines = filter_lines_regex(lines, r"^@.*$", "")
         lines = remove_empty_lines(lines)
 
-    with open(path, "w") as bld:
+    with path.open("w") as bld:
         bld.write("".join(lines))
 
 
@@ -287,9 +286,8 @@ def add_maintainers(lines: list[str]) -> None:
     """
     Append the contents of "maintainers.yaml" to the end of a YAML file.
     """
-    HERE = os.path.abspath(os.path.dirname(__file__))
-    maintainers_yaml = os.path.join(HERE, "maintainers.yaml")
-    with open(maintainers_yaml) as yaml:
+    maintainers_yaml = Path(__file__).parent / "maintainers.yaml"
+    with maintainers_yaml.open() as yaml:
         extra_lines = list(yaml.readlines())
         lines.extend(extra_lines)
 
@@ -299,7 +297,7 @@ def main() -> None:
     setup_logger()
     parser = argparse.ArgumentParser()
     parser.add_argument("package", help="name of the cran package")
-    parser.add_argument("output_dir", help="output directory for the recipe")
+    parser.add_argument("output_dir", type=Path, help="output directory for the recipe")
     parser.add_argument(
         "--no-win",
         action="store_true",

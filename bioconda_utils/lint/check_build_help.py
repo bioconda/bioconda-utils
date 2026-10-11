@@ -5,9 +5,10 @@ These checks catch errors relating to the use of ``-
 
 """
 
-import os
+from pathlib import Path
 
-from . import INFO, WARNING, LintCheck, _recipe
+from ..recipe import Recipe
+from . import INFO, WARNING, LintCheck
 
 
 class should_use_compilers(LintCheck):
@@ -95,7 +96,7 @@ class uses_setuptools(LintCheck):
 
     severity = INFO
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         if "setuptools" in recipe.get_deps("run"):
             self.message()
 
@@ -127,11 +128,12 @@ class setup_py_install_args(LintCheck):
         if not self._check_line(self.recipe.get("build/script", "")):
             self.message(section="build/script")
 
+        build_sh: Path = self.recipe.dir / "build.sh"
         try:
-            with open(os.path.join(self.recipe.dir, "build.sh")) as buildsh:
+            with open(build_sh) as buildsh:
                 for num, line in enumerate(buildsh):
                     if not self._check_line(line):
-                        self.message(fname="build.sh", line=num)
+                        self.message(path=build_sh, line=num)
         except FileNotFoundError:
             pass
 
@@ -238,7 +240,7 @@ class missing_run_exports(LintCheck):
     run_exports in upstream packages as well if needed.
     """
 
-    def check_recipe(self, recipe: _recipe.Recipe) -> None:
+    def check_recipe(self, recipe: Recipe) -> None:
         build_sections = recipe.get_all_section_occurrences(
             section="build",
             outputs_exclusive=True,

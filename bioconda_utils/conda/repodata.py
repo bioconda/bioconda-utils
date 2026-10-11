@@ -1,9 +1,9 @@
 """
 Access to the conda package directory (repodata) of anaconda.org channels.
 
-:class:`RepoData` is a singleton that loads channel/subdir repodata,
-caches it in memory and on disk, and answers package queries.
-:class:`AsyncRequests` is the parallel HTTP downloader it relies on.
+:class:`RepoData` that loads channel/subdir repodata,
+caches indexed records on disk, and answers package queries.
+:func:`fetch` is the parallel HTTP downloader it relies on.
 """
 
 from __future__ import annotations
@@ -14,19 +14,23 @@ import json
 import logging
 import os
 import platform
+import sqlite3
 import sys
-import warnings
-from collections.abc import Collection, Iterable, Mapping, Sequence
+import tempfile
+from collections import namedtuple
+from collections.abc import Callable, Iterable, Mapping
+from contextlib import closing, contextmanager
 from dataclasses import dataclass
-from itertools import chain, product, zip_longest
+from hashlib import sha256
+from itertools import product, zip_longest
 from multiprocessing.pool import ThreadPool
-from typing import Any, ClassVar, TypeAlias, cast
+from pathlib import Path
+from typing import Any, ClassVar, cast
 from urllib.parse import urljoin
 
 import aiofiles
 import aiohttp
 import msgpack
-import pandas as pd
 import requests
 import zstandard
 
@@ -39,23 +43,178 @@ from .._types import (
     native_container_platform,
 )
 from ..support import http
-from ..support.caching import disk_cache
-from ..support.logsetup import tqdm
+from ..support.caching import file_lock, get_cache_root, memoize
+from ..support.logsetup import progress_display
 
 logger = logging.getLogger(__name__)
 
 
-class BiocondaUtilsWarning(UserWarning):
-    pass
+type RepoDataKey = tuple[str, Subdir]
 
 
-RepoDataKey: TypeAlias = tuple[Channel, Subdir]
+#: Max connections to each server
+CONNECTIONS_PER_HOST = 4
 
 
-@dataclass
-class _CachedRepoData:
-    dataframe: pd.DataFrame
-    fetched_at: datetime.datetime
+def fetch(
+    urls: Iterable[str],
+    descriptions: Iterable[str],
+    transform: Callable[[bytes, RepoDataKey], Any] | None,
+    metadata: Iterable[RepoDataKey],
+    *,
+    allow_404: bool = False,
+    return_exceptions: bool = False,
+) -> list[Any]:
+    """Fetch data from URLs.
+
+    This will use asyncio to manage a pool of connections at once, speeding
+    up download as compared to iterative use of ``requests`` significantly.
+    It will also retry on non-permanent HTTP error codes (i.e. 429, 502,
+    503 and 504).
+
+    Args:
+      urls: List of URLS
+      descriptions: Matching list of descriptions (for progress display)
+      transform: As each download completes, the raw bytes and the matching
+          entry from **metadata** are passed through this function, e.g. to
+          offload json parsing into the download loop.
+      metadata: Per-URL context handed to **transform** alongside the bytes.
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+    else:
+        logger.warning("Running fetch from within running loop")
+        # Workaround the fact that asyncio's loop is marked as not-reentrant
+        # (it is apparently easy to patch, but not desired by the devs,
+        with ThreadPool(1) as pool:
+            res = pool.apply(
+                lambda: fetch(
+                    urls,
+                    descriptions,
+                    transform,
+                    metadata,
+                    allow_404=allow_404,
+                    return_exceptions=return_exceptions,
+                )
+            )
+        return res
+
+    # asyncio.run cancels the fetch on SIGINT before raising
+    # KeyboardInterrupt, so pending connections close cleanly
+    return cast(
+        list[Any],
+        asyncio.run(
+            async_fetch(
+                urls,
+                descriptions,
+                transform,
+                metadata,
+                allow_404=allow_404,
+                return_exceptions=return_exceptions,
+            )
+        ),
+    )
+
+
+async def async_fetch(
+    urls: Iterable[str] = (),
+    descriptions: Iterable[str] = (),
+    transform: Callable[[bytes, RepoDataKey], Any] | None = None,
+    metadata: Iterable[RepoDataKey] | None = None,
+    *,
+    allow_404: bool = False,
+    return_exceptions: bool = False,
+) -> list[Any | bytes]:
+    if metadata is None:
+        metadata = []
+    conn = aiohttp.TCPConnector(limit_per_host=CONNECTIONS_PER_HOST)
+    async with http.make_session(connector=conn) as session:
+
+        async def fetch_indexed(index, url, description, datum):
+            try:
+                value = await _async_fetch_one(
+                    session,
+                    url,
+                    description or url,
+                    transform=transform,
+                    metadata=datum,
+                    allow_404=allow_404,
+                )
+            except Exception as exc:
+                if not return_exceptions:
+                    raise
+                value = exc
+            return index, value
+
+        coros = [
+            asyncio.create_task(fetch_indexed(index, url, description, datum))
+            for index, (url, description, datum) in enumerate(
+                zip_longest(urls, descriptions, metadata)
+            )
+            if url is not None
+        ]
+        try:
+            with progress_display.count_task("Downloading", total=len(coros)) as (
+                progress,
+                task,
+            ):
+                result = [None] * len(coros)
+                for coro in progress.track(
+                    asyncio.as_completed(coros), total=len(coros), task_id=task
+                ):
+                    index, value = await coro
+                    result[index] = value
+        finally:
+            for coro in coros:
+                if not coro.done():
+                    coro.cancel()
+            await asyncio.gather(*coros, return_exceptions=True)
+    return result
+
+
+@http.retry_on_transient
+async def _async_fetch_one(
+    session: aiohttp.ClientSession,
+    url: str,
+    description: str,
+    transform: Callable[[bytes, RepoDataKey], Any] | None = None,
+    metadata: RepoDataKey | None = None,
+    *,
+    allow_404: bool = False,
+) -> Any | bytes:
+    if url.startswith("file://"):
+        local_path = Path(url[7:])
+        if local_path.exists():
+            async with aiofiles.open(local_path, mode="rb") as f:
+                raw = await f.read()
+        elif allow_404:
+            return None
+        else:
+            subdir = url.split("/")[-2]
+            d = {
+                "info": {"subdir": subdir},
+                "packages": {},
+                "packages.conda": {},
+                "removed": [],
+                "repodata_version": 1,
+            }
+            raw = json.dumps(d).encode("UTF-8")
+    else:
+        async with session.get(url) as resp:
+            if allow_404 and resp.status == 404:
+                return None
+            resp.raise_for_status()
+            raw = await http.download_to_bytes(
+                resp,
+                description,
+                block_size=1024 * 16,
+            )
+    if transform is None:
+        return raw
+    assert metadata is not None
+    return transform(raw, metadata)
 
 
 @dataclass
@@ -71,172 +230,13 @@ class _CachedPackageShard:
     records: list[dict[str, Any]]
 
 
-class AsyncRequests:
-    """Download a bunch of files in parallel
-
-    This is not really a class, more a name space encapsulating a bunch of calls.
-    """
-
-    #: Identify ourselves
-    USER_AGENT = http.USER_AGENT
-    #: Max connections to each server
-    CONNECTIONS_PER_HOST = 4
-
-    @classmethod
-    def fetch(cls, urls, descs, cb, datas, allow_404=False, return_exceptions=False):
-        """Fetch data from URLs.
-
-        This will use asyncio to manage a pool of connections at once, speeding
-        up download as compared to iterative use of ``requests`` significantly.
-        It will also retry on non-permanent HTTP error codes (i.e. 429, 502,
-        503 and 504).
-
-        Args:
-          urls: List of URLS
-          descs: Matching list of descriptions (for progress display)
-          cb: As each download is completed, data is passed through this function.
-              Use to e.g. offload json parsing into download loop.
-          allow_404: If true, missing resources produce ``None`` instead of an error.
-          return_exceptions: If true, request failures are returned in their
-              corresponding result positions instead of failing the whole batch.
-        """
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-        if loop.is_running():
-            logger.warning("Running AsyncRequests.fetch from within running loop")
-            # Workaround the fact that asyncio's loop is marked as not-reentrant
-            # (it is apparently easy to patch, but not desired by the devs,
-            with ThreadPool(1) as pool:
-                res = pool.apply(
-                    cls.fetch,
-                    (urls, descs, cb, datas, allow_404, return_exceptions),
-                )
-            return res
-
-        task = asyncio.ensure_future(
-            cls.async_fetch(
-                urls,
-                descs,
-                cb,
-                datas,
-                allow_404=allow_404,
-                return_exceptions=return_exceptions,
-            )
-        )
-
-        try:
-            loop.run_until_complete(task)
-        except KeyboardInterrupt:
-            task.cancel()
-            loop.run_forever()
-            task.exception()
-
-        return task.result()
-
-    @classmethod
-    async def async_fetch(
-        cls,
-        urls,
-        descs=None,
-        cb=None,
-        datas=None,
-        fds=None,
-        allow_404=False,
-        return_exceptions=False,
-    ):
-        if descs is None:
-            descs = []
-        if datas is None:
-            datas = []
-        if fds is None:
-            fds = []
-        conn = aiohttp.TCPConnector(limit_per_host=cls.CONNECTIONS_PER_HOST)
-        async with http.make_session(
-            user_agent=cls.USER_AGENT,
-            connector=conn,
-        ) as session:
-
-            async def fetch_indexed(index, url, desc, data, fd):
-                try:
-                    value = await cls._async_fetch_one(
-                        session, url, desc, cb, data, fd, allow_404=allow_404
-                    )
-                except Exception as exc:
-                    if not return_exceptions:
-                        raise
-                    value = exc
-                return index, value
-
-            coros = [
-                asyncio.ensure_future(fetch_indexed(index, url, desc, data, fd))
-                for index, (url, desc, data, fd) in enumerate(
-                    zip_longest(urls, descs, datas, fds)
-                )
-            ]
-            result = [None] * len(coros)
-            with tqdm(
-                asyncio.as_completed(coros),
-                total=len(coros),
-                desc="Downloading",
-                unit="files",
-            ) as t:
-                for coro in t:
-                    index, value = await coro
-                    result[index] = value
-        return result
-
-    @staticmethod
-    @http.retry_on_transient
-    async def _async_fetch_one(
-        session, url, desc, cb=None, data=None, fd=None, allow_404=False
-    ):
-        result = []
-        if url.startswith("file://"):
-            if os.path.exists(url[7:]):
-                async with aiofiles.open(url[7:], mode="rb") as f:
-                    result.append(await f.read())
-            elif allow_404:
-                return cb(None, data) if cb else None
-            else:
-                subdir = url.split("/")[-2]
-                d = {
-                    "info": {"subdir": subdir},
-                    "packages": {},
-                    "packages.conda": {},
-                    "removed": [],
-                    "repodata_version": 1,
-                }
-                result.append(json.dumps(d).encode("UTF-8"))
-        else:
-            async with session.get(url, timeout=None) as resp:
-                if allow_404 and resp.status == 404:
-                    return cb(None, data) if cb else None
-                resp.raise_for_status()
-                async for block in http.stream_download(
-                    resp,
-                    desc,
-                    block_size=1024 * 16,
-                    disable=logger.getEffectiveLevel() > logging.INFO,
-                ):
-                    if fd:
-                        fd.write(block)
-                    else:
-                        result.append(block)
-        if cb:
-            return cb(b"".join(result), data)
-        else:
-            return b"".join(result)
-
-
 class RepoData:
-    """Singleton providing access to package directory on anaconda cloud
+    """Access to the package directory on anaconda cloud
 
-    If the first call provides a filename as **cache** argument, the
-    file is used to cache the directory in CSV format.
+    Each repository is an indexed SQLite database in the user's cache directory,
+    refreshed after eight hours. Processes share disk pages rather than Python
+    tables, and coordinate refreshes with OS advisory locks.
+    Local file channels are read afresh on every query.
 
     Data structure:
 
@@ -260,8 +260,7 @@ class RepoData:
       number. Used to distinguish different builds of the same
       package/version combination.
 
-    depends: Runtime requirements for package as list of strings. We
-      do not currently load this.
+    depends: Runtime requirements for package as list of strings.
 
     arch: Architecture key (x86_64). Not used by conda and not loaded
       here.
@@ -285,29 +284,23 @@ class RepoData:
 
     """
 
+    REPODATA_URL = "https://conda.anaconda.org/{channel}/{subdir}/repodata.json"
+    REPODATA_DEFAULTS_URL = "https://repo.anaconda.com/pkgs/main/{subdir}/repodata.json"
+    LOCAL_REPODATA = "{channel}/{subdir}/repodata.json"
+
     _load_columns: ClassVar = ["build", "build_number", "name", "version", "depends"]
 
-    #: Columns available in internal dataframe
+    #: Columns available to package queries
     columns = _load_columns + ["channel", "subdir", "platform"]
-    #: Conda repodata subdirs loaded by default. The dataframe ``platform``
-    #: column stores these subdir strings directly for historical reasons.
+    #: Conda repodata subdirs loaded by default; ``platform`` returns subdir strings.
     platforms: ClassVar[list[Subdir]] = [*ALL_PACKAGE_SUBDIRS, "noarch"]
     # config object
     config = None
 
-    cache_file: str | os.PathLike[str] | None = None
-    _df = None
-    _df_ts = None
-    _repository_cache: ClassVar[dict[RepoDataKey, _CachedRepoData]] = {}
-
-    _shard_index_cache: ClassVar[dict[RepoDataKey, _CachedShardIndex]] = {}
-    _package_shard_cache: ClassVar[
-        dict[tuple[Channel, Subdir, str], _CachedPackageShard]
-    ] = {}
-    _package_shards_unavailable: ClassVar[
-        dict[tuple[Channel, Subdir, str], datetime.datetime]
-    ] = {}
-    _shards_unavailable: ClassVar[dict[RepoDataKey, datetime.datetime]] = {}
+    _shard_index_cache: ClassVar[dict[str, _CachedShardIndex]] = {}
+    _package_shard_cache: ClassVar[dict[str, _CachedPackageShard]] = {}
+    _package_shards_unavailable: ClassVar[dict[str, datetime.datetime]] = {}
+    _shards_unavailable: ClassVar[dict[str, datetime.datetime]] = {}
 
     #: Retry unavailable shard indexes sooner than successful cache entries.
     shards_unavailable_timeout = 60 * 5
@@ -317,161 +310,193 @@ class RepoData:
     shard_index_cache_timeout = 60 * 15
     package_shard_cache_max_entries = 4096
 
-    #: default lifetime for repodata cache
-    cache_timeout = 60 * 60 * 8
+    cache_dir: ClassVar[Path | None] = None
+    refresh_after: ClassVar[datetime.datetime | None] = None
+
+    #: Repository lifetime; no full-table in-memory cache is kept.
+    cache_timeout: ClassVar[float] = 60 * 60 * 8
 
     @classmethod
     def register_config(cls, config):
-        previous_channels = tuple((cls.config or {}).get("channels", ()))
-        current_channels = tuple(config.get("channels", ()))
-        if previous_channels != current_channels:
-            cls._df = None
-            cls._df_ts = None
-            cls._repository_cache.clear()
-            cls._shard_index_cache.clear()
-            cls._package_shard_cache.clear()
-            cls._package_shards_unavailable.clear()
-            cls._shards_unavailable.clear()
         cls.config = config
 
-    __instance = None
+    @classmethod
+    def configure_cache(
+        cls, directory: Path | None = None, *, refresh: bool = False
+    ) -> None:
+        """Choose a cache directory; None restores the platform/XDG default."""
+        cls._shard_index_cache.clear()
+        cls._package_shard_cache.clear()
+        cls._shards_unavailable.clear()
+        cls._package_shards_unavailable.clear()
+        cls.cache_dir = directory.resolve() if directory is not None else None
+        cls.refresh_after = datetime.datetime.now(datetime.UTC) if refresh else None
 
-    def __new__(cls):
-        """Makes RepoData a singleton"""
-        if RepoData.__instance is None:
-            assert RepoData.config is not None, (
-                "bug: ensure to load config before instantiating RepoData."
-            )
-            RepoData.__instance = object.__new__(cls)
-        return RepoData.__instance
-
-    def set_cache(self, cache: str | os.PathLike[str] | None) -> None:
-        if self._df is not None:
-            warnings.warn("RepoData cache set after first use", BiocondaUtilsWarning)
-        else:
-            self.cache_file = cache
+    @classmethod
+    def get_cache_dir(cls) -> Path:
+        return cls.cache_dir or get_cache_root() / "repodata-v2"
 
     @property
     def channels(self):
-        """Return channels to load."""
-        assert self.config is not None
+        assert self.config is not None, "Load configuration before querying repodata"
         return self.config["channels"]
 
-    @property
-    def df(self):
-        """Internal Pandas DataFrame object
+    def _cache_path(self, url: str) -> Path:
+        return self.get_cache_dir() / (sha256(url.encode()).hexdigest() + ".sqlite")
 
-        Try not to use this ... the point of this class is to be able to
-        change the structure in which the data is held.
-        """
-        if self._df_ts is not None:
-            seconds = (
-                datetime.datetime.now(datetime.UTC) - self._df_ts
-            ).total_seconds()
-        else:
-            seconds = 0
-
-        if self._df is None or seconds > self.cache_timeout:
-            self._df = None
-            self._df_ts = None
-            self._df = self._load_channel_dataframe_cached()
-            self._df_ts = datetime.datetime.now(datetime.UTC)
-            self._repository_cache.clear()
-        return self._df
-
-    def _make_repodata_dir_url(self, channel: Channel, subdir: Subdir) -> str:
-        """Return the base URL of a channel subdirectory.
-
-        Single place that knows that ``defaults`` is an alias for
-        ``pkgs/main`` on a different host (caveat: only main, not free/r/pro)
-        and that ``file://`` channels are local paths.
-        """
-        if channel == "defaults":
-            return f"https://repo.anaconda.com/pkgs/main/{subdir}/"
-        elif channel.startswith("file://"):
-            return f"{channel}/{subdir}/"
-        else:
-            return f"https://conda.anaconda.org/{channel}/{subdir}/"
-
-    def _make_repodata_url(self, channel: Channel, subdir: Subdir) -> str:
-        return f"{self._make_repodata_dir_url(channel, subdir)}repodata.json"
-
-    def _load_channel_dataframe_cached(self):
-        if self.cache_file is not None and os.path.exists(self.cache_file):
-            ts = datetime.datetime.fromtimestamp(
-                os.path.getmtime(self.cache_file), datetime.UTC
-            )
-            seconds = (datetime.datetime.now(datetime.UTC) - ts).total_seconds()
-            if seconds <= self.cache_timeout:
-                logger.info("Loading repodata from cache %s", self.cache_file)
-                return pd.read_pickle(self.cache_file)
-            else:
-                logger.info("Repodata cache file too old. Reloading")
-
-        if self.cache_file is None:
-            res = self._get_repository_dataframe(self.channels, self.platforms)
-        else:
-            res = self._load_channel_dataframe()
-
-        if self.cache_file is not None:
-            res.to_pickle(self.cache_file)
-        return res
-
-    def _load_channel_dataframe(
-        self, repositories: Iterable[tuple[Channel, Subdir]] | None = None
-    ):
-        repos = list(
-            product(self.channels, self.platforms)
-            if repositories is None
-            else repositories
+    def _is_fresh(self, fetched_at: float) -> bool:
+        now = datetime.datetime.now(datetime.UTC).timestamp()
+        return 0 <= now - fetched_at < self.cache_timeout and (
+            self.refresh_after is None or fetched_at >= self.refresh_after.timestamp()
         )
-        urls = [self._make_repodata_url(c, p) for c, p in repos]
-        descs = [f"{c}/{p}" for c, p in repos]
 
-        def to_dataframe(json_data, meta_data):
-            channel, platform = meta_data
-            raw = json.loads(json_data)
-            subdir = raw["info"]["subdir"]
-            packages = raw["packages"]
-            packages.update(raw.get("packages.conda", {}))
+    def _read_cache(self, path: Path) -> sqlite3.Connection | None:
+        """Open a fresh database without deserializing its package records."""
+        if not path.exists():
+            return None
+        connection = None
+        try:
+            connection = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)
+            # Bound private page caches. The OS shares file pages across workers.
+            connection.execute("PRAGMA cache_size=-512")
+            if connection.execute("PRAGMA user_version").fetchone()[0] != 2:
+                raise sqlite3.DatabaseError("incompatible repodata cache")
+            fetched_at = connection.execute(
+                "SELECT fetched_at FROM metadata"
+            ).fetchone()[0]
+            connection.execute(
+                "SELECT name, version, build, build_number, depends FROM packages LIMIT 0"
+            )
+            if self._is_fresh(fetched_at):
+                return connection
+        except (sqlite3.DatabaseError, TypeError, IndexError):
+            logger.warning("Ignoring unreadable repodata cache %s", path)
+        if connection is not None:
+            connection.close()
+        return None
 
-            df = pd.DataFrame.from_dict(packages, "index", columns=self._load_columns)
-            # Ensure that version is always a string.
-            df["version"] = df["version"].astype(str)
-            df["channel"] = channel
-            df["platform"] = platform
-            df["subdir"] = subdir
-            return df
+    @staticmethod
+    def _populate_database(
+        connection: sqlite3.Connection, raw: bytes, *, fetched_at: float
+    ) -> None:
+        data = json.loads(raw)
+        packages = data["packages"]
+        packages.update(data.get("packages.conda", {}))
+        RepoData._populate_records(
+            connection,
+            packages.values(),
+            subdir=data["info"]["subdir"],
+            fetched_at=fetched_at,
+        )
 
-        if urls:
-            dfs = AsyncRequests.fetch(urls, descs, to_dataframe, repos)
-            res = pd.concat(dfs)
-        else:
-            res = pd.DataFrame(columns=self.columns)
+    @staticmethod
+    def _populate_records(
+        connection: sqlite3.Connection,
+        records: Iterable[dict[str, Any]],
+        *,
+        subdir: Subdir,
+        fetched_at: float,
+    ) -> None:
+        with connection:
+            connection.execute("CREATE TABLE metadata (fetched_at REAL, subdir TEXT)")
+            connection.execute(
+                "INSERT INTO metadata VALUES (?, ?)",
+                (fetched_at, subdir),
+            )
+            connection.execute(
+                "CREATE TABLE packages (name TEXT, version TEXT, build TEXT, build_number INTEGER, depends TEXT)"
+            )
+            connection.executemany(
+                "INSERT INTO packages VALUES (?, ?, ?, ?, ?)",
+                (
+                    (
+                        record.get("name"),
+                        str(record.get("version")),
+                        record.get("build"),
+                        record.get("build_number"),
+                        json.dumps(record.get("depends")),
+                    )
+                    for record in records
+                ),
+            )
+            connection.execute(
+                "CREATE INDEX package_lookup ON packages (name, version, build_number, build)"
+            )
+            connection.execute("PRAGMA user_version=2")
 
-        for col in (
-            "channel",
-            "platform",
-            "subdir",
-            "name",
-            "version",
-            "build",
-        ):
-            res[col] = res[col].astype("category")
-        res = res.reset_index(drop=True)
+    @classmethod
+    def _write_cache(
+        cls, path: Path, raw: bytes, *, fetched_at: float | None = None
+    ) -> None:
+        """Build a complete replacement; readers retain a consistent old inode."""
+        with tempfile.NamedTemporaryFile(
+            dir=path.parent, prefix=".repodata-", suffix=".tmp", delete=False
+        ) as handle:
+            temporary = Path(handle.name)
+        try:
+            with closing(sqlite3.connect(temporary)) as connection:
+                cls._populate_database(
+                    connection,
+                    raw,
+                    fetched_at=datetime.datetime.now(datetime.UTC).timestamp()
+                    if fetched_at is None
+                    else fetched_at,
+                )
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+            temporary.with_name(temporary.name + "-journal").unlink(missing_ok=True)
 
-        return res
+    def _download_repository(self, channel: str, subdir: Subdir) -> bytes:
+        url = self._make_repodata_url(channel, subdir)
+        return fetch([url], [f"{channel}/{subdir}"], None, [(channel, subdir)])[0]
 
-    def _is_loader_mocked(self) -> bool:
-        loader = getattr(self, "_load_channel_dataframe", None)
-        if loader is None:
-            return False
-        return getattr(loader, "__func__", loader) != RepoData._load_channel_dataframe
+    def _repositories(self, channels: Iterable[str], subdirs: Iterable[Subdir]):
+        return (
+            (channel, subdir)
+            for channel, subdir in product(
+                dict.fromkeys(channels), dict.fromkeys(subdirs)
+            )
+            if channel in self.channels
+        )
+
+    @contextmanager
+    def _open_repository(self, channel: str, subdir: Subdir):
+        url = self._make_repodata_url(channel, subdir)
+        if url.startswith("file://"):
+            with closing(sqlite3.connect(":memory:")) as connection:
+                self._populate_database(
+                    connection,
+                    self._download_repository(channel, subdir),
+                    fetched_at=datetime.datetime.now(datetime.UTC).timestamp(),
+                )
+                yield connection
+            return
+        path = self._cache_path(url)
+        connection = self._read_cache(path)
+        if connection is None:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            # Hold only one repository lock at a time. A refresh builds one
+            # repository at a time, bounding peak JSON/table memory as well.
+            with (
+                file_lock(path.with_suffix(".lock")),
+                file_lock(path.parent / "refresh.lock"),
+            ):
+                connection = self._read_cache(path)
+                if connection is None:
+                    # The refresh lock excludes every active builder. Recover
+                    # temporary files left by SIGKILL without touching other files.
+                    for abandoned in path.parent.glob(".repodata-*.tmp*"):
+                        abandoned.unlink(missing_ok=True)
+                    self._write_cache(path, self._download_repository(channel, subdir))
+                    connection = self._read_cache(path)
+                    if connection is None:
+                        raise RuntimeError(f"New repodata cache is invalid: {path}")
+        with closing(connection):
+            yield connection
 
     def _make_shards_index_url(self, channel: Channel, subdir: Subdir) -> str:
-        return (
-            f"{self._make_repodata_dir_url(channel, subdir)}repodata_shards.msgpack.zst"
-        )
+        return f"{self._make_repodata_url(channel, subdir).rsplit('/', 1)[0] + '/'}repodata_shards.msgpack.zst"
 
     def _make_shard_url(
         self,
@@ -610,228 +635,172 @@ class RepoData:
         missing: list[RepoDataKey] = []
 
         for repo in repositories:
-            unavailable_at = self._shards_unavailable.get(repo)
+            cache_key = self._make_shards_index_url(*repo)
+            unavailable_at = self._shards_unavailable.get(cache_key)
             if unavailable_at is not None:
                 if (
-                    now - unavailable_at
-                ).total_seconds() <= self.shards_unavailable_timeout:
+                    0
+                    <= (now - unavailable_at).total_seconds()
+                    <= self.shards_unavailable_timeout
+                ):
                     continue
-                self._shards_unavailable.pop(repo, None)
-            if repo in self._shard_index_cache:
-                cached = self._shard_index_cache[repo]
+                self._shards_unavailable.pop(cache_key, None)
+            if cache_key in self._shard_index_cache:
+                cached = self._shard_index_cache[cache_key]
                 if (
-                    now - cached.fetched_at
-                ).total_seconds() <= self.shard_index_cache_timeout:
+                    0
+                    <= (now - cached.fetched_at).total_seconds()
+                    <= self.shard_index_cache_timeout
+                ):
                     result[repo] = cached
                     continue
-                self._shard_index_cache.pop(repo, None)
+                self._shard_index_cache.pop(cache_key, None)
             missing.append(repo)
 
         if missing:
             urls = [self._make_shards_index_url(c, s) for c, s in missing]
             descs = [f"{c}/{s} shards index" for c, s in missing]
             try:
-                indexes = AsyncRequests.fetch(
+                indexes = fetch(
                     urls,
                     descs,
-                    cb=self._parse_shard_index,
-                    datas=missing,
+                    transform=self._parse_shard_index,
+                    metadata=missing,
                     allow_404=True,
                     return_exceptions=True,
                 )
                 for repo, index in zip(missing, indexes):
+                    cache_key = self._make_shards_index_url(*repo)
                     if isinstance(index, Exception):
                         logger.debug(
                             "Error fetching shard index for %s/%s: %s", *repo, index
                         )
-                        self._shards_unavailable[repo] = now
+                        self._shards_unavailable[cache_key] = now
                     elif index is not None:
-                        self._shards_unavailable.pop(repo, None)
-                        self._shard_index_cache[repo] = index
+                        self._shards_unavailable.pop(cache_key, None)
+                        self._shard_index_cache[cache_key] = index
                         result[repo] = index
                     else:
-                        self._shards_unavailable[repo] = now
+                        self._shards_unavailable[cache_key] = now
             except (aiohttp.ClientError, OSError, TimeoutError, RuntimeError) as exc:
                 logger.debug("Error batch fetching shard indexes: %s", exc)
                 for repo in missing:
-                    self._shards_unavailable[repo] = now
+                    cache_key = self._make_shards_index_url(*repo)
+                    self._shards_unavailable[cache_key] = now
 
         return result
 
-    def _get_sharded_package_data(
-        self,
-        requested_channels: Sequence[Channel],
-        requested_subdirs: Sequence[Subdir],
-        package_names: Collection[str],
-    ) -> list[dict[str, Any]]:
-        repositories = tuple(product(requested_channels, requested_subdirs))
-        shard_indexes = self._get_shard_indexes(repositories)
+    def _get_repository_shards(
+        self, channel: Channel, subdir: Subdir, names: list[str]
+    ) -> list[dict[str, Any]] | None:
+        """Return targeted records, or None when full repodata is needed.
+
+        A missing name in a valid index is authoritative. Any failed package
+        download falls back for the whole repository, avoiding duplicate rows.
+        """
+        if not names:
+            return []
+        if channel.startswith("file://"):
+            return None
+        index = self._get_shard_indexes([(channel, subdir)]).get((channel, subdir))
+        if index is None:
+            return None
+        records_by_url: dict[str, list[dict[str, Any]]] = {}
+        missing: dict[str, str] = {}
         now = datetime.datetime.now(datetime.UTC)
-
-        records_by_repo: dict[RepoDataKey, list[dict[str, Any]]] = {
-            repo: [] for repo in repositories
-        }
-        to_fetch_urls: list[str] = []
-        to_fetch_descs: list[str] = []
-        to_fetch_metadata: list[tuple[Channel, Subdir, str]] = []
-
-        fallback_repos: set[RepoDataKey] = set()
-
-        for repo in repositories:
-            channel, subdir = repo
-            shard_index = shard_indexes.get(repo)
-            if shard_index is None:
-                fallback_repos.add(repo)
+        for name in dict.fromkeys(names):
+            shard_hash = index.shards.get(name)
+            if shard_hash is None:
                 continue
+            url = self._make_shard_url(channel, subdir, index, shard_hash)
+            cached = self._package_shard_cache.get(url)
+            if cached is not None:
+                records_by_url[url] = cached.records
+                continue
+            unavailable_at = self._package_shards_unavailable.get(url)
+            if (
+                unavailable_at is not None
+                and 0
+                <= (now - unavailable_at).total_seconds()
+                < self.package_shards_unavailable_timeout
+            ):
+                return None
+            records_by_url.setdefault(url, [])
+            missing.setdefault(url, name)
 
-            for pkg_name in package_names:
-                if pkg_name not in shard_index.shards:
-                    continue
-                hex_hash = shard_index.shards[pkg_name]
-                cache_key = (channel, subdir, hex_hash)
-                if cache_key in self._package_shard_cache:
-                    cached = self._package_shard_cache[cache_key]
-                    records_by_repo[repo].extend(cached.records)
-                    continue
-
-                unavailable_at = self._package_shards_unavailable.get(cache_key)
-                if unavailable_at is not None:
-                    if (
-                        now - unavailable_at
-                    ).total_seconds() <= self.package_shards_unavailable_timeout:
-                        fallback_repos.add(repo)
-                        continue
-                    self._package_shards_unavailable.pop(cache_key, None)
-
-                url = self._make_shard_url(channel, subdir, shard_index, hex_hash)
-                to_fetch_urls.append(url)
-                to_fetch_descs.append(f"{channel}/{subdir}/{pkg_name} shard")
-                to_fetch_metadata.append((channel, subdir, pkg_name))
-
-        if to_fetch_urls:
-            try:
-                fetched_shards = AsyncRequests.fetch(
-                    to_fetch_urls,
-                    to_fetch_descs,
-                    cb=self._parse_package_shard,
-                    datas=to_fetch_metadata,
-                    allow_404=True,
-                    return_exceptions=True,
-                )
-                for meta, records in zip(to_fetch_metadata, fetched_shards):
-                    channel, subdir, pkg_name = meta
-                    repo = (channel, subdir)
-                    shard_hash = shard_indexes[repo].shards[pkg_name]
-                    cache_key = (channel, subdir, shard_hash)
-                    if isinstance(records, Exception):
-                        logger.debug(
-                            "Error fetching package shard for %s/%s/%s: %s",
-                            channel,
-                            subdir,
-                            pkg_name,
-                            records,
-                        )
-                        self._package_shards_unavailable[cache_key] = now
-                        fallback_repos.add(repo)
-                        continue
-                    if records is None:
-                        self._package_shards_unavailable[cache_key] = now
-                        fallback_repos.add(repo)
-                        continue
-                    recs = records
-                    self._package_shards_unavailable.pop(cache_key, None)
-                    if (
-                        len(self._package_shard_cache)
-                        >= self.package_shard_cache_max_entries
-                    ):
-                        self._package_shard_cache.pop(
-                            next(iter(self._package_shard_cache))
-                        )
-                    self._package_shard_cache[cache_key] = _CachedPackageShard(
-                        records=recs
-                    )
-                    records_by_repo[repo].extend(recs)
-            except (aiohttp.ClientError, OSError, TimeoutError, RuntimeError) as exc:
-                logger.debug("Error fetching package shards: %s", exc)
-                for channel, subdir, pkg_name in to_fetch_metadata:
-                    repo = (channel, subdir)
-                    shard_hash = shard_indexes[repo].shards[pkg_name]
-                    self._package_shards_unavailable[(channel, subdir, shard_hash)] = (
-                        now
-                    )
-                    fallback_repos.add(repo)
-
-        if fallback_repos:
-            ordered_fallback_repos = tuple(
-                repo for repo in repositories if repo in fallback_repos
-            )
-            df = self._get_repository_pairs_dataframe(ordered_fallback_repos)
-            df_filtered = df[df["name"].isin(package_names)]
-            for channel, subdir in ordered_fallback_repos:
-                records_by_repo[(channel, subdir)] = df_filtered[
-                    (df_filtered["channel"] == channel)
-                    & (df_filtered["subdir"] == subdir)
-                ].to_dict("records")
-
-        return list(chain.from_iterable(records_by_repo[repo] for repo in repositories))
-
-    def _filter_channels(self, channels: Iterable[Channel]) -> tuple[Channel, ...]:
-        """Keep only configured channels, warning about dropped names."""
-        configured_channels = set(self.channels)
-        requested = tuple(dict.fromkeys(channels))
-        dropped = [c for c in requested if c not in configured_channels]
-        if dropped:
-            logger.warning(
-                "Ignoring unknown channels %s (configured: %s)",
-                dropped,
-                sorted(configured_channels),
-            )
-        return tuple(c for c in requested if c in configured_channels)
-
-    def _get_repository_dataframe(
-        self, channels: Iterable[Channel], subdirs: Iterable[Subdir]
-    ) -> pd.DataFrame:
-        """Load and cache only the requested channel/subdirectory pairs."""
-        requested_channels = self._filter_channels(channels)
-        requested_subdirs = tuple(dict.fromkeys(subdirs))
-        return self._get_repository_pairs_dataframe(
-            product(requested_channels, requested_subdirs)
-        )
-
-    def _get_repository_pairs_dataframe(
-        self, repositories: Iterable[RepoDataKey]
-    ) -> pd.DataFrame:
-        """Load and cache the exact requested channel/subdirectory pairs."""
-        if self._df is not None or self.cache_file is not None:
-            return self.df
-
-        repositories = tuple(dict.fromkeys(repositories))
-        requested_channels = self._filter_channels(repo[0] for repo in repositories)
-        allowed = set(requested_channels)
-        repositories = tuple(repo for repo in repositories if repo[0] in allowed)
-        now = datetime.datetime.now(datetime.UTC)
-        missing = [
-            repository
-            for repository in repositories
-            if repository not in self._repository_cache
-            or (now - self._repository_cache[repository].fetched_at).total_seconds()
-            > self.cache_timeout
-        ]
+        failed = False
         if missing:
-            loaded = self._load_channel_dataframe(missing)
-            for channel, subdir in missing:
-                repository = (channel, subdir)
-                self._repository_cache[repository] = _CachedRepoData(
-                    dataframe=loaded[
-                        (loaded["channel"] == channel) & (loaded["subdir"] == subdir)
-                    ],
-                    fetched_at=now,
+            results = fetch(
+                list(missing),
+                [f"{channel}/{subdir}/{name} shard" for name in missing.values()],
+                None,
+                [(channel, subdir)] * len(missing),
+                allow_404=True,
+                return_exceptions=True,
+            )
+            for (url, name), raw in zip(missing.items(), results):
+                records = (
+                    None
+                    if isinstance(raw, Exception)
+                    else self._parse_package_shard(raw, (channel, subdir, name))
                 )
-
-        frames = [
-            self._repository_cache[repository].dataframe for repository in repositories
+                if records is None:
+                    self._package_shards_unavailable[url] = now
+                    failed = True
+                    continue
+                self._package_shards_unavailable.pop(url, None)
+                if (
+                    len(self._package_shard_cache)
+                    >= self.package_shard_cache_max_entries
+                ):
+                    self._package_shard_cache.pop(next(iter(self._package_shard_cache)))
+                self._package_shard_cache[url] = _CachedPackageShard(records)
+                records_by_url[url] = records
+        if failed:
+            return None
+        wanted = set(names)
+        return [
+            record
+            for records in records_by_url.values()
+            for record in records
+            if record["name"] in wanted
         ]
-        return pd.concat(frames) if frames else pd.DataFrame(columns=self.columns)
+
+    @contextmanager
+    def _open_query_repository(self, channel: Channel, subdir: Subdir, names):
+        records = (
+            None
+            if names is None
+            else self._get_repository_shards(channel, subdir, names)
+        )
+        if records is None:
+            with self._open_repository(channel, subdir) as connection:
+                yield connection
+            return
+        # Share SQL filtering and projection with full repodata. Only requested
+        # shards are materialized; no full repository Python table is retained.
+        with closing(sqlite3.connect(":memory:")) as connection:
+            self._populate_records(
+                connection,
+                records,
+                subdir=subdir,
+                fetched_at=datetime.datetime.now(datetime.UTC).timestamp(),
+            )
+            yield connection
+
+    def _make_repodata_url(self, channel, subdir: Subdir):
+        if channel == "defaults":
+            # caveat: this only gets defaults main, not 'free', 'r' or 'pro'
+            url_template = self.REPODATA_DEFAULTS_URL
+        else:
+            url_template = self.REPODATA_URL
+        local_url_template = self.LOCAL_REPODATA
+
+        if channel.startswith("file://"):  # Allow local channels
+            url = local_url_template.format(channel=channel, subdir=subdir)
+        else:
+            url = url_template.format(channel=channel, subdir=subdir)
+        return url
 
     @staticmethod
     def native_subdir() -> PackageSubdir:
@@ -853,41 +822,12 @@ class RepoData:
           Dictionary mapping version numbers to list of subdirs
           e.g. {'0.1': ['linux-64'], '0.2': ['linux-64', 'osx-64'], '0.3': ['noarch']}
         """
-        # called from doc generator
-        can_use_shards = (
-            not self._is_loader_mocked()
-            and self._df is None
-            and self.cache_file is None
-        )
-        if can_use_shards:
-            records = self._get_sharded_package_data(
-                self.channels, self.platforms, [name]
-            )
-            df = (
-                pd.DataFrame(records, columns=self.columns)
-                if records
-                else pd.DataFrame(columns=self.columns)
-            )
-            for col in (
-                "channel",
-                "platform",
-                "subdir",
-                "name",
-                "version",
-                "build",
-            ):
-                df[col] = df[col].astype("category")
-            df = df.reset_index(drop=True)
-            packages = df[df.name == name][["version", "platform"]].copy()
-        else:
-            packages = self.df[self.df.name == name][["version", "platform"]].copy()
-
-        packages["platform"] = packages["platform"].astype(str)
-        packages["version"] = packages["version"].astype(str)
-        versions = packages.groupby("version", observed=True).agg(
-            lambda x: list(set(x))
-        )
-        return versions["platform"].to_dict()
+        versions: dict[str, set[str]] = {}
+        for version, subdir in self.get_package_data(
+            ["version", "platform"], name=name
+        ):
+            versions.setdefault(version, set()).add(subdir)
+        return {version: sorted(versions[version]) for version in sorted(versions)}
 
     def get_package_data(
         self,
@@ -910,7 +850,11 @@ class RepoData:
             platform = ["noarch", self.native_subdir()]
 
         if version is not None:
-            version = str(version)
+            version = (
+                [str(value) for value in version]
+                if isinstance(version, (list, tuple))
+                else str(version)
+            )
 
         if isinstance(channels, str):
             requested_channels = [channels]
@@ -926,77 +870,79 @@ class RepoData:
         else:
             requested_subdirs = [cast(Subdir, subdir) for subdir in platform]
 
-        requested_channels = self._filter_channels(requested_channels)
-        if not requested_channels or not requested_subdirs:
-            if key is None:
-                return False
-            if isinstance(key, str):
-                return []
-            return iter([])
-
-        can_use_shards = (
-            not self._is_loader_mocked()
-            and self._df is None
-            and self.cache_file is None
-        )
-
-        if can_use_shards and name is not None:
-            target_names = [name] if isinstance(name, str) else list(name)
-            records = self._get_sharded_package_data(
-                requested_channels, requested_subdirs, target_names
-            )
-            df = (
-                pd.DataFrame(records, columns=self.columns)
-                if records
-                else pd.DataFrame(columns=self.columns)
-            )
-            for col in (
-                "channel",
-                "platform",
-                "subdir",
-                "name",
-                "version",
-                "build",
-            ):
-                df[col] = df[col].astype("category")
-            df = df.reset_index(drop=True)
-        else:
-            df = self._get_repository_dataframe(requested_channels, requested_subdirs)
-
-        channel_filter = requested_channels if channels is not None else None
-        platform_filter = requested_subdirs if platform is not None else None
-        # We iteratively drill down here, starting with the (probably)
-        # most specific columns. Filtering this way on a large data frame
-        # is much faster than executing the comparisons for all values
-        # every time, in particular if we are looking at a specific package.
-        # NB: cheap, high-selectivity filters come first so that later,
-        #     expensive filters (e.g. high-cardinality categoricals such as
-        #     "build", or int comparisons that box every value) only run on
-        #     an already tiny frame. The result is identical either way.
-        for col, val in (
-            ("name", name),  # thousands of different values
-            ("version", version),  # still pretty good variety
-            ("channel", channel_filter),  # 3 values
-            ("platform", platform_filter),  # 3 values
-            ("build_number", build_number),  # most values 0
-            ("build", build),  # build string should vary a lot
+        keys = [] if key is None else [key] if isinstance(key, str) else list(key)
+        if not keys and key is not None:
+            return iter(())
+        for column in keys:
+            if column not in self.columns:
+                raise KeyError(column)
+        clauses, parameters = [], []
+        for column, value in (
+            ("name", name),
+            ("version", version),
+            ("build_number", build_number),
+            ("build", build),
         ):
-            if val is None:
+            if value is None:
                 continue
-            if isinstance(val, (list, tuple)):
-                df = df[df[col].isin(val)]
+            if isinstance(value, (list, tuple)):
+                clauses.append(f"{column} IN ({','.join('?' for _ in value)})")
+                parameters.extend(value)
             else:
-                df = df[df[col] == val]
-
+                clauses.append(f"{column} = ?")
+                parameters.append(value)
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        package_names = None
+        if name is not None:
+            package_names = list(name) if isinstance(name, (list, tuple)) else [name]
+        Package = namedtuple("Package", keys, rename=True)
+        rows = []
+        for channel, subdir in self._repositories(
+            requested_channels, requested_subdirs
+        ):
+            with self._open_query_repository(
+                channel,
+                subdir,
+                package_names,
+            ) as connection:
+                constants = {"channel": channel, "platform": subdir}
+                if "subdir" in keys:
+                    constants["subdir"] = connection.execute(
+                        "SELECT subdir FROM metadata"
+                    ).fetchone()[0]
+                projection = (
+                    ", ".join("?" if column in constants else column for column in keys)
+                    if keys
+                    else "1"
+                )
+                values = [
+                    constants[column] for column in keys if column in constants
+                ] + parameters
+                query = "SELECT " + projection + " FROM packages" + where
+                if key is None:
+                    if (
+                        connection.execute(query + " LIMIT 1", values).fetchone()
+                        is not None
+                    ):
+                        return True
+                else:
+                    for row in connection.execute(query + " ORDER BY rowid", values):
+                        decoded = [
+                            json.loads(value) if column == "depends" else value
+                            for column, value in zip(keys, row)
+                        ]
+                        rows.append(
+                            decoded[0] if isinstance(key, str) else Package(*decoded)
+                        )
         if key is None:
-            return not df.empty
+            return False
         if isinstance(key, str):
-            return list(df[key])
-        return df[key].itertuples(index=False)
+            return rows
+        return iter(rows)
 
 
-@disk_cache.memoize(expire=604800)
-def get_package_downloads(channel: Channel, package: str) -> int:
+@memoize(expire=604800)
+def get_package_downloads(channel: str, package: str) -> int:
     """Use anaconda API to obtain download counts."""
     data = requests.get(f"https://api.anaconda.org/package/{channel}/{package}").json()
     if "files" in data:

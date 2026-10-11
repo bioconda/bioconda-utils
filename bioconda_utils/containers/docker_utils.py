@@ -60,6 +60,7 @@ from packaging.version import Version
 
 from .._types import (
     ALL_PACKAGE_SUBDIRS,
+    BuildSystem,
     ContainerPlatform,
     PkgBuildRef,
     Subdir,
@@ -71,7 +72,9 @@ from ..conda.conda_build_bridge import (
     get_conda_build_config_files,
     load_conda_build_config,
 )
-from ..support.logsetup import Progress
+from ..rattler.rattler_build_bridge import (
+    get_rattler_build_global_variants_paths,
+)
 from ..support.subproc import run
 
 logger = logging.getLogger(__name__)
@@ -160,6 +163,51 @@ conda-build -c file://{self.container_staging} {self.conda_build_args} \
 conda index {self.container_staging}
 """
 
+
+# ----------------------------------------------------------------------------
+# RATTLER_BUILD_SCRIPT_TEMPLATE
+# ----------------------------------------------------------------------------
+#
+# This is the equivalent of the BUILD_SCRIPT_TEMPLATE but defined for rattler-build
+# recipes instead of conda-build recipes.
+#
+RATTLER_BUILD_SCRIPT_TEMPLATE = r"""
+#!/bin/bash
+set -eo pipefail
+
+# Add the host's mounted conda-bld dir so that we can use its contents as
+# dependencies for building this recipe.
+#
+# Note that if the directory didn't exist on the host, then the staging area
+# will exist in the container but will be empty.  Channels expect at least
+# a linux-64/linux-aarch64 and noarch directory within that directory, so we
+# make sure it exists before adding the channel.
+# Also ensure conda-build's local channel directory exists the same way.
+for local_channel in '/opt/conda/conda-bld' '{self.container_staging}'; do
+  mkdir -p "${{local_channel}}"/linux-64
+  mkdir -p "${{local_channel}}"/linux-aarch64
+  mkdir -p "${{local_channel}}"/noarch
+  conda index "${{local_channel}}"
+done
+
+# The actual building...
+# we explicitly point to the meta.yaml, in order to keep
+# conda-build from building all subdirectories
+rattler-build build -c file://{self.container_staging} {self.rattler_build_args} --recipe {self.container_recipe}/recipe.yaml --output-dir {self.container_staging} 2>&1
+
+# copy all built packages to the staging area
+find /opt/conda/conda-bld \
+  -name src_cache -prune -o \
+  -type f \( -name '*.tar.bz2' -o -name '*.conda' \) -print0 |
+  xargs -0 -- cp -t '{self.container_staging}/{arch}' --
+#While technically better, this is slower and more prone to breaking
+#cp `conda-build {self.conda_build_args} {self.container_recipe}/meta.yaml --output | grep -e '\.tar\.bz2$' -e '\.conda$')` {self.container_staging}/{arch}
+conda index {self.container_staging}
+# Ensure permissions are correct on the host.
+HOST_USER={self.user_info[uid]}
+chown $HOST_USER:$HOST_USER {self.container_staging}/{arch}/*
+"""
+
 # ----------------------------------------------------------------------------
 # DOCKERFILE_TEMPLATE
 # ----------------------------------------------------------------------------
@@ -191,17 +239,18 @@ class RecipeBuilder:
         tag: str = "tmp-bioconda-builder",
         container_recipe: str = "/opt/recipe",
         container_staging: str = "/opt/host-conda-bld",
-        requirements: str | None = None,
+        requirements: Path | None = None,
         build_script_template: str = BUILD_SCRIPT_TEMPLATE,
+        rattler_build_script_template: str = RATTLER_BUILD_SCRIPT_TEMPLATE,
         dockerfile_template: str = DOCKERFILE_TEMPLATE,
         use_host_conda_bld: bool = False,
-        pkg_dir: str | None = None,
+        pkg_dir: Path | None = None,
         keep_image: bool = False,
         build_image: bool = False,
-        image_build_dir: str | None = None,
+        image_build_dir: Path | None = None,
         docker_base_image: str | None = None,
         target_platform: ContainerPlatform | None = None,
-        container_pkgs_cache: str | None = None,
+        container_pkgs_cache: Path | None = None,
     ) -> None:
         """
         Class to handle building a custom docker container that can be used for
@@ -223,7 +272,7 @@ class RecipeBuilder:
             Upon successful building container-built packages will be copied
             over. Mounted as read-write.
 
-        requirements : None or str
+        requirements : Path or None
             Path to a "requirements.txt" file which will be installed with
             conda in a newly-created container. If None, then use the default
             installed with bioconda_utils.
@@ -247,7 +296,7 @@ class RecipeBuilder:
             Otherwise, use **pkg_dir** as a common host directory used across
             multiple runs of this RecipeBuilder object.
 
-        pkg_dir : str or None
+        pkg_dir : Path or None
             Specify where packages should appear on the host.
 
             If **pkg_dir** is None, then a temporary directory will be
@@ -256,7 +305,7 @@ class RecipeBuilder:
             subsequent recipes built by the container to see previous built
             recipes without polluting the host's conda-bld directory.
 
-            If **pkg_dir** is a string, then it will be created if needed and
+            If **pkg_dir** is given, then it will be created if needed and
             this directory will be used store all built packages on the host
             instead of the temp dir.
 
@@ -277,14 +326,14 @@ class RecipeBuilder:
             freeing up storage space.  Set ``keep_image=True`` to disable this
             behavior.
 
-        image_build_dir : str or None
+        image_build_dir : Path or None
             If not None, use an existing directory as a docker image context
             instead of a temporary one. For testing purposes only.
 
         docker_base_image : str or None
             Name of base image that can be used in **dockerfile_template**.
 
-        container_pkgs_cache : str or None
+        container_pkgs_cache : Path or None
             Host directory bind-mounted at /opt/conda/pkgs in build
             containers, so repodata, shards indexes and downloaded build/host
             env packages persist across the containers of one build run.
@@ -292,20 +341,28 @@ class RecipeBuilder:
             environment variable when not given.
         """
         self.requirements = requirements
+        self.conda_build_args: str = ""
+        self.rattler_build_args: str = ""
         # Host directory bind-mounted at /opt/conda/pkgs in build containers
         # so repodata/shards and downloaded build/host env packages persist
         # across the containers of one build run. Falls back to the
-        self.container_pkgs_cache = container_pkgs_cache or os.environ.get(
-            "BIOCONDA_UTILS_CONTAINER_PKGS_CACHE"
+        self.container_pkgs_cache: Path | None = (
+            Path(container_pkgs_cache)
+            if container_pkgs_cache
+            else (
+                Path(env_cache)
+                if (env_cache := os.environ.get("BIOCONDA_UTILS_CONTAINER_PKGS_CACHE"))
+                else None
+            )
         )
         if self.container_pkgs_cache:
-            os.makedirs(self.container_pkgs_cache, exist_ok=True)
+            self.container_pkgs_cache.mkdir(parents=True, exist_ok=True)
             # build containers run as a different user (uid 9001 "conda") and
             # conda writes cache state even on cache hits
-            os.chmod(self.container_pkgs_cache, 0o777)
-        self.conda_build_args = ""
+            self.container_pkgs_cache.chmod(0o777)
         self.target_platform: ContainerPlatform | None = target_platform
         self.build_script_template: str = build_script_template
+        self.rattler_build_script_template: str = rattler_build_script_template
         self.dockerfile_template = dockerfile_template
         self.keep_image = keep_image
         self.build_image = build_image
@@ -331,26 +388,20 @@ class RecipeBuilder:
 
         conda_build_config = load_conda_build_config()
         # Identify conda-bld directory on the host.
-        self.host_conda_bld = conda_build_config.croot
+        self.host_conda_bld = Path(conda_build_config.croot)
         # Pass on config to choose wheter to build .tar.bz2 or .conda format.
         self.conda_pkg_format = conda_build_config.conda_pkg_format or ""
 
         if use_host_conda_bld:
             self.pkg_dir = self.host_conda_bld
         else:
-            if pkg_dir is None:
-                self.pkg_dir = tempfile.mkdtemp()
-            else:
-                if not os.path.exists(pkg_dir):
-                    os.makedirs(pkg_dir)
-                self.pkg_dir = pkg_dir
+            self.pkg_dir = pkg_dir if pkg_dir is not None else Path(tempfile.mkdtemp())
 
         # Copy the conda build config files to the staging directory that is
         # visible in the container
+        self.pkg_dir.mkdir(parents=True, exist_ok=True)
         for i, config_file in enumerate(get_conda_build_config_files()):
             dst_file = self._get_config_path(self.pkg_dir, i, config_file)
-            if not os.path.exists(self.pkg_dir):
-                os.makedirs(self.pkg_dir)
             shutil.copyfile(config_file.path, dst_file)
         if self.build_image:
             self._build_image()
@@ -388,11 +439,11 @@ class RecipeBuilder:
         run(command, live=True)
 
     def _get_config_path(
-        self, staging_prefix: str, i: int, config_file: CondaBuildConfigFile
-    ) -> str:
-        src_basename = os.path.basename(config_file.path)
+        self, staging_prefix: Path, i: int, config_file: CondaBuildConfigFile
+    ) -> Path:
+        src_basename = Path(config_file.path).name
         dst_basename = f"conda_build_config_{i}_{config_file.arg}_{src_basename}"
-        return os.path.join(staging_prefix, dst_basename)
+        return staging_prefix / dst_basename
 
     def _output_subdir(self, noarch: bool) -> Subdir:
         """Return the legacy ``{arch}`` template value for this build.
@@ -431,7 +482,7 @@ class RecipeBuilder:
         if self.image_build_dir is None:
             # Create a temporary build directory since we'll be copying the
             # requirements file over
-            build_dir = tempfile.mkdtemp()
+            build_dir = Path(tempfile.mkdtemp())
         else:
             build_dir = self.image_build_dir
 
@@ -440,9 +491,10 @@ class RecipeBuilder:
             self.docker_temp_image,
             build_dir,
         )
-        with open(os.path.join(build_dir, "requirements.txt"), "w") as fout:
+        requirements_txt: Path = build_dir / "requirements.txt"
+        with open(requirements_txt, "w") as fout:
             if self.requirements:
-                fout.write(Path(self.requirements).read_text())
+                fout.write(self.requirements.read_text())
             else:
                 # pkg_resources (deprecated) is replaced with importlib.resources
                 with (
@@ -455,14 +507,15 @@ class RecipeBuilder:
 
         proxies = "\n".join(f"ENV {k} {v}" for k, v in self._find_proxy_settings())
 
-        with open(os.path.join(build_dir, "Dockerfile"), "w") as fout:
+        dockerfile_path: Path = build_dir / "Dockerfile"
+        with open(dockerfile_path, "w") as fout:
             fout.write(
                 self.dockerfile_template.format(
                     docker_base_image=self.docker_base_image, proxies=proxies
                 )
             )
 
-        logger.debug("Dockerfile:\n%s", Path(fout.name).read_text())
+        logger.debug("Dockerfile:\n%s", dockerfile_path.read_text())
 
         # Check if the installed version of docker supports the --network flag
         # (requires version >= 1.13.0)
@@ -496,17 +549,22 @@ class RecipeBuilder:
                 "host",
                 "-t",
                 self.docker_temp_image,
-                build_dir,
+                str(build_dir),
             ]
         else:
             # Network flag was added in 1.13.0, do not add it for lower versions. xref #5387
-            cmd = ["docker", "build", "-t", self.docker_temp_image, build_dir]
+            cmd = [
+                "docker",
+                "build",
+                "-t",
+                self.docker_temp_image,
+                str(build_dir),
+            ]
         if self.target_platform:
             cmd[2:2] = ["--platform", self.target_platform]
 
         try:
-            with Progress():
-                p = run(cmd)
+            p = run(cmd)
         except sp.CalledProcessError:
             logger.error(
                 "DOCKER FAILED: Error building docker container %s. ",
@@ -521,9 +579,11 @@ class RecipeBuilder:
 
     def build_recipe(
         self,
-        recipe_dir: str,
+        recipe_dir: Path,
         build_args: str,
+        rattler_args: str,
         env: dict[str, str],
+        build_system: BuildSystem,
         noarch: bool = False,
         live_logs: bool = True,
     ) -> sp.CompletedProcess:
@@ -533,7 +593,7 @@ class RecipeBuilder:
         Parameters
         ----------
 
-        recipe_dir : str
+        recipe_dir : Path
             Path to recipe that contains meta.yaml
 
         build_args : str
@@ -557,34 +617,65 @@ class RecipeBuilder:
         # template.
         if not isinstance(build_args, str):
             raise TypeError("build_args must be str")
-        build_args_list = [build_args]
-        for i, config_file in enumerate(get_conda_build_config_files()):
-            dst_file = self._get_config_path(self.container_staging, i, config_file)
-            build_args_list.extend([config_file.arg, quote(dst_file)])
-        self.conda_build_args = " ".join(build_args_list)
 
         # Write build script to tempfile
-        build_dir = os.path.realpath(tempfile.mkdtemp())
-        publish_built_packages = PUBLISH_BUILT_PACKAGES_TEMPLATE.format_map(
-            {
-                "self": self,
-                "local_channel_subdirs": LOCAL_CHANNEL_SUBDIR_ARGS,
-            }
-        )
-        script = self.build_script_template.format_map(
-            {
-                "self": self,
-                "arch": self._output_subdir(noarch),
-                "local_channel_mkdirs": LOCAL_CHANNEL_MKDIRS,
-                "publish_built_packages": publish_built_packages,
-            }
-        )
-        with open(os.path.join(build_dir, "build_script.bash"), "w") as fout:
+        build_dir = Path(os.path.realpath(tempfile.mkdtemp()))
+
+        match build_system:
+            case BuildSystem.CONDA:
+                build_args_list = [build_args]
+                for i, config_file in enumerate(get_conda_build_config_files()):
+                    dst_file = self._get_config_path(
+                        Path(self.container_staging), i, config_file
+                    )
+                    build_args_list.extend([config_file.arg, quote(str(dst_file))])
+                self.conda_build_args = " ".join(build_args_list)
+                self.rattler_build_args = ""
+
+                publish_built_packages = PUBLISH_BUILT_PACKAGES_TEMPLATE.format_map(
+                    {
+                        "self": self,
+                        "local_channel_subdirs": LOCAL_CHANNEL_SUBDIR_ARGS,
+                    }
+                )
+
+                script = self.build_script_template.format_map(
+                    {
+                        "self": self,
+                        "arch": self._output_subdir(noarch),
+                        "local_channel_mkdirs": LOCAL_CHANNEL_MKDIRS,
+                        "publish_built_packages": publish_built_packages,
+                    }
+                )
+            case BuildSystem.RATTLER:
+                build_args_list = [rattler_args]
+                global_variants = get_rattler_build_global_variants_paths()
+
+                # TODO (rb): should we also allow `conda_build_config.yaml` as per rattler-build docs?
+                local_variant: Path = recipe_dir / "variants.yaml"
+                global_variants.append(local_variant)
+
+                for variant in global_variants:
+                    if variant.exists():
+                        build_args_list.append(
+                            f"--variant-config {quote(variant.as_posix())}"
+                        )
+
+                self.rattler_build_args = " ".join(build_args_list)
+                self.conda_build_args = ""
+
+                # TODO (rb): maybe update this function to accept same args as self.build_script_template
+                script = self.rattler_build_script_template.format_map(
+                    {
+                        "self": self,
+                        "arch": self._output_subdir(noarch),
+                    }
+                )
+
+        build_script: Path = build_dir / "build_script.bash"
+        with open(build_script, "w") as fout:
             fout.write(script)
-        build_script = fout.name
-        logger.debug(
-            "DOCKER: Container build script: \n%s", Path(fout.name).read_text()
-        )
+        logger.debug("DOCKER: Container build script: \n%s", build_script.read_text())
 
         # Build the args for env vars. Note can also write these to tempfile
         # and use --env-file arg, but using -e seems clearer in debug output.
@@ -633,8 +724,7 @@ class RecipeBuilder:
         cmd += ["/bin/bash", "/opt/build_script.bash"]
 
         logger.debug("DOCKER: cmd: %s", cmd)
-        with Progress():
-            p = run(cmd, live=live_logs)
+        p = run(cmd, live=live_logs)
         return p
 
     def cleanup(self) -> None:

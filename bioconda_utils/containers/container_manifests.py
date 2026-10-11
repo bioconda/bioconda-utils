@@ -120,13 +120,13 @@ def multiarch_ref(canonical_ref: str) -> str:
     return f"{repository}:{version}"
 
 
-def write_image_record(path: str | Path, record: MulledImageRecord) -> None:
+def write_image_record(path: Path, record: MulledImageRecord) -> None:
     """Write one image record to a uniquely-named JSONL file inside *path*.
 
     The target directory is created if it does not exist.  Each call produces
     a separate file (timestamp + UUID), so concurrent writers never collide.
     """
-    output = Path(path)
+    output = path
     output.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
     file_path = output / f"{timestamp}_{uuid.uuid4().hex}.jsonl"
@@ -135,7 +135,7 @@ def write_image_record(path: str | Path, record: MulledImageRecord) -> None:
         handle.write("\n")
 
 
-def load_image_records(paths: Iterable[str | Path]) -> list[MulledImageRecord]:
+def load_image_records(paths: Iterable[Path]) -> list[MulledImageRecord]:
     """Load and de-duplicate JSONL records from files or directories.
 
     Directory inputs are treated as record directories written by
@@ -145,8 +145,7 @@ def load_image_records(paths: Iterable[str | Path]) -> list[MulledImageRecord]:
     """
     records: set[MulledImageRecord] = set()
     files: list[Path] = []
-    for raw_path in paths:
-        path = Path(raw_path)
+    for path in paths:
         if path.is_dir():
             files.extend(sorted(p for p in path.rglob("*.jsonl") if p.is_file()))
         elif path.is_file():

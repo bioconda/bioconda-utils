@@ -7,10 +7,11 @@ from bioconda_utils.recipe import Recipe
 
 class Skiplist:
     def __init__(self, config: dict[str, Any], recipe_folder: Path) -> None:
-        self.recipe_folder = recipe_folder
-        self.global_list = set()
+        self.recipe_folder = recipe_folder.resolve()
+        self.global_list: set[Path] = set()
+
         for p in config.get("blacklists", []):
-            lines = Path(p).read_text(encoding="utf8").splitlines()
+            lines = p.read_text(encoding="utf8").splitlines()
             self.global_list.update(
                 [
                     self._get_reldir(Path(i.strip()))
@@ -19,8 +20,12 @@ class Skiplist:
                 ]
             )
 
-    def _get_reldir(self, recipe_path: Path) -> str:
-        return os.path.relpath(recipe_path, self.recipe_folder)
+    def _get_reldir(self, recipe_path: Path) -> Path:
+        # os.path.relpath, not relative_to: recipe_folder may be relative (e.g.
+        # "recipes/foo" from a blacklist line) while recipe_path is absolute,
+        # and paths outside recipe_folder must yield a ../.. path rather than
+        # raising ValueError.
+        return Path(os.path.relpath(recipe_path, self.recipe_folder))
 
     def is_skiplisted(self, recipe: Path | Recipe) -> bool:
         from bioconda_utils.build_failure import BuildFailureRecord
