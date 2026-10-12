@@ -175,7 +175,7 @@ async def stream_to_sink(
 
 async def download_to_file(
     resp: aiohttp.ClientResponse,
-    fname: Path | str,
+    fname: Path,
     desc: str,
     *,
     block_size: int = 1024 * 1024,
@@ -191,7 +191,6 @@ async def download_to_file(
     the same destination (e.g. duplicate sources sharing the source cache)
     cannot stream into the same file.
     """
-    fname = Path(fname)
     tmp = fname.with_name(f"{fname.name}.{uuid.uuid4().hex}.part")
     try:
         async with aiofiles.open(tmp, "wb") as f:

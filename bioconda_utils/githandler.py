@@ -452,7 +452,7 @@ class GitHandlerBase:
         self.home_remote.fetch("master")
         return self.rev_parse("FETCH_HEAD")
 
-    def read_from_branch(self, branch: GitRev, file_path: Path | str) -> str:
+    def read_from_branch(self, branch: GitRev, file_path: Path) -> str:
         """Reads contents of file **file_path** from git branch **branch**"""
         target = (self._working_dir / file_path).resolve()
         if not target.is_relative_to(self._working_dir):
