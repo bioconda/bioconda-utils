@@ -9,12 +9,17 @@ import pytest
 import zstandard
 
 from bioconda_utils._types import PackageSubdir
-from bioconda_utils.conda import repodata
+from bioconda_utils.conda import fetch, repodata, shards
 from bioconda_utils.conda.repodata import RepoData
+from bioconda_utils.conda.shards import ShardClient
 
 
 def _pack_shard(data):
     return zstandard.ZstdCompressor().compress(msgpack.packb(data))
+
+
+def index_url(repository, channel, subdir="noarch"):
+    return ShardClient.shards_index_url(repository._make_repodata_url(channel, subdir))
 
 
 @pytest.mark.parametrize(
@@ -29,7 +34,7 @@ def _pack_shard(data):
 )
 def test_repodata_rejects_invalid_shard_indexes(data):
     assert (
-        RepoData._parse_shard_index(
+        ShardClient._parse_shard_index(
             _pack_shard(data), ("bioconda", PackageSubdir.LINUX_64)
         )
         is None
@@ -51,7 +56,7 @@ def test_repodata_rejects_invalid_shard_indexes(data):
 )
 def test_repodata_rejects_invalid_package_shards(data):
     assert (
-        RepoData._parse_package_shard(
+        ShardClient._parse_package_shard(
             _pack_shard(data),
             ("bioconda", PackageSubdir.LINUX_64, "pkg"),
         )
@@ -74,7 +79,7 @@ def test_repodata_rejects_invalid_package_shards(data):
 def test_repodata_resolves_shards_base_url(monkeypatch, shards_base_url, expected):
     monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
     repository = RepoData()
-    index = repodata._CachedShardIndex(
+    index = shards._CachedShardIndex(
         shards={},
         base_url="",
         shards_base_url=shards_base_url,
@@ -82,7 +87,11 @@ def test_repodata_resolves_shards_base_url(monkeypatch, shards_base_url, expecte
     )
 
     assert (
-        repository._make_shard_url("bioconda", PackageSubdir.LINUX_64, index, "hash")
+        ShardClient.shard_url(
+            repository._make_repodata_url("bioconda", PackageSubdir.LINUX_64),
+            index,
+            "hash",
+        )
         == expected
     )
 
@@ -107,12 +116,13 @@ def sharded(monkeypatch):
             )
         return result
 
+    monkeypatch.setattr(shards, "fetch", download)
     monkeypatch.setattr(repodata, "fetch", download)
     return repository, bodies, requests
 
 
 def set_index(repository, bodies, channel="high", **shards):
-    bodies[repository._make_shards_index_url(channel, "noarch")] = _pack_shard(
+    bodies[index_url(repository, channel)] = _pack_shard(
         {
             "version": 1,
             "info": {"shards_base_url": "./shards/"},
@@ -133,7 +143,7 @@ def record(name="example", version="1", build="0", depends=None):
 
 def set_shard(repository, bodies, records, channel="high", shard_hash="hash"):
     url = (
-        repository._make_shards_index_url(channel, "noarch").rsplit("/", 1)[0]
+        index_url(repository, channel).rsplit("/", 1)[0]
         + "/shards/"
         + shard_hash
         + ".msgpack.zst"
@@ -212,7 +222,7 @@ def test_failed_shards_fall_back_once_and_preserve_channel_order(
         set_index(repository, bodies, channel, example="hash")
         set_shard(repository, bodies, [record(version=channel)], channel)
     broken_url = (
-        repository._make_shards_index_url(broken_channel, "noarch").rsplit("/", 1)[0]
+        index_url(repository, broken_channel).rsplit("/", 1)[0]
         + "/shards/hash.msgpack.zst"
     )
     bodies[broken_url] = failure
@@ -244,8 +254,8 @@ def test_expired_indexes_and_changed_hashes_refetch(sharded, monkeypatch):
     assert repository.get_package_data("version", channels="high", name="example") == [
         "old"
     ]
-    url = repository._make_shards_index_url("high", "noarch")
-    repository._shard_index_cache[url].fetched_at -= datetime.timedelta(minutes=16)
+    url = index_url(repository, "high")
+    ShardClient._shard_index_cache[url].fetched_at -= datetime.timedelta(minutes=16)
     set_index(repository, bodies, example="new")
     set_shard(repository, bodies, [record(version="new")], shard_hash="new")
     assert repository.get_package_data("version", channels="high", name="example") == [
@@ -264,9 +274,9 @@ def test_negative_index_cache_expires(sharded, monkeypatch):
     loads = fallback(repository, monkeypatch, [record()])
     for _ in range(2):
         assert repository.get_package_data(channels="high", name="example")
-    url = repository._make_shards_index_url("high", "noarch")
+    url = index_url(repository, "high")
     assert requests == [url]
-    repository._shards_unavailable[url] -= datetime.timedelta(minutes=6)
+    ShardClient._shards_unavailable[url] -= datetime.timedelta(minutes=6)
     set_index(repository, bodies, example="hash")
     set_shard(repository, bodies, [record(version="sharded")])
     assert repository.get_package_data("version", channels="high", name="example") == [
@@ -299,9 +309,9 @@ def test_async_downloads_preserve_input_order_and_isolate_errors(monkeypatch):
             raise OSError("failed")
         return url
 
-    monkeypatch.setattr(repodata, "_async_fetch_one", download)
+    monkeypatch.setattr(fetch, "_async_fetch_one", download)
     result = asyncio.run(
-        repodata.async_fetch(["slow", "broken", "fast"], return_exceptions=True)
+        fetch.async_fetch(["slow", "broken", "fast"], return_exceptions=True)
     )
     assert result[0] == "slow"
     assert isinstance(result[1], OSError)

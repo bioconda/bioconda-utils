@@ -1,7 +1,7 @@
 """Shared helpers for asynchronous HTTP access
 
 This module centralizes the pieces shared between the async download
-helpers in :py:mod:`bioconda_utils.conda.repodata` and
+helpers in :py:mod:`bioconda_utils.conda.fetch` and
 :py:mod:`bioconda_utils.aiopipe`: the user agent we identify ourselves
 with, the retry policy applied to transient HTTP errors and the progress
 monitor used while streaming response bodies.

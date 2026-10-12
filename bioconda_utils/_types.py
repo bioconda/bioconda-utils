@@ -166,6 +166,8 @@ BuildFailureOutputFormat = Literal["table", "markdown"]
 
 #: Conda repodata subdir notation, including ``noarch``.
 type Subdir = PackageSubdir | Literal["noarch"]
+#: Identity of a repodata repository: its channel and subdir.
+type RepoDataKey = tuple[str, Subdir]
 #: Conda channel name. Deliberately a plain ``str`` alias, not an enum:
 #: channels are an open set (any anaconda.org namespace, mirror URL, or
 #: ``file://`` path), so the valid values cannot be enumerated the way
