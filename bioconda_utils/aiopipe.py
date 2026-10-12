@@ -41,7 +41,7 @@ class EndProcessingItem(Exception):
     template = "broken: %s"
     level = logging.INFO
 
-    def __init__(self, item: Any, *args) -> None:
+    def __init__(self, item: object, *args) -> None:
         super().__init__(item, *args)
         self.item = item
         self.args = args

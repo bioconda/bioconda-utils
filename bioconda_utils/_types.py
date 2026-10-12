@@ -371,7 +371,7 @@ class RecipeMetaLike(Protocol):
     def get_value(self, key: str, default: Any = None) -> Any: ...
 
 
-def ensure_list(obj):
+def ensure_list[T](obj: T) -> Sequence[T]:
     """Wraps **obj** in a list if necessary
 
     >>> ensure_list("one")

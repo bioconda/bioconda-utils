@@ -347,7 +347,7 @@ class AutoBumpConfigMixin:
     #: Name of key under `EXTRA_CONFIG` to enable/disable autobump
     ENABLE = "enable"
 
-    def get_config(self, recipe: Recipe) -> dict[Any, Any]:
+    def get_config(self, recipe: Recipe) -> dict[str, Any]:
         """Returns the configuration dict from the recipe"""
         return recipe.get("extra", {}).get(self.EXTRA_CONFIG, {})
 
@@ -730,7 +730,7 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
         return versions
 
     async def get_versions(
-        self, recipe: Recipe, source: Mapping[Any, Any], source_idx: int
+        self, recipe: Recipe, source: Mapping[str, Any], source_idx: int
     ) -> dict[str, dict[str, Any]]:
         """Select hosters and retrieve versions for this source"""
         urls = source.get("url")
@@ -900,7 +900,7 @@ class UpdateChecksums(Filter):
             recipe.render()
 
     async def update_source(
-        self, recipe: Recipe, source: Mapping[Any, Any], source_idx: int
+        self, recipe: Recipe, source: Mapping[str, Any], source_idx: int
     ) -> None:
         """Updates one source
 

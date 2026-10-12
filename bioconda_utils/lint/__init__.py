@@ -373,7 +373,7 @@ class LintCheck(metaclass=LintCheckMeta):
 
         """
 
-    def fix(self, _message, _data, /) -> bool:
+    def fix(self, _message: LintMessage, _data: Any, /) -> bool:
         """Attempt to fix the problem"""
         return False
 

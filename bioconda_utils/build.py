@@ -461,7 +461,11 @@ def build(
 
 
 def store_build_failure_record(
-    recipe: Path, output: Any, package_name: str, dag: nx.DiGraph, skiplist_leaves: bool
+    recipe: Path,
+    output: str | bytes | None,
+    package_name: str,
+    dag: nx.DiGraph,
+    skiplist_leaves: bool,
 ) -> None:
     """
     Write the exception to a file next to the meta.yaml
@@ -471,6 +475,8 @@ def store_build_failure_record(
     build_failure_record = BuildFailureRecord(recipe)
     # if recipe is a leaf (i.e. not used by others as dependency)
     # we can automatically blacklist it if desired
+    if isinstance(output, bytes):
+        output = output.decode(errors="replace")
     build_failure_record.fill(log=output, skiplist=skiplist_leaves and is_leaf)
 
     build_failure_record.write()
