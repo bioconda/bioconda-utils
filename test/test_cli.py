@@ -949,7 +949,7 @@ def test_help_keeps_rich_rendering(monkeypatch, args):
 def test_build_failure_table_preserves_literal_text(monkeypatch, tmp_path, literal):
     from bioconda_utils.build_failure import BUILD_FAILURE_COLUMNS
 
-    monkeypatch.setattr(cli.report_console, "width", 300)
+    monkeypatch.setattr(cli.report_console, "size", (300, 25))
     monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: {})
     row = dict.fromkeys(BUILD_FAILURE_COLUMNS, "value")
     row["reason"] = literal
@@ -971,7 +971,7 @@ def test_build_failure_table_preserves_literal_text(monkeypatch, tmp_path, liter
 def test_lint_table_preserves_literal_text(monkeypatch, tmp_path, literal):
     from unittest.mock import Mock
 
-    monkeypatch.setattr(cli.report_console, "width", 300)
+    monkeypatch.setattr(cli.report_console, "size", (300, 25))
     monkeypatch.setattr(cli, "_setup_runtime", lambda *_args, **_kwargs: None)
     monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: {})
     monkeypatch.setattr(cli, "get_recipes", lambda *_args, **_kwargs: [])
