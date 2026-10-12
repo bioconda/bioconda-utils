@@ -391,6 +391,68 @@ def test_recipe_builder_fails_when_base_image_cannot_be_pulled(monkeypatch):
         builder._ensure_base_image()
 
 
+def _rattler_run_command(monkeypatch, tmp_path, container_cache):
+    """Run build_recipe for a rattler recipe with a stubbed docker client."""
+    commands = []
+    builder = docker_utils.RecipeBuilder.__new__(docker_utils.RecipeBuilder)
+    builder.container_cache = container_cache
+    builder.container_conda_cache = (
+        container_cache / "conda" if container_cache else None
+    )
+    builder.container_rattler_cache = (
+        container_cache / "rattler" if container_cache else None
+    )
+    builder.container_staging = "/opt/host-conda-bld"
+    builder.container_recipe = "/opt/recipe"
+    builder.pkg_dir = tmp_path
+    builder.user_info = {"uid": 1000}
+    builder.target_platform = None
+    builder.rattler_build_script_template = docker_utils.RATTLER_BUILD_SCRIPT_TEMPLATE
+    builder.build_image = False
+    builder.keep_image = True
+    builder.docker_temp_image = "tmp-bioconda-builder"
+    builder.docker_base_image = "quay.io/bioconda/build-env:latest"
+
+    monkeypatch.setattr(
+        docker_utils,
+        "get_rattler_build_global_variants_paths",
+        list,
+    )
+    monkeypatch.setattr(
+        docker_utils,
+        "run",
+        lambda cmd, **_kwargs: commands.append(cmd),
+    )
+
+    builder.build_recipe(
+        tmp_path,
+        build_args="",
+        rattler_args="",
+        env={},
+        build_system=_types.BuildSystem.RATTLER,
+        live_logs=False,
+    )
+    return commands[0]
+
+
+def test_container_cache_mounts_conda_and_rattler_subdirs(monkeypatch, tmp_path):
+    cache = tmp_path / "container-cache"
+    cmd = _rattler_run_command(monkeypatch, tmp_path, cache)
+
+    assert f"{cache / 'conda'}:/opt/conda/pkgs" in cmd
+    assert f"{cache / 'rattler'}:/opt/rattler/cache" in cmd
+    assert "RATTLER_CACHE_DIR=/opt/rattler/cache" in cmd
+    assert cmd[cmd.index("RATTLER_CACHE_DIR=/opt/rattler/cache") - 1] == "-e"
+
+
+def test_container_without_cache_keeps_container_defaults(monkeypatch, tmp_path):
+    cmd = _rattler_run_command(monkeypatch, tmp_path, None)
+
+    assert "/opt/conda/pkgs" not in cmd
+    assert "/opt/rattler/cache" not in cmd
+    assert "RATTLER_CACHE_DIR" not in cmd
+
+
 def test_mulled_upload_passes_target_platform(monkeypatch):
     commands = []
     monkeypatch.setenv("QUAY_LOGIN", "user:token")

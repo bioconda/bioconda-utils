@@ -185,7 +185,7 @@ CacheOpt = Annotated[
     Path | None,
     typer.Option(
         "--cache",
-        help="Shared cache directory for repodata, recipe graphs, and upstream downloads (default: platform/XDG cache directory).",
+        help="Shared cache directory for repodata, recipe graphs, upstream downloads, and rattler-build downloads (default: platform/XDG cache directory).",
     ),
 ]
 RefreshRepodataOpt = Annotated[
@@ -611,15 +611,17 @@ def build(
     ] = False,
     image_records_dir: ImageRecordsDirOpt = None,
     use_existing_auth: UseExistingAuthOpt = False,
-    container_pkgs_cache: Annotated[
+    container_cache: Annotated[
         Path | None,
         typer.Option(
-            "--container-pkgs-cache",
-            help="Host directory bind-mounted at /opt/conda/pkgs in build "
-            "containers (--docker) so repodata, shards indexes and "
-            "downloaded build/host env packages persist across the "
-            "containers of one build run. Falls back to the "
-            "BIOCONDA_UTILS_CONTAINER_PKGS_CACHE environment variable.",
+            "--container-cache",
+            help="Host directory with per-tool cache subdirectories "
+            "bind-mounted into build containers (--docker): conda/ at "
+            "/opt/conda/pkgs and rattler/ at /opt/rattler/cache (exported "
+            "as RATTLER_CACHE_DIR), so repodata, shards indexes and "
+            "downloaded packages persist across the containers of one "
+            "build run. Falls back to the BIOCONDA_UTILS_CONTAINER_CACHE "
+            "environment variable.",
         ),
     ] = None,
     exclude: Annotated[
@@ -715,7 +717,7 @@ def build(
             build_image=build_image,
             docker_base_image=docker_base_image,
             target_platform=target_platform,
-            container_pkgs_cache=container_pkgs_cache,
+            container_cache=container_cache,
         )
     else:
         docker_builder = None

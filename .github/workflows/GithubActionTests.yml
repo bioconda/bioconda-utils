@@ -62,7 +62,7 @@ jobs:
 
       - name: Run tests '${{ matrix.py_test_marker }}'
         env:
-          BIOCONDA_UTILS_CONTAINER_PKGS_CACHE: /tmp/bioconda-container-pkgs
+          BIOCONDA_UTILS_CONTAINER_CACHE: /tmp/bioconda-container-cache
         run: |
           if git diff --name-only origin/master...HEAD | grep -vE ^docs; then
               py.test --durations=0 test/ -v --log-level=DEBUG --tb=native -m '${{ matrix.py_test_marker }}'

@@ -250,7 +250,7 @@ class RecipeBuilder:
         image_build_dir: Path | None = None,
         docker_base_image: str | None = None,
         target_platform: ContainerPlatform | None = None,
-        container_pkgs_cache: Path | None = None,
+        container_cache: Path | None = None,
     ) -> None:
         """
         Class to handle building a custom docker container that can be used for
@@ -333,33 +333,48 @@ class RecipeBuilder:
         docker_base_image : str or None
             Name of base image that can be used in **dockerfile_template**.
 
-        container_pkgs_cache : Path or None
-            Host directory bind-mounted at /opt/conda/pkgs in build
-            containers, so repodata, shards indexes and downloaded build/host
-            env packages persist across the containers of one build run.
-            Falls back to the BIOCONDA_UTILS_CONTAINER_PKGS_CACHE
-            environment variable when not given.
+        container_cache : Path or None
+            Host directory holding per-tool cache subdirectories that are
+            bind-mounted into build containers, so repodata, shards indexes
+            and downloaded packages persist across the containers of one
+            build run: ``conda/`` is mounted at /opt/conda/pkgs and
+            ``rattler/`` at /opt/rattler/cache (exported to rattler-build as
+            RATTLER_CACHE_DIR). Falls back to the
+            BIOCONDA_UTILS_CONTAINER_CACHE environment variable when not
+            given.
         """
         self.requirements = requirements
         self.conda_build_args: str = ""
         self.rattler_build_args: str = ""
-        # Host directory bind-mounted at /opt/conda/pkgs in build containers
-        # so repodata/shards and downloaded build/host env packages persist
-        # across the containers of one build run. Falls back to the
-        self.container_pkgs_cache: Path | None = (
-            Path(container_pkgs_cache)
-            if container_pkgs_cache
+        # Host directory whose per-tool subdirectories are bind-mounted into
+        # build containers (conda/ at /opt/conda/pkgs, rattler/ at
+        # /opt/rattler/cache) so repodata, shards indexes and downloaded
+        # packages persist across the containers of one build run. Falls
+        # back to BIOCONDA_UTILS_CONTAINER_CACHE when not given.
+        self.container_cache: Path | None = (
+            Path(container_cache).expanduser().resolve()
+            if container_cache
             else (
-                Path(env_cache)
-                if (env_cache := os.environ.get("BIOCONDA_UTILS_CONTAINER_PKGS_CACHE"))
+                Path(env_cache).expanduser().resolve()
+                if (env_cache := os.environ.get("BIOCONDA_UTILS_CONTAINER_CACHE"))
                 else None
             )
         )
-        if self.container_pkgs_cache:
-            self.container_pkgs_cache.mkdir(parents=True, exist_ok=True)
+        self.container_conda_cache: Path | None = None
+        self.container_rattler_cache: Path | None = None
+        if self.container_cache:
             # build containers run as a different user (uid 9001 "conda") and
-            # conda writes cache state even on cache hits
-            self.container_pkgs_cache.chmod(0o777)
+            # conda/rattler write cache state even on cache hits
+            self.container_cache.mkdir(parents=True, exist_ok=True)
+            self.container_cache.chmod(0o777)
+            self.container_conda_cache = self.container_cache / "conda"
+            self.container_rattler_cache = self.container_cache / "rattler"
+            for cache_dir in (
+                self.container_conda_cache,
+                self.container_rattler_cache,
+            ):
+                cache_dir.mkdir(exist_ok=True)
+                cache_dir.chmod(0o777)
         self.target_platform: ContainerPlatform | None = target_platform
         self.build_script_template: str = build_script_template
         self.rattler_build_script_template: str = rattler_build_script_template
@@ -705,16 +720,20 @@ class RecipeBuilder:
             "-v",
             f"{recipe_dir}:{self.container_recipe}",
         ]
-        # Optionally persist the container's conda package cache (repodata,
-        # shards indexes, downloaded packages) across the containers of one
-        # build run. Containers are ephemeral (--rm); without this, every
-        # recipe re-downloads repodata and its build/host env packages.
-        # Enabled via --container-pkgs-cache (or the
-        # BIOCONDA_UTILS_CONTAINER_PKGS_CACHE environment variable).
-        if self.container_pkgs_cache:
+        # Persist caches across the containers of one build run. Containers
+        # are ephemeral (--rm); without this, every recipe re-downloads
+        # repodata and its build/host env packages. conda's package cache is
+        # mounted at its in-container default /opt/conda/pkgs; rattler-build
+        # has no --cache-dir CLI flag but resolves its cache from the
+        # RATTLER_CACHE_DIR variable, so it gets its own mount.
+        if self.container_cache:
             cmd += [
                 "-v",
-                f"{self.container_pkgs_cache}:/opt/conda/pkgs",
+                f"{self.container_conda_cache}:/opt/conda/pkgs",
+                "-v",
+                f"{self.container_rattler_cache}:/opt/rattler/cache",
+                "-e",
+                "RATTLER_CACHE_DIR=/opt/rattler/cache",
             ]
         cmd += env_list
         image = self.docker_temp_image if self.build_image else self.docker_base_image

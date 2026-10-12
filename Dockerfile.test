@@ -7,7 +7,7 @@ FROM "${base}"
 # so /opt/conda/bin is not on PATH here; activate base explicitly (same as
 # the root Dockerfile does). This intentionally only checks functionality;
 # repodata/package caching across `docker run --rm` invocations is handled
-# at runtime via the `BIOCONDA_UTILS_CONTAINER_PKGS_CACHE` bind-mount
+# at runtime via the `BIOCONDA_UTILS_CONTAINER_CACHE` bind-mount
 # (see `docker_utils.py`), not via baked-in image layers.
 RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda activate base && \
