@@ -22,7 +22,7 @@ import msgpack
 import zstandard
 
 from .._types import RepoDataKey, Subdir
-from .fetch import fetch
+from .fetch import FetchRequest, fetch
 
 logger = logging.getLogger(__name__)
 
@@ -235,10 +235,14 @@ class ShardClient:
         cls._shard_index_cache.pop(cache_key, None)
         try:
             [index] = fetch(
-                [cache_key],
-                [f"{channel}/{subdir} shards index"],
+                [
+                    FetchRequest(
+                        cache_key,
+                        f"{channel}/{subdir} shards index",
+                        (channel, subdir),
+                    )
+                ],
                 transform=cls._parse_shard_index,
-                metadata=[(channel, subdir)],
                 allow_404=True,
                 return_exceptions=True,
             )
@@ -297,10 +301,10 @@ class ShardClient:
         repodata for the whole repository.
         """
         results = fetch(
-            list(missing),
-            [f"{channel}/{subdir}/{name} shard" for name in missing.values()],
-            None,
-            [(channel, subdir)] * len(missing),
+            [
+                FetchRequest(url, f"{channel}/{subdir}/{name} shard")
+                for url, name in missing.items()
+            ],
             allow_404=True,
             return_exceptions=True,
         )

@@ -11,7 +11,7 @@ import asyncio
 import json
 import logging
 from collections.abc import Callable, Iterable
-from itertools import zip_longest
+from dataclasses import dataclass
 from multiprocessing.pool import ThreadPool
 from pathlib import Path
 from typing import Any, cast
@@ -30,11 +30,26 @@ logger = logging.getLogger(__name__)
 CONNECTIONS_PER_HOST = 4
 
 
+@dataclass(frozen=True)
+class FetchRequest:
+    """One download performed by :func:`fetch`.
+
+    Args:
+      url: The URL (or ``file://`` path) to download.
+      description: Label for the progress display. Falls back to **url**
+          when left empty.
+      metadata: Context passed to **transform** alongside the downloaded
+          bytes; ignored when no **transform** is given.
+    """
+
+    url: str
+    description: str = ""
+    metadata: RepoDataKey | None = None
+
+
 def fetch(
-    urls: Iterable[str],
-    descriptions: Iterable[str],
-    transform: Callable[[bytes, RepoDataKey], Any] | None,
-    metadata: Iterable[RepoDataKey],
+    requests: Iterable[FetchRequest],
+    transform: Callable[[bytes, RepoDataKey], Any] | None = None,
     *,
     allow_404: bool = False,
     return_exceptions: bool = False,
@@ -47,12 +62,10 @@ def fetch(
     503 and 504).
 
     Args:
-      urls: List of URLS
-      descriptions: Matching list of descriptions (for progress display)
+      requests: The downloads to perform.
       transform: As each download completes, the raw bytes and the matching
-          entry from **metadata** are passed through this function, e.g. to
-          offload json parsing into the download loop.
-      metadata: Per-URL context handed to **transform** alongside the bytes.
+          :attr:`FetchRequest.metadata` are passed through this function,
+          e.g. to offload json parsing into the download loop.
     """
     try:
         asyncio.get_running_loop()
@@ -65,10 +78,8 @@ def fetch(
         with ThreadPool(1) as pool:
             res = pool.apply(
                 lambda: fetch(
-                    urls,
-                    descriptions,
+                    requests,
                     transform,
-                    metadata,
                     allow_404=allow_404,
                     return_exceptions=return_exceptions,
                 )
@@ -81,10 +92,8 @@ def fetch(
         list[Any],
         asyncio.run(
             async_fetch(
-                urls,
-                descriptions,
+                requests,
                 transform,
-                metadata,
                 allow_404=allow_404,
                 return_exceptions=return_exceptions,
             )
@@ -93,27 +102,23 @@ def fetch(
 
 
 async def async_fetch(
-    urls: Iterable[str] = (),
-    descriptions: Iterable[str] = (),
+    requests: Iterable[FetchRequest] = (),
     transform: Callable[[bytes, RepoDataKey], Any] | None = None,
-    metadata: Iterable[RepoDataKey] | None = None,
     *,
     allow_404: bool = False,
     return_exceptions: bool = False,
 ) -> list[Any | bytes]:
-    if metadata is None:
-        metadata = []
     conn = aiohttp.TCPConnector(limit_per_host=CONNECTIONS_PER_HOST)
     async with http.make_session(connector=conn) as session:
 
-        async def fetch_indexed(index, url, description, datum):
+        async def fetch_indexed(index, request):
             try:
                 value = await _async_fetch_one(
                     session,
-                    url,
-                    description or url,
+                    request.url,
+                    request.description or request.url,
                     transform=transform,
-                    metadata=datum,
+                    metadata=request.metadata,
                     allow_404=allow_404,
                 )
             except Exception as exc:
@@ -123,11 +128,8 @@ async def async_fetch(
             return index, value
 
         coros = [
-            asyncio.create_task(fetch_indexed(index, url, description, datum))
-            for index, (url, description, datum) in enumerate(
-                zip_longest(urls, descriptions, metadata)
-            )
-            if url is not None
+            asyncio.create_task(fetch_indexed(index, request))
+            for index, request in enumerate(requests)
         ]
         try:
             with progress_display.count_task("Downloading", total=len(coros)) as (

@@ -36,7 +36,7 @@ from .._types import (
     native_container_platform,
 )
 from ..support.caching import file_lock, get_cache_root, memoize
-from .fetch import fetch
+from .fetch import FetchRequest, fetch
 from .shards import ShardClient
 
 logger = logging.getLogger(__name__)
@@ -245,7 +245,7 @@ class RepoData:
 
     def _download_repository(self, channel: str, subdir: Subdir) -> bytes:
         url = self._make_repodata_url(channel, subdir)
-        return fetch([url], [f"{channel}/{subdir}"], None, [(channel, subdir)])[0]
+        return fetch([FetchRequest(url, f"{channel}/{subdir}")])[0]
 
     def _repositories(self, channels: Iterable[str], subdirs: Iterable[Subdir]):
         return (

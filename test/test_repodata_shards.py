@@ -10,6 +10,7 @@ import zstandard
 
 from bioconda_utils._types import PackageSubdir
 from bioconda_utils.conda import fetch, repodata, shards
+from bioconda_utils.conda.fetch import FetchRequest
 from bioconda_utils.conda.repodata import RepoData
 from bioconda_utils.conda.shards import ShardClient
 
@@ -104,15 +105,15 @@ def sharded(monkeypatch):
     requests = []
     bodies = {}
 
-    def download(urls, descriptions, transform, metadata, **kwargs):
+    def download(downloads, transform=None, **kwargs):
         result = []
-        for url, meta in zip(urls, metadata):
-            requests.append(url)
-            body = bodies.get(url)
+        for request in downloads:
+            requests.append(request.url)
+            body = bodies.get(request.url)
             result.append(
                 body
                 if isinstance(body, Exception) or transform is None
-                else transform(body, meta)
+                else transform(body, request.metadata)
             )
         return result
 
@@ -311,7 +312,10 @@ def test_async_downloads_preserve_input_order_and_isolate_errors(monkeypatch):
 
     monkeypatch.setattr(fetch, "_async_fetch_one", download)
     result = asyncio.run(
-        fetch.async_fetch(["slow", "broken", "fast"], return_exceptions=True)
+        fetch.async_fetch(
+            [FetchRequest(url) for url in ["slow", "broken", "fast"]],
+            return_exceptions=True,
+        )
     )
     assert result[0] == "slow"
     assert isinstance(result[1], OSError)

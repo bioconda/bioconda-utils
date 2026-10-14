@@ -10,6 +10,7 @@ from aiohttp import web
 from rich.console import Console
 from rich.logging import RichHandler
 
+from bioconda_utils.conda.fetch import FetchRequest
 from bioconda_utils.support import http, logsetup
 from bioconda_utils.support.progress import ProgressDisplay
 
@@ -243,7 +244,9 @@ def test_download_callers_retry_truncated_bodies(
             await web.TCPSite(runner, "127.0.0.1", 0).start()
             url = f"http://127.0.0.1:{runner.addresses[0][1]}/artifact"
             if consumer == "repodata":
-                assert await async_fetch([url], ["artifact"]) == [b"firstsecond"]
+                assert await async_fetch([FetchRequest(url, "artifact")]) == [
+                    b"firstsecond"
+                ]
             else:
                 async with AsyncRequests() as requests:
                     if consumer == "checksum":
@@ -430,8 +433,28 @@ def test_logger_treats_subprocess_output_as_literal_text():
     logger.info("unmatched closing tag [/bold]")
 
 
-@pytest.mark.parametrize("descriptions", [[], ["first"], ["", "second"]])
-def test_async_fetch_defaults_missing_descriptions(monkeypatch, descriptions):
+@pytest.mark.parametrize(
+    "requests,expected",
+    [
+        (
+            [FetchRequest("https://example.com/first")],
+            {"https://example.com/first": "https://example.com/first"},
+        ),
+        (
+            [
+                FetchRequest("https://example.com/first"),
+                FetchRequest("https://example.com/second", "second"),
+                FetchRequest("https://example.com/third", ""),
+            ],
+            {
+                "https://example.com/first": "https://example.com/first",
+                "https://example.com/second": "second",
+                "https://example.com/third": "https://example.com/third",
+            },
+        ),
+    ],
+)
+def test_async_fetch_defaults_empty_descriptions(monkeypatch, requests, expected):
     from bioconda_utils.conda import fetch
 
     seen = {}
@@ -441,13 +464,9 @@ def test_async_fetch_defaults_missing_descriptions(monkeypatch, descriptions):
         return b"data"
 
     monkeypatch.setattr(fetch, "_async_fetch_one", fetch_one)
-    urls = ["https://example.com/first", "https://example.com/second"]
-    results = asyncio.run(fetch.async_fetch(urls, descriptions))
-    assert results == [b"data", b"data"]
-    assert seen == {
-        url: descriptions[i] or url if i < len(descriptions) else url
-        for i, url in enumerate(urls)
-    }
+    results = asyncio.run(fetch.async_fetch(requests))
+    assert results == [b"data"] * len(requests)
+    assert seen == expected
 
 
 def test_async_fetch_cancels_pending_tasks_on_failure(monkeypatch):
@@ -466,25 +485,12 @@ def test_async_fetch_cancels_pending_tasks_on_failure(monkeypatch):
 
     monkeypatch.setattr(fetch, "_async_fetch_one", slow_fetch)
     with pytest.raises(RuntimeError, match="task failed"):
-        asyncio.run(fetch.async_fetch(["https://example.com/slow", "fail"]))
+        asyncio.run(
+            fetch.async_fetch(
+                [FetchRequest("https://example.com/slow"), FetchRequest("fail")]
+            )
+        )
     assert cancelled.is_set()
-
-
-def test_async_fetch_ignores_excess_descriptions_and_metadata(monkeypatch):
-    from bioconda_utils.conda import fetch
-
-    fetched = []
-
-    async def mock_fetch_one(session, url, description, **kwargs):
-        fetched.append(url)
-        return b"data"
-
-    monkeypatch.setattr(fetch, "_async_fetch_one", mock_fetch_one)
-    urls = ["https://example.com/only"]
-    descriptions = ["first", "excess"]
-    results = asyncio.run(fetch.async_fetch(urls, descriptions))
-    assert results == [b"data"]
-    assert fetched == ["https://example.com/only"]
 
 
 def test_retry_budget_includes_backoff_waits(monkeypatch, caplog):
