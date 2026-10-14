@@ -15,7 +15,7 @@ import inspect
 import logging
 import os
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from functools import wraps
 from pathlib import Path
 from time import monotonic
@@ -52,7 +52,7 @@ HTTP_OPERATION_TIMEOUT = 300
 
 def retry_on_transient[**P, R](
     func: Callable[P, Awaitable[R]],
-) -> Callable[P, Awaitable[R]]:
+) -> Callable[P, Coroutine[Any, Any, R]]:
     retried = backoff.on_exception(
         backoff.fibo,
         (

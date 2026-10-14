@@ -54,7 +54,6 @@ import tempfile
 from importlib.resources import as_file, files
 from pathlib import Path
 from shlex import quote
-from typing import Protocol
 
 from packaging.version import Version
 
@@ -69,6 +68,7 @@ from .._types import (
     native_container_platform,
 )
 from ..conda.conda_build_bridge import (
+    CondaBuildConfigFile,
     get_conda_build_config_files,
     load_conda_build_config,
 )
@@ -105,11 +105,6 @@ for subdir in {local_channel_subdirs}; do
   )
 done
 """
-
-
-class CondaBuildConfigFile(Protocol):
-    arg: str
-    path: str
 
 
 # ----------------------------------------------------------------------------

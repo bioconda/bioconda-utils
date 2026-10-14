@@ -6,7 +6,7 @@ can use ``with progress_display.live:`` to animate a group of operations too.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import AbstractContextManager, contextmanager
 from multiprocessing import parent_process
 
@@ -92,7 +92,7 @@ class ProgressDisplay:
         description: str,
         *,
         total: float | None = None,
-    ) -> Iterator[tuple[Progress, TaskID]]:
+    ) -> Generator[tuple[Progress, TaskID]]:
         # Workers leave terminal output to the parent's item counter. Use a
         # local disabled Progress so workers never render a terminal display.
         if parent_process() is not None:

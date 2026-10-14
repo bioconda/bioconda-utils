@@ -265,7 +265,7 @@ class LintCheck(metaclass=LintCheckMeta):
     severity: Severity = ERROR
 
     #: Checks that must have passed for this check to be executed.
-    requires: ClassVar[list[LintCheck]] = []
+    requires: ClassVar[list[type[LintCheck]]] = []
 
     def __init__(self, _linter: Linter) -> None:
         #: Messages collected running tests
@@ -582,13 +582,17 @@ class Linter:
         self.nocatch = nocatch
         self._messages: list[LintMessage] = []
 
+        checks = get_checks()
+        registered_checks = set(checks)
         dag = nx.DiGraph()
-        dag.add_nodes_from(str(check) for check in get_checks())
-        dag.add_edges_from(
-            (str(check), str(check_dep))
-            for check in get_checks()
-            for check_dep in check.requires
-        )
+        dag.add_nodes_from(str(check) for check in checks)
+        for check in checks:
+            for dependency in check.requires:
+                if dependency not in registered_checks:
+                    raise ValueError(
+                        f"Unregistered lint dependency {dependency!r} required by {check}"
+                    )
+                dag.add_edge(str(check), str(dependency))
         self.checks_dag = dag
 
     def order_and_load_checks(self) -> None:

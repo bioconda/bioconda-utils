@@ -12,6 +12,7 @@ from bioconda_utils.build_failure import BuildFailureRecord
 from ..conda.repodata import RepoData
 from ..recipe import Recipe
 from . import LintCheck, Linter, LintMessage
+from .check_completeness import missing_build_number
 
 
 class in_other_channels(LintCheck):
@@ -48,7 +49,7 @@ class build_number_needs_bump(LintCheck):
 
     """
 
-    requires: ClassVar = ["missing_build_number"]
+    requires: ClassVar = [missing_build_number]
 
     def check_recipe(self, recipe: Recipe) -> None:
         bldnos = RepoData().get_package_data(
@@ -74,7 +75,7 @@ class build_number_needs_reset(LintCheck):
 
     """
 
-    requires: ClassVar = ["missing_build_number"]
+    requires: ClassVar = [missing_build_number]
 
     def check_recipe(self, recipe: Recipe) -> None:
         bldnos = RepoData().get_package_data(

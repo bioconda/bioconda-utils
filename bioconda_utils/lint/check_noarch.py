@@ -72,7 +72,7 @@ class should_be_noarch_generic(LintCheck):
 
     """
 
-    requires: ClassVar = ["should_be_noarch_python"]
+    requires: ClassVar = [should_be_noarch_python]
 
     def check_deps(self, deps: dict[str, list[str]], package_location: str) -> None:
         build_section = f"{package_location}build"

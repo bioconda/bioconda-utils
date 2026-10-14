@@ -7,7 +7,7 @@ import fcntl
 import json
 import os
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import asynccontextmanager, contextmanager
 from functools import wraps
 from pathlib import Path
@@ -80,7 +80,7 @@ async def async_file_lock(path: Path, *, timeout: float = 600):
 
 
 @contextmanager
-def file_lock(path: Path, *, timeout: float = 600) -> Iterator[None]:
+def file_lock(path: Path, *, timeout: float = 600) -> Generator[None]:
     """Serialize cache refreshes; the OS releases this lock on process exit."""
     with path.open("a") as handle:
         deadline = monotonic() + timeout

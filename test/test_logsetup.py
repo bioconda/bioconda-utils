@@ -2,6 +2,7 @@
 
 import logging
 import sys
+from functools import partial
 from io import StringIO
 
 import pytest
@@ -20,14 +21,15 @@ def test_command_output_is_logged_in_full(monkeypatch, tmp_path, custom_logger):
     logfile = tmp_path / "commands.log"
     try:
         logsetup.setup_logger(logfile=logfile)
-        kwargs = (
-            {"mylogger": logging.getLogger("custom-command")} if custom_logger else {}
+        run_command = (
+            partial(run, mylogger=logging.getLogger("custom-command"))
+            if custom_logger
+            else run
         )
         for _ in range(2):
-            result = run(
+            result = run_command(
                 [sys.executable, "-c", "for i in range(5): print(f'line-{i}')"],
                 live=True,
-                **kwargs,
             )
             assert "line-4" in result.stdout
         rendered = output.getvalue()

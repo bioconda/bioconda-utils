@@ -606,17 +606,23 @@ class BioCProjectPage:
     @property
     def tarball_url(self):
         if not self._tarball_url:
+            # Each candidate is optional and yields None when that mirror does
+            # not carry the package. Filter here so both the retry loop and the
+            # "Tried the following" message only ever deal with real urls.
             urls = [
-                self.bioconductor_tarball_url,
-                self.bioarchive_url,
-                self.cargoport_url,
+                url
+                for url in (
+                    self.bioconductor_tarball_url,
+                    self.bioarchive_url,
+                    self.cargoport_url,
+                )
+                if url is not None
             ]
             for url in urls:
-                if url is not None:
-                    response = requests.head(url, allow_redirects=True, timeout=20)
-                    if response.status_code == 200:
-                        self._tarball_url = url
-                        return url
+                response = requests.head(url, allow_redirects=True, timeout=20)
+                if response.status_code == 200:
+                    self._tarball_url = url
+                    return url
 
             logger.error(
                 "No working URL for %s==%s in Bioconductor %s. "

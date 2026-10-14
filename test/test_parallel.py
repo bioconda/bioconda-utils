@@ -8,7 +8,7 @@ from multiprocessing import get_start_method
 import pytest
 
 from bioconda_utils.conda.repodata import RepoData
-from bioconda_utils.support import logsetup
+from bioconda_utils.support import logsetup, parallel
 from bioconda_utils.support.parallel import parallel_iter, worker_pool
 
 
@@ -155,3 +155,46 @@ with worker_pool(1) as pool:
                 worker.kill()
             except psutil.NoSuchProcess:
                 pass
+
+
+def test_threads_to_use_uses_affinity_when_available(monkeypatch):
+    """On Linux the affinity mask, not cpu_count, bounds the worker count."""
+    monkeypatch.setattr(
+        os, "sched_getaffinity", lambda pid: {1, 2, 3, 4}, raising=False
+    )
+    monkeypatch.setattr(parallel, "_max_threads", 16)
+    assert parallel.threads_to_use() == 4
+
+
+def test_threads_to_use_caps_at_max_threads(monkeypatch):
+    """The configured cap wins when more cores are available."""
+    monkeypatch.delattr(os, "sched_getaffinity", raising=False)
+    monkeypatch.setattr(os, "cpu_count", lambda: 64)
+    monkeypatch.setattr(parallel, "_max_threads", 8)
+    assert parallel.threads_to_use() == 8
+
+
+def test_threads_to_use_survives_undeterminable_cpu_count(monkeypatch):
+    """`os.cpu_count()` returns None when the count cannot be determined.
+
+    This is the branch taken on platforms without `os.sched_getaffinity`
+    (macOS, Windows). `threads_to_use()` must still yield a usable worker
+    count rather than raising TypeError inside min().
+    """
+    monkeypatch.delattr(os, "sched_getaffinity", raising=False)
+    monkeypatch.setattr(os, "cpu_count", lambda: None)
+    monkeypatch.setattr(parallel, "_max_threads", 7)
+    assert parallel.threads_to_use() == 7
+
+
+def test_threads_to_use_fallback_is_always_a_positive_int(monkeypatch):
+    """Whatever the platform reports, the result must be a valid worker count."""
+    monkeypatch.delattr(os, "sched_getaffinity", raising=False)
+    monkeypatch.setattr(os, "cpu_count", lambda: None)
+    monkeypatch.setattr(parallel, "_max_threads", 1)
+    threads = parallel.threads_to_use()
+    assert isinstance(threads, int)
+    assert threads >= 1
+    # a count of 0 would make ProcessPoolExecutor raise
+    with worker_pool(threads) as pool:
+        assert pool.submit(int, "3").result(timeout=20) == 3

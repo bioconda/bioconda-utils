@@ -71,6 +71,7 @@ from .aiopipe import (
     AsyncRequests,
     EndProcessing,
     EndProcessingItem,
+    UnsupportedUrlScheme,
 )
 from .conda.conda_build_bridge import load_conda_build_config
 from .conda.repodata import RepoData
@@ -300,10 +301,8 @@ class Scanner(AsyncPipeline[Recipe]):
         return updated
 
 
-class Filter(AsyncFilter[Recipe]):
-    """Filter for Scanner - class exists primarily to silence mypy"""
-
-    pipeline: Scanner
+class Filter(AsyncFilter[Recipe, Scanner]):
+    """Recipe filter with access to its owning Scanner."""
 
     def get_info(self) -> str:
         """Return description of filter for logging"""
@@ -485,7 +484,7 @@ class CheckPinning(Filter):
             recipe.render()
 
     @classmethod
-    def _sp_apply(cls, data) -> None:
+    def _sp_apply(cls, data) -> dict[str, set[str]] | None:
         config, recipe = data
         status, recipe = update_pinnings.check(
             recipe, build_config=config, keep_metas=True
@@ -499,7 +498,12 @@ class CheckPinning(Filter):
         return reason
 
     @classmethod
-    def find_reason(cls, recipe, metas):
+    def find_reason(cls, recipe: Recipe, metas) -> dict[str, set[str]]:
+        """Explain why the pinning needs a rebuild.
+
+        Returns a dict of package name to explanations, possibly empty
+        but never None.
+        """
         # Decypher variants:
         pinnings = {}
         for variant in metas:
@@ -513,18 +517,16 @@ class CheckPinning(Filter):
         # Extend incomplete pinned versions
         # This is really only necessary because conda-forge pins zlib as 1.2, which
         # doesn't exist and needs to be extended to 1.2.11.
-        resolved_vers = {}
+        resolved_vers: dict[str, set[str]] = {}
         for var, vers in pinnings.items():
             avail_vers = RepoData().get_package_data("version", name=var)
             if avail_vers:
-                resolved_vers[var] = list(
-                    {
-                        avs
-                        for avs in list(set(avail_vers))
-                        for pvs in vers
-                        if avs.startswith(pvs)
-                    }
-                )
+                resolved_vers[var] = {
+                    avs
+                    for avs in list(set(avail_vers))
+                    for pvs in vers
+                    if avs.startswith(pvs)
+                }
             else:
                 resolved_vers[var] = vers
 
@@ -559,7 +561,6 @@ class CheckPinning(Filter):
             if compiler_pins:
                 return {"compiler": {f"Recompiling with {' / '.join(compiler_pins)}"}}
         return causes
-        # must return not None!
 
 
 class UpdateVersion(Filter, AutoBumpConfigMixin):
@@ -940,6 +941,9 @@ class UpdateChecksums(Filter):
                     url_idx,
                 )
                 self.failed_urls += ["\t".join((str(exc.code), url))]
+            except UnsupportedUrlScheme as exc:
+                logger.info("Recipe %s: %s for url %i", recipe, exc, url_idx)
+                self.failed_urls += [f"unsupported scheme\t{url}"]
 
         if not new_checksums:
             raise self.NoValidUrls(recipe, source_idx)

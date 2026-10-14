@@ -11,6 +11,7 @@ from bioconda_utils.conda.repodata import RepoData
 
 from ..recipe import Recipe
 from . import WARNING, LintCheck
+from .check_completeness import missing_license
 
 
 class uses_vcs_url(LintCheck):
@@ -57,7 +58,7 @@ class gpl_requires_license_distributed(LintCheck):
     """
 
     severity = WARNING
-    requires: ClassVar = ["missing_license"]
+    requires: ClassVar = [missing_license]
 
     def check_recipe(self, recipe: Recipe) -> None:
         if "gpl" in recipe.get("about/license").lower() and not recipe.get(

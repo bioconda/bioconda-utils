@@ -1654,18 +1654,19 @@ def autobump(
         # Write the recipe. For making PRs, the recipe should be written to a branch
         # of its own.
         if create_branch or create_pr:
+            assert git_handler is not None
             scanner.add(autobump.GitWriteRecipe, git_handler)
+            if create_pr:
+                token = os.environ.get("GITHUB_TOKEN")
+                if not token and (not dry_run):
+                    logger.critical("GITHUB_TOKEN required to create PRs")
+                    sys.exit(1)
+                github_handler = githubhandler.AiohttpGitHubHandler(
+                    token, dry_run, "bioconda", "bioconda-recipes"
+                )
+                scanner.add(autobump.CreatePullRequest, git_handler, github_handler)
         else:
             scanner.add(autobump.WriteRecipe)
-        if create_pr:
-            token = os.environ.get("GITHUB_TOKEN")
-            if not token and (not dry_run):
-                logger.critical("GITHUB_TOKEN required to create PRs")
-                sys.exit(1)
-            github_handler = githubhandler.AiohttpGitHubHandler(
-                token, dry_run, "bioconda", "bioconda-recipes"
-            )
-            scanner.add(autobump.CreatePullRequest, git_handler, github_handler)
 
         # Terminate the scanning pipeline after x recipes have reached this point.
         if max_updates:

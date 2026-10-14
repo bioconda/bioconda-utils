@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 
 from bioconda_utils import bioconductor_skeleton, cran_skeleton
@@ -279,3 +281,71 @@ def test_fetch_packages_invalid_version():
     assert "Could not fetch any Bioconductor package metadata files" in str(
         excinfo.value
     )
+
+
+def test_tarball_url_error_path_does_not_crash_on_optional_candidates(
+    monkeypatch, caplog
+):
+    """The three candidate properties are optional and may be None.
+
+    The "Tried the following" error message used to join the unfiltered
+    candidate list, raising TypeError precisely when a mirror did not carry
+    the package - masking the diagnostic it was meant to report.
+    """
+    from bioconda_utils.bioconductor_skeleton import BioCProjectPage
+
+    page = object.__new__(BioCProjectPage)
+    page._tarball_url = None
+    page._auto = False
+    page.package = "example"
+    page.version = "1.2.3"
+    page.bioc_version = "3.18"
+
+    # Only the bioconductor mirror resolves; the others do not carry the pkg.
+    monkeypatch.setattr(
+        BioCProjectPage,
+        "bioconductor_tarball_url",
+        property(lambda self: "https://bioconductor.org/dead.tar.gz"),
+    )
+    monkeypatch.setattr(BioCProjectPage, "bioarchive_url", property(lambda self: None))
+    monkeypatch.setattr(BioCProjectPage, "cargoport_url", property(lambda self: None))
+
+    class _NotFound:
+        status_code = 404
+
+    monkeypatch.setattr(
+        bioconductor_skeleton.requests, "head", lambda url, **kwargs: _NotFound()
+    )
+
+    with (
+        caplog.at_level(logging.ERROR, logger="bioconda_utils.bioconductor_skeleton"),
+        pytest.raises(ValueError, match="No working URLs found"),
+    ):
+        page.tarball_url  # noqa: B018 - deliberate property access
+
+    assert "Tried the following:" in caplog.text
+    # only the url that was actually probed may be listed
+    assert "https://bioconductor.org/dead.tar.gz" in caplog.text
+
+
+def test_tarball_url_all_candidates_missing_still_raises_cleanly(monkeypatch, caplog):
+    """With no candidate at all the message renders empty rather than crashing."""
+    from bioconda_utils.bioconductor_skeleton import BioCProjectPage
+
+    page = object.__new__(BioCProjectPage)
+    page._tarball_url = None
+    page._auto = False
+    page.package = "example"
+    page.version = "1.2.3"
+    page.bioc_version = "3.18"
+
+    for name in ("bioconductor_tarball_url", "bioarchive_url", "cargoport_url"):
+        monkeypatch.setattr(BioCProjectPage, name, property(lambda self: None))
+
+    with (
+        caplog.at_level(logging.ERROR, logger="bioconda_utils.bioconductor_skeleton"),
+        pytest.raises(ValueError, match="No working URLs found"),
+    ):
+        page.tarball_url  # noqa: B018 - deliberate property access
+
+    assert "No working URL for example==1.2.3" in caplog.text
