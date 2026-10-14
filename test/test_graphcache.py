@@ -140,3 +140,12 @@ def test_changed_input_during_parse_is_not_published(collection, monkeypatch):
     with pytest.raises(RuntimeError, match="changed while constructing graph"):
         graphcache.load_graph_recipes(collection)
     assert not list((get_cache_root() / "graph-v1").glob("*.json"))
+
+
+def test_graph_metadata_uses_shared_cache_root(collection, tmp_path):
+    from bioconda_utils.cli import _configure_caches
+
+    root = tmp_path / "shared"
+    _configure_caches(root, False)
+    assert edges(graphcache.load_graph_recipes(collection)) == {("library", "consumer")}
+    assert len(list((root / "graph-v1").glob("*.json"))) == 1

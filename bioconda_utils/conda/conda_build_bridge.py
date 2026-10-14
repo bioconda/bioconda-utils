@@ -10,11 +10,10 @@ rendering.
 from __future__ import annotations
 
 import logging
-from collections import namedtuple
 from importlib.resources import files
 from itertools import chain
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, NamedTuple, cast
 
 # FIXME(upstream): For conda>=4.7.0 initialize_logging is (erroneously) called
 #                  by conda.core.index.get_index which messes up our logging.
@@ -36,6 +35,13 @@ logger = logging.getLogger(__name__)
 
 
 class JinjaSilentUndefined(jinja2.Undefined):
+    """Suppress missing template text, but reject numeric use of unknown values.
+
+    Numeric conversions retain Jinja's UndefinedError: substituting a number
+    would invent recipe metadata, and returning an empty string violates
+    Python's conversion protocols.
+    """
+
     def _fail_with_undefined_error(self, *args, **kwargs):
         return ""
 
@@ -43,9 +49,18 @@ class JinjaSilentUndefined(jinja2.Undefined):
         __rtruediv__
     ) = __floordiv__ = __rfloordiv__ = __mod__ = __rmod__ = __pos__ = __neg__ = (
         __call__
-    ) = __getitem__ = __lt__ = __le__ = __gt__ = __ge__ = __int__ = __float__ = (
-        __complex__
-    ) = __pow__ = __rpow__ = _fail_with_undefined_error
+    ) = __getitem__ = __lt__ = __le__ = __gt__ = __ge__ = __pow__ = __rpow__ = (
+        _fail_with_undefined_error
+    )
+
+    def __int__(self):
+        raise jinja2.UndefinedError(self._undefined_message)
+
+    def __float__(self):
+        raise jinja2.UndefinedError(self._undefined_message)
+
+    def __complex__(self):
+        raise jinja2.UndefinedError(self._undefined_message)
 
 
 jinja_silent_undef = Environment(undefined=JinjaSilentUndefined)
@@ -179,13 +194,9 @@ def load_conda_build_config(
     return config
 
 
-CondaBuildConfigFile = namedtuple(
-    "CondaBuildConfigFile",
-    (
-        "arg",  # either '-e' or '-m'
-        "path",
-    ),
-)
+class CondaBuildConfigFile(NamedTuple):
+    arg: Literal["-e", "-m"]
+    path: str
 
 
 def get_conda_build_config_files(config=None):
@@ -198,13 +209,14 @@ def get_conda_build_config_files(config=None):
         yield CondaBuildConfigFile("-m", file_path)
 
 
-def load_first_metadata(recipe: Path, config=None, finalize=True):
+def load_first_metadata(recipe: Path, config=None, finalize=True) -> api.MetaData:
     """
     Returns just the first of possibly many metadata files. Used for when you
     need to do things like check a package name or version number (which are
     not expected to change between variants).
 
-    If the recipe will be skipped, then returns None
+    Raises ValueError if rendering produces no metadata, for example when all
+    variants are skipped. Call load_all_meta when an empty render is expected.
 
     Parameters
     ----------
@@ -218,5 +230,8 @@ def load_first_metadata(recipe: Path, config=None, finalize=True):
         run_exports). For fast-running tasks like linting, set to False.
     """
     metas = load_all_meta(recipe, config, finalize=finalize)
-    if len(metas) > 0:
-        return metas[0]
+    if not metas:
+        raise ValueError(
+            f"No metadata rendered for recipe {recipe}; all variants may be skipped"
+        )
+    return metas[0]

@@ -1,14 +1,14 @@
 """
 Access to the conda package directory (repodata) of anaconda.org channels.
 
-:class:`RepoData` that loads channel/subdir repodata,
-caches indexed records on disk, and answers package queries.
-:func:`fetch` is the parallel HTTP downloader it relies on.
+:class:`RepoData` loads channel/subdir repodata, caches indexed records on
+disk, and answers package queries. Sharded repodata is resolved by
+:class:`~bioconda_utils.conda.shards.ShardClient`, and the parallel HTTP
+downloader shared by both lives in :mod:`bioconda_utils.conda.fetch`.
 """
 
 from __future__ import annotations
 
-import asyncio
 import datetime
 import json
 import logging
@@ -18,160 +18,28 @@ import sqlite3
 import sys
 import tempfile
 from collections import namedtuple
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from contextlib import closing, contextmanager
 from hashlib import sha256
-from itertools import product, zip_longest
-from multiprocessing.pool import ThreadPool
+from itertools import product
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
-import aiofiles
-import aiohttp
 import requests
 
 from .._types import (
     ALL_PACKAGE_SUBDIRS,
+    Channel,
     PackageSubdir,
     Subdir,
     container_platform_to_package_subdir,
     native_container_platform,
 )
-from ..support import http
-from ..support.caching import disk_cache, file_lock, get_cache_root
-from ..support.logsetup import progress_display
+from ..support.caching import file_lock, get_cache_root, memoize
+from .fetch import FetchRequest, fetch
+from .shards import ShardClient
 
 logger = logging.getLogger(__name__)
-
-
-type RepoDataKey = tuple[str, Subdir]
-
-
-#: Max connections to each server
-CONNECTIONS_PER_HOST = 4
-
-
-def fetch(
-    urls: Iterable[str],
-    descriptions: Iterable[str],
-    transform: Callable[[bytes, RepoDataKey], Any] | None,
-    metadata: Iterable[RepoDataKey],
-) -> list[Any]:
-    """Fetch data from URLs.
-
-    This will use asyncio to manage a pool of connections at once, speeding
-    up download as compared to iterative use of ``requests`` significantly.
-    It will also retry on non-permanent HTTP error codes (i.e. 429, 502,
-    503 and 504).
-
-    Args:
-      urls: List of URLS
-      descriptions: Matching list of descriptions (for progress display)
-      transform: As each download completes, the raw bytes and the matching
-          entry from **metadata** are passed through this function, e.g. to
-          offload json parsing into the download loop.
-      metadata: Per-URL context handed to **transform** alongside the bytes.
-    """
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        pass
-    else:
-        logger.warning("Running fetch from within running loop")
-        # Workaround the fact that asyncio's loop is marked as not-reentrant
-        # (it is apparently easy to patch, but not desired by the devs,
-        with ThreadPool(1) as pool:
-            res = pool.apply(fetch, (urls, descriptions, transform, metadata))
-        return res
-
-    # asyncio.run cancels the fetch on SIGINT before raising
-    # KeyboardInterrupt, so pending connections close cleanly
-    return cast(
-        list[Any],
-        asyncio.run(async_fetch(urls, descriptions, transform, metadata)),
-    )
-
-
-async def async_fetch(
-    urls: Iterable[str] = (),
-    descriptions: Iterable[str] = (),
-    transform: Callable[[bytes, RepoDataKey], Any] | None = None,
-    metadata: Iterable[RepoDataKey] | None = None,
-) -> list[Any | bytes]:
-    if metadata is None:
-        metadata = []
-    conn = aiohttp.TCPConnector(limit_per_host=CONNECTIONS_PER_HOST)
-    async with http.make_session(connector=conn) as session:
-        coros = [
-            asyncio.create_task(
-                _async_fetch_one(
-                    session,
-                    url,
-                    description or url,
-                    transform=transform,
-                    metadata=datum,
-                )
-            )
-            for url, description, datum in zip_longest(urls, descriptions, metadata)
-            if url is not None
-        ]
-        try:
-            with progress_display.count_task("Downloading", total=len(coros)) as (
-                progress,
-                task,
-            ):
-                result = [
-                    await coro
-                    for coro in progress.track(
-                        asyncio.as_completed(coros),
-                        total=len(coros),
-                        task_id=task,
-                    )
-                ]
-        finally:
-            for coro in coros:
-                if not coro.done():
-                    coro.cancel()
-            if any(not coro.done() for coro in coros):
-                await asyncio.gather(*coros, return_exceptions=True)
-    return result
-
-
-@http.retry_on_transient
-async def _async_fetch_one(
-    session: aiohttp.ClientSession,
-    url: str,
-    description: str,
-    transform: Callable[[bytes, RepoDataKey], Any] | None = None,
-    metadata: RepoDataKey | None = None,
-) -> Any | bytes:
-    if url.startswith("file://"):
-        local_path = Path(url[7:])
-        if local_path.exists():
-            async with aiofiles.open(local_path, mode="rb") as f:
-                raw = await f.read()
-        else:
-            subdir = url.split("/")[-2]
-            d = {
-                "info": {"subdir": subdir},
-                "packages": {},
-                "packages.conda": {},
-                "removed": [],
-                "repodata_version": 1,
-            }
-            raw = json.dumps(d).encode("UTF-8")
-    else:
-        async with session.get(url) as resp:
-            resp.raise_for_status()
-            raw = await http.download_to_bytes(
-                resp,
-                description,
-                block_size=1024 * 16,
-            )
-    if transform is None:
-        return raw
-    assert metadata is not None
-    return transform(raw, metadata)
 
 
 class RepoData:
@@ -234,10 +102,9 @@ class RepoData:
 
     _load_columns: ClassVar = ["build", "build_number", "name", "version", "depends"]
 
-    #: Columns available in internal dataframe
+    #: Columns available to package queries
     columns = _load_columns + ["channel", "subdir", "platform"]
-    #: Conda repodata subdirs loaded by default. The dataframe ``platform``
-    #: column stores these subdir strings directly for historical reasons.
+    #: Conda repodata subdirs loaded by default; ``platform`` returns subdir strings.
     platforms: ClassVar[list[Subdir]] = [*ALL_PACKAGE_SUBDIRS, "noarch"]
     # config object
     config = None
@@ -257,6 +124,7 @@ class RepoData:
         cls, directory: Path | None = None, *, refresh: bool = False
     ) -> None:
         """Choose a cache directory; None restores the platform/XDG default."""
+        ShardClient.clear_caches()
         cls.cache_dir = directory.resolve() if directory is not None else None
         cls.refresh_after = datetime.datetime.now(datetime.UTC) if refresh else None
 
@@ -310,11 +178,26 @@ class RepoData:
         data = json.loads(raw)
         packages = data["packages"]
         packages.update(data.get("packages.conda", {}))
+        RepoData._populate_records(
+            connection,
+            packages.values(),
+            subdir=data["info"]["subdir"],
+            fetched_at=fetched_at,
+        )
+
+    @staticmethod
+    def _populate_records(
+        connection: sqlite3.Connection,
+        records: Iterable[dict[str, Any]],
+        *,
+        subdir: Subdir,
+        fetched_at: float,
+    ) -> None:
         with connection:
             connection.execute("CREATE TABLE metadata (fetched_at REAL, subdir TEXT)")
             connection.execute(
                 "INSERT INTO metadata VALUES (?, ?)",
-                (fetched_at, data["info"]["subdir"]),
+                (fetched_at, subdir),
             )
             connection.execute(
                 "CREATE TABLE packages (name TEXT, version TEXT, build TEXT, build_number INTEGER, depends TEXT)"
@@ -329,7 +212,7 @@ class RepoData:
                         record.get("build_number"),
                         json.dumps(record.get("depends")),
                     )
-                    for record in packages.values()
+                    for record in records
                 ),
             )
             connection.execute(
@@ -362,7 +245,7 @@ class RepoData:
 
     def _download_repository(self, channel: str, subdir: Subdir) -> bytes:
         url = self._make_repodata_url(channel, subdir)
-        return fetch([url], [f"{channel}/{subdir}"], None, [(channel, subdir)])[0]
+        return fetch([FetchRequest(url, f"{channel}/{subdir}")])[0]
 
     def _repositories(self, channels: Iterable[str], subdirs: Iterable[Subdir]):
         return (
@@ -406,6 +289,30 @@ class RepoData:
                     if connection is None:
                         raise RuntimeError(f"New repodata cache is invalid: {path}")
         with closing(connection):
+            yield connection
+
+    @contextmanager
+    def _open_query_repository(self, channel: Channel, subdir: Subdir, names):
+        records = (
+            None
+            if names is None
+            else ShardClient.get_repository_shards(
+                channel, subdir, names, self._make_repodata_url(channel, subdir)
+            )
+        )
+        if records is None:
+            with self._open_repository(channel, subdir) as connection:
+                yield connection
+            return
+        # Share SQL filtering and projection with full repodata. Only requested
+        # shards are materialized; no full repository Python table is retained.
+        with closing(sqlite3.connect(":memory:")) as connection:
+            self._populate_records(
+                connection,
+                records,
+                subdir=subdir,
+                fetched_at=datetime.datetime.now(datetime.UTC).timestamp(),
+            )
             yield connection
 
     def _make_repodata_url(self, channel, subdir: Subdir):
@@ -512,12 +419,19 @@ class RepoData:
                 clauses.append(f"{column} = ?")
                 parameters.append(value)
         where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        package_names = None
+        if name is not None:
+            package_names = list(name) if isinstance(name, (list, tuple)) else [name]
         Package = namedtuple("Package", keys, rename=True)
         rows = []
         for channel, subdir in self._repositories(
             requested_channels, requested_subdirs
         ):
-            with self._open_repository(channel, subdir) as connection:
+            with self._open_query_repository(
+                channel,
+                subdir,
+                package_names,
+            ) as connection:
                 constants = {"channel": channel, "platform": subdir}
                 if "subdir" in keys:
                     constants["subdir"] = connection.execute(
@@ -554,7 +468,7 @@ class RepoData:
         return iter(rows)
 
 
-@disk_cache.memoize(expire=604800)
+@memoize(expire=604800)
 def get_package_downloads(channel: str, package: str) -> int:
     """Use anaconda API to obtain download counts."""
     data = requests.get(f"https://api.anaconda.org/package/{channel}/{package}").json()

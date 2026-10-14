@@ -53,9 +53,14 @@ TEST_LABEL = "bioconda-utils-test"
 # any tests that depend on a fixture that uses PARAMS will run twice (once with
 # docker, once without). On OSX, only the non-docker runs.
 
-# Docker ref for build container
+# Docker ref for build container. This must be a pushed, public image so fresh
+# clones can `docker pull` it. (The `...-test-env-...` tag used here
+# historically never existed remotely; CI only ever built it locally via
+# `docker build -f ./Dockerfile.test`, which failed for everyone else with a
+# cryptic 401.) To test local Dockerfile changes, build the tag locally first:
+# `docker build -t quay.io/bioconda/bioconda-utils-build-env-cos7:latest ./`
 BUILD_ENV_IMAGE = os.getenv(
-    "BUILD_ENV_IMAGE", "quay.io/bioconda/bioconda-utils-test-env-cos7:latest"
+    "BUILD_ENV_IMAGE", "quay.io/bioconda/bioconda-utils-build-env-cos7:latest"
 )
 
 SKIP_DOCKER_TESTS = sys.platform.startswith("darwin")
@@ -1302,6 +1307,7 @@ def test_load_platform_metas_preserves_complete_target_platform(
 
 
 def test_filter_existing_packages_queries_rendered_target_subdir(monkeypatch):
+    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
     meta = Mock()
     meta.name.return_value = "samtools"
     meta.version.return_value = "1.24"

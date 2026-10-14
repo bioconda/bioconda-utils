@@ -23,7 +23,7 @@ from conda_build.exceptions import DependencyNeedsBuildingError
 
 from bioconda_utils.build_failure import BuildFailureRecord
 from bioconda_utils.rattler.rattler_build_bridge import (
-    CURR_RATTLER_CACHE_DIR_PATH,
+    get_rattler_cache_dir_path,
     load_rattler_build_global_variants,
     render_rattler_recipe,
 )
@@ -461,7 +461,11 @@ def build(
 
 
 def store_build_failure_record(
-    recipe: Path, output: Any, package_name: str, dag: nx.DiGraph, skiplist_leaves: bool
+    recipe: Path,
+    output: str | bytes | None,
+    package_name: str,
+    dag: nx.DiGraph,
+    skiplist_leaves: bool,
 ) -> None:
     """
     Write the exception to a file next to the meta.yaml
@@ -471,6 +475,8 @@ def store_build_failure_record(
     build_failure_record = BuildFailureRecord(recipe)
     # if recipe is a leaf (i.e. not used by others as dependency)
     # we can automatically blacklist it if desired
+    if isinstance(output, bytes):
+        output = output.decode(errors="replace")
     build_failure_record.fill(log=output, skiplist=skiplist_leaves and is_leaf)
 
     build_failure_record.write()
@@ -900,7 +906,7 @@ def build_recipes(
         # remove traces of the build
         if not keep_old_work:
             conda_build_purge()
-            rattler_cache: Path = CURR_RATTLER_CACHE_DIR_PATH
+            rattler_cache = get_rattler_cache_dir_path()
             rattler_build_purge(rattler_cache, rattler_output_dir)
             # prune stopped containers
             if docker_builder is not None:

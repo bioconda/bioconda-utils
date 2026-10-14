@@ -23,11 +23,11 @@ import json
 import logging
 import os
 import sys
+from collections.abc import Awaitable
 from contextlib import redirect_stderr, redirect_stdout
 from html.parser import HTMLParser
 from itertools import chain
 from pathlib import Path
-from re import Match, Pattern
 from typing import Any, ClassVar, Protocol
 from urllib.parse import urljoin
 
@@ -38,12 +38,22 @@ from packaging.version import Version
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
+class TextMatch(Protocol):
+    def groupdict(self) -> dict[str, str | None]: ...
+
+
+class TextPattern(Protocol):
+    def search(self, string: str, /) -> TextMatch | None: ...
+
+
 class Requester(Protocol):
     """Protocol for making requests"""
 
-    async def get_text_from_url(self, url: str) -> str: ...
-    async def get_ftp_listing(self, url: str) -> list[str]: ...
-    async def get_file_from_url(self, fname: Path, url: str, desc: str) -> None: ...
+    def get_text_from_url(self, url: str) -> Awaitable[str]: ...
+    def get_ftp_listing(self, url: str) -> Awaitable[list[str]]: ...
+    def get_file_from_url(
+        self, fname: Path, url: str, desc: str
+    ) -> Awaitable[None]: ...
 
 
 #: Matches named capture groups
@@ -86,23 +96,23 @@ def replace_named_capture_group(pattern, vals: dict[str, str]):
     return res
 
 
-class HosterMeta(abc.ABCMeta):
-    """Meta-Class for Hosters
-
-    By making Hosters classes of a metaclass, rather than instances of a class,
-    we leave the option to add functions to a Hoster.
-    """
-
-
-class Hoster(metaclass=HosterMeta):
+class Hoster(abc.ABC):
     """Hoster Baseclass"""
 
     hoster_types: ClassVar[list[type[Hoster]]] = []
 
-    def __init_subclass__(cls, **kwargs: Any) -> None:
+    def __init_subclass__(cls, *, abstract: bool = False, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
-        if inspect.isabstract(cls):
+        cls._abstract = abstract
+        if abstract or inspect.isabstract(cls):
             return
+        for name, expected_type in (
+            ("url_pattern", str),
+            ("link_pattern", str),
+            ("releases_formats", list),
+        ):
+            if not isinstance(getattr(cls, name, None), expected_type):
+                raise TypeError(f"{cls.__name__} must define {name}")
         if not cls.__name__.startswith("Custom"):
             Hoster.hoster_types.append(cls)
 
@@ -157,27 +167,20 @@ class Hoster(metaclass=HosterMeta):
     #: named patterns that will change with a version upgrade
     exclude: ClassVar = ["version"]
 
-    @property
-    @abc.abstractmethod
-    def url_pattern(self) -> str:
-        "matches upstream package url"
+    url_pattern: ClassVar[str]
 
     #: will be generated as each class is created
-    url_re: Pattern[str] | None = None
+    url_re: TextPattern | None = None
     link_pattern_compiled: str
     expanded_assets_pattern_compiled: str
 
-    @property
-    @abc.abstractmethod
-    def link_pattern(self) -> str:
-        "matches links on relase page"
+    link_pattern: ClassVar[str]
+    releases_formats: ClassVar[list[str]]
+    _abstract: ClassVar[bool] = True
 
-    @property
-    @abc.abstractmethod
-    def releases_formats(self) -> list[str]:
-        "format template for release page URL"
-
-    def __init__(self, url: str, match: Match[str]) -> None:
+    def __init__(self, url: str, match: TextMatch) -> None:
+        if self._abstract:
+            raise TypeError(f"Cannot instantiate abstract hoster {type(self).__name__}")
         self.vals = {k: v or "" for k, v in match.groupdict().items()}
         self.releases_urls = [
             template.format_map(self.vals) for template in self.releases_formats
@@ -218,7 +221,7 @@ class Hoster(metaclass=HosterMeta):
 class HrefParser(HTMLParser):
     """Extract link targets from HTML"""
 
-    def __init__(self, link_re: Pattern[str]) -> None:
+    def __init__(self, link_re: TextPattern) -> None:
         super().__init__()
         self.link_re = link_re
         self.matches: list[dict[str, Any]] = []
@@ -249,7 +252,7 @@ class HrefParser(HTMLParser):
 class IncludeFragmentParser(HTMLParser):
     """Extract include-fragment targets from HTML"""
 
-    def __init__(self, link_re: Pattern[str]) -> None:
+    def __init__(self, link_re: TextPattern) -> None:
         super().__init__()
         self.link_re = link_re
         self.matches: list[dict[str, Any]] = []
@@ -278,7 +281,7 @@ class IncludeFragmentParser(HTMLParser):
 
 
 # pylint: disable=abstract-method
-class HTMLHoster(Hoster):
+class HTMLHoster(Hoster, abstract=True):
     """Base for Hosters handling release listings in HTML format"""
 
     async def get_versions(self, req, orig_version):
@@ -330,7 +333,7 @@ class FTPHoster(Hoster):
     releases_formats: ClassVar = ["ftp://{host}/{path}"]
 
 
-class OrderedHTMLHoster(HTMLHoster):
+class OrderedHTMLHoster(HTMLHoster, abstract=True):
     """HTMLHoster for which we can expected newest releases at top
 
     The point isn't performance, but avoiding hassle with old versions
@@ -352,7 +355,7 @@ class OrderedHTMLHoster(HTMLHoster):
         return matches[: num + 1]
 
 
-class GithubBase(OrderedHTMLHoster):
+class GithubBase(OrderedHTMLHoster, abstract=True):
     """Base class for software hosted on github.com"""
 
     exclude: ClassVar = ["version", "fname"]
@@ -559,7 +562,7 @@ class SourceForge(HTMLHoster):
     releases_formats: ClassVar = ["https://sourceforge.net/projects/{project}/files/"]
 
 
-class JSONHoster(Hoster):
+class JSONHoster(Hoster, abstract=True):
     """Base for Hosters handling release listings in JSON format"""
 
     async def get_versions(self, req: Requester, orig_version: str):
@@ -876,7 +879,7 @@ class CRAN(JSONHoster):
 
 
 # pylint: disable=abstract-method
-class BitBucketBase(OrderedHTMLHoster):  # abstract
+class BitBucketBase(OrderedHTMLHoster, abstract=True):
     """Base class for hosting at bitbucket.org"""
 
     account_pattern = r"(?P<account>[-\w]+)"

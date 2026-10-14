@@ -166,6 +166,14 @@ BuildFailureOutputFormat = Literal["table", "markdown"]
 
 #: Conda repodata subdir notation, including ``noarch``.
 type Subdir = PackageSubdir | Literal["noarch"]
+#: Identity of a repodata repository: its channel and subdir.
+type RepoDataKey = tuple[str, Subdir]
+#: Conda channel name. Deliberately a plain ``str`` alias, not an enum:
+#: channels are an open set (any anaconda.org namespace, mirror URL, or
+#: ``file://`` path), so the valid values cannot be enumerated the way
+#: package subdirs can. Use this alias to mark which strings are channels
+#: as opposed to URLs or other names.
+type Channel = str
 #: A two-part OS label -- the form conda-build's ``config.platform`` and its
 #: ``DEFAULT_COMPILERS`` table require (see ``conda_build.variants``). This is
 #: *not* a subdir: ``"linux-64"`` is not a valid ``OsLabel``.
@@ -363,7 +371,7 @@ class RecipeMetaLike(Protocol):
     def get_value(self, key: str, default: Any = None) -> Any: ...
 
 
-def ensure_list(obj):
+def ensure_list[T](obj: T) -> Sequence[T]:
     """Wraps **obj** in a list if necessary
 
     >>> ensure_list("one")

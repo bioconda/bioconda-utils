@@ -519,7 +519,7 @@ def test_autobump_closes_git_handler_on_keyboard_interrupt(monkeypatch):
 
 
 @pytest.mark.parametrize("exclude_channels", [["conda-forge"], ["none"]])
-def test_autobump_configures_repodata_cache_independently_of_filters(
+def test_autobump_configures_shared_cache_independently_of_filters(
     monkeypatch, tmp_path, exclude_channels
 ):
     from bioconda_utils import autobump
@@ -548,7 +548,7 @@ def test_autobump_configures_repodata_cache_independently_of_filters(
 
     cache = tmp_path / "autobump-cache"
     cli.autobump(
-        repodata_cache=cache,
+        cache=cache,
         no_follow_graph=True,
         ignore_skiplists=True,
         exclude_channels=exclude_channels,
@@ -559,7 +559,7 @@ def test_autobump_configures_repodata_cache_independently_of_filters(
     from bioconda_utils.conda.repodata import RepoData
 
     assert scanner_arguments == [{"status_file": None}]
-    assert RepoData.get_cache_dir() == cache
+    assert RepoData.get_cache_dir() == cache / "repodata-v2"
     exclude_calls = [
         call for call in added_filters if call[0] is autobump.ExcludeOtherChannel
     ]
@@ -571,47 +571,17 @@ def test_autobump_configures_repodata_cache_independently_of_filters(
 
 
 @pytest.mark.parametrize("command", ["lint", "update-pinning", "autobump"])
-def test_legacy_cache_option_reaches_cache_configuration(
-    monkeypatch, tmp_path, command
-):
+def test_separate_repodata_cache_option_is_rejected(tmp_path, command):
     root = tmp_path / "recipes"
     root.mkdir()
     config = tmp_path / "config.yml"
     config.write_text("channels: []\n")
-    prefix = tmp_path / "old-cache.pkl"
-    calls = []
-
-    def configure(directory, refresh, legacy_prefix=None):
-        calls.append((directory, refresh, legacy_prefix))
-        raise RuntimeError("cache configuration reached")
-
-    monkeypatch.setattr(cli, "_configure_caches", configure)
     result = runner.invoke(
-        cli.app, [command, str(root), str(config), "--cache", str(prefix)]
+        cli.app,
+        [command, str(root), str(config), "--repodata-cache", str(tmp_path / "cache")],
     )
-
-    assert isinstance(result.exception, RuntimeError), result.output
-    assert str(result.exception) == "cache configuration reached"
-    assert calls == [(None, False, prefix)]
-
-
-@pytest.mark.parametrize("legacy", [False, True])
-def test_cache_filename_compatibility_preserves_old_snapshot(tmp_path, legacy):
-    from bioconda_utils.conda.repodata import RepoData
-
-    old = tmp_path / "cache.pkl"
-    old.write_bytes(b"old snapshot must not be loaded or overwritten")
-    cli._configure_caches(None if legacy else old, False, old if legacy else None)
-    expected = tmp_path / "cache.pkl.d"
-    assert RepoData.get_cache_dir() == (
-        expected / "repodata-v2" if legacy else expected
-    )
-    assert old.read_bytes() == b"old snapshot must not be loaded or overwritten"
-
-
-def test_cache_options_cannot_silently_override_each_other(tmp_path):
-    with pytest.raises(typer.BadParameter, match="either --cache or --repodata-cache"):
-        cli._configure_caches(tmp_path / "directory", False, tmp_path / "prefix")
+    assert result.exit_code == 2
+    assert "No such option" in result.output
 
 
 def test_list_build_failures_markdown_is_written_verbatim(monkeypatch, tmp_path):
@@ -979,7 +949,7 @@ def test_help_keeps_rich_rendering(monkeypatch, args):
 def test_build_failure_table_preserves_literal_text(monkeypatch, tmp_path, literal):
     from bioconda_utils.build_failure import BUILD_FAILURE_COLUMNS
 
-    monkeypatch.setattr(cli.report_console, "width", 300)
+    monkeypatch.setattr(cli.report_console, "size", (300, 25))
     monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: {})
     row = dict.fromkeys(BUILD_FAILURE_COLUMNS, "value")
     row["reason"] = literal
@@ -1001,7 +971,7 @@ def test_build_failure_table_preserves_literal_text(monkeypatch, tmp_path, liter
 def test_lint_table_preserves_literal_text(monkeypatch, tmp_path, literal):
     from unittest.mock import Mock
 
-    monkeypatch.setattr(cli.report_console, "width", 300)
+    monkeypatch.setattr(cli.report_console, "size", (300, 25))
     monkeypatch.setattr(cli, "_setup_runtime", lambda *_args, **_kwargs: None)
     monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: {})
     monkeypatch.setattr(cli, "get_recipes", lambda *_args, **_kwargs: [])
@@ -1016,3 +986,34 @@ def test_lint_table_preserves_literal_text(monkeypatch, tmp_path, literal):
     assert result.exit_code == 1
     assert literal in result.output
     assert "MarkupError" not in result.output
+
+
+@pytest.mark.parametrize("command", ["build", "lint", "update-pinning", "autobump"])
+def test_shared_cache_option_reaches_configuration(monkeypatch, tmp_path, command):
+    root = tmp_path / "recipes"
+    root.mkdir()
+    config = tmp_path / "config.yml"
+    config.write_text("channels: []\n")
+    directory = tmp_path / "shared-cache"
+    calls = []
+
+    def configure(path, refresh):
+        calls.append((path, refresh))
+        raise RuntimeError("cache configuration reached")
+
+    monkeypatch.setattr(cli, "_configure_caches", configure)
+    args = [command, str(root), str(config)]
+    result = runner.invoke(
+        cli.app, [*args, "--cache", str(directory), "--refresh-repodata"]
+    )
+    assert isinstance(result.exception, RuntimeError), result.output
+    assert str(result.exception) == "cache configuration reached"
+    assert calls == [(directory, True)]
+
+
+def test_shared_cache_rejects_old_pickle_files(tmp_path):
+    old = tmp_path / "cache.pkl"
+    old.write_bytes(b"old snapshot")
+    with pytest.raises(typer.BadParameter, match="must be a directory"):
+        cli._configure_caches(old, False)
+    assert old.read_bytes() == b"old snapshot"

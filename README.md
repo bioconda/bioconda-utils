@@ -72,7 +72,11 @@ macOS). Repodata is refreshed after eight hours; upstream HTTP responses are
 revalidated against the server and pruned after seven days. Caches are shared
 between concurrent commands, are safe to delete, and local `file://` channels
 are always read afresh. `build`, `lint`, `update-pinning`, and `autobump`
-accept `--repodata-cache DIRECTORY` to choose another cache directory and
-`--refresh-repodata` to refresh entries needed by the current run. Older
-scripts can still pass `--cache PREFIX`, which stores caches under `PREFIX.d`;
-the two options cannot be combined.
+accept `--cache DIRECTORY` to choose a shared root for all application caches and
+`--refresh-repodata` to refresh entries needed by the current run. Targeted
+package queries use shards when available, with indexes refreshed after fifteen
+minutes and SQLite repodata as fallback. Repodata, recipe graphs, upstream
+downloads, API lookups, and rattler-build use internal subdirectories under
+that shared root.
+`--cache` now takes a directory; the old filename-prefix and pickle cache
+formats and the separate `--repodata-cache` option are no longer supported.

@@ -71,10 +71,11 @@ from .aiopipe import (
     AsyncRequests,
     EndProcessing,
     EndProcessingItem,
+    UnsupportedUrlScheme,
 )
 from .conda.conda_build_bridge import load_conda_build_config
 from .conda.repodata import RepoData
-from .githandler import GitHandler
+from .githandler import BranchName, GitHandler
 from .githubhandler import GitHubHandler
 from .hosters import Hoster
 from .recipe import Recipe
@@ -300,10 +301,8 @@ class Scanner(AsyncPipeline[Recipe]):
         return updated
 
 
-class Filter(AsyncFilter[Recipe]):
-    """Filter for Scanner - class exists primarily to silence mypy"""
-
-    pipeline: Scanner
+class Filter(AsyncFilter[Recipe, Scanner]):
+    """Recipe filter with access to its owning Scanner."""
 
     def get_info(self) -> str:
         """Return description of filter for logging"""
@@ -347,7 +346,7 @@ class AutoBumpConfigMixin:
     #: Name of key under `EXTRA_CONFIG` to enable/disable autobump
     ENABLE = "enable"
 
-    def get_config(self, recipe: Recipe) -> dict[Any, Any]:
+    def get_config(self, recipe: Recipe) -> dict[str, Any]:
         """Returns the configuration dict from the recipe"""
         return recipe.get("extra", {}).get(self.EXTRA_CONFIG, {})
 
@@ -485,7 +484,7 @@ class CheckPinning(Filter):
             recipe.render()
 
     @classmethod
-    def _sp_apply(cls, data) -> None:
+    def _sp_apply(cls, data) -> dict[str, set[str]] | None:
         config, recipe = data
         status, recipe = update_pinnings.check(
             recipe, build_config=config, keep_metas=True
@@ -499,7 +498,12 @@ class CheckPinning(Filter):
         return reason
 
     @classmethod
-    def find_reason(cls, recipe, metas):
+    def find_reason(cls, recipe: Recipe, metas) -> dict[str, set[str]]:
+        """Explain why the pinning needs a rebuild.
+
+        Returns a dict of package name to explanations, possibly empty
+        but never None.
+        """
         # Decypher variants:
         pinnings = {}
         for variant in metas:
@@ -513,18 +517,16 @@ class CheckPinning(Filter):
         # Extend incomplete pinned versions
         # This is really only necessary because conda-forge pins zlib as 1.2, which
         # doesn't exist and needs to be extended to 1.2.11.
-        resolved_vers = {}
+        resolved_vers: dict[str, set[str]] = {}
         for var, vers in pinnings.items():
             avail_vers = RepoData().get_package_data("version", name=var)
             if avail_vers:
-                resolved_vers[var] = list(
-                    {
-                        avs
-                        for avs in list(set(avail_vers))
-                        for pvs in vers
-                        if avs.startswith(pvs)
-                    }
-                )
+                resolved_vers[var] = {
+                    avs
+                    for avs in list(set(avail_vers))
+                    for pvs in vers
+                    if avs.startswith(pvs)
+                }
             else:
                 resolved_vers[var] = vers
 
@@ -559,7 +561,6 @@ class CheckPinning(Filter):
             if compiler_pins:
                 return {"compiler": {f"Recompiling with {' / '.join(compiler_pins)}"}}
         return causes
-        # must return not None!
 
 
 class UpdateVersion(Filter, AutoBumpConfigMixin):
@@ -730,7 +731,7 @@ class UpdateVersion(Filter, AutoBumpConfigMixin):
         return versions
 
     async def get_versions(
-        self, recipe: Recipe, source: Mapping[Any, Any], source_idx: int
+        self, recipe: Recipe, source: Mapping[str, Any], source_idx: int
     ) -> dict[str, dict[str, Any]]:
         """Select hosters and retrieve versions for this source"""
         urls = source.get("url")
@@ -900,7 +901,7 @@ class UpdateChecksums(Filter):
             recipe.render()
 
     async def update_source(
-        self, recipe: Recipe, source: Mapping[Any, Any], source_idx: int
+        self, recipe: Recipe, source: Mapping[str, Any], source_idx: int
     ) -> None:
         """Updates one source
 
@@ -940,6 +941,9 @@ class UpdateChecksums(Filter):
                     url_idx,
                 )
                 self.failed_urls += ["\t".join((str(exc.code), url))]
+            except UnsupportedUrlScheme as exc:
+                logger.info("Recipe %s: %s for url %i", recipe, exc, url_idx)
+                self.failed_urls += [f"unsupported scheme\t{url}"]
 
         if not new_checksums:
             raise self.NoValidUrls(recipe, source_idx)
@@ -975,16 +979,18 @@ class GitFilter(Filter):
         self.git = git_handler
 
     @classmethod
-    def branch_name(cls, recipe: Recipe) -> str:
+    def branch_name(cls, recipe: Recipe) -> BranchName:
         """Render branch name from recipe
 
-        - Replace dashes with underscores (GitPython does not like dash)
+        - Replace dashes with underscores
         - Replace slashes with ``.d/`` slash as Git will use directories when separating
           parts with slashes, so ``bump/toolx`` cannot be a branch at the same time as
           ``bump/toolx/1.2.x``.
           Note: this will break if we have ``recipe/x`` and ``recipe/x.d`` in the repo.
         """
-        return f"{cls.branch_prefix}{recipe.reldir.as_posix().replace('-', '_').replace('/', '.d/')}"
+        return BranchName(
+            f"{cls.branch_prefix}{recipe.reldir.as_posix().replace('-', '_').replace('/', '.d/')}"
+        )
 
     # placate pylint by reiterating abstract method
     @abc.abstractmethod
@@ -1050,7 +1056,9 @@ class GitLoadRecipe(GitFilter):
         branch_name = self.branch_name(recipe)
         remote_branch = self.git.get_remote_branch(branch_name)
         local_branch = self.git.get_local_branch(branch_name)
-        master_branch = self.git.get_local_branch("master")
+        master_branch = self.git.get_local_branch(BranchName("master")) or BranchName(
+            "master"
+        )
 
         if local_branch:
             logger.debug("Recipe %s: removing local branch %s", recipe, branch_name)

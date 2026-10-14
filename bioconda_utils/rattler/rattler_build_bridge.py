@@ -8,12 +8,12 @@ from pathlib import Path
 
 import conda_build.config as cb_config
 import conda_build.metadata as cb_metadata
-import platformdirs
 import rattler_build as rb
 
 from .._types import RattlerDictList
 from ..conda.conda_build_bridge import subdir_to_oslabel
 from ..conda.repodata import PackageSubdir, RepoData
+from ..support.caching import get_cache_root
 
 
 def _filter_config(config_path: Path, platform: PackageSubdir | None) -> str:
@@ -171,13 +171,9 @@ def load_rattler_build_global_variants(
         return global_variants
 
 
-def get_default_rattler_cache_dir_path() -> Path:
-    """Return the default cache directory path used by rattler-build."""
-    bioconda_utils_cache: Path = Path(platformdirs.user_cache_dir("bioconda-utils"))
-    return bioconda_utils_cache / "rattler_cache"
-
-
-CURR_RATTLER_CACHE_DIR_PATH: Path = get_default_rattler_cache_dir_path()
+def get_rattler_cache_dir_path() -> Path:
+    """Return the rattler-build directory under the shared cache root."""
+    return get_cache_root() / "rattler_cache"
 
 
 def set_rattler_cache_to_dir(path: Path) -> None:
@@ -185,13 +181,7 @@ def set_rattler_cache_to_dir(path: Path) -> None:
     Set the rattler-build cache directory.
 
     Creates the directory if it does not already exist, updates the
-    ``RATTLER_CACHE_DIR`` environment variable, and updates the module-level
-    current cache directory.
+    ``RATTLER_CACHE_DIR`` environment variable.
     """
-    if not path.exists():
-        path.mkdir()
+    path.mkdir(parents=True, exist_ok=True)
     os.environ["RATTLER_CACHE_DIR"] = str(path)
-    # TODO (rb): this way of setting and getting the current cache dir is very ugly and should be improved
-    # is there a more elegant way to do this?
-    global CURR_RATTLER_CACHE_DIR_PATH
-    CURR_RATTLER_CACHE_DIR_PATH = path

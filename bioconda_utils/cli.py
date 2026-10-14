@@ -51,7 +51,7 @@ if TYPE_CHECKING:
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 
-# Everything else a command needs -- networkx, conda-build, GitPython,
+# Everything else a command needs -- networkx, conda-build,
 # PyGithub, aiohttp, the repo/graph/config helpers -- is imported inside the
 # command bodies below. Rendering ``--help`` only requires the command
 # callables and the parameter types above, so importing the rest eagerly made
@@ -181,18 +181,11 @@ LogfileOpt = Annotated[Path | None, typer.Option("--logfile", help="Write log to
 LogfileLevelOpt = Annotated[
     LogLevel, typer.Option("--logfile-level", help="Log level for log file")
 ]
-RepodataCacheOpt = Annotated[
-    Path | None,
-    typer.Option(
-        "--repodata-cache",
-        help="Repodata cache directory (default: platform/XDG cache directory). Entries expire after 8 hours.",
-    ),
-]
-LegacyCacheOpt = Annotated[
+CacheOpt = Annotated[
     Path | None,
     typer.Option(
         "--cache",
-        help="Cache filename prefix (compatible with older scripts). Caches are stored under PREFIX.d; --repodata-cache overrides only the repodata directory.",
+        help="Shared cache directory for repodata, recipe graphs, upstream downloads, and rattler-build downloads (default: platform/XDG cache directory).",
     ),
 ]
 RefreshRepodataOpt = Annotated[
@@ -203,22 +196,18 @@ RefreshRepodataOpt = Annotated[
 ]
 
 
-def _configure_caches(
-    directory: Path | None, refresh: bool, legacy_prefix: Path | None = None
-) -> None:
+def _configure_caches(directory: Path | None, refresh: bool) -> None:
     from .conda.repodata import RepoData
     from .support.caching import configure_cache_root
 
-    configure_cache_root(None)
-    if legacy_prefix is not None:
-        if directory is not None:
-            raise typer.BadParameter("Use either --cache or --repodata-cache, not both")
-        configure_cache_root(legacy_prefix.with_name(legacy_prefix.name + ".d"))
-    elif directory is not None and directory.is_file():
-        # Older build scripts passed a pickle filename to --repodata-cache.
-        # Leave that file intact and use a sibling directory for current entries.
-        directory = directory.with_name(directory.name + ".d")
-    RepoData.configure_cache(directory, refresh=refresh)
+    if directory is not None:
+        directory = directory.expanduser()
+        if directory.exists() and not directory.is_dir():
+            raise typer.BadParameter(
+                "Cache path must be a directory", param_hint="--cache"
+            )
+    configure_cache_root(directory)
+    RepoData.configure_cache(refresh=refresh)
 
 
 RecipeFolderArg = Annotated[
@@ -622,15 +611,17 @@ def build(
     ] = False,
     image_records_dir: ImageRecordsDirOpt = None,
     use_existing_auth: UseExistingAuthOpt = False,
-    container_pkgs_cache: Annotated[
+    container_cache: Annotated[
         Path | None,
         typer.Option(
-            "--container-pkgs-cache",
-            help="Host directory bind-mounted at /opt/conda/pkgs in build "
-            "containers (--docker) so repodata, shards indexes and "
-            "downloaded build/host env packages persist across the "
-            "containers of one build run. Falls back to the "
-            "BIOCONDA_UTILS_CONTAINER_PKGS_CACHE environment variable.",
+            "--container-cache",
+            help="Host directory with per-tool cache subdirectories "
+            "bind-mounted into build containers (--docker): conda/ at "
+            "/opt/conda/pkgs and rattler/ at /opt/rattler/cache (exported "
+            "as RATTLER_CACHE_DIR), so repodata, shards indexes and "
+            "downloaded packages persist across the containers of one "
+            "build run. Falls back to the BIOCONDA_UTILS_CONTAINER_CACHE "
+            "environment variable.",
         ),
     ] = None,
     exclude: Annotated[
@@ -645,7 +636,7 @@ def build(
         ),
     ] = None,
     threads: ThreadsOpt = 16,
-    repodata_cache: RepodataCacheOpt = None,
+    cache: CacheOpt = None,
     refresh_repodata: RefreshRepodataOpt = False,
     loglevel: LoglevelOpt = "info",
     logfile: LogfileOpt = None,
@@ -672,23 +663,21 @@ def build(
     from .config import load_config
     from .containers import docker_utils
     from .rattler.rattler_build_bridge import (
-        get_default_rattler_cache_dir_path,
+        get_rattler_cache_dir_path,
         set_rattler_cache_to_dir,
     )
     from .support.subproc import run
 
     cfg = load_config(config)
 
-    # setting the rattler cache to custom path
-    # TODO (rb): should this be exposed to the user?
-    # how should this be handled for docker containers?
-    rattler_cache_dir: Path = get_default_rattler_cache_dir_path()
+    _configure_caches(cache, refresh_repodata)
+
+    rattler_cache_dir: Path = get_rattler_cache_dir_path()
     set_rattler_cache_to_dir(rattler_cache_dir)
 
     # TODO: should we also load the rattler variants config here?
     # currently it is loaded by rattler.ratter_build_bridge.load_rattler_build_global_variants
     # using a semi-hardcoded path
-    _configure_caches(repodata_cache, refresh_repodata)
     setup = cfg.get("setup", None)
     if setup:
         logger.debug("Running setup: %s", setup)
@@ -728,7 +717,7 @@ def build(
             build_image=build_image,
             docker_base_image=docker_base_image,
             target_platform=target_platform,
-            container_pkgs_cache=container_pkgs_cache,
+            container_cache=container_cache,
         )
     else:
         docker_builder = None
@@ -906,8 +895,7 @@ def lint(
     recipe_folder: LintRecipeFolderArg = Path("recipes/"),
     config: LintConfigArg = Path("config.yml"),
     packages: PackagesOpt = None,
-    repodata_cache: RepodataCacheOpt = None,
-    cache: LegacyCacheOpt = None,
+    cache: CacheOpt = None,
     refresh_repodata: RefreshRepodataOpt = False,
     list_checks: Annotated[
         bool,
@@ -948,7 +936,7 @@ def lint(
         _validate_path_exists(recipe_folder)
         _validate_path_exists(config)
         config_data = load_config(config)
-        _configure_caches(repodata_cache, refresh_repodata, cache)
+        _configure_caches(cache, refresh_repodata)
         recipes: list[RecipePath] = get_recipes(
             config_data,
             Path(recipe_folder),
@@ -1136,8 +1124,7 @@ def update_pinning(
             "--no-leaves", help="Only update recipes with dependent packages."
         ),
     ] = False,
-    repodata_cache: RepodataCacheOpt = None,
-    cache: LegacyCacheOpt = None,
+    cache: CacheOpt = None,
     refresh_repodata: RefreshRepodataOpt = False,
     pdb: PdbOpt = False,
     threads: ThreadsOpt = 16,
@@ -1162,7 +1149,7 @@ def update_pinning(
         if skip_additional_channels:
             config_data["channels"] += skip_additional_channels
         variant_keys = frozenset(skip_variants or ())
-        _configure_caches(repodata_cache, refresh_repodata, cache)
+        _configure_caches(cache, refresh_repodata)
         build_config = load_conda_build_config()
         skiplist = Skiplist(config_data, recipe_folder)
         from . import recipe
@@ -1432,8 +1419,7 @@ def autobump(
             help="Globs for package[s] to exclude from scan. Can be specified more than once",
         ),
     ] = None,
-    repodata_cache: RepodataCacheOpt = None,
-    cache: LegacyCacheOpt = None,
+    cache: CacheOpt = None,
     refresh_repodata: RefreshRepodataOpt = False,
     failed_urls: Annotated[
         Path | None,
@@ -1573,7 +1559,7 @@ def autobump(
         # load and register config
         config_dict = load_config(config)
 
-        _configure_caches(repodata_cache, refresh_repodata, cache)
+        _configure_caches(cache, refresh_repodata)
         from . import autobump, githubhandler
 
         if no_follow_graph:
@@ -1668,18 +1654,19 @@ def autobump(
         # Write the recipe. For making PRs, the recipe should be written to a branch
         # of its own.
         if create_branch or create_pr:
+            assert git_handler is not None
             scanner.add(autobump.GitWriteRecipe, git_handler)
+            if create_pr:
+                token = os.environ.get("GITHUB_TOKEN")
+                if not token and (not dry_run):
+                    logger.critical("GITHUB_TOKEN required to create PRs")
+                    sys.exit(1)
+                github_handler = githubhandler.AiohttpGitHubHandler(
+                    token, dry_run, "bioconda", "bioconda-recipes"
+                )
+                scanner.add(autobump.CreatePullRequest, git_handler, github_handler)
         else:
             scanner.add(autobump.WriteRecipe)
-        if create_pr:
-            token = os.environ.get("GITHUB_TOKEN")
-            if not token and (not dry_run):
-                logger.critical("GITHUB_TOKEN required to create PRs")
-                sys.exit(1)
-            github_handler = githubhandler.AiohttpGitHubHandler(
-                token, dry_run, "bioconda", "bioconda-recipes"
-            )
-            scanner.add(autobump.CreatePullRequest, git_handler, github_handler)
 
         # Terminate the scanning pipeline after x recipes have reached this point.
         if max_updates:
@@ -1693,7 +1680,7 @@ def autobump(
             return
         raise
     finally:
-        # In addition to releasing GitPython's resources, BiocondaRepo.close()
+        # BiocondaRepo.close()
         # restores the branch that was active before autobump started.  This
         # must also happen for BaseExceptions such as KeyboardInterrupt.
         if git_handler is not None:

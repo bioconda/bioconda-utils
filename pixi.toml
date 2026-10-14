@@ -18,6 +18,8 @@ conda-build = "26.7.*"
 conda-index = "0.12.*"
 conda-package-streaming = "0.13.*"
 mamba = "2.5.*"
+zstandard = ">=0.23,<1"
+msgpack-python = ">=1.1,<2"
 
 # CLI
 typer = "0.26.*"
@@ -54,7 +56,6 @@ backoff = "2.2.*"  # retrying of failed API calls
 cachetools = "7.0.*"  # GitHub API response cache
 
 # client API wrappers
-gitpython = "3.1.*"  # githandler
 gidgethub = "5.*"  # githubhandler
 
 # bioconductor-skeleton and HTTP API clients

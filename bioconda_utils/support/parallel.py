@@ -8,7 +8,7 @@ import logging
 import os
 import signal
 import threading
-from collections.abc import Iterator
+from collections.abc import Generator
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from contextlib import contextmanager
 from functools import partial
@@ -19,20 +19,23 @@ from pathlib import Path
 
 from .logsetup import progress_display
 
-_max_threads = 1
+_max_threads: int = 1
 
 
-def set_max_threads(n):
+def set_max_threads(n: int) -> None:
     global _max_threads
     _max_threads = n
 
 
-def threads_to_use():
+def threads_to_use() -> int:
     """Returns the number of cores we are allowed to run on"""
     if hasattr(os, "sched_getaffinity"):
         cores = len(os.sched_getaffinity(0))
     else:
-        cores = os.cpu_count()
+        cpu_count = os.cpu_count()
+        # os.cpu_count() returns None when the count cannot be determined.
+        # Fall back to the configured cap rather than handing None to min().
+        cores = _max_threads if cpu_count is None else cpu_count
     return min(_max_threads, cores)
 
 
@@ -81,7 +84,7 @@ def _initialize_worker(
 
 
 @contextmanager
-def worker_pool(workers: int) -> Iterator[ProcessPoolExecutor]:
+def worker_pool(workers: int) -> Generator[ProcessPoolExecutor]:
     """Start independent workers with explicit configuration and parent logging."""
     from ..conda.repodata import RepoData
     from .caching import get_cache_root

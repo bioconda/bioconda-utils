@@ -11,6 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 
 from bioconda_utils.conda.repodata import RepoData
+from bioconda_utils.conda.shards import ShardClient
 from bioconda_utils.support.parallel import worker_pool
 
 
@@ -37,6 +38,11 @@ def repodata(name="example", version="1", subdir="noarch", records=None):
 def repository(monkeypatch):
     monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda", "conda-forge"]})
     monkeypatch.setattr(RepoData, "platforms", ["linux-64", "noarch"])
+    monkeypatch.setattr(
+        ShardClient,
+        "get_repository_shards",
+        lambda channel, subdir, names, repodata_url: None,
+    )
     return RepoData()
 
 
