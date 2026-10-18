@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from dataclasses import dataclass
 from multiprocessing.pool import ThreadPool
 from pathlib import Path
@@ -19,7 +19,6 @@ from typing import Any, cast
 import aiofiles
 import aiohttp
 
-from .._types import RepoDataKey
 from ..support import http
 from ..support.logsetup import progress_display
 
@@ -38,18 +37,14 @@ class FetchRequest:
       url: The URL (or ``file://`` path) to download.
       description: Label for the progress display. Falls back to **url**
           when left empty.
-      metadata: Context passed to **transform** alongside the downloaded
-          bytes; ignored when no **transform** is given.
     """
 
     url: str
     description: str = ""
-    metadata: RepoDataKey | None = None
 
 
 def fetch(
     requests: Iterable[FetchRequest],
-    transform: Callable[[bytes, RepoDataKey], Any] | None = None,
     *,
     allow_404: bool = False,
     return_exceptions: bool = False,
@@ -63,9 +58,6 @@ def fetch(
 
     Args:
       requests: The downloads to perform.
-      transform: As each download completes, the raw bytes and the matching
-          :attr:`FetchRequest.metadata` are passed through this function,
-          e.g. to offload json parsing into the download loop.
     """
     try:
         asyncio.get_running_loop()
@@ -79,7 +71,6 @@ def fetch(
             res = pool.apply(
                 lambda: fetch(
                     requests,
-                    transform,
                     allow_404=allow_404,
                     return_exceptions=return_exceptions,
                 )
@@ -93,7 +84,6 @@ def fetch(
         asyncio.run(
             async_fetch(
                 requests,
-                transform,
                 allow_404=allow_404,
                 return_exceptions=return_exceptions,
             )
@@ -103,7 +93,6 @@ def fetch(
 
 async def async_fetch(
     requests: Iterable[FetchRequest] = (),
-    transform: Callable[[bytes, RepoDataKey], Any] | None = None,
     *,
     allow_404: bool = False,
     return_exceptions: bool = False,
@@ -117,8 +106,6 @@ async def async_fetch(
                     session,
                     request.url,
                     request.description or request.url,
-                    transform=transform,
-                    metadata=request.metadata,
                     allow_404=allow_404,
                 )
             except Exception as exc:
@@ -155,11 +142,9 @@ async def _async_fetch_one(
     session: aiohttp.ClientSession,
     url: str,
     description: str,
-    transform: Callable[[bytes, RepoDataKey], Any] | None = None,
-    metadata: RepoDataKey | None = None,
     *,
     allow_404: bool = False,
-) -> Any | bytes:
+) -> bytes | None:
     if url.startswith("file://"):
         local_path = Path(url[7:])
         if local_path.exists():
@@ -187,7 +172,4 @@ async def _async_fetch_one(
                 description,
                 block_size=1024 * 16,
             )
-    if transform is None:
-        return raw
-    assert metadata is not None
-    return transform(raw, metadata)
+    return raw

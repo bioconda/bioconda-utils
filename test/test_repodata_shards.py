@@ -36,7 +36,8 @@ def index_url(repository, channel, subdir="noarch"):
 def test_repodata_rejects_invalid_shard_indexes(data):
     assert (
         ShardClient._parse_shard_index(
-            _pack_shard(data), ("bioconda", PackageSubdir.LINUX_64)
+            _pack_shard(data),
+            "https://conda.anaconda.org/bioconda/linux-64/repodata_shards.msgpack.zst",
         )
         is None
     )
@@ -77,24 +78,20 @@ def test_repodata_rejects_invalid_package_shards(data):
         ("https://cdn.example/shards", "https://cdn.example/shards/hash.msgpack.zst"),
     ],
 )
-def test_repodata_resolves_shards_base_url(monkeypatch, shards_base_url, expected):
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
+def test_repodata_resolves_shards_base_url(shards_base_url, expected):
     repository = RepoData()
-    index = shards._CachedShardIndex(
-        shards={},
-        base_url="",
-        shards_base_url=shards_base_url,
-        fetched_at=datetime.datetime.now(datetime.UTC),
+    index = ShardClient._parse_shard_index(
+        _pack_shard(
+            {
+                "version": 1,
+                "info": {"shards_base_url": shards_base_url},
+                "shards": {},
+            }
+        ),
+        index_url(repository, "bioconda", PackageSubdir.LINUX_64),
     )
-
-    assert (
-        ShardClient.shard_url(
-            repository._make_repodata_url("bioconda", PackageSubdir.LINUX_64),
-            index,
-            "hash",
-        )
-        == expected
-    )
+    assert index is not None
+    assert ShardClient.shard_url(index, "hash") == expected
 
 
 @pytest.fixture
@@ -105,16 +102,11 @@ def sharded(monkeypatch):
     requests = []
     bodies = {}
 
-    def download(downloads, transform=None, **kwargs):
+    def download(downloads, **kwargs):
         result = []
         for request in downloads:
             requests.append(request.url)
-            body = bodies.get(request.url)
-            result.append(
-                body
-                if isinstance(body, Exception) or transform is None
-                else transform(body, request.metadata)
-            )
+            result.append(bodies.get(request.url))
         return result
 
     monkeypatch.setattr(shards, "fetch", download)

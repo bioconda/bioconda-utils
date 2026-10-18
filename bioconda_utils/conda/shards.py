@@ -21,7 +21,7 @@ import aiohttp
 import msgpack
 import zstandard
 
-from .._types import RepoDataKey, Subdir
+from .._types import Subdir
 from .fetch import FetchRequest, fetch
 
 logger = logging.getLogger(__name__)
@@ -39,8 +39,14 @@ def _unpack_msgpack_zst(data: bytes) -> Any:
 
 @dataclass
 class _CachedShardIndex:
+    """Parsed CEP 16 shard index.
+
+    ``shards`` maps package names to hex-encoded shard hashes, and
+    ``shards_base_url`` is the base URL of the shard files, resolved
+    against the index URL at parse time.
+    """
+
     shards: dict[str, str]
-    base_url: str
     shards_base_url: str
     fetched_at: datetime.datetime
 
@@ -86,25 +92,15 @@ class ShardClient:
         return repodata_url.rsplit("/", 1)[0] + "/" + SHARDS_INDEX_FILENAME
 
     @staticmethod
-    def shard_url(
-        repodata_url: str,
-        shard_index: _CachedShardIndex,
-        hex_hash: str,
-    ) -> str:
-        index_url = ShardClient.shards_index_url(repodata_url)
-        shards_base = shard_index.shards_base_url or "./"
-        if not shards_base.endswith("/"):
-            shards_base += "/"
-        shards_url = urljoin(index_url, shards_base)
-        return urljoin(shards_url, f"{hex_hash}.msgpack.zst")
+    def shard_url(shard_index: _CachedShardIndex, hex_hash: str) -> str:
+        return urljoin(shard_index.shards_base_url, f"{hex_hash}.msgpack.zst")
 
     @staticmethod
     def _parse_shard_index(
-        data: bytes | None, repo_meta: RepoDataKey
+        data: bytes | None, index_url: str
     ) -> _CachedShardIndex | None:
         if not data:
             return None
-        channel, subdir = repo_meta
         try:
             raw = _unpack_msgpack_zst(data)
 
@@ -125,10 +121,13 @@ class ShardClient:
                     hash_val.hex() if isinstance(hash_val, bytes) else hash_val
                 )
 
-            base_url = info.get("base_url", "")
             shards_base_url = info.get("shards_base_url", "")
-            if not isinstance(base_url, str) or not isinstance(shards_base_url, str):
-                raise TypeError("invalid shard index URLs")
+            if not isinstance(shards_base_url, str):
+                raise TypeError("invalid shard index base URL")
+            # Shard files live next to the index unless it says otherwise.
+            shards_base_url = urljoin(index_url, shards_base_url or "./")
+            if not shards_base_url.endswith("/"):
+                shards_base_url += "/"
         except (
             zstandard.ZstdError,
             msgpack.UnpackException,
@@ -138,16 +137,14 @@ class ShardClient:
             OSError,
         ) as exc:
             logger.debug(
-                "Failed to decompress/unpack shards index for %s/%s: %s",
-                channel,
-                subdir,
+                "Failed to decompress/unpack shards index at %s: %s",
+                index_url,
                 exc,
             )
             return None
 
         return _CachedShardIndex(
             shards=shards_map,
-            base_url=base_url,
             shards_base_url=shards_base_url,
             fetched_at=datetime.datetime.now(datetime.UTC),
         )
@@ -213,9 +210,9 @@ class ShardClient:
         cls, channel: str, subdir: Subdir, repodata_url: str
     ) -> _CachedShardIndex | None:
         """Return a fresh shard index, or None when shards are unavailable."""
-        cache_key = cls.shards_index_url(repodata_url)
+        index_url = cls.shards_index_url(repodata_url)
         now = datetime.datetime.now(datetime.UTC)
-        unavailable_at = cls._shards_unavailable.get(cache_key)
+        unavailable_at = cls._shards_unavailable.get(index_url)
         if (
             unavailable_at is not None
             and 0
@@ -223,8 +220,8 @@ class ShardClient:
             <= cls.shards_unavailable_timeout
         ):
             return None
-        cls._shards_unavailable.pop(cache_key, None)
-        cached = cls._shard_index_cache.get(cache_key)
+        cls._shards_unavailable.pop(index_url, None)
+        cached = cls._shard_index_cache.get(index_url)
         if (
             cached is not None
             and 0
@@ -232,17 +229,10 @@ class ShardClient:
             <= cls.shard_index_cache_timeout
         ):
             return cached
-        cls._shard_index_cache.pop(cache_key, None)
+        cls._shard_index_cache.pop(index_url, None)
         try:
-            [index] = fetch(
-                [
-                    FetchRequest(
-                        cache_key,
-                        f"{channel}/{subdir} shards index",
-                        (channel, subdir),
-                    )
-                ],
-                transform=cls._parse_shard_index,
+            [raw] = fetch(
+                [FetchRequest(index_url, f"{channel}/{subdir} shards index")],
                 allow_404=True,
                 return_exceptions=True,
             )
@@ -250,11 +240,16 @@ class ShardClient:
             logger.debug(
                 "Error fetching shard index for %s/%s: %s", channel, subdir, exc
             )
-            index = exc
-        if isinstance(index, Exception) or index is None:
-            cls._shards_unavailable[cache_key] = now
+            raw = exc
+        index = (
+            None
+            if isinstance(raw, Exception)
+            else cls._parse_shard_index(raw, index_url)
+        )
+        if index is None:
+            cls._shards_unavailable[index_url] = now
             return None
-        cls._shard_index_cache[cache_key] = index
+        cls._shard_index_cache[index_url] = index
         return index
 
     @classmethod
@@ -349,9 +344,7 @@ class ShardClient:
             if shard_hash is None:
                 # A missing name in a valid index is authoritative.
                 continue
-            shard_name_by_url.setdefault(
-                cls.shard_url(repodata_url, index, shard_hash), name
-            )
+            shard_name_by_url.setdefault(cls.shard_url(index, shard_hash), name)
         records_by_url: dict[str, list[dict[str, Any]]] = {}
         missing = cls._cached_shards(shard_name_by_url, records_by_url)
         if missing is None:
