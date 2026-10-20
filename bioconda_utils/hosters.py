@@ -920,4 +920,26 @@ class GitlabTag(OrderedHTMLHoster):
     ]
 
 
+class CratesIO(JSONHoster):
+    """Rust crates hosted at static.crates.io"""
+
+    async def get_versions_from_json(self, data, req, orig_version):
+        return [
+            {
+                "version": vers["num"],
+                "link": self.link_format.format(
+                    package=self.vals["package"], version=vers["num"]
+                ),
+                "sha256": vers["checksum"],
+            }
+            for vers in data["versions"]
+            if not vers["yanked"]
+        ]
+
+    releases_formats: ClassVar = ["https://crates.io/api/v1/crates/{package}/versions"]
+    link_format = "https://static.crates.io/crates/{package}/{package}-{version}.crate"
+    package_pattern = r"(?P<package>[A-Za-z][\w-]*)"
+    url_pattern = r"static\.crates\.io/crates/{package}/{package}-{version}\.crate"
+
+
 logger.info("Hosters loaded: %s", [h.__name__ for h in Hoster.hoster_types])
