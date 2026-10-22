@@ -14,6 +14,18 @@ from ruamel.yaml import YAML
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
+BranchName = NewType("BranchName", str)
+RemoteRef = NewType("RemoteRef", str)
+CommitSha = NewType("CommitSha", str)
+SymbolicRef = NewType("SymbolicRef", str)
+RevisionExpression = NewType("RevisionExpression", str)
+
+# Git accepts an open-ended revision grammar: branches, tags, remote refs,
+# commit SHAs, symbolic refs such as HEAD, and expressions such as HEAD~1.
+# Keep that open-ended category explicit instead of falling back to bare str.
+type GitRev = BranchName | RemoteRef | CommitSha | SymbolicRef | RevisionExpression
+
+
 @dataclass(frozen=True)
 class GitRange:
     """Changes on ``ref`` since it diverged from ``base``.
@@ -21,8 +33,8 @@ class GitRange:
     This matches the directional merge-base behavior of ``git diff A...B``.
     """
 
-    base: str
-    ref: str = "HEAD"
+    base: GitRev
+    ref: GitRev = SymbolicRef("HEAD")
 
     @classmethod
     def parse(cls, spec: str) -> "GitRange":
@@ -38,7 +50,7 @@ class GitRange:
                 raise ValueError("git range must have the form BASE...REF")
             if ".." in base or ".." in ref:
                 raise ValueError("git refs cannot contain '..'")
-            return cls(base, ref)
+            return cls(RevisionExpression(base), RevisionExpression(ref))
 
         if ".." in spec:
             raise ValueError(
@@ -46,7 +58,7 @@ class GitRange:
                 "changes on REF since its merge base with BASE"
             )
 
-        return cls(spec)
+        return cls(RevisionExpression(spec))
 
     def __str__(self) -> str:
         return f"{self.base}...{self.ref}"
@@ -93,14 +105,6 @@ class GitHandlerFailure(Exception):
     """Something went wrong interacting with git"""
 
 
-BranchName = NewType("BranchName", str)
-RemoteRef = NewType("RemoteRef", str)
-CommitSha = NewType("CommitSha", str)
-
-# A GitRev represents any revision specifier: branch name, remote tracking ref, commit SHA, or symbolic rev ("HEAD")
-type GitRev = BranchName | RemoteRef | CommitSha | str
-
-
 @dataclass(frozen=True)
 class GitActor:
     """Git author or committer representation."""
@@ -136,7 +140,7 @@ class GitRemote:
         cmd.extend(args)
         self.repo._git(cmd)
 
-    def pull(self, branch: str) -> None:
+    def pull(self, branch: BranchName) -> None:
         self.repo._git(["pull", self.name, branch])
 
     def push(self, *args: str) -> None:
@@ -306,11 +310,11 @@ class GitHandlerBase:
         return matching[0]
 
     async def branch_is_current(
-        self, branch: GitRev, path: Path, master: GitRev = "master"
+        self, branch: GitRev, path: Path, master: GitRev = BranchName("master")
     ) -> bool:
         """Checks if **branch** is missing any commits to **path**
         as compared to **master**"""
-        branch_name = getattr(branch, "name", str(branch))
+        branch_name = str(branch)
         master_name = str(master)
         proc = await asyncio.create_subprocess_exec(
             "git",
@@ -330,10 +334,9 @@ class GitHandlerBase:
             )
         return len(stdout) == 0
 
-    def delete_local_branch(self, branch: BranchName | CommitSha | str) -> None:
+    def delete_local_branch(self, branch: BranchName) -> None:
         """Deletes **branch** locally"""
-        branch_name = getattr(branch, "name", str(branch))
-        self._git(["branch", "-D", branch_name])
+        self._git(["branch", "-D", str(branch)])
 
     def delete_remote_branch(self, branch_name: BranchName) -> None:
         """Deletes **branch** on fork remote"""
@@ -343,7 +346,7 @@ class GitHandlerBase:
         else:
             logger.info("Would delete branch %s", branch_name)
 
-    def has_local_branch(self, branch_name: BranchName | str) -> bool:
+    def has_local_branch(self, branch_name: BranchName) -> bool:
         """Checks if local branch named **branch_name** exists"""
         res = self._git(
             ["show-ref", "--verify", "--quiet", f"refs/heads/{branch_name}"],
@@ -351,18 +354,10 @@ class GitHandlerBase:
         )
         return res.returncode == 0
 
-    def get_local_branch(
-        self, branch_name: BranchName | str
-    ) -> BranchName | CommitSha | None:
+    def get_local_branch(self, branch_name: BranchName) -> BranchName | None:
         """Finds local branch named **branch_name**"""
         if self.has_local_branch(branch_name):
-            return BranchName(str(branch_name))
-        res = self._git(
-            ["rev-parse", "--verify", "--quiet", f"{branch_name}^{{commit}}"],
-            check=False,
-        )
-        if res.returncode == 0:
-            return CommitSha(res.stdout.strip())
+            return branch_name
         return None
 
     def get_active_branch(self) -> BranchName:
@@ -391,7 +386,7 @@ class GitHandlerBase:
         return False
 
     def has_remote_branch(
-        self, branch_name: BranchName | str, remote: str | GitRemote | None = None
+        self, branch_name: BranchName, remote: str | GitRemote | None = None
     ) -> bool:
         """Checks if remote branch named **branch_name** exists"""
         remote_name = (
@@ -410,47 +405,15 @@ class GitHandlerBase:
         )
         return res.returncode == 0
 
-    def get_remote_branch(
-        self, branch_name: BranchName | str, try_fetch: bool = False
-    ) -> RemoteRef | CommitSha | None:
-        """Finds fork remote branch named **branch_name**"""
+    def get_remote_branch(self, branch_name: BranchName) -> RemoteRef | None:
+        """Finds a cached fork remote branch without fetching or resolving revisions."""
         if self.has_remote_branch(branch_name):
             return RemoteRef(f"{self.fork_remote.name}/{branch_name}")
-
-        # only do slow fetch attempts for SHA refs
-        if not self.is_sha(str(branch_name)):
-            return None
-
-        depths = (0, 50, 200) if try_fetch else (None,)
-        for depth in depths:
-            logger.info("Trying depth %s", depth)
-            try:
-                if depth:
-                    self.fork_remote.fetch(depth=depth)
-                    self.fork_remote.fetch(str(branch_name), depth=depth)
-                else:
-                    self.fork_remote.fetch(str(branch_name))
-
-                if self.has_remote_branch(branch_name):
-                    return RemoteRef(f"{self.fork_remote.name}/{branch_name}")
-
-                # Check if SHA resolves
-                res = self._git(
-                    ["cat-file", "-e", f"{branch_name}^{{commit}}"], check=False
-                )
-                if res.returncode == 0:
-                    return CommitSha(str(branch_name))
-                break
-            except GitHandlerFailure:
-                pass
-        else:
-            logger.info("Failed to fetch %s", branch_name)
-            return None
         return None
 
     def get_latest_master(self) -> CommitSha:
         self.home_remote.fetch("master")
-        return self.rev_parse("FETCH_HEAD")
+        return self.rev_parse(SymbolicRef("FETCH_HEAD"))
 
     def read_from_branch(self, branch: GitRev, file_path: Path) -> str:
         """Reads contents of file **file_path** from git branch **branch**"""
@@ -458,7 +421,7 @@ class GitHandlerBase:
         if not target.is_relative_to(self._working_dir):
             raise RuntimeError(f"File {target} not inside {self._working_dir}")
         rel_path = target.relative_to(self._working_dir)
-        ref = getattr(branch, "commit", getattr(branch, "name", str(branch)))
+        ref = str(branch)
         res = self._git(["show", f"{ref}:{rel_path.as_posix()}"], check=False)
         if res.returncode == 0:
             return res.stdout
@@ -470,20 +433,16 @@ class GitHandlerBase:
     def create_local_branch(
         self,
         branch_name: BranchName,
-        remote_branch: RemoteRef | BranchName | str | None = None,
+        start_point: GitRev | None = None,
     ) -> BranchName:
-        """Creates local branch from remote **branch_name**"""
-        remote_branch_name = remote_branch or branch_name
-        if remote_branch is None:
-            start_point = self.get_remote_branch(branch_name, try_fetch=False)
-        else:
-            start_point = self.get_remote_branch(
-                BranchName(str(remote_branch)), try_fetch=False
-            ) or str(remote_branch)
+        """Creates a branch at an explicit revision or its cached fork remote branch.
+
+        Explicit revisions are passed directly to Git. No remote fetch is performed.
+        """
         if start_point is None:
-            raise GitHandlerFailure(
-                f"Unable to find remote branch {remote_branch_name}"
-            )
+            start_point = self.get_remote_branch(branch_name)
+        if start_point is None:
+            raise GitHandlerFailure(f"Unable to find remote branch {branch_name}")
         self._git(["branch", str(branch_name), str(start_point)])
         return branch_name
 
@@ -526,18 +485,14 @@ class GitHandlerBase:
           example happen if branches were deleted or if the repository is
           shallow and the merge base commit is not available.
         """
-        if not ref:
+        if ref is None:
             try:
                 ref = self.get_active_branch()
             except TypeError:
-                ref = self.rev_parse("HEAD")
-        else:
-            ref = getattr(ref, "commit", getattr(ref, "name", str(ref)))
+                ref = self.rev_parse(SymbolicRef("HEAD"))
 
-        if not other:
-            other = f"{self.home_remote.name}/master"
-        else:
-            other = getattr(other, "commit", getattr(other, "name", str(other)))
+        if other is None:
+            other = RemoteRef(f"{self.home_remote.name}/master")
 
         depths = (0, 50, 200) if try_fetch else (0,)
         merge_bases: list[CommitSha] = []
@@ -575,11 +530,7 @@ class GitHandlerBase:
         Returns:
           Generator over modified or created (**not deleted**) files.
         """
-        ref_str = (
-            "HEAD"
-            if not ref
-            else getattr(ref, "commit", getattr(ref, "name", str(ref)))
-        )
+        ref_str = "HEAD" if not ref else str(ref)
         merge_base = self.get_merge_base(ref, other)
         res = self._git(
             ["diff", "--name-only", "--diff-filter=d", str(merge_base), ref_str]
@@ -599,7 +550,7 @@ class GitHandlerBase:
                 seen.add(fname)
                 yield Path(fname)
 
-    def prepare_branch(self, branch_name: BranchName | str) -> None:
+    def prepare_branch(self, branch_name: BranchName) -> None:
         """Checks out **branch_name**, creating it from home remote master if needed"""
         if not self.has_local_branch(branch_name):
             logger.info("Creating new branch %s", branch_name)
@@ -611,7 +562,7 @@ class GitHandlerBase:
     def commit_and_push_changes(
         self,
         files: list[Path],
-        branch_name: BranchName | str | None,
+        branch_name: BranchName | None,
         msg: str,
         sign: bool | str = False,
     ) -> bool:
@@ -622,9 +573,11 @@ class GitHandlerBase:
         """
         if branch_name is None:
             try:
-                branch_name = self.get_active_branch()
+                push_ref: GitRev = self.get_active_branch()
             except TypeError:
-                branch_name = "HEAD"
+                push_ref = SymbolicRef("HEAD")
+        else:
+            push_ref = branch_name
         if not files:
             files = [Path(f) for f in self.list_modified_files()]
         if files:
@@ -654,17 +607,15 @@ class GitHandlerBase:
         self._git(commit_cmd)
 
         if not self.dry_run:
-            logger.info("Pushing branch %s", branch_name)
+            logger.info("Pushing branch %s", push_ref)
             push_res = self._git(
-                ["push", self.fork_remote.name, str(branch_name)], check=False
+                ["push", self.fork_remote.name, str(push_ref)], check=False
             )
             if push_res.returncode != 0:
-                logger.error(
-                    "Failed to push branch %s: %s", branch_name, push_res.stderr
-                )
+                logger.error("Failed to push branch %s: %s", push_ref, push_res.stderr)
                 raise GitHandlerFailure(push_res.stderr or push_res.stdout)
         else:
-            logger.info("Would push branch %s", branch_name)
+            logger.info("Would push branch %s", push_ref)
         return True
 
     def set_user(self, user: str, email: str | None = None) -> None:
@@ -724,13 +675,9 @@ class BiocondaRepoMixin(GitHandlerBase):
             try:
                 branch: GitRev = self.get_active_branch()
             except TypeError:
-                branch = "HEAD"
-        elif isinstance(ref, str):
-            branch = self.get_local_branch(ref) or ref
+                branch = SymbolicRef("HEAD")
         else:
             branch = ref
-        if branch is None:
-            raise GitHandlerFailure(f"Unable to resolve branch {ref}")
         config_data = self.read_from_branch(branch, self.config_file)
         config = YAML(typ="safe").load(config_data)
         blacklists = config.get("blacklists", [])
@@ -854,7 +801,7 @@ class GitHandler(GitHandlerBase):
         logger.warning("Checking out master")
         self.checkout(BranchName("master"))
         logger.info("Updating master to latest project master")
-        self.home_remote.pull("master")
+        self.home_remote.pull(BranchName("master"))
         logger.info("Updating and pruning remotes")
         self.home_remote.fetch(prune=True)
         self.fork_remote.fetch(prune=True)

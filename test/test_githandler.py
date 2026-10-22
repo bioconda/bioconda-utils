@@ -10,11 +10,13 @@ import yaml
 from bioconda_utils.githandler import (
     BiocondaRepoMixin,
     BranchName,
-    CommitSha,
     GitActor,
     GitHandler,
     GitHandlerFailure,
     GitRange,
+    RemoteRef,
+    RevisionExpression,
+    SymbolicRef,
 )
 
 
@@ -125,11 +127,15 @@ def test_githandler_branches_and_read(sample_git_repo: Path):
     assert active == "master"
 
     # Read from branch
-    content = handler.read_from_branch("master", sample_git_repo / "config.yml")
+    content = handler.read_from_branch(
+        BranchName("master"), sample_git_repo / "config.yml"
+    )
     assert "blacklists" in content
 
     with pytest.raises(GitHandlerFailure):
-        handler.read_from_branch("master", sample_git_repo / "nonexistent.yml")
+        handler.read_from_branch(
+            BranchName("master"), sample_git_repo / "nonexistent.yml"
+        )
 
     # Create a new branch with a change
     run_git(["checkout", "-b", "feature"], cwd=sample_git_repo)
@@ -140,11 +146,13 @@ def test_githandler_branches_and_read(sample_git_repo: Path):
     run_git(["commit", "-m", "add pkg_b"], cwd=sample_git_repo)
 
     # Merge base between master and feature
-    mb = handler.get_merge_base("feature", "master")
+    mb = handler.get_merge_base(BranchName("feature"), BranchName("master"))
     assert handler.is_sha(mb)
 
     # Changed files
-    changed = list(handler.list_changed_files("feature", "master"))
+    changed = list(
+        handler.list_changed_files(BranchName("feature"), BranchName("master"))
+    )
     assert Path("recipes/pkg_b/meta.yaml") in changed
 
 
@@ -165,7 +173,7 @@ def test_bioconda_repo_recipes_to_build(sample_git_repo: Path):
     run_git(["add", "."], cwd=sample_git_repo)
     run_git(["commit", "-m", "add pkg_c"], cwd=sample_git_repo)
 
-    to_build = repo.get_recipes_to_build("feature", "master")
+    to_build = repo.get_recipes_to_build(BranchName("feature"), BranchName("master"))
     assert Path("recipes/pkg_c") in to_build
 
 
@@ -187,17 +195,19 @@ def test_commit_and_push_changes(sample_git_repo: Path):
     handler.set_user("Bioconda Bot", "bot@bioconda.org")
 
     # When no changes, commit_and_push_changes returns False
-    assert not handler.commit_and_push_changes([], "master", "empty commit")
+    assert not handler.commit_and_push_changes([], BranchName("master"), "empty commit")
 
     # Case 1: Modify a tracked file, files=[]
     (sample_git_repo / "config.yml").write_text("blacklists: []\n")
-    committed = handler.commit_and_push_changes([], "master", "update config")
+    committed = handler.commit_and_push_changes(
+        [], BranchName("master"), "update config"
+    )
     assert committed
 
     # Case 2: Explicit untracked file
     (sample_git_repo / "README.md").write_text("modified readme")
     committed2 = handler.commit_and_push_changes(
-        [sample_git_repo / "README.md"], "master", "update readme"
+        [sample_git_repo / "README.md"], BranchName("master"), "update readme"
     )
     assert committed2
 
@@ -213,19 +223,16 @@ def test_commit_and_push_changes_with_author_without_email(sample_git_repo: Path
     handler.set_user("Bioconda Bot")
     (sample_git_repo / "config.yml").write_text("blacklists: []\n")
 
-    assert handler.commit_and_push_changes([], "master", "update config")
+    assert handler.commit_and_push_changes([], BranchName("master"), "update config")
     log = run_git(
         ["log", "-1", "--format=%an <%ae> %s"], cwd=sample_git_repo
     ).stdout.strip()
     assert log == "Bioconda Bot <test@example.com> update config"
 
 
-def test_create_local_branch_from_raw_sha(sample_git_repo: Path, monkeypatch):
+def test_create_local_branch_from_raw_sha(sample_git_repo: Path):
     handler = GitHandler(sample_git_repo, dry_run=True, allow_dirty=True)
-    commit = handler.rev_parse("HEAD")
-    monkeypatch.setattr(
-        handler, "get_remote_branch", lambda *args, **kwargs: CommitSha(commit)
-    )
+    commit = handler.rev_parse(SymbolicRef("HEAD"))
 
     branch = handler.create_local_branch(BranchName("from-sha"), commit)
 
@@ -233,11 +240,71 @@ def test_create_local_branch_from_raw_sha(sample_git_repo: Path, monkeypatch):
     assert handler.rev_parse(branch) == commit
 
 
+@pytest.mark.parametrize("revision", ["HEAD", "release", "sha"])
+def test_local_branch_lookup_does_not_resolve_revisions(sample_git_repo, revision):
+    handler = GitHandler(sample_git_repo, dry_run=True, allow_dirty=True)
+    run_git(["tag", "release"], cwd=sample_git_repo)
+    if revision == "sha":
+        revision = handler.rev_parse(SymbolicRef("HEAD"))
+
+    assert handler.get_local_branch(BranchName(revision)) is None
+    assert handler.get_local_branch(BranchName("master")) == "master"
+    assert "blacklists" in handler.read_from_branch(
+        RevisionExpression(revision), sample_git_repo / "config.yml"
+    )
+
+
+def test_remote_branch_lookup_only_checks_cached_branches(sample_git_repo, monkeypatch):
+    handler = GitHandler(sample_git_repo, dry_run=True, allow_dirty=True)
+    commit = handler.rev_parse(SymbolicRef("HEAD"))
+    run_git(["update-ref", "refs/remotes/origin/feature", commit], cwd=sample_git_repo)
+
+    def unexpected_fetch(*args, **kwargs):
+        pytest.fail("Branch lookup must not fetch")
+
+    monkeypatch.setattr(handler.fork_remote, "fetch", unexpected_fetch)
+    assert handler.get_remote_branch(BranchName("feature")) == RemoteRef(
+        "origin/feature"
+    )
+    assert handler.get_remote_branch(BranchName(commit)) is None
+    assert handler.get_remote_branch(BranchName("missing")) is None
+
+    handler.create_local_branch(BranchName("feature"))
+    assert handler.rev_parse(BranchName("feature")) == commit
+    with pytest.raises(GitHandlerFailure, match="Unable to find remote branch missing"):
+        handler.create_local_branch(BranchName("missing"))
+
+
+@pytest.mark.parametrize(
+    "start_point",
+    [
+        BranchName("master"),
+        SymbolicRef("HEAD"),
+        RevisionExpression("HEAD~0"),
+        RemoteRef("origin/feature"),
+    ],
+)
+def test_create_local_branch_at_explicit_revision(sample_git_repo, start_point):
+    handler = GitHandler(sample_git_repo, dry_run=True, allow_dirty=True)
+    commit = handler.rev_parse(SymbolicRef("HEAD"))
+    run_git(["update-ref", "refs/remotes/origin/feature", commit], cwd=sample_git_repo)
+    # An explicit local branch must not be silently replaced by its remote counterpart.
+    (sample_git_repo / "README.md").write_text("new commit")
+    run_git(["add", "."], cwd=sample_git_repo)
+    run_git(["commit", "-m", "advance master"], cwd=sample_git_repo)
+    run_git(["update-ref", "refs/remotes/origin/master", commit], cwd=sample_git_repo)
+
+    handler.create_local_branch(BranchName("new"), start_point=start_point)
+    assert handler.rev_parse(BranchName("new")) == handler.rev_parse(start_point)
+
+
 def test_branch_is_current_raises_when_git_log_fails(sample_git_repo: Path):
     handler = GitHandler(sample_git_repo, dry_run=True, allow_dirty=True)
 
     with pytest.raises(GitHandlerFailure, match="Unable to compare branch"):
-        asyncio.run(handler.branch_is_current("missing-branch", Path("config.yml")))
+        asyncio.run(
+            handler.branch_is_current(BranchName("missing-branch"), Path("config.yml"))
+        )
 
 
 def test_branch_lifecycle_and_restore(sample_git_repo: Path):
@@ -254,7 +321,7 @@ def test_branch_lifecycle_and_restore(sample_git_repo: Path):
 
     # Delete the temporary branch
     handler.delete_local_branch(BranchName("temp_branch"))
-    assert handler.get_local_branch("temp_branch") is None
+    assert handler.get_local_branch(BranchName("temp_branch")) is None
 
     # Delete remote branch dry run
     handler.delete_remote_branch(BranchName("temp_branch"))
@@ -276,10 +343,14 @@ def test_bioconda_repo_unblacklisted(sample_git_repo: Path):
     run_git(["add", "."], cwd=sample_git_repo)
     run_git(["commit", "-m", "unblacklist pkg_blacklisted"], cwd=sample_git_repo)
 
-    unblacklisted = repo.get_unblacklisted("unblacklist_branch", "master")
+    unblacklisted = repo.get_unblacklisted(
+        BranchName("unblacklist_branch"), BranchName("master")
+    )
     assert Path("recipes/pkg_blacklisted") in unblacklisted
 
-    to_build = repo.get_recipes_to_build("unblacklist_branch", "master")
+    to_build = repo.get_recipes_to_build(
+        BranchName("unblacklist_branch"), BranchName("master")
+    )
     assert Path("recipes/pkg_blacklisted") in to_build
 
 
@@ -292,7 +363,7 @@ def test_get_blacklisted_rejects_missing_configured_file(sample_git_repo: Path):
     run_git(["commit", "-m", "configure missing blacklist"], cwd=sample_git_repo)
 
     with pytest.raises(GitHandlerFailure, match="Unable to read configured blacklist"):
-        repo.get_blacklisted("HEAD")
+        repo.get_blacklisted(SymbolicRef("HEAD"))
 
 
 class FakeRepoHandler(BiocondaRepoMixin):
@@ -357,6 +428,6 @@ def test_read_from_branch_rejects_sibling_with_common_prefix(sample_git_repo):
     handler = GitHandler(sample_git_repo, dry_run=True, allow_dirty=True)
     with pytest.raises(RuntimeError, match="not inside"):
         handler.read_from_branch(
-            "master",
+            BranchName("master"),
             sample_git_repo.with_name(sample_git_repo.name + "-sibling") / "config.yml",
         )
