@@ -96,7 +96,11 @@ def get_image_name(path: Path) -> PkgBuildRef:
 
 
 def _generate_explicit_spec(
-    spec: PkgBuildRef, channels: Sequence[str], conda_bld_dir: Path, tmpdir: Path
+    spec: PkgBuildRef,
+    channels: Sequence[str],
+    conda_bld_dir: Path,
+    tmpdir: Path,
+    conda_override_cuda: str | None = None,
 ) -> Path | None:
     """Generate an @EXPLICIT spec file by dry-running conda create.
 
@@ -110,6 +114,10 @@ def _generate_explicit_spec(
         Path to local conda-bld directory
     tmpdir : Path
         Directory to write the spec file into
+    conda_override_cuda : None | str
+        Value for CONDA_OVERRIDE_CUDA during the dry-run solve, making the
+        solver pretend a CUDA driver of that version is present so that
+        cuda-enabled package builds are selected.
 
     Returns
     -------
@@ -135,6 +143,10 @@ def _generate_explicit_spec(
         + [pkg_spec]
     )
 
+    env = None
+    if conda_override_cuda:
+        env = {**os.environ, "CONDA_OVERRIDE_CUDA": conda_override_cuda}
+
     logger.debug("Generating explicit spec: %s", cmd)
     try:
         result = sp.run(
@@ -143,6 +155,7 @@ def _generate_explicit_spec(
             text=True,
             timeout=300,
             check=False,
+            env=env,
         )
         if result.returncode != 0:
             logger.debug("conda create --dry-run failed: %s", result.stderr)
@@ -321,6 +334,7 @@ def test_package_in_temporary_container(
     base_image: str | None = None,
     conda_image: str = CREATE_ENV_IMAGE,
     live_logs: bool = True,
+    conda_override_cuda: str | None = None,
 ) -> sp.CompletedProcess | None:
     """
     Test a built package in a temporary container from a pre-solved spec.
@@ -347,6 +361,10 @@ def test_package_in_temporary_container(
 
     live_logs : True | bool
         If True, enable live logging during the build process
+
+    conda_override_cuda : None | str
+        Value for CONDA_OVERRIDE_CUDA during the pre-solve, making the solver
+        pretend a CUDA driver of that version is present.
     """
     conda_bld_dir, spec, resolved_channels, tests = _test_inputs(path, channels)
 
@@ -356,6 +374,7 @@ def test_package_in_temporary_container(
             resolved_channels,
             conda_bld_dir,
             Path(tmpdir),
+            conda_override_cuda=conda_override_cuda,
         )
         if spec_path is None:
             logger.info("Pre-solve failed, falling back to mulled-build")
@@ -377,6 +396,7 @@ def build_and_test_mulled_image(
     name_override: str | None = None,
     channels: Sequence[str] = ("conda-forge", "local", "bioconda"),
     mulled_args: str = "",
+    conda_override_cuda: str | None = None,
     base_image: str | None = None,
     conda_image: str = CREATE_ENV_IMAGE,
     live_logs: bool = True,
@@ -418,6 +438,12 @@ def build_and_test_mulled_image(
 
     target_platform : ContainerPlatform | None
         Docker target platform to pass to mulled-build, e.g. linux/arm64.
+
+    conda_override_cuda : None | str
+        Passed as the --conda-override-cuda argument to mulled-build so the
+        environment solve inside the build container picks cuda-enabled
+        package builds. Requires a galaxy-tool-util release that provides
+        that flag.
     """
     _conda_bld_dir, spec, resolved_channels, tests = _test_inputs(path, channels)
     channel_args = ["--channels", ",".join(resolved_channels)]
@@ -435,6 +461,8 @@ def build_and_test_mulled_image(
         cmd += ["--name-override", name_override]
     if target_platform:
         cmd += ["--target-platform", target_platform]
+    if conda_override_cuda:
+        cmd += ["--conda-override-cuda", conda_override_cuda]
     cmd += channel_args
     cmd += shlex.split(mulled_args)
 
