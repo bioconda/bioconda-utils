@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
+from bioconda_utils._types import Channel, Config
 from bioconda_utils.conda.repodata import RepoData
 from bioconda_utils.conda.shards import ShardClient
 from bioconda_utils.support.parallel import worker_pool
@@ -36,7 +37,9 @@ def repodata(name="example", version="1", subdir="noarch", records=None):
 
 @pytest.fixture
 def repository(monkeypatch):
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda", "conda-forge"]})
+    monkeypatch.setattr(
+        RepoData, "config", Config({"channels": ["bioconda", "conda-forge"]})
+    )
     monkeypatch.setattr(RepoData, "platforms", ["linux-64", "noarch"])
     monkeypatch.setattr(
         ShardClient,
@@ -102,7 +105,7 @@ def test_configuration_changes_cannot_leak_other_channels(repository, monkeypatc
         "bioconda",
         "conda-forge",
     ]
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
+    monkeypatch.setattr(RepoData, "config", Config({"channels": ["bioconda"]}))
     assert repository.get_package_data("name", platform="noarch") == ["bioconda"]
     assert not repository.get_package_data(channels="conda-forge", platform="noarch")
 
@@ -137,7 +140,7 @@ def test_local_channels_are_always_read_fresh(repository, monkeypatch, tmp_path)
     channel = (tmp_path / "channel").as_uri()
     path = tmp_path / "channel" / "noarch" / "repodata.json"
     path.parent.mkdir(parents=True)
-    monkeypatch.setattr(RepoData, "config", {"channels": [channel]})
+    monkeypatch.setattr(RepoData, "config", Config({"channels": [channel]}))
 
     def write(name):
         path.write_text(
@@ -167,7 +170,9 @@ def test_local_channels_are_always_read_fresh(repository, monkeypatch, tmp_path)
 def query_repository(base_url):
     """Spawn-picklable worker using the real HTTP downloader and disk cache."""
     RepoData.REPODATA_URL = base_url + "/{channel}/{subdir}/repodata.json"
-    return RepoData().get_package_data("name", channels="bioconda", platform="noarch")
+    return RepoData().get_package_data(
+        "name", channels=Channel("bioconda"), platform="noarch"
+    )
 
 
 def test_concurrent_spawned_workers_download_repository_once(repository):

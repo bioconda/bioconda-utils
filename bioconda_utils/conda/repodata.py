@@ -18,7 +18,7 @@ import sqlite3
 import sys
 import tempfile
 from collections import namedtuple
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from contextlib import closing, contextmanager
 from hashlib import sha256
 from itertools import product
@@ -30,6 +30,7 @@ import requests
 from .._types import (
     ALL_PACKAGE_SUBDIRS,
     Channel,
+    Config,
     PackageSubdir,
     Subdir,
     container_platform_to_package_subdir,
@@ -107,7 +108,7 @@ class RepoData:
     #: Conda repodata subdirs loaded by default; ``platform`` returns subdir strings.
     platforms: ClassVar[list[Subdir]] = [*ALL_PACKAGE_SUBDIRS, "noarch"]
     # config object
-    config = None
+    config: ClassVar[Config | None] = None
 
     cache_dir: ClassVar[Path | None] = None
     refresh_after: ClassVar[datetime.datetime | None] = None
@@ -116,7 +117,7 @@ class RepoData:
     cache_timeout: ClassVar[float] = 60 * 60 * 8
 
     @classmethod
-    def register_config(cls, config):
+    def register_config(cls, config: Config) -> None:
         cls.config = config
 
     @classmethod
@@ -133,9 +134,9 @@ class RepoData:
         return cls.cache_dir or get_cache_root() / "repodata-v2"
 
     @property
-    def channels(self):
+    def channels(self) -> list[Channel]:
         assert self.config is not None, "Load configuration before querying repodata"
-        return self.config["channels"]
+        return self.config.channels
 
     def _cache_path(self, url: str) -> Path:
         return self.get_cache_dir() / (sha256(url.encode()).hexdigest() + ".sqlite")
@@ -243,11 +244,13 @@ class RepoData:
             temporary.unlink(missing_ok=True)
             temporary.with_name(temporary.name + "-journal").unlink(missing_ok=True)
 
-    def _download_repository(self, channel: str, subdir: Subdir) -> bytes:
+    def _download_repository(self, channel: Channel, subdir: Subdir) -> bytes:
         url = self._make_repodata_url(channel, subdir)
         return fetch([FetchRequest(url, f"{channel}/{subdir}")])[0]
 
-    def _repositories(self, channels: Iterable[str], subdirs: Iterable[Subdir]):
+    def _repositories(
+        self, channels: Iterable[Channel], subdirs: Iterable[Subdir]
+    ) -> Iterator[tuple[Channel, Subdir]]:
         return (
             (channel, subdir)
             for channel, subdir in product(
@@ -257,7 +260,7 @@ class RepoData:
         )
 
     @contextmanager
-    def _open_repository(self, channel: str, subdir: Subdir):
+    def _open_repository(self, channel: Channel, subdir: Subdir):
         url = self._make_repodata_url(channel, subdir)
         if url.startswith("file://"):
             with closing(sqlite3.connect(":memory:")) as connection:
@@ -315,7 +318,7 @@ class RepoData:
             )
             yield connection
 
-    def _make_repodata_url(self, channel, subdir: Subdir):
+    def _make_repodata_url(self, channel: Channel, subdir: Subdir) -> str:
         if channel == "defaults":
             # caveat: this only gets defaults main, not 'free', 'r' or 'pro'
             url_template = self.REPODATA_DEFAULTS_URL
@@ -359,7 +362,7 @@ class RepoData:
     def get_package_data(
         self,
         key=None,
-        channels=None,
+        channels: Channel | Iterable[Channel] | None = None,
         name=None,
         version=None,
         build_number=None,
@@ -383,12 +386,12 @@ class RepoData:
                 else str(version)
             )
 
-        if isinstance(channels, str):
-            requested_channels = [channels]
-        elif channels is None:
+        if channels is None:
             requested_channels = self.channels
+        elif isinstance(channels, str):
+            requested_channels = [cast(Channel, channels)]
         else:
-            requested_channels = channels
+            requested_channels = list(channels)
 
         if isinstance(platform, str):
             requested_subdirs = [cast(Subdir, platform)]
@@ -469,7 +472,7 @@ class RepoData:
 
 
 @memoize(expire=604800)
-def get_package_downloads(channel: str, package: str) -> int:
+def get_package_downloads(channel: Channel, package: str) -> int:
     """Use anaconda API to obtain download counts."""
     data = requests.get(f"https://api.anaconda.org/package/{channel}/{package}").json()
     if "files" in data:

@@ -24,10 +24,12 @@ from bioconda_utils import __version__, build
 from bioconda_utils import recipes as _recipes
 from bioconda_utils._types import (
     BuildSystem,
+    Channel,
     Config,
     ContainerPlatform,
     PackageSubdir,
     RecipePath,
+    parse_channel,
 )
 from bioconda_utils.conda import conda_build_bridge
 from bioconda_utils.conda import recipes as conda_recipes
@@ -1376,7 +1378,7 @@ def test_get_package_paths_force_builds_existing_and_logs_force(caplog, monkeypa
 
     caplog.set_level(logging.INFO, logger="bioconda_utils.conda.recipes")
     paths = conda_recipes.get_package_paths(
-        Path("recipes/samtools"), ["bioconda"], force=True
+        Path("recipes/samtools"), [Channel("bioconda")], force=True
     )
     assert paths == [Path("/tmp/samtools-1.24-h391949c_1.tar.bz2")]
     assert "FORCE: building samtools-1.24-h391949c_1" in caplog.text
@@ -1385,7 +1387,7 @@ def test_get_package_paths_force_builds_existing_and_logs_force(caplog, monkeypa
 
     caplog.clear()
     paths = conda_recipes.get_package_paths(
-        Path("recipes/samtools"), ["bioconda"], force=False
+        Path("recipes/samtools"), [Channel("bioconda")], force=False
     )
     assert paths == []
     assert "channel(s) [bioconda]" in caplog.text
@@ -1444,7 +1446,9 @@ def test_get_package_paths_reports_channels_per_multi_output(caplog, monkeypatch
 
     caplog.set_level(logging.INFO, logger="bioconda_utils.conda.recipes")
     paths = conda_recipes.get_package_paths(
-        Path("recipes/r-seurat"), ["bioconda", "conda-forge"], force=True
+        Path("recipes/r-seurat"),
+        [Channel("bioconda"), Channel("conda-forge")],
+        force=True,
     )
     assert paths == [
         Path("/tmp/r-seurat-5.0.0-py311_0.conda"),
@@ -1487,7 +1491,9 @@ def test_check_recipe_skippable_queries_requested_target(monkeypatch, config_fix
     monkeypatch.setattr(RepoData, "get_package_data", get_package_data)
 
     assert not conda_recipes.check_recipe_skippable(
-        Path("samtools"), ["bioconda"], target_platform=ContainerPlatform.LINUX_ARM64
+        Path("samtools"),
+        [Channel("bioconda")],
+        target_platform=ContainerPlatform.LINUX_ARM64,
     )
     assert loaded_targets == [(False, ContainerPlatform.LINUX_ARM64)]
     assert queried_platforms == [[PackageSubdir.LINUX_AARCH64, "noarch"]]
@@ -1523,7 +1529,9 @@ def test_check_recipe_skippable_logs_channels_with_build(
 
     caplog.set_level(logging.INFO, logger="bioconda_utils.conda.recipes")
     assert conda_recipes.check_recipe_skippable(
-        Path("samtools"), ["bioconda", "conda-forge"], target_platform=None
+        Path("samtools"),
+        [Channel("bioconda"), Channel("conda-forge")],
+        target_platform=None,
     )
     expected_channels = "bioconda, conda-forge" if duplicate_channel else "conda-forge"
     assert f"channel(s) [{expected_channels}]" in caplog.text
@@ -1531,7 +1539,8 @@ def test_check_recipe_skippable_logs_channels_with_build(
     # A second distinct build remains a second variant, even in the same subdir.
     rows.append(("conda-forge", "h456_1", PackageSubdir.LINUX_64))
     assert not conda_recipes.check_recipe_skippable(
-        Path("samtools"), ["bioconda", "conda-forge"]
+        Path("samtools"),
+        [Channel("bioconda"), Channel("conda-forge")],
     )
 
 
@@ -2302,3 +2311,40 @@ def test_load_meta_fast_allows_duplicate_keys(tmp_path):
     assert meta["package"]["name"] == "test-pkg"
     assert meta["build"]["number"] == 0
     assert loaded_recipe == recipe_dir
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        (" bioconda/ ", "bioconda"),
+        (" https://example.org/channel/// ", "https://example.org/channel"),
+        ("file:///tmp/channel/", "file:///tmp/channel"),
+    ],
+)
+def test_parse_channel_normalizes_names_and_urls(value, expected):
+    assert parse_channel(value) == expected
+
+
+@pytest.mark.parametrize("value", ["", "  ", " / "])
+def test_parse_channel_rejects_empty_names(value):
+    with pytest.raises(ValueError, match="must not be empty"):
+        parse_channel(value)
+
+
+def test_normalize_config_normalizes_and_deduplicates_channels():
+    config = {
+        "channels": [" bioconda/ ", "conda-forge", "bioconda"],
+        "upload_channel": " bioconda/ ",
+    }
+    normalized = normalize_config(config)
+
+    assert normalized.channels == ["bioconda", "conda-forge"]
+    assert normalized.upload_channel == "bioconda"
+    assert config["channels"] == [" bioconda/ ", "conda-forge", "bioconda"]
+
+
+@pytest.mark.parametrize("key", ["channels", "upload_channel"])
+def test_normalize_config_rejects_blank_channels(key):
+    value = ["  "] if key == "channels" else "  "
+    with pytest.raises(ValueError, match="must not be empty"):
+        normalize_config({key: value})

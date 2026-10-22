@@ -7,6 +7,7 @@ can be mechanically checked).
 
 from typing import Any, ClassVar
 
+from bioconda_utils._types import Channel
 from bioconda_utils.conda.repodata import RepoData
 
 from ..recipe import Recipe
@@ -137,7 +138,7 @@ class cran_packages_to_conda_forge(LintCheck):
             "R" in deps
             and any("run" in dep for dep in deps["R"])
             and all(
-                RepoData().get_package_data(name=dep, channels="conda-forge")
+                RepoData().get_package_data(name=dep, channels=Channel("conda-forge"))
                 for dep in deps
             )
         ):

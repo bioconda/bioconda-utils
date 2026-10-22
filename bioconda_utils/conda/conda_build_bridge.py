@@ -166,7 +166,7 @@ def load_conda_build_config(
     """
     config_kwargs: dict[str, Any] = {"no_download_source": True, "set_build_id": False}
     if RepoData.config is not None:
-        config_kwargs["channel_urls"] = tuple(RepoData.config["channels"])
+        config_kwargs["channel_urls"] = tuple(RepoData.config.channels)
     config = api.Config(**config_kwargs)
 
     pinnings = env_root() / "conda_build_config.yaml"

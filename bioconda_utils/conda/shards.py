@@ -21,7 +21,7 @@ import aiohttp
 import msgpack
 import zstandard
 
-from .._types import Subdir
+from .._types import Channel, Subdir
 from .fetch import FetchRequest, fetch
 
 logger = logging.getLogger(__name__)
@@ -152,7 +152,7 @@ class ShardClient:
     @staticmethod
     def _parse_package_shard(
         data: bytes | None,
-        meta_data: tuple[str, Subdir, str],
+        meta_data: tuple[Channel, Subdir, str],
     ) -> list[dict[str, Any]] | None:
         if not data:
             return None
@@ -207,7 +207,7 @@ class ShardClient:
 
     @classmethod
     def _get_shard_index(
-        cls, channel: str, subdir: Subdir, repodata_url: str
+        cls, channel: Channel, subdir: Subdir, repodata_url: str
     ) -> _CachedShardIndex | None:
         """Return a fresh shard index, or None when shards are unavailable."""
         index_url = cls.shards_index_url(repodata_url)
@@ -285,7 +285,7 @@ class ShardClient:
     @classmethod
     def _download_shards(
         cls,
-        channel: str,
+        channel: Channel,
         subdir: Subdir,
         missing: dict[str, str],
         records_by_url: dict[str, list[dict[str, Any]]],
@@ -324,7 +324,7 @@ class ShardClient:
 
     @classmethod
     def get_repository_shards(
-        cls, channel: str, subdir: Subdir, names: list[str], repodata_url: str
+        cls, channel: Channel, subdir: Subdir, names: list[str], repodata_url: str
     ) -> list[dict[str, Any]] | None:
         """Return targeted records, or None when full repodata is needed.
 

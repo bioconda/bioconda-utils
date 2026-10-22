@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 from ruamel.yaml import YAML
 
+from bioconda_utils._types import Config
 from bioconda_utils.conda import repodata, shards
 
 yaml = YAML(typ="rt")  # pylint: disable=invalid-name
@@ -74,17 +75,19 @@ def mock_repodata(case, monkeypatch):
     monkeypatch.setattr(
         repodata.RepoData,
         "config",
-        {
-            **config,
-            "channels": list(
-                dict.fromkeys(
-                    [
-                        *config.get("channels", []),
-                        *(channel for channel, _subdir in records),
-                    ]
-                )
-            ),
-        },
+        Config(
+            {
+                **config,
+                "channels": list(
+                    dict.fromkeys(
+                        [
+                            *config.get("channels", []),
+                            *(channel for channel, _subdir in records),
+                        ]
+                    )
+                ),
+            }
+        ),
     )
 
     monkeypatch.setattr(

@@ -64,7 +64,7 @@ from packaging.version import parse as _pep440_parse
 from bioconda_utils.skiplist import Skiplist
 
 from . import __version__, graph, update_pinnings
-from ._types import BuildSystem, RecipePath, ensure_list
+from ._types import BuildSystem, Channel, RecipePath, ensure_list
 from .aiopipe import (
     AsyncFilter,
     AsyncPipeline,
@@ -325,7 +325,7 @@ class ExcludeOtherChannel(Filter):
         template = "builds package found in other channel(s)"
         level = logging.DEBUG
 
-    def __init__(self, scanner: Scanner, channels: Sequence[str]) -> None:
+    def __init__(self, scanner: Scanner, channels: Sequence[Channel]) -> None:
         super().__init__(scanner)
         self.channels = channels
         logger.info("Loading package lists for %s", channels)

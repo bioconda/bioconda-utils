@@ -16,7 +16,11 @@ from pathlib import Path
 
 from conda_build import api
 
-from .._types import ContainerPlatform, container_platform_to_package_subdir
+from .._types import (
+    Channel,
+    ContainerPlatform,
+    container_platform_to_package_subdir,
+)
 from .conda_build_bridge import load_all_meta, load_conda_build_config
 from .repodata import RepoData
 
@@ -143,7 +147,7 @@ def _meta_build_key(meta):
 
 
 def check_recipe_skippable(
-    recipe: Path, check_channels: list[str], target_platform=None
+    recipe: Path, check_channels: list[Channel], target_platform=None
 ):
     """
     Return True if the same number of builds (per subdir) defined by the recipe
@@ -255,7 +259,7 @@ def _filter_existing_packages(metas, check_channels):
 
 def get_package_paths(
     recipe: Path,
-    check_channels: list[str],
+    check_channels: list[Channel],
     force: bool = False,
     finalize: bool = True,
     target_platform: ContainerPlatform | None = None,

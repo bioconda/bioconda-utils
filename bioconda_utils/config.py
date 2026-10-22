@@ -16,6 +16,7 @@ from bioconda_utils._types import (
     Channel,
     Config,
     PackageSubdir,
+    parse_channel,
 )
 from bioconda_utils.conda.repodata import RepoData
 
@@ -57,9 +58,9 @@ def normalize_config(config: dict[str, Any], *, base_dir: Path | None = None) ->
     default_config = Config(
         {
             "blacklists": [],
-            "channels": ["conda-forge", "bioconda"],
+            "channels": [Channel("conda-forge"), Channel("bioconda")],
             "requirements": None,
-            "upload_channel": "bioconda",
+            "upload_channel": Channel("bioconda"),
             "primary_platforms": list(DEFAULT_PRIMARY_PLATFORMS),
         }
     )
@@ -74,12 +75,14 @@ def normalize_config(config: dict[str, Any], *, base_dir: Path | None = None) ->
         for channel in get_list("channels"):
             if not isinstance(channel, str):
                 raise TypeError(f"Channel names must be strings, not {channel!r}")
-            channel = channel.strip().rstrip("/")
-            if not channel:
-                raise ValueError("Channel names must not be empty")
-            if channel not in normalized_channels:
-                normalized_channels.append(channel)
+            parsed = parse_channel(channel)
+            if parsed not in normalized_channels:
+                normalized_channels.append(parsed)
         default_config["channels"] = normalized_channels
+    if "upload_channel" in config:
+        default_config["upload_channel"] = parse_channel(
+            default_config["upload_channel"]
+        )
     if "primary_platforms" in config:
         default_config["primary_platforms"] = [
             PackageSubdir(p) for p in get_list("primary_platforms")

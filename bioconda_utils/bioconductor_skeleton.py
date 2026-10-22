@@ -21,6 +21,7 @@ import networkx as nx
 import requests
 from ruamel.yaml import YAML
 
+from ._types import Channel
 from .conda.conda_build_bridge import load_first_metadata
 from .conda.repodata import RepoData
 from .config import normalize_config
@@ -1320,7 +1321,7 @@ def write_recipe(
     recursive=False,
     seen_dependencies=None,
     packages=None,
-    skip_if_in_channels=None,
+    skip_if_in_channels: list[Channel] | None = None,
     needs_x=None,
 ):
     """

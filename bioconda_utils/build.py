@@ -34,6 +34,7 @@ from . import recipe as _recipe
 from ._types import (
     ALL_PACKAGE_SUBDIRS,
     DEFAULT_PRIMARY_PLATFORMS,
+    Channel,
     ContainerPlatform,
     PackageSubdir,
     PkgBuildRef,
@@ -138,7 +139,7 @@ def build(
     force: bool,
     pkg_paths: list[Path] | None = None,
     mulled_build_and_test: bool = True,
-    channels: list[str] | None = None,
+    channels: list[Channel] | None = None,
     docker_builder: docker_utils.RecipeBuilder | None = None,
     raise_error: bool = False,
     linter: lint.Linter | None = None,
@@ -353,7 +354,7 @@ def build(
                         # terminal, so no spinner is wrapped around it here.
                         result = variant.run_build(
                             tool_config,
-                            channels=channels,
+                            channels=list(channels) if channels is not None else None,
                             output_dir=rattler_output_dir,
                         )
                         built_package_names.extend(
@@ -636,7 +637,7 @@ def build_recipes(
     label: str | None = None,
     anaconda_upload: bool = False,
     mulled_upload_target: QuayUploadTarget | None = None,
-    check_channels: list[str] | None = None,
+    check_channels: list[Channel] | None = None,
     do_lint: bool | None = None,
     lint_exclude: list[str] | None = None,
     n_workers: int = 1,
@@ -708,8 +709,8 @@ def build_recipes(
 
     # get channels to check
     if check_channels is None:
-        if config["channels"]:
-            check_channels = [c for c in config["channels"] if c != "defaults"]
+        if config.channels:
+            check_channels = [c for c in config.channels if c != "defaults"]
         else:
             check_channels = []
 
@@ -867,7 +868,7 @@ def build_recipes(
             force=force,
             pkg_paths=pkg_paths,
             mulled_build_and_test=mulled_build_and_test,
-            channels=config["channels"],
+            channels=config.channels,
             docker_builder=docker_builder,
             linter=linter,
             mulled_conda_image=mulled_conda_image,

@@ -33,10 +33,12 @@ from ._types import (
     ALL_PACKAGE_SUBDIRS,
     ArtifactSource,
     BuildFailureOutputFormat,
+    Channel,
     ContainerPlatform,
     PackageSubdir,
     QuayUploadTarget,
     package_subdir_to_container_platform,
+    parse_channel,
     parse_quay_upload_target,
 )
 from .containers.pkg_test import CREATE_ENV_IMAGE
@@ -110,6 +112,10 @@ def _parse_quay_upload_target(value: str | None) -> QuayUploadTarget | None:
         return parse_quay_upload_target(value)
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
+
+
+def _parse_channels(values: list[str] | None) -> list[Channel] | None:
+    return None if values is None else [parse_channel(value) for value in values]
 
 
 def _resolve_image_records_dir(
@@ -735,7 +741,7 @@ def build(
         mulled_upload_target=parsed_upload_target,
         do_lint=lint,
         lint_exclude=lint_exclude,
-        check_channels=check_channels,
+        check_channels=_parse_channels(check_channels),
         label=label,
         n_workers=n_workers,
         worker_offset=worker_offset,
@@ -1014,10 +1020,10 @@ def duplicates(
     from .config import load_config
 
     config_data = load_config(config)
-    if channel not in config_data["channels"]:
+    our_channel = parse_channel(channel)
+    if our_channel not in config_data.channels:
         raise ValueError("Channel given with --channel must be in config channels")
-    our_channel = channel
-    channels = [c for c in config_data["channels"] if c != our_channel]
+    channels = [c for c in config_data.channels if c != our_channel]
     logger.info(
         "Checking for packages from %s also present in %s", our_channel, channels
     )
@@ -1147,7 +1153,9 @@ def update_pinning(
     try:
         config_data = load_config(config)
         if skip_additional_channels:
-            config_data["channels"] += skip_additional_channels
+            config_data.channels.extend(
+                parse_channel(channel) for channel in skip_additional_channels
+            )
         variant_keys = frozenset(skip_variants or ())
         _configure_caches(cache, refresh_repodata)
         build_config = load_conda_build_config()
@@ -1312,10 +1320,11 @@ def bioconductor_skeleton(
     from .config import load_config
 
     config_data = load_config(config)
-    skip_if_in_channels = (
-        skip_if_in_channels
-        if skip_if_in_channels is not None
-        else ["conda-forge", "bioconda"]
+    parsed_skip_channels = _parse_channels(skip_if_in_channels)
+    skip_channels = (
+        parsed_skip_channels
+        if parsed_skip_channels is not None
+        else [Channel("conda-forge"), Channel("bioconda")]
     )
     seen_dependencies = set()
     if bioc_data_packages is None:
@@ -1338,7 +1347,7 @@ def bioconductor_skeleton(
                     pkg_version=v["Version"],
                     versioned=versioned,
                     packages=all_packages,
-                    skip_if_in_channels=skip_if_in_channels,
+                    skip_if_in_channels=skip_channels,
                     needs_x=k in needs_x,
                 )
             except (OSError, RuntimeError, ValueError, requests.RequestException):
@@ -1364,7 +1373,7 @@ def bioconductor_skeleton(
                 versioned=versioned,
                 recursive=recursive,
                 seen_dependencies=seen_dependencies,
-                skip_if_in_channels=skip_if_in_channels,
+                skip_if_in_channels=skip_channels,
             )
     else:
         raise typer.BadParameter("Either --packages or --update-all must be specified.")
@@ -1632,7 +1641,7 @@ def autobump(
         if excluded_channels != ["none"]:
             scanner.add(
                 autobump.ExcludeOtherChannel,
-                excluded_channels,
+                [parse_channel(channel) for channel in excluded_channels],
             )
         # Test if due to pinnings, the package hash would change and a rebuild
         # has become necessary. If so, bump the buildnumber.
@@ -1964,7 +1973,7 @@ def list_build_failures(
     records = collect_build_failure_records(
         recipe_folder,
         config_data,
-        channel,
+        parse_channel(channel),
         link_fmt=output_format,
         link_prefix=link_prefix,
         git_range=parsed_git_range,

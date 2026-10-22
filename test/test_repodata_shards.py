@@ -8,7 +8,7 @@ import msgpack
 import pytest
 import zstandard
 
-from bioconda_utils._types import PackageSubdir
+from bioconda_utils._types import Channel, Config, PackageSubdir
 from bioconda_utils.conda import fetch, repodata, shards
 from bioconda_utils.conda.fetch import FetchRequest
 from bioconda_utils.conda.repodata import RepoData
@@ -60,7 +60,7 @@ def test_repodata_rejects_invalid_package_shards(data):
     assert (
         ShardClient._parse_package_shard(
             _pack_shard(data),
-            ("bioconda", PackageSubdir.LINUX_64, "pkg"),
+            (Channel("bioconda"), PackageSubdir.LINUX_64, "pkg"),
         )
         is None
     )
@@ -96,7 +96,7 @@ def test_repodata_resolves_shards_base_url(shards_base_url, expected):
 
 @pytest.fixture
 def sharded(monkeypatch):
-    monkeypatch.setattr(RepoData, "config", {"channels": ["high", "low"]})
+    monkeypatch.setattr(RepoData, "config", Config({"channels": ["high", "low"]}))
     monkeypatch.setattr(RepoData, "platforms", ["noarch"])
     repository = RepoData()
     requests = []
@@ -363,7 +363,7 @@ def test_http_shards_and_missing_index_fallback(monkeypatch):
             "REPODATA_URL",
             f"http://127.0.0.1:{server.server_port}/{{channel}}/{{subdir}}/repodata.json",
         )
-        monkeypatch.setattr(RepoData, "config", {"channels": ["high", "low"]})
+        monkeypatch.setattr(RepoData, "config", Config({"channels": ["high", "low"]}))
         monkeypatch.setattr(RepoData, "platforms", ["noarch"])
         repository = RepoData()
         for _ in range(2):

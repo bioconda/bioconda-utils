@@ -11,13 +11,25 @@ import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 
-from .._types import MULLED_LOCAL_NAMESPACE, ContainerPlatform, PkgBuildRef
+from .._types import (
+    MULLED_LOCAL_NAMESPACE,
+    Channel,
+    ContainerPlatform,
+    PkgBuildRef,
+    parse_channel,
+)
 from ..support.subproc import run
 
 logger = logging.getLogger(__name__)
 
 # Will be provided to mulled-build via "CONDA_IMAGE" env var.
 CREATE_ENV_IMAGE = os.getenv("CREATE_ENV_IMAGE", "quay.io/bioconda/create-env:latest")
+
+DEFAULT_CHANNELS: tuple[Channel, ...] = (
+    Channel("conda-forge"),
+    Channel("local"),
+    Channel("bioconda"),
+)
 
 
 def get_test_command(path: Path) -> str:
@@ -96,7 +108,7 @@ def get_image_name(path: Path) -> PkgBuildRef:
 
 
 def _generate_explicit_spec(
-    spec: PkgBuildRef, channels: Sequence[str], conda_bld_dir: Path, tmpdir: Path
+    spec: PkgBuildRef, channels: Sequence[Channel], conda_bld_dir: Path, tmpdir: Path
 ) -> Path | None:
     """Generate an @EXPLICIT spec file by dry-running conda create.
 
@@ -284,9 +296,9 @@ fi
 
 def _test_inputs(
     path: Path,
-    channels: Sequence[str] = ("conda-forge", "local", "bioconda"),
+    channels: Sequence[Channel] = DEFAULT_CHANNELS,
     update_local_index: bool = True,
-) -> tuple[Path, PkgBuildRef, list[str], str]:
+) -> tuple[Path, PkgBuildRef, list[Channel], str]:
     """Return shared inputs needed for package container tests."""
     assert path.name.endswith((".tar.bz2", ".conda")), f"Unrecognized path {path}"
 
@@ -305,7 +317,7 @@ def _test_inputs(
         raise ValueError('"local" must be in channel list')
 
     resolved_channels = [
-        f"file://{conda_bld_dir}" if channel == "local" else channel
+        parse_channel(f"file://{conda_bld_dir}") if channel == "local" else channel
         for channel in channels
     ]
 
@@ -317,7 +329,7 @@ def _test_inputs(
 
 def test_package_in_temporary_container(
     path: Path,
-    channels: Sequence[str] = ("conda-forge", "local", "bioconda"),
+    channels: Sequence[Channel] = DEFAULT_CHANNELS,
     base_image: str | None = None,
     conda_image: str = CREATE_ENV_IMAGE,
     live_logs: bool = True,
@@ -375,7 +387,7 @@ def test_package_in_temporary_container(
 def build_and_test_mulled_image(
     path: Path,
     name_override: str | None = None,
-    channels: Sequence[str] = ("conda-forge", "local", "bioconda"),
+    channels: Sequence[Channel] = DEFAULT_CHANNELS,
     mulled_args: str = "",
     base_image: str | None = None,
     conda_image: str = CREATE_ENV_IMAGE,

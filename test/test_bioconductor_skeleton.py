@@ -3,7 +3,7 @@ import logging
 import pytest
 
 from bioconda_utils import bioconductor_skeleton, cran_skeleton
-from bioconda_utils._types import Config
+from bioconda_utils._types import Channel, Config
 from bioconda_utils.conda import repodata
 from bioconda_utils.conda.conda_build_bridge import load_first_metadata
 
@@ -68,7 +68,7 @@ def test_bioc_write_recipe_skip_in_condaforge(tmp_path, bioc_fetch):
         config=config,
         recursive=True,
         packages=bioc_fetch,
-        skip_if_in_channels=["conda-forge"],
+        skip_if_in_channels=[Channel("conda-forge")],
     )
 
     for pkg in [
