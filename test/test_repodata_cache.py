@@ -67,6 +67,35 @@ def test_selective_loads_and_disk_reuse(repository, monkeypatch):
     assert len(loads) == 4
 
 
+def test_invalid_records_fail_the_repository_load(repository, monkeypatch):
+    records = {
+        "good.conda": {
+            "name": "good",
+            "version": "1",
+            "build": "0",
+            "build_number": 0,
+            "depends": ["zlib"],
+        },
+        "bad.conda": {
+            "name": "bad",
+            "version": "1",
+            "build": "0",
+            "build_number": 0,
+            "depends": "zlib",
+        },
+    }
+    monkeypatch.setattr(
+        repository,
+        "_download_repository",
+        lambda channel, subdir: repodata(subdir=subdir, records=records),
+    )
+    with pytest.raises(
+        ValueError, match="Invalid package record 'bad.conda' in noarch repodata"
+    ):
+        repository.get_package_data("name", channels="bioconda", platform="noarch")
+    assert not list(repository.get_cache_dir().glob("*.sqlite"))
+
+
 @pytest.mark.parametrize("age", [9 * 3600, -3600])
 def test_expired_or_future_entries_are_refreshed(repository, monkeypatch, age):
     path = repository._cache_path(repository._make_repodata_url("bioconda", "noarch"))

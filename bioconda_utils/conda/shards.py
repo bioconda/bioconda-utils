@@ -21,7 +21,12 @@ import aiohttp
 import msgpack
 import zstandard
 
-from .._types import Channel, Subdir
+from .._types import (
+    Channel,
+    PackageRecord,
+    Subdir,
+    parse_package_record,
+)
 from .fetch import FetchRequest, fetch
 
 logger = logging.getLogger(__name__)
@@ -53,7 +58,7 @@ class _CachedShardIndex:
 
 @dataclass
 class _CachedPackageShard:
-    records: list[dict[str, Any]]
+    records: tuple[PackageRecord, ...]
 
 
 class ShardClient:
@@ -153,7 +158,7 @@ class ShardClient:
     def _parse_package_shard(
         data: bytes | None,
         meta_data: tuple[Channel, Subdir, str],
-    ) -> list[dict[str, Any]] | None:
+    ) -> tuple[PackageRecord, ...] | None:
         if not data:
             return None
         channel, subdir, package_name = meta_data
@@ -172,21 +177,10 @@ class ShardClient:
             packages = dict(raw_packages)
             packages.update(raw_conda_packages)
 
-            records: list[dict[str, Any]] = []
-            for raw_record in packages.values():
-                if not isinstance(raw_record, Mapping):
-                    raise TypeError("invalid package record")
-                rec = {
-                    "name": raw_record.get("name", package_name),
-                    "version": str(raw_record.get("version", "")),
-                    "build": raw_record.get("build", ""),
-                    "build_number": int(raw_record.get("build_number", 0)),
-                    "depends": list(raw_record.get("depends", [])),
-                    "channel": channel,
-                    "platform": subdir,
-                    "subdir": raw_record.get("subdir", subdir),
-                }
-                records.append(rec)
+            records = tuple(
+                parse_package_record(raw_record, default_name=package_name)
+                for raw_record in packages.values()
+            )
         except (
             zstandard.ZstdError,
             msgpack.UnpackException,
@@ -256,7 +250,7 @@ class ShardClient:
     def _cached_shards(
         cls,
         shard_name_by_url: dict[str, str],
-        records_by_url: dict[str, list[dict[str, Any]]],
+        records_by_url: dict[str, tuple[PackageRecord, ...]],
     ) -> dict[str, str] | None:
         """Fill **records_by_url** from cached shard records.
 
@@ -288,7 +282,7 @@ class ShardClient:
         channel: Channel,
         subdir: Subdir,
         missing: dict[str, str],
-        records_by_url: dict[str, list[dict[str, Any]]],
+        records_by_url: dict[str, tuple[PackageRecord, ...]],
     ) -> bool:
         """Download and parse shards into **records_by_url**.
 
@@ -325,7 +319,7 @@ class ShardClient:
     @classmethod
     def get_repository_shards(
         cls, channel: Channel, subdir: Subdir, names: list[str], repodata_url: str
-    ) -> list[dict[str, Any]] | None:
+    ) -> list[PackageRecord] | None:
         """Return targeted records, or None when full repodata is needed.
 
         A missing name in a valid index is authoritative. Any failed package
@@ -345,7 +339,7 @@ class ShardClient:
                 # A missing name in a valid index is authoritative.
                 continue
             shard_name_by_url.setdefault(cls.shard_url(index, shard_hash), name)
-        records_by_url: dict[str, list[dict[str, Any]]] = {}
+        records_by_url: dict[str, tuple[PackageRecord, ...]] = {}
         missing = cls._cached_shards(shard_name_by_url, records_by_url)
         if missing is None:
             return None
@@ -358,5 +352,5 @@ class ShardClient:
             record
             for records in records_by_url.values()
             for record in records
-            if record["name"] in wanted
+            if record.name in wanted
         ]

@@ -54,6 +54,30 @@ def test_repodata_rejects_invalid_shard_indexes(data):
             "packages": {"pkg-1-0.tar.bz2": {"depends": None}},
             "packages.conda": {},
         },
+        {
+            "packages": {
+                "pkg-1-0.tar.bz2": {
+                    "name": "pkg",
+                    "version": "1",
+                    "build": "0",
+                    "build_number": 0,
+                    "depends": "zlib",
+                }
+            },
+            "packages.conda": {},
+        },
+        {
+            "packages": {
+                "pkg-1-0.tar.bz2": {
+                    "name": "pkg",
+                    "version": "1",
+                    "build": "0",
+                    "build_number": "0",
+                    "depends": [],
+                }
+            },
+            "packages.conda": {},
+        },
     ],
 )
 def test_repodata_rejects_invalid_package_shards(data):

@@ -18,12 +18,12 @@ import sqlite3
 import sys
 import tempfile
 from collections import namedtuple
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from contextlib import closing, contextmanager
 from hashlib import sha256
 from itertools import product
 from pathlib import Path
-from typing import Any, ClassVar, cast
+from typing import ClassVar, cast
 
 import requests
 
@@ -31,10 +31,12 @@ from .._types import (
     ALL_PACKAGE_SUBDIRS,
     Channel,
     Config,
+    PackageRecord,
     PackageSubdir,
     Subdir,
     container_platform_to_package_subdir,
     native_container_platform,
+    parse_package_record,
 )
 from ..support.caching import file_lock, get_cache_root, memoize
 from .fetch import FetchRequest, fetch
@@ -179,17 +181,30 @@ class RepoData:
         data = json.loads(raw)
         packages = data["packages"]
         packages.update(data.get("packages.conda", {}))
+        subdir = data["info"]["subdir"]
         RepoData._populate_records(
             connection,
-            packages.values(),
-            subdir=data["info"]["subdir"],
+            RepoData._parse_package_records(packages, subdir),
+            subdir=subdir,
             fetched_at=fetched_at,
         )
 
     @staticmethod
+    def _parse_package_records(
+        packages: Mapping[str, object], subdir: str
+    ) -> Iterator[PackageRecord]:
+        for filename, raw_record in packages.items():
+            try:
+                yield parse_package_record(raw_record)
+            except TypeError as exc:
+                raise ValueError(
+                    f"Invalid package record {filename!r} in {subdir} repodata: {exc}"
+                ) from exc
+
+    @staticmethod
     def _populate_records(
         connection: sqlite3.Connection,
-        records: Iterable[dict[str, Any]],
+        records: Iterable[PackageRecord],
         *,
         subdir: Subdir,
         fetched_at: float,
@@ -207,11 +222,11 @@ class RepoData:
                 "INSERT INTO packages VALUES (?, ?, ?, ?, ?)",
                 (
                     (
-                        record.get("name"),
-                        str(record.get("version")),
-                        record.get("build"),
-                        record.get("build_number"),
-                        json.dumps(record.get("depends")),
+                        record.name,
+                        record.version,
+                        record.build,
+                        record.build_number,
+                        json.dumps(record.depends),
                     )
                     for record in records
                 ),

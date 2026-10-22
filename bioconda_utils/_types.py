@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import platform
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -184,6 +184,61 @@ type Subdir = PackageSubdir | Literal["noarch"]
 Channel = NewType("Channel", str)
 #: Identity of a repodata repository: its channel and subdir.
 type RepoDataKey = tuple[Channel, Subdir]
+
+
+class PackageRecord(NamedTuple):
+    """The repodata fields bioconda-utils indexes for package queries.
+
+    Full repodata and CEP-16 package shards are both normalized to this shape
+    before being written to the SQLite cache, so shard queries and full-repodata
+    fallbacks return identical results.
+    """
+
+    name: str
+    version: str
+    build: str
+    build_number: int
+    depends: tuple[str, ...] | None
+
+
+def parse_package_record(
+    raw: object, *, default_name: str | None = None
+) -> PackageRecord:
+    """Validate and normalize one repodata package record.
+
+    Raises :class:`TypeError` for malformed records, allowing shard downloads
+    to fall back to full repodata instead of caching corrupt dependency data.
+    """
+    if not isinstance(raw, Mapping):
+        raise TypeError("package record is not a mapping")
+    name = raw.get("name", default_name)
+    if not isinstance(name, str):
+        raise TypeError("package record has no valid name")
+    version = raw.get("version")
+    if not isinstance(version, (str, int, float)):
+        raise TypeError("package record has no valid version")
+    build = raw.get("build", "")
+    if not isinstance(build, str):
+        raise TypeError("package record has no valid build string")
+    build_number = raw.get("build_number", 0)
+    if not isinstance(build_number, int):
+        raise TypeError("package record has no valid build number")
+    depends = raw.get("depends", ())
+    if depends is None:
+        normalized_depends = None
+    elif isinstance(depends, (list, tuple)) and all(
+        isinstance(depend, str) for depend in depends
+    ):
+        normalized_depends = tuple(depends)
+    else:
+        raise TypeError("package record has no valid depends list")
+    return PackageRecord(
+        name=name,
+        version=str(version),
+        build=build,
+        build_number=build_number,
+        depends=normalized_depends,
+    )
 
 
 def parse_channel(value: str) -> Channel:
