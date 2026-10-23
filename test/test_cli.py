@@ -342,12 +342,83 @@ def test_git_range_parsing(spec, base, ref):
 
 
 @pytest.mark.parametrize(
-    "spec",
-    ["", "main..HEAD", "main....HEAD", "...HEAD", "main...", "a...b...c"],
+    "spec", ["", "main..HEAD", "main....HEAD", "...HEAD", "main...", "a...b...c"]
 )
 def test_invalid_git_ranges_are_rejected(spec):
     with pytest.raises(ValueError):
         GitRange.parse(spec)
+
+
+MISSING_PACKAGES_COMMANDS = ["lint", "build", "dag", "update-pinning", "autobump"]
+
+
+def write_single_recipe_collection(tmp_path):
+    recipe_folder = tmp_path / "recipes"
+    (recipe_folder / "samtools").mkdir(parents=True)
+    (recipe_folder / "samtools" / "meta.yaml").write_text(
+        '{% set version = "1.0" %}\n'
+        "package:\n"
+        "  name: samtools\n"
+        '  version: "{{ version }}"\n'
+    )
+    config = tmp_path / "config.yml"
+    config.write_text("{}")
+    return recipe_folder, config
+
+
+@pytest.mark.parametrize("command", MISSING_PACKAGES_COMMANDS)
+def test_missing_packages_pattern_is_an_error(command, tmp_path):
+    recipe_folder, config = write_single_recipe_collection(tmp_path)
+
+    result = runner.invoke(
+        cli.app,
+        [command, str(recipe_folder), str(config), "--packages", "samtool"],
+    )
+
+    assert result.exit_code == 2, result.output
+    output = ANSI_CODES.sub("", result.output)
+    assert "no recipe directories match" in output
+    assert "'samtool'" in output
+
+
+def test_mixed_packages_with_missing_pattern_is_an_error(tmp_path):
+    # a single typo among valid names must fail, not be silently dropped
+    recipe_folder, config = write_single_recipe_collection(tmp_path)
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "lint",
+            str(recipe_folder),
+            str(config),
+            "--packages",
+            "samtools",
+            "--packages",
+            "samtool",
+        ],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "no recipe directories match" in ANSI_CODES.sub("", result.output)
+
+
+@pytest.mark.parametrize("command", ["lint", "build", "update-pinning"])
+def test_skiplisted_package_alone_is_not_an_error(command, tmp_path):
+    # per contract: recipes that exist but are skiplisted stay a non-error
+    recipe_folder, config = write_single_recipe_collection(tmp_path)
+    (tmp_path / "blacklist.txt").write_text("recipes/samtools\n")
+    config.write_text("blacklists:\n  - blacklist.txt\n")
+
+    result = runner.invoke(
+        cli.app,
+        [command, str(recipe_folder), str(config), "--packages", "samtools"],
+    )
+
+    # lint intentionally lints blacklisted recipes, so it reports lint errors
+    # (exit 1) for the minimal fixture rather than passing; what matters here
+    # is that the missing-package check does not fire.
+    assert result.exit_code != 2, result.output
+    assert "no recipe directories match" not in ANSI_CODES.sub("", result.output)
 
 
 def test_cli_rejects_two_dot_git_range(monkeypatch):

@@ -168,6 +168,29 @@ def _validate_positive_int(value: int) -> int:
     return value
 
 
+def _error_on_missing_packages(recipe_folder: Path, packages: list[str] | None) -> None:
+    """Error when an explicitly supplied ``--packages`` pattern matches nothing.
+
+    Patterns match recipe folder names, so an unmatched pattern is almost
+    always a typo that would otherwise silently become an empty, but
+    successful, run. Recipes that exist but are skiplisted are unaffected:
+    filtering them out happens later and remains a non-error.
+    """
+    if packages is None:
+        return
+    from .recipes import get_recipes as find_recipes
+
+    unmatched = [p for p in packages if not any(find_recipes(recipe_folder, [p]))]
+    if unmatched:
+        raise typer.BadParameter(
+            "no recipe directories match: "
+            + ", ".join(repr(p) for p in unmatched)
+            + ". Patterns match recipe folder names (e.g. 'bwa' or 'bwa*'), "
+            "not package names",
+            param_hint="--packages",
+        )
+
+
 def _parse_git_range(value: str) -> GitRange:
     from .githandler import GitRange
 
@@ -284,7 +307,9 @@ PackagesOpt = Annotated[
     list[str] | None,
     typer.Option(
         "--packages",
-        help="Package name(s) or glob pattern(s). Can be specified more than once.",
+        help="Package name(s) or glob pattern(s) matching recipe folder names. "
+        "Can be specified more than once. A pattern that matches no recipe "
+        "folder is an error.",
     ),
 ]
 PdbOpt = Annotated[
@@ -722,6 +747,7 @@ def build(
         for cmd in setup:
             run(shlex.split(cmd))
 
+    _error_on_missing_packages(recipe_folder, packages)
     recipes: list[RecipePath] = get_recipes(
         cfg, recipe_folder, package_patterns, parsed_git_range
     )
@@ -830,6 +856,7 @@ def dag(
     from .recipes import get_recipes as find_recipes
 
     config_data = load_config(config)
+    _error_on_missing_packages(recipe_folder, packages)
     dag, name2recipes = graph.build(
         find_recipes(recipe_folder, package_patterns), config_data
     )
@@ -973,6 +1000,7 @@ def lint(
         _validate_path_exists(config)
         config_data = load_config(config)
         _configure_caches(cache, refresh_repodata)
+        _error_on_missing_packages(recipe_folder, packages)
         recipes: list[RecipePath] = get_recipes(
             config_data,
             Path(recipe_folder),
@@ -1187,6 +1215,7 @@ def update_pinning(
                 parse_channel(channel) for channel in skip_additional_channels
             )
         variant_keys = frozenset(skip_variants or ())
+        _error_on_missing_packages(recipe_folder, packages)
         _configure_caches(cache, refresh_repodata)
         build_config = load_conda_build_config()
         skiplist = Skiplist(config_data, recipe_folder)
@@ -1253,6 +1282,9 @@ def update_pinning(
             report_console.print(
                 f"The build numbers in the following recipes could not be incremented: {list(bumpErrors)}"
             )
+    except (typer.Exit, typer.BadParameter):
+        # Control flow and user errors, not failures (see lint).
+        raise
     except Exception:
         if _handle_pdb_exception("Update-pinning", pdb):
             return
@@ -1598,6 +1630,7 @@ def autobump(
         # load and register config
         config_dict = load_config(config)
 
+        _error_on_missing_packages(recipe_folder, packages)
         _configure_caches(cache, refresh_repodata)
         from . import autobump, githubhandler
 
@@ -1714,6 +1747,9 @@ def autobump(
         # And go.
         scanner.run()
 
+    except (typer.Exit, typer.BadParameter):
+        # Control flow and user errors, not failures (see lint).
+        raise
     except Exception:
         if _handle_pdb_exception("Autobump", pdb):
             return
