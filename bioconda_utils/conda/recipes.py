@@ -284,7 +284,13 @@ def get_package_paths(
     )
 
     if divergent_builds:
-        raise DivergentBuildsError(*sorted(divergent_builds))
+        local_builds = sorted(
+            {f"{meta.name()}-{meta.version()}-{meta.build_id()}" for meta in metas}
+        )
+        raise DivergentBuildsError(
+            f"published: {', '.join(sorted(divergent_builds))}; "
+            f"locally calculated: {', '.join(local_builds)}"
+        )
 
     if force:
         for meta in existing_metas:

@@ -2,9 +2,13 @@ import json
 import logging
 import os
 import subprocess as sp
+import sys
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
+import typer
+from typer.testing import CliRunner
 
 from bioconda_utils import _types, build, cli
 from bioconda_utils._types import ContainerPlatform, PackageSubdir, PkgBuildRef
@@ -368,9 +372,7 @@ def test_docker_build_image_selection(
     )
 
 
-def test_dev_image_failure_is_actionable(monkeypatch):
-    from click import ClickException
-
+def test_dev_image_failure_is_actionable(monkeypatch, caplog):
     monkeypatch.setattr(cli, "VERSION", "5.1.1.dev189+gabc")
     monkeypatch.delenv("BUILD_ENV_IMAGE", raising=False)
     monkeypatch.setattr(
@@ -379,11 +381,18 @@ def test_dev_image_failure_is_actionable(monkeypatch):
     pull = Mock(side_effect=sp.CalledProcessError(1, ["docker", "pull"]))
     monkeypatch.setattr(docker_utils, "run", pull)
 
-    with pytest.raises(ClickException) as error:
+    app = typer.Typer()
+
+    @app.command()
+    def build_image():
         cli._docker_build_image(None, ContainerPlatform.LINUX_ARM64)
 
-    assert "just docker-image linux/arm64" in str(error.value)
-    assert "--docker-base-image" in str(error.value)
+    result = CliRunner().invoke(app, [])
+
+    assert result.exit_code == 1
+    assert isinstance(result.exception, SystemExit)
+    assert "just docker-image linux/arm64" in caplog.text
+    assert "--docker-base-image" in caplog.text
     pull.assert_called_once_with(
         [
             "docker",
@@ -393,6 +402,65 @@ def test_dev_image_failure_is_actionable(monkeypatch):
             "quay.io/bioconda/bioconda-utils-build-env-cos7:5.1.1",
         ],
         live=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "platform,base",
+    [
+        ("linux/amd64", "quay.io/condaforge/linux-anvil-cos7-x86_64"),
+        ("linux/arm64", "quay.io/condaforge/linux-anvil-aarch64"),
+    ],
+)
+def test_local_image_matches_installed_cli_despite_stale_metadata(
+    tmp_path, monkeypatch, platform, base
+):
+    # Reproduce a checkout whose old egg-info disagrees with the installed CLI.
+    checkout = tmp_path / "checkout"
+    scripts = checkout / "scripts"
+    scripts.mkdir(parents=True)
+    source = Path(__file__).resolve().parents[1] / "scripts" / "build-dev-image.sh"
+    script = scripts / source.name
+    script.write_text(source.read_text())
+    metadata = checkout / "bioconda_utils.egg-info"
+    metadata.mkdir()
+    (metadata / "PKG-INFO").write_text(
+        "Metadata-Version: 2.4\nName: bioconda-utils\nVersion: 0.0.0\n"
+    )
+    executable_dir = Path(sys.executable).parent
+    installed_cli = sp.run(
+        [str(executable_dir / "bioconda-utils"), "--version"],
+        cwd=checkout,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    version = installed_cli.stdout.strip().removeprefix(
+        "This is bioconda-utils version "
+    )
+    assert not version.startswith("0.0.0")
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    docker = fake_bin / "docker"
+    docker.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+    docker.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{fake_bin}:{executable_dir}:{os.environ['PATH']}")
+
+    result = sp.run(
+        ["bash", str(script), platform],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert f"BIOCONDA_UTILS_VERSION={version}" in result.stdout
+    assert f"BASE_IMAGE={base}" in result.stdout
+    assert f"--platform\n{platform}\n" in result.stdout
+    assert (
+        f"--tag\nquay.io/bioconda/bioconda-utils-build-env-cos7:{cli.extract_stable_version(version)}\n"
+        in result.stdout
     )
 
 

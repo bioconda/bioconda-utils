@@ -1336,6 +1336,47 @@ def test_filter_existing_packages_queries_rendered_target_subdir(monkeypatch):
     assert queried_platforms == [[PackageSubdir.LINUX_AARCH64, "noarch"]]
 
 
+@pytest.mark.parametrize(
+    "local_builds",
+    [["h1111111_12"], ["h2222222_12", "h1111111_12"]],
+)
+def test_divergent_build_error_shows_published_and_local_builds(
+    monkeypatch, local_builds
+):
+    ExistingBuild = namedtuple("ExistingBuild", ["channel", "subdir", "build"])
+    metas = []
+    for build_id in local_builds:
+        meta = Mock()
+        meta.name.return_value = "samtools"
+        meta.version.return_value = "1.3.1"
+        meta.build_number.return_value = 12
+        meta.build_id.return_value = build_id
+        meta.noarch = False
+        meta.noarch_python = False
+        meta.config.host_subdir = PackageSubdir.LINUX_64
+        metas.append(meta)
+    render = Mock(return_value=(PackageSubdir.LINUX_64, metas))
+    monkeypatch.setattr(conda_recipes, "_load_platform_metas", render)
+    monkeypatch.setattr(
+        RepoData,
+        "get_package_data",
+        lambda *_args, **_kwargs: [
+            ExistingBuild("bioconda", PackageSubdir.LINUX_64, "h60f3df9_12")
+        ],
+    )
+
+    with pytest.raises(conda_recipes.DivergentBuildsError) as error:
+        conda_recipes.get_package_paths(
+            Path("recipes/samtools/1.3.1"), [Channel("bioconda")], force=True
+        )
+
+    expected_local = ", ".join(f"samtools-1.3.1-{b}" for b in sorted(local_builds))
+    assert str(error.value) == (
+        f"published: samtools-1.3.1-h60f3df9_12; locally calculated: {expected_local}"
+    )
+    render.assert_called_once()
+
+
 def test_get_package_paths_force_builds_existing_and_logs_force(caplog, monkeypatch):
     # get_package_data yields namedtuple rows for ["channel", "subdir", "build"]
     ExistingBuild = namedtuple("ExistingBuild", ["channel", "subdir", "build"])
