@@ -296,6 +296,35 @@ def test_dag_text_output_does_not_wrap_recipe_paths(monkeypatch, tmp_path):
     assert str(long_recipe) in result.output.splitlines()
 
 
+def test_dag_dot_output_contains_nodes_and_edges(monkeypatch, tmp_path):
+    recipe_folder = tmp_path / "recipes"
+    recipe_folder.mkdir()
+    config = tmp_path / "config.yml"
+    config.write_text("{}")
+    package_dag = nx.DiGraph([("dependency", "package")])
+    name2recipes = {
+        name: {RecipePath(Path("recipes") / name, CONDA)} for name in package_dag.nodes
+    }
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda _: {})
+    monkeypatch.setattr(cli, "get_recipes", lambda *_: [])
+    monkeypatch.setattr(
+        "bioconda_utils.graph.build", lambda *_: (package_dag, name2recipes)
+    )
+
+    result = runner.invoke(
+        cli.app,
+        ["dag", str(recipe_folder), str(config), "--output-format", "dot"],
+    )
+
+    assert result.exit_code == 0, result.output
+    output = click.unstyle(result.output)
+    # The writer is deterministic; pin the exact bytes so any format drift
+    # (which would break downstream DOT consumers) fails loudly here.
+    assert output == (
+        'digraph {\n  "dependency";\n  "package";\n  "dependency" -> "package";\n}\n'
+    )
+
+
 @pytest.mark.parametrize(
     ("spec", "base", "ref"),
     [

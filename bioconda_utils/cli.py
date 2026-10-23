@@ -48,6 +48,8 @@ from .support.logsetup import err_console as error_console
 
 if TYPE_CHECKING:
     # Annotation-only: imported lazily inside the functions that need it.
+    from networkx import DiGraph
+
     from ._types import RecipePath
     from .githandler import GitRange
 
@@ -88,6 +90,36 @@ def _write_output(text: str) -> None:
     logs, progress, and errors belong on stderr.
     """
     sys.stdout.write(text)
+
+
+def _dot_quote(label: str) -> str:
+    """Quote a string for use as a DOT node identifier."""
+    escaped = label.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def _write_dot(dag: DiGraph) -> None:
+    """Serialize a package DAG as DOT (Graphviz) to stdout.
+
+    Nodes are package names, used directly as (quoted) node identifiers.
+
+    Deliberately dependency-free: ``networkx.drawing.nx_pydot.write_dot``
+    needs pydot, which on conda-forge hard-depends on graphviz and its GUI
+    stack -- GTK3, X11, Wayland, cups, librsvg, pango, cairo, fontconfig and
+    a font set: 63 packages / 35 MB download *per platform* (measured
+    2026-10-23). Because runtime deps ship in
+    ``bioconda_utils-requirements.txt``, that cost lands in the CI build
+    docker images and every user environment. bioconda-utils uses none of
+    pydot's features (parsing DOT, attributed graphs, rendering); it only
+    emits this flat quoted edge list. Revisit pydot only if dot output ever
+    needs graph attributes or styling.
+    """
+    _write_output("digraph {\n")
+    for node in dag.nodes:
+        _write_output(f"  {_dot_quote(str(node))};\n")
+    for source, target in dag.edges:
+        _write_output(f"  {_dot_quote(str(source))} -> {_dot_quote(str(target))};\n")
+    _write_output("}\n")
 
 
 # A package is the name of the software package, like `bowtie`.
@@ -806,9 +838,7 @@ def dag(
     if output_format == "gml":
         nx.write_gml(dag, sys.stdout.buffer)
     elif output_format == "dot":
-        from networkx.drawing.nx_pydot import write_dot
-
-        write_dot(dag, sys.stdout)
+        _write_dot(dag)
     elif output_format == "txt":
         subdags: list[list[str]] = sorted(
             map(sorted, nx.connected_components(dag.to_undirected()))
