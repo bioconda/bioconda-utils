@@ -79,6 +79,35 @@ from ..support.subproc import run
 
 logger = logging.getLogger(__name__)
 
+
+def ensure_build_image(image: str, target_platform: ContainerPlatform | None) -> None:
+    """Reuse a matching local image, otherwise pull it for the requested platform."""
+    result = sp.run(
+        [
+            "docker",
+            "image",
+            "inspect",
+            "--format",
+            "{{.Os}}/{{.Architecture}}",
+            image,
+        ],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    if result.returncode == 0 and (
+        target_platform is None or result.stdout.strip() == target_platform
+    ):
+        return
+
+    logger.info("Pulling Docker build image %s", image)
+    command = ["docker", "pull"]
+    if target_platform is not None:
+        command += ["--platform", target_platform]
+    command.append(image)
+    run(command, live=True)
+
+
 LOCAL_CHANNEL_SUBDIRS = tuple(
     subdir for subdir in ALL_PACKAGE_SUBDIRS if subdir.startswith("linux-")
 ) + ("noarch",)
@@ -418,35 +447,9 @@ class RecipeBuilder:
 
     def _ensure_base_image(self) -> None:
         """Ensure the requested build image and platform are available locally."""
-        image = self.docker_base_image
-        if image is None:
+        if self.docker_base_image is None:
             raise ValueError("docker_base_image is required when build_image is false")
-
-        result = sp.run(
-            [
-                "docker",
-                "image",
-                "inspect",
-                "--format",
-                "{{.Os}}/{{.Architecture}}",
-                image,
-            ],
-            capture_output=True,
-            check=False,
-            text=True,
-        )
-        if result.returncode == 0 and (
-            self.target_platform is None
-            or result.stdout.strip() == self.target_platform
-        ):
-            return
-
-        logger.info("Pulling Docker build image %s", image)
-        command = ["docker", "pull"]
-        if self.target_platform is not None:
-            command += ["--platform", self.target_platform]
-        command.append(image)
-        run(command, live=True)
+        ensure_build_image(self.docker_base_image, self.target_platform)
 
     def _get_config_path(
         self, staging_prefix: Path, i: int, config_file: CondaBuildConfigFile

@@ -53,6 +53,25 @@ Or use the Just wrappers around the Pixi tasks:
 just global-install
 ```
 
+Docker builds use the image tag matching the leading `X.Y.Z` of the installed
+version, including development versions (for example, `5.1.1.dev189` uses
+`quay.io/bioconda/bioconda-utils-build-env-cos7:5.1.1`). A matching local image
+is reused; otherwise the published image is pulled. If that image is not yet
+published, build it from this checkout:
+
+```bash
+just docker-image
+```
+
+The recipe tags the image with that same version so `build --docker` and Linux
+`handle-merged-pr --fallback build` can use it. It defaults to the Docker
+daemon's platform. To build for another supported platform, use
+`just docker-image linux/arm64` or `just docker-image linux/amd64`
+(cross-platform builds require emulation). Rebuild when you need checkout or
+dependency changes reflected inside the container. `--build-image` only
+customizes an existing image and does not replace this step. An explicit
+`--docker-base-image` or `BUILD_ENV_IMAGE` overrides the default.
+
 To update selected recipes, pass the recipe collection root and select
 packages:
 

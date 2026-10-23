@@ -337,6 +337,83 @@ def test_recipe_builder_reuses_matching_local_base_image(monkeypatch):
     assert pulls == []
 
 
+@pytest.mark.parametrize(
+    "version,explicit,environment,expected",
+    [
+        (
+            "5.1.1.dev189+gabc",
+            None,
+            None,
+            "quay.io/bioconda/bioconda-utils-build-env-cos7:5.1.1",
+        ),
+        ("5.1.1", None, None, "quay.io/bioconda/bioconda-utils-build-env-cos7:5.1.1"),
+        ("5.1.1.dev189+gabc", "custom:explicit", "custom:env", "custom:explicit"),
+        ("5.1.1.dev189+gabc", None, "custom:env", "custom:env"),
+        ("5.1.1", "custom:explicit", None, "custom:explicit"),
+    ],
+)
+def test_docker_build_image_selection(
+    monkeypatch, version, explicit, environment, expected
+):
+    monkeypatch.setattr(cli, "VERSION", version)
+    monkeypatch.delenv("BUILD_ENV_IMAGE", raising=False)
+    if environment:
+        monkeypatch.setenv("BUILD_ENV_IMAGE", environment)
+    inspect = Mock(return_value=Mock(returncode=0, stdout="linux/arm64\n"))
+    monkeypatch.setattr(docker_utils.sp, "run", inspect)
+
+    assert cli._docker_build_image(explicit, ContainerPlatform.LINUX_ARM64) == expected
+    assert inspect.call_count == int(
+        "dev" in version and not explicit and not environment
+    )
+
+
+def test_dev_image_failure_is_actionable(monkeypatch):
+    from click import ClickException
+
+    monkeypatch.setattr(cli, "VERSION", "5.1.1.dev189+gabc")
+    monkeypatch.delenv("BUILD_ENV_IMAGE", raising=False)
+    monkeypatch.setattr(
+        docker_utils.sp, "run", Mock(return_value=Mock(returncode=1, stdout=""))
+    )
+    pull = Mock(side_effect=sp.CalledProcessError(1, ["docker", "pull"]))
+    monkeypatch.setattr(docker_utils, "run", pull)
+
+    with pytest.raises(ClickException) as error:
+        cli._docker_build_image(None, ContainerPlatform.LINUX_ARM64)
+
+    assert "just docker-image linux/arm64" in str(error.value)
+    assert "--docker-base-image" in str(error.value)
+    pull.assert_called_once_with(
+        [
+            "docker",
+            "pull",
+            "--platform",
+            ContainerPlatform.LINUX_ARM64,
+            "quay.io/bioconda/bioconda-utils-build-env-cos7:5.1.1",
+        ],
+        live=True,
+    )
+
+
+def test_dev_image_uses_published_image_when_not_local(monkeypatch):
+    monkeypatch.setattr(cli, "VERSION", "5.1.1.dev189+gabc")
+    monkeypatch.delenv("BUILD_ENV_IMAGE", raising=False)
+    monkeypatch.setattr(
+        docker_utils.sp, "run", Mock(return_value=Mock(returncode=1, stdout=""))
+    )
+    pull = Mock()
+    monkeypatch.setattr(docker_utils, "run", pull)
+
+    image = cli._docker_build_image(None, ContainerPlatform.LINUX_ARM64)
+
+    assert image == "quay.io/bioconda/bioconda-utils-build-env-cos7:5.1.1"
+    pull.assert_called_once_with(
+        ["docker", "pull", "--platform", ContainerPlatform.LINUX_ARM64, image],
+        live=True,
+    )
+
+
 def test_recipe_builder_pulls_missing_base_image_for_target(monkeypatch):
     builder = docker_utils.RecipeBuilder.__new__(docker_utils.RecipeBuilder)
     builder.docker_base_image = "quay.io/bioconda/build-env:latest"

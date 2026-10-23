@@ -67,10 +67,38 @@ def is_stable_version(version: str) -> bool:
 
 
 def extract_stable_version(version: str) -> str:
-    m = re.match(r"^(\d+\.\d+\.\d+)", version)
-    if m is None:
+    match = re.match(r"^(\d+\.\d+\.\d+)", version)
+    if match is None:
         raise ValueError(f"Could not extract stable version from {version}")
-    return m.group(1)
+    return match.group(1)
+
+
+def _docker_build_image(
+    explicit_image: str | None, target_platform: ContainerPlatform | None
+) -> str:
+    """Resolve overrides first; development builds can reuse release images."""
+    import subprocess
+
+    from click import ClickException
+
+    from .containers import docker_utils
+
+    override = explicit_image or os.getenv("BUILD_ENV_IMAGE")
+    if override:
+        return override
+    image = f"quay.io/bioconda/bioconda-utils-build-env-cos7:{extract_stable_version(VERSION)}"
+    if not is_stable_version(VERSION):
+        try:
+            docker_utils.ensure_build_image(image, target_platform)
+        except subprocess.CalledProcessError:
+            platform_arg = f" {target_platform}" if target_platform else ""
+            raise ClickException(
+                f"Could not obtain Docker build image {image}. "
+                f"Run `just docker-image{platform_arg}` from your bioconda-utils "
+                "checkout to build it locally, or specify --docker-base-image "
+                "(or BUILD_ENV_IMAGE). Check the Docker error above for details."
+            ) from None
+    return image
 
 
 app = typer.Typer(
@@ -760,18 +788,7 @@ def build(
             use_host_conda_bld = True
         else:
             use_host_conda_bld = False
-        if not is_stable_version(VERSION):
-            image_tag = extract_stable_version(VERSION)
-            logger.warning(
-                f"Using tag {image_tag} for docker image, since there is no image for a not yet release version ({VERSION})."
-            )
-        else:
-            image_tag = VERSION
-        docker_base_image = (
-            docker_base_image
-            or os.getenv("BUILD_ENV_IMAGE", None)
-            or f"quay.io/bioconda/bioconda-utils-build-env-cos7:{image_tag}"
-        )
+        docker_base_image = _docker_build_image(docker_base_image, target_platform)
         logger.info(f"Using docker image {docker_base_image} for building.")
         docker_builder = docker_utils.RecipeBuilder(
             build_script_template=build_script_content,
