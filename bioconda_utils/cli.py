@@ -76,27 +76,30 @@ def extract_stable_version(version: str) -> str:
 def _docker_build_image(
     explicit_image: str | None, target_platform: ContainerPlatform | None
 ) -> str:
-    """Resolve overrides first; development builds can reuse release images."""
+    """Resolve the build image and check availability before recipe rendering."""
     import subprocess
 
     from .containers import docker_utils
 
     override = explicit_image or os.getenv("BUILD_ENV_IMAGE")
-    if override:
-        return override
-    image = f"quay.io/bioconda/bioconda-utils-build-env-cos7:{extract_stable_version(VERSION)}"
-    if not is_stable_version(VERSION):
-        try:
-            docker_utils.ensure_build_image(image, target_platform)
-        except subprocess.CalledProcessError:
-            platform_arg = f" {target_platform}" if target_platform else ""
-            logger.error(
-                f"Could not obtain Docker build image {image}. "
-                f"Run `just docker-image{platform_arg}` from your bioconda-utils "
-                "checkout to build it locally, or specify --docker-base-image "
-                "(or BUILD_ENV_IMAGE). Check the Docker error above for details."
-            )
-            raise typer.Exit(code=1) from None
+    image = override or (
+        f"quay.io/bioconda/bioconda-utils-build-env-cos7:{extract_stable_version(VERSION)}"
+    )
+    # Docker can pull on demand, but that would fail after expensive host-side
+    # rendering. Check once here so missing development images get useful guidance.
+    try:
+        docker_utils.ensure_build_image(image, target_platform)
+    except subprocess.CalledProcessError:
+        if override or is_stable_version(VERSION):
+            raise
+        platform_arg = f" {target_platform}" if target_platform else ""
+        logger.error(
+            f"Could not obtain Docker build image {image}. "
+            f"Run `just docker-image{platform_arg}` from your bioconda-utils "
+            "checkout to build it locally, or specify --docker-base-image "
+            "(or BUILD_ENV_IMAGE). Check the Docker error above for details."
+        )
+        raise typer.Exit(code=1) from None
     return image
 
 

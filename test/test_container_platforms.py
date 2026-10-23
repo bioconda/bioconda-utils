@@ -317,12 +317,7 @@ def test_recipe_builder_build_image_passes_target_platform(monkeypatch, tmp_path
     assert commands[0][3] == ContainerPlatform.LINUX_ARM64
 
 
-def test_recipe_builder_reuses_matching_local_base_image(monkeypatch):
-    builder = docker_utils.RecipeBuilder.__new__(docker_utils.RecipeBuilder)
-    builder.docker_base_image = "local-build-env:arm64"
-    builder.target_platform = ContainerPlatform.LINUX_ARM64
-    builder.build_image = False
-    builder.keep_image = False
+def test_ensure_build_image_reuses_matching_local_image(monkeypatch):
     pulls = []
 
     monkeypatch.setattr(
@@ -336,7 +331,9 @@ def test_recipe_builder_reuses_matching_local_base_image(monkeypatch):
         lambda command, **_kwargs: pulls.append(command),
     )
 
-    builder._ensure_base_image()
+    docker_utils.ensure_build_image(
+        "local-build-env:arm64", ContainerPlatform.LINUX_ARM64
+    )
 
     assert pulls == []
 
@@ -367,9 +364,7 @@ def test_docker_build_image_selection(
     monkeypatch.setattr(docker_utils.sp, "run", inspect)
 
     assert cli._docker_build_image(explicit, ContainerPlatform.LINUX_ARM64) == expected
-    assert inspect.call_count == int(
-        "dev" in version and not explicit and not environment
-    )
+    inspect.assert_called_once()
 
 
 def test_dev_image_failure_is_actionable(monkeypatch, caplog):
@@ -482,18 +477,18 @@ def test_dev_image_uses_published_image_when_not_local(monkeypatch):
     )
 
 
-def test_recipe_builder_pulls_missing_base_image_for_target(monkeypatch):
-    builder = docker_utils.RecipeBuilder.__new__(docker_utils.RecipeBuilder)
-    builder.docker_base_image = "quay.io/bioconda/build-env:latest"
-    builder.target_platform = ContainerPlatform.LINUX_ARM64
-    builder.build_image = False
-    builder.keep_image = False
+@pytest.mark.parametrize("local_platform", [None, "linux/amd64"])
+def test_ensure_build_image_pulls_missing_or_wrong_platform_image(
+    monkeypatch, local_platform
+):
     pulls = []
 
     monkeypatch.setattr(
         docker_utils.sp,
         "run",
-        lambda *_args, **_kwargs: Mock(returncode=1, stdout=""),
+        lambda *_args, **_kwargs: Mock(
+            returncode=0 if local_platform else 1, stdout=local_platform or ""
+        ),
     )
     monkeypatch.setattr(
         docker_utils,
@@ -501,7 +496,9 @@ def test_recipe_builder_pulls_missing_base_image_for_target(monkeypatch):
         lambda command, **_kwargs: pulls.append(command),
     )
 
-    builder._ensure_base_image()
+    docker_utils.ensure_build_image(
+        "quay.io/bioconda/build-env:latest", ContainerPlatform.LINUX_ARM64
+    )
 
     assert pulls == [
         [
@@ -514,13 +511,7 @@ def test_recipe_builder_pulls_missing_base_image_for_target(monkeypatch):
     ]
 
 
-def test_recipe_builder_fails_when_base_image_cannot_be_pulled(monkeypatch):
-    builder = docker_utils.RecipeBuilder.__new__(docker_utils.RecipeBuilder)
-    builder.docker_base_image = "missing-build-env:arm64"
-    builder.target_platform = ContainerPlatform.LINUX_ARM64
-    builder.build_image = False
-    builder.keep_image = False
-
+def test_ensure_build_image_fails_when_image_cannot_be_pulled(monkeypatch):
     monkeypatch.setattr(
         docker_utils.sp,
         "run",
@@ -533,7 +524,9 @@ def test_recipe_builder_fails_when_base_image_cannot_be_pulled(monkeypatch):
     monkeypatch.setattr(docker_utils, "run", fail_pull)
 
     with pytest.raises(sp.CalledProcessError):
-        builder._ensure_base_image()
+        docker_utils.ensure_build_image(
+            "missing-build-env:arm64", ContainerPlatform.LINUX_ARM64
+        )
 
 
 def _rattler_run_command(monkeypatch, tmp_path, container_cache):

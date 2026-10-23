@@ -409,9 +409,6 @@ class RecipeBuilder:
         self.docker_base_image = docker_base_image
         self.docker_temp_image = tag
 
-        if not self.build_image:
-            self._ensure_base_image()
-
         # find and store user info
         uid = os.getuid()
         usr = pwd.getpwuid(uid)
@@ -444,12 +441,6 @@ class RecipeBuilder:
             shutil.copyfile(config_file.path, dst_file)
         if self.build_image:
             self._build_image()
-
-    def _ensure_base_image(self) -> None:
-        """Ensure the requested build image and platform are available locally."""
-        if self.docker_base_image is None:
-            raise ValueError("docker_base_image is required when build_image is false")
-        ensure_build_image(self.docker_base_image, self.target_platform)
 
     def _get_config_path(
         self, staging_prefix: Path, i: int, config_file: CondaBuildConfigFile
