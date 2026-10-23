@@ -79,8 +79,6 @@ def _docker_build_image(
     """Resolve overrides first; development builds can reuse release images."""
     import subprocess
 
-    from click import ClickException
-
     from .containers import docker_utils
 
     override = explicit_image or os.getenv("BUILD_ENV_IMAGE")
@@ -92,12 +90,13 @@ def _docker_build_image(
             docker_utils.ensure_build_image(image, target_platform)
         except subprocess.CalledProcessError:
             platform_arg = f" {target_platform}" if target_platform else ""
-            raise ClickException(
+            logger.error(
                 f"Could not obtain Docker build image {image}. "
                 f"Run `just docker-image{platform_arg}` from your bioconda-utils "
                 "checkout to build it locally, or specify --docker-base-image "
                 "(or BUILD_ENV_IMAGE). Check the Docker error above for details."
-            ) from None
+            )
+            raise typer.Exit(code=1) from None
     return image
 
 

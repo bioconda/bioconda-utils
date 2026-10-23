@@ -13,8 +13,9 @@ linux/arm64) base_image=quay.io/condaforge/linux-anvil-aarch64 ;;
 esac
 
 cd -- "$repo_root"
-version="$(python -c 'from bioconda_utils import __version__; print(__version__)')"
-image="$(python -c 'import sys; from bioconda_utils.cli import extract_stable_version; print("quay.io/bioconda/bioconda-utils-build-env-cos7:" + extract_stable_version(sys.argv[1]))' "$version")"
+# Match the installed CLI; stale checkout .egg-info must not shadow its metadata.
+version="$(python -P -c 'from bioconda_utils import __version__; print(__version__)')"
+image="$(python -P -c 'import sys; from bioconda_utils.cli import extract_stable_version; print("quay.io/bioconda/bioconda-utils-build-env-cos7:" + extract_stable_version(sys.argv[1]))' "$version")"
 
 docker build --platform "$platform" \
     --build-arg "BASE_IMAGE=$base_image" \
