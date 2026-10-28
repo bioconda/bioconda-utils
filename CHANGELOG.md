@@ -1,5 +1,22 @@
 # Changelog
 
+## [5.2.0](https://github.com/bioconda/bioconda-utils/compare/v5.1.0...v5.2.0) (2026-10-28)
+
+
+### Features
+
+* bump deps 10-13-2026 ([#1142](https://github.com/bioconda/bioconda-utils/issues/1142)) ([2515e75](https://github.com/bioconda/bioconda-utils/commit/2515e7546275d105ba91eb69fa3b3afbf623bcaf))
+
+
+### Bug Fixes
+
+* adopt modern async features ([#1136](https://github.com/bioconda/bioconda-utils/issues/1136)) ([cc7b0e3](https://github.com/bioconda/bioconda-utils/commit/cc7b0e39904376f7953c5dbd17a53da2fbfdff9b))
+
+
+### Performance Improvements
+
+* bump conda and rattler-build dependencies ([#1145](https://github.com/bioconda/bioconda-utils/issues/1145)) ([180e2ae](https://github.com/bioconda/bioconda-utils/commit/180e2ae0dcbb106d6c69f290a49d6130324564b0))
+
 ## [5.1.0](https://github.com/bioconda/bioconda-utils/compare/v5.0.0...v5.1.0) (2026-10-05)
 
 
