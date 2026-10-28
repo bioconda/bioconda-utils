@@ -534,12 +534,8 @@ def _rattler_run_command(monkeypatch, tmp_path, container_cache):
     commands = []
     builder = docker_utils.RecipeBuilder.__new__(docker_utils.RecipeBuilder)
     builder.container_cache = container_cache
-    builder.container_conda_cache = (
-        container_cache / "conda" if container_cache else None
-    )
-    builder.container_rattler_cache = (
-        container_cache / "rattler" if container_cache else None
-    )
+    builder.container_conda_cache = container_cache / "conda"
+    builder.container_rattler_cache = container_cache / "rattler"
     builder.container_staging = "/opt/host-conda-bld"
     builder.container_recipe = "/opt/recipe"
     builder.pkg_dir = tmp_path
@@ -583,12 +579,37 @@ def test_container_cache_mounts_conda_and_rattler_subdirs(monkeypatch, tmp_path)
     assert cmd[cmd.index("RATTLER_CACHE_DIR=/opt/rattler/cache") - 1] == "-e"
 
 
-def test_container_without_cache_keeps_container_defaults(monkeypatch, tmp_path):
-    cmd = _rattler_run_command(monkeypatch, tmp_path, None)
+@pytest.mark.parametrize("explicit_cache", [False, True])
+def test_container_cache_uses_shared_root(monkeypatch, tmp_path, explicit_cache):
+    from bioconda_utils.support.caching import get_cache_root
 
-    assert "/opt/conda/pkgs" not in cmd
-    assert "/opt/rattler/cache" not in cmd
-    assert "RATTLER_CACHE_DIR" not in cmd
+    monkeypatch.setattr(
+        "bioconda_utils.support.caching.platformdirs.user_cache_path",
+        lambda _app: tmp_path / "default-cache",
+    )
+    cli._configure_caches(tmp_path / "custom-cache" if explicit_cache else None, False)
+    root = get_cache_root()
+    root.mkdir(mode=0o700)
+    monkeypatch.setattr(
+        docker_utils,
+        "load_conda_build_config",
+        lambda: Mock(croot=str(tmp_path / "conda-bld"), conda_pkg_format="2"),
+    )
+    monkeypatch.setattr(docker_utils, "get_conda_build_config_files", list)
+    builder = docker_utils.RecipeBuilder(pkg_dir=tmp_path / "packages")
+
+    assert builder.container_cache == root / "containers"
+    assert root.stat().st_mode & 0o777 == 0o700
+    for directory in (
+        builder.container_cache,
+        builder.container_conda_cache,
+        builder.container_rattler_cache,
+    ):
+        assert directory.is_dir()
+        assert directory.stat().st_mode & 0o777 == 0o777
+    cmd = _rattler_run_command(monkeypatch, tmp_path, builder.container_cache)
+    assert f"{root / 'containers/conda'}:/opt/conda/pkgs" in cmd
+    assert f"{root / 'containers/rattler'}:/opt/rattler/cache" in cmd
 
 
 def test_mulled_upload_passes_target_platform(monkeypatch):

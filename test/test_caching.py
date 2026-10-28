@@ -8,6 +8,7 @@ import aiohttp
 from aiohttp import web
 
 from bioconda_utils import cli
+from bioconda_utils._types import Config
 from bioconda_utils.conda.repodata import RepoData
 from bioconda_utils.support.caching import get_cache_root, memoize
 from bioconda_utils.support.parallel import worker_pool
@@ -93,7 +94,7 @@ def test_upstream_downloads_use_shared_root(tmp_path):
 def test_repodata_uses_shared_cache_root(tmp_path, monkeypatch):
     root = tmp_path / "shared"
     cli._configure_caches(root, False)
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
+    monkeypatch.setattr(RepoData, "config", Config({"channels": ["bioconda"]}))
     raw = json.dumps({"info": {"subdir": "noarch"}, "packages": {}}).encode()
     monkeypatch.setattr(RepoData, "_download_repository", lambda *_args: raw)
     assert RepoData().get_package_data("name", platform="noarch") == []

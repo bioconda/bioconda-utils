@@ -75,6 +75,7 @@ from ..conda.conda_build_bridge import (
 from ..rattler.rattler_build_bridge import (
     get_rattler_build_global_variants_paths,
 )
+from ..support.caching import get_cache_root
 from ..support.subproc import run
 
 logger = logging.getLogger(__name__)
@@ -274,11 +275,11 @@ class RecipeBuilder:
         image_build_dir: Path | None = None,
         docker_base_image: str | None = None,
         target_platform: ContainerPlatform | None = None,
-        container_cache: Path | None = None,
     ) -> None:
         """
         Class to handle building a custom docker container that can be used for
-        building conda recipes.
+        building conda recipes. Per-tool caches under the shared cache root
+        (containers/conda and containers/rattler) are mounted into each build.
 
         Parameters
         ----------
@@ -357,48 +358,22 @@ class RecipeBuilder:
         docker_base_image : str or None
             Name of base image that can be used in **dockerfile_template**.
 
-        container_cache : Path or None
-            Host directory holding per-tool cache subdirectories that are
-            bind-mounted into build containers, so repodata, shards indexes
-            and downloaded packages persist across the containers of one
-            build run: ``conda/`` is mounted at /opt/conda/pkgs and
-            ``rattler/`` at /opt/rattler/cache (exported to rattler-build as
-            RATTLER_CACHE_DIR). Falls back to the
-            BIOCONDA_UTILS_CONTAINER_CACHE environment variable when not
-            given.
         """
         self.requirements = requirements
         self.conda_build_args: str = ""
         self.rattler_build_args: str = ""
-        # Host directory whose per-tool subdirectories are bind-mounted into
-        # build containers (conda/ at /opt/conda/pkgs, rattler/ at
-        # /opt/rattler/cache) so repodata, shards indexes and downloaded
-        # packages persist across the containers of one build run. Falls
-        # back to BIOCONDA_UTILS_CONTAINER_CACHE when not given.
-        self.container_cache: Path | None = (
-            Path(container_cache).expanduser().resolve()
-            if container_cache
-            else (
-                Path(env_cache).expanduser().resolve()
-                if (env_cache := os.environ.get("BIOCONDA_UTILS_CONTAINER_CACHE"))
-                else None
-            )
-        )
-        self.container_conda_cache: Path | None = None
-        self.container_rattler_cache: Path | None = None
-        if self.container_cache:
-            # build containers run as a different user (uid 9001 "conda") and
-            # conda/rattler write cache state even on cache hits
-            self.container_cache.mkdir(parents=True, exist_ok=True)
-            self.container_cache.chmod(0o777)
-            self.container_conda_cache = self.container_cache / "conda"
-            self.container_rattler_cache = self.container_cache / "rattler"
-            for cache_dir in (
-                self.container_conda_cache,
-                self.container_rattler_cache,
-            ):
-                cache_dir.mkdir(exist_ok=True)
-                cache_dir.chmod(0o777)
+        # Containers run as uid 9001 and write cache state even on hits.
+        # Keep their writable directories separate from the host caches.
+        self.container_cache = get_cache_root() / "containers"
+        self.container_conda_cache = self.container_cache / "conda"
+        self.container_rattler_cache = self.container_cache / "rattler"
+        for cache_dir in (
+            self.container_cache,
+            self.container_conda_cache,
+            self.container_rattler_cache,
+        ):
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            cache_dir.chmod(0o777)
         self.target_platform: ContainerPlatform | None = target_platform
         self.build_script_template: str = build_script_template
         self.rattler_build_script_template: str = rattler_build_script_template
@@ -715,15 +690,14 @@ class RecipeBuilder:
         # mounted at its in-container default /opt/conda/pkgs; rattler-build
         # has no --cache-dir CLI flag but resolves its cache from the
         # RATTLER_CACHE_DIR variable, so it gets its own mount.
-        if self.container_cache:
-            cmd += [
-                "-v",
-                f"{self.container_conda_cache}:/opt/conda/pkgs",
-                "-v",
-                f"{self.container_rattler_cache}:/opt/rattler/cache",
-                "-e",
-                "RATTLER_CACHE_DIR=/opt/rattler/cache",
-            ]
+        cmd += [
+            "-v",
+            f"{self.container_conda_cache}:/opt/conda/pkgs",
+            "-v",
+            f"{self.container_rattler_cache}:/opt/rattler/cache",
+            "-e",
+            "RATTLER_CACHE_DIR=/opt/rattler/cache",
+        ]
         cmd += env_list
         image = self.docker_temp_image if self.build_image else self.docker_base_image
         if image is None:

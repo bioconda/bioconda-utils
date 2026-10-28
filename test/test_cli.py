@@ -135,6 +135,8 @@ def test_build_uses_normalized_option_names():
         for option in [*param.opts, *param.secondary_opts]
     }
 
+    assert "--cache" in option_names
+    assert "--container-cache" not in option_names
     assert "--test-only" in option_names
     assert "--mulled-build-and-test" in option_names
     assert "--build-script-template" in option_names
