@@ -6,12 +6,12 @@ conda-forge-pinning==2026.01.07.13.16.30
 python=3.13.*
 setuptools=81.*
 setuptools-scm>=8
-conda=26.7.*
+conda>=26.9.4,<26.10
 conda-libmamba-solver=26.7.*
-conda-build=26.7.*
-conda-index=0.12.*
+conda-build=26.9.*
+conda-index=0.13.*
 conda-package-streaming=0.13.*
-mamba=2.5.*
+mamba=2.10.*
 zstandard>=0.23,<1
 msgpack-python>=1.1,<2
 typer=0.26.*
@@ -41,6 +41,6 @@ pygithub
 diskcache=5.*
 platformdirs=4.*
 psutil
-py-rattler-build>=0.67.0,<0.68
+py-rattler-build>=0.73.0,<0.74
 conda-smithy>=2026.8.5,<2027
 yarl=1.24.*
