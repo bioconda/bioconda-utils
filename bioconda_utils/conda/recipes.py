@@ -85,14 +85,23 @@ def built_package_paths(recipe: Path) -> list[Path]:
     config = load_conda_build_config()
     # NB: Setting bypass_env_check disables ``pin_compatible`` parsing, which
     #     these days does not change the package build string, so should be fine.
-    paths = api.get_output_file_paths(recipe, config=config, bypass_env_check=True)
+    #     Recipes with exact subpackage pins need the real render, otherwise
+    #     conda-build sees mismatching hashes between the outputs.
+    paths = api.get_output_file_paths(
+        recipe,
+        config=config,
+        bypass_env_check=not recipe_requires_finalized_render(recipe),
+    )
     return [Path(p) for p in paths]
 
 
 # Recipe patterns whose rendered hash depends on solver state (run_exports from
 # e.g. sysroot_linux-64 inject __glibc into the variant during a real solve but
 # not under bypass_env_check=True). When any of these appear we must finalize.
-_SOLVER_DEPENDENT_JINJA = re.compile(r"\{\{\s*(stdlib|compiler|pin_compatible)\s*\(")
+_SOLVER_DEPENDENT_JINJA = re.compile(
+    r"\{\{\s*(?:(?:stdlib|compiler|pin_compatible)\s*\("
+    r"|pin_subpackage\s*\([^}]*\bexact\s*=\s*True)"
+)
 
 
 def recipe_requires_finalized_render(recipe: Path) -> bool:
