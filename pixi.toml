@@ -15,7 +15,7 @@ setuptools-scm = ">=8"
 conda = ">=26.9.4,<26.10"
 conda-libmamba-solver = "26.7.*"
 conda-build = "26.7.*"
-conda-index = "0.12.*"
+conda-index = "0.13.*"
 conda-package-streaming = "0.13.*"
 mamba = "2.5.*"
 
