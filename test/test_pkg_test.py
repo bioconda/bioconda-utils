@@ -130,3 +130,52 @@ def test_pkg_test_temporary_container(build_pkg):
         res = pkg_test.test_package_in_temporary_container(pkg)
         assert res is not None
         assert res.returncode == 0
+
+
+def test_build_and_test_mulled_image_forwards_cuda_override(monkeypatch, tmp_path):
+    """--conda-override-cuda is forwarded to the mulled-build command line."""
+    pkg = tmp_path / "one-0.1-0.conda"
+    pkg.touch()
+    captured = {}
+
+    monkeypatch.setattr(
+        pkg_test,
+        "_test_inputs",
+        lambda path, channels: (
+            tmp_path,
+            pkg_test.PkgBuildRef("one", "0.1", "0"),
+            ["conda-forge", "local", "bioconda"],
+            "true",
+        ),
+    )
+
+    def fake_run(cmd, **kw):
+        captured["cmd"] = cmd
+        return sp.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(pkg_test, "run", fake_run)
+
+    pkg_test.build_and_test_mulled_image(pkg, conda_override_cuda="99")
+    assert "--conda-override-cuda" in captured["cmd"]
+    flag_index = captured["cmd"].index("--conda-override-cuda")
+    assert captured["cmd"][flag_index + 1] == "99"
+
+
+def test_generate_explicit_spec_forwards_cuda_override(monkeypatch, tmp_path):
+    """The pre-solve dry run gets CONDA_OVERRIDE_CUDA only when requested."""
+    spec = pkg_test.PkgBuildRef("one", "0.1", "0")
+    envs = []
+
+    def fake_run(cmd, **kw):
+        envs.append(kw.get("env"))
+        return sp.CompletedProcess(cmd, 0, stdout='{"actions": {}}')
+
+    monkeypatch.setattr(pkg_test.sp, "run", fake_run)
+
+    pkg_test._generate_explicit_spec(spec, ["conda-forge"], tmp_path, tmp_path)
+    assert envs[-1] is None
+
+    pkg_test._generate_explicit_spec(
+        spec, ["conda-forge"], tmp_path, tmp_path, conda_override_cuda="12.4"
+    )
+    assert envs[-1]["CONDA_OVERRIDE_CUDA"] == "12.4"

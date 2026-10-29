@@ -224,6 +224,7 @@ def build(
     logger.info("BUILD START %s", recipe)
 
     use_base_image = None
+    conda_override_cuda: str | None = None
 
     args: list[str] = []
     rattler_args: list[str] = []
@@ -246,9 +247,17 @@ def build(
         package_name = meta.meta["package"]["name"]
 
         is_noarch = bool(meta.get_value("build/noarch", default=False))
-        use_base_image = meta.get_value("extra/container", {}).get(
-            "extended-base", False
-        )
+        container_extra = meta.get_value("extra/container", {})
+        use_base_image = container_extra.get("extended-base", False)
+        cuda_override = container_extra.get("cuda")
+        if cuda_override is True:
+            # ``cuda: true`` lets the solver pick the best available cuda
+            # build; a value like ``cuda: "12.4"`` instead pins the
+            # reported driver version passed to CONDA_OVERRIDE_CUDA (the
+            # solver then picks cuda builds compatible with that driver).
+            conda_override_cuda = "99"
+        elif cuda_override:
+            conda_override_cuda = str(cuda_override)
     elif recipe.build_system == BuildSystem.RATTLER and docker_builder is not None:
         # We only need the rattler_args when building with docker_builder. When building without
         # docker we use py-rattler-build's bindings directly in the code.
@@ -412,6 +421,7 @@ def build(
                             base_image=base_image,
                             conda_image=mulled_conda_image,
                             live_logs=live_logs,
+                            conda_override_cuda=conda_override_cuda,
                         )
                     except (
                         OSError,
@@ -433,6 +443,7 @@ def build(
                             conda_image=mulled_conda_image,
                             live_logs=live_logs,
                             target_platform=target_platform,
+                            conda_override_cuda=conda_override_cuda,
                         )
                         built_mulled_image = True
                 else:
@@ -442,6 +453,7 @@ def build(
                         conda_image=mulled_conda_image,
                         live_logs=live_logs,
                         target_platform=target_platform,
+                        conda_override_cuda=conda_override_cuda,
                     )
                     built_mulled_image = True
             except sp.CalledProcessError:
