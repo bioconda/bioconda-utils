@@ -471,4 +471,16 @@ FTPHoster:
     override:
       url: "ftp://{host}/{link}/edirect.tar.gz"
       link: "{path}{version}$"
-
+CratesIO:
+  - case: static
+    url: https://static.crates.io/crates/syn/syn-1.0.0.crate
+    version: 1.0.0
+    release_url:
+      - https://crates.io/api/v1/crates/syn/versions
+    release_json:
+      versions:
+        - {num: 2.0.0, yanked: false, dl_path: /api/v1/crates/syn/2.0.0/download, checksum: aa}
+        - {num: 1.0.1, yanked: true, dl_path: /api/v1/crates/syn/1.0.1/download, checksum: bb}
+        - {num: 1.0.0, yanked: false, dl_path: /api/v1/crates/syn/1.0.0/download, checksum: cc}
+      meta: {total: 3, next_page: null}
+    parsed_versions: ['1.0.0', '2.0.0']
