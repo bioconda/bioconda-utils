@@ -122,10 +122,10 @@ def test_selective_loads_and_disk_reuse(repository, monkeypatch):
     assert len(loads) == 4
 
 
-@pytest.mark.parametrize("channels", [" bioconda/ ", [" bioconda/ "]])
-def test_query_validates_channels_from_untyped_callers(
-    repository, monkeypatch, channels
-):
+@pytest.mark.parametrize(
+    "channels", [Channel("bioconda"), [Channel("bioconda")], (Channel("bioconda"),)]
+)
+def test_query_accepts_single_channel_and_iterables(repository, monkeypatch, channels):
     loads = []
 
     def download(channel, subdir):
@@ -138,12 +138,6 @@ def test_query_validates_channels_from_untyped_callers(
         "name", channels=channels, platform="noarch"
     ) == ["example"]
     assert loads == [Channel("bioconda")]
-
-
-@pytest.mark.parametrize("channels", [" ", [" "]])
-def test_query_rejects_blank_channels_from_untyped_callers(repository, channels):
-    with pytest.raises(ValueError, match="must not be empty"):
-        repository.get_package_data("name", channels=channels, platform="noarch")
 
 
 def test_invalid_records_fail_the_repository_load(repository, monkeypatch):

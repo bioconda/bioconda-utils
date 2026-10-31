@@ -396,10 +396,10 @@ class RepoData:
 
         if channels is None:
             requested_channels = self.channels
-        elif isinstance(channels, str):
-            requested_channels = [Channel(channels)]
+        elif isinstance(channels, Channel):
+            requested_channels = [channels]
         else:
-            requested_channels = [Channel(channel) for channel in channels]
+            requested_channels = list(channels)
 
         if isinstance(platform, str):
             requested_subdirs = [cast(Subdir, platform)]
