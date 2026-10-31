@@ -310,13 +310,11 @@ class RepoData:
 
     @contextmanager
     def _open_query_repository(self, channel: Channel, subdir: Subdir, names):
-        records = (
-            None
-            if names is None
-            else ShardClient.get_repository_shards(
+        records = None
+        if names is not None:
+            records = ShardClient.get_repository_shards(
                 channel, subdir, names, self._make_repodata_url(channel, subdir)
             )
-        )
         if records is None:
             with self._open_repository(channel, subdir) as connection:
                 yield connection
