@@ -23,6 +23,7 @@ from ._types import (
     CONDA,
     RATTLER,
     BuildSystem,
+    Channel,
     ContainerPlatform,
     PackageSubdir,
     QueryableRecipe,
@@ -42,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 def get_package_paths(
     recipe: RecipePath,
-    check_channels: list[str],
+    check_channels: list[Channel],
     force: bool = False,
     finalize: bool = True,
     rattler_output_dir: Path | None = None,

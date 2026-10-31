@@ -54,7 +54,6 @@ import tempfile
 from importlib.resources import as_file, files
 from pathlib import Path
 from shlex import quote
-from typing import Protocol
 
 from packaging.version import Version
 
@@ -69,15 +68,46 @@ from .._types import (
     native_container_platform,
 )
 from ..conda.conda_build_bridge import (
+    CondaBuildConfigFile,
     get_conda_build_config_files,
     load_conda_build_config,
 )
 from ..rattler.rattler_build_bridge import (
     get_rattler_build_global_variants_paths,
 )
+from ..support.caching import get_cache_root
 from ..support.subproc import run
 
 logger = logging.getLogger(__name__)
+
+
+def ensure_build_image(image: str, target_platform: ContainerPlatform | None) -> None:
+    """Reuse a matching local image, otherwise pull it for the requested platform."""
+    result = sp.run(
+        [
+            "docker",
+            "image",
+            "inspect",
+            "--format",
+            "{{.Os}}/{{.Architecture}}",
+            image,
+        ],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    if result.returncode == 0 and (
+        target_platform is None or result.stdout.strip() == target_platform
+    ):
+        return
+
+    logger.info("Pulling Docker build image %s", image)
+    command = ["docker", "pull"]
+    if target_platform is not None:
+        command += ["--platform", target_platform]
+    command.append(image)
+    run(command, live=True)
+
 
 LOCAL_CHANNEL_SUBDIRS = tuple(
     subdir for subdir in ALL_PACKAGE_SUBDIRS if subdir.startswith("linux-")
@@ -105,11 +135,6 @@ for subdir in {local_channel_subdirs}; do
   )
 done
 """
-
-
-class CondaBuildConfigFile(Protocol):
-    arg: str
-    path: str
 
 
 # ----------------------------------------------------------------------------
@@ -250,11 +275,11 @@ class RecipeBuilder:
         image_build_dir: Path | None = None,
         docker_base_image: str | None = None,
         target_platform: ContainerPlatform | None = None,
-        container_pkgs_cache: Path | None = None,
     ) -> None:
         """
         Class to handle building a custom docker container that can be used for
-        building conda recipes.
+        building conda recipes. Per-tool caches under the shared cache root
+        (containers/conda and containers/rattler) are mounted into each build.
 
         Parameters
         ----------
@@ -333,33 +358,22 @@ class RecipeBuilder:
         docker_base_image : str or None
             Name of base image that can be used in **dockerfile_template**.
 
-        container_pkgs_cache : Path or None
-            Host directory bind-mounted at /opt/conda/pkgs in build
-            containers, so repodata, shards indexes and downloaded build/host
-            env packages persist across the containers of one build run.
-            Falls back to the BIOCONDA_UTILS_CONTAINER_PKGS_CACHE
-            environment variable when not given.
         """
         self.requirements = requirements
         self.conda_build_args: str = ""
         self.rattler_build_args: str = ""
-        # Host directory bind-mounted at /opt/conda/pkgs in build containers
-        # so repodata/shards and downloaded build/host env packages persist
-        # across the containers of one build run. Falls back to the
-        self.container_pkgs_cache: Path | None = (
-            Path(container_pkgs_cache)
-            if container_pkgs_cache
-            else (
-                Path(env_cache)
-                if (env_cache := os.environ.get("BIOCONDA_UTILS_CONTAINER_PKGS_CACHE"))
-                else None
-            )
-        )
-        if self.container_pkgs_cache:
-            self.container_pkgs_cache.mkdir(parents=True, exist_ok=True)
-            # build containers run as a different user (uid 9001 "conda") and
-            # conda writes cache state even on cache hits
-            self.container_pkgs_cache.chmod(0o777)
+        # Containers run as uid 9001 and write cache state even on hits.
+        # Keep their writable directories separate from the host caches.
+        self.container_cache = get_cache_root() / "containers"
+        self.container_conda_cache = self.container_cache / "conda"
+        self.container_rattler_cache = self.container_cache / "rattler"
+        for cache_dir in (
+            self.container_cache,
+            self.container_conda_cache,
+            self.container_rattler_cache,
+        ):
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            cache_dir.chmod(0o777)
         self.target_platform: ContainerPlatform | None = target_platform
         self.build_script_template: str = build_script_template
         self.rattler_build_script_template: str = rattler_build_script_template
@@ -369,9 +383,6 @@ class RecipeBuilder:
         self.image_build_dir = image_build_dir
         self.docker_base_image = docker_base_image
         self.docker_temp_image = tag
-
-        if not self.build_image:
-            self._ensure_base_image()
 
         # find and store user info
         uid = os.getuid()
@@ -405,38 +416,6 @@ class RecipeBuilder:
             shutil.copyfile(config_file.path, dst_file)
         if self.build_image:
             self._build_image()
-
-    def _ensure_base_image(self) -> None:
-        """Ensure the requested build image and platform are available locally."""
-        image = self.docker_base_image
-        if image is None:
-            raise ValueError("docker_base_image is required when build_image is false")
-
-        result = sp.run(
-            [
-                "docker",
-                "image",
-                "inspect",
-                "--format",
-                "{{.Os}}/{{.Architecture}}",
-                image,
-            ],
-            capture_output=True,
-            check=False,
-            text=True,
-        )
-        if result.returncode == 0 and (
-            self.target_platform is None
-            or result.stdout.strip() == self.target_platform
-        ):
-            return
-
-        logger.info("Pulling Docker build image %s", image)
-        command = ["docker", "pull"]
-        if self.target_platform is not None:
-            command += ["--platform", self.target_platform]
-        command.append(image)
-        run(command, live=True)
 
     def _get_config_path(
         self, staging_prefix: Path, i: int, config_file: CondaBuildConfigFile
@@ -705,17 +684,20 @@ class RecipeBuilder:
             "-v",
             f"{recipe_dir}:{self.container_recipe}",
         ]
-        # Optionally persist the container's conda package cache (repodata,
-        # shards indexes, downloaded packages) across the containers of one
-        # build run. Containers are ephemeral (--rm); without this, every
-        # recipe re-downloads repodata and its build/host env packages.
-        # Enabled via --container-pkgs-cache (or the
-        # BIOCONDA_UTILS_CONTAINER_PKGS_CACHE environment variable).
-        if self.container_pkgs_cache:
-            cmd += [
-                "-v",
-                f"{self.container_pkgs_cache}:/opt/conda/pkgs",
-            ]
+        # Persist caches across the containers of one build run. Containers
+        # are ephemeral (--rm); without this, every recipe re-downloads
+        # repodata and its build/host env packages. conda's package cache is
+        # mounted at its in-container default /opt/conda/pkgs; rattler-build
+        # has no --cache-dir CLI flag but resolves its cache from the
+        # RATTLER_CACHE_DIR variable, so it gets its own mount.
+        cmd += [
+            "-v",
+            f"{self.container_conda_cache}:/opt/conda/pkgs",
+            "-v",
+            f"{self.container_rattler_cache}:/opt/rattler/cache",
+            "-e",
+            "RATTLER_CACHE_DIR=/opt/rattler/cache",
+        ]
         cmd += env_list
         image = self.docker_temp_image if self.build_image else self.docker_base_image
         if image is None:

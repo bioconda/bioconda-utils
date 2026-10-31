@@ -1,11 +1,18 @@
 ARG base=quay.io/bioconda/bioconda-utils-build-env-cos7
 FROM "${base}"
-# Retrieve index and set TTL to make it last over the duration of the test.
+# Functional smoke test for the build-env image. Used by
+# `.github/scripts/test-local-container` and `test-pushed-container` via
+# `buildah build --build-arg base=<image under test> -f Dockerfile.test`.
+# NOTE: `docker/buildah build` RUN steps do not execute the image ENTRYPOINT,
+# so /opt/conda/bin is not on PATH here; activate base explicitly (same as
+# the root Dockerfile does). This intentionally only checks functionality;
+# repodata/package caching across `docker run --rm` invocations is handled
+# at runtime via bind mounts under the shared `--cache` directory
+# (see `docker_utils.py`), not via baked-in image layers.
 RUN . /opt/conda/etc/profile.d/conda.sh && \
-    conda search bioconda-utils > /dev/null && \
-    conda config --set local_repodata_ttl 3600 && \
-    find /opt/conda \
-      \! -group lucky \
-      -exec chgrp --no-dereference lucky {} + \
-      \! -type l \
-      -exec chmod g=u {} +
+    conda activate base && \
+    conda info --verbose && \
+    conda list && \
+    bioconda-utils --version && \
+    python -c "import bioconda_utils" && \
+    conda search bioconda-utils > /dev/null

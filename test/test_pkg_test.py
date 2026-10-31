@@ -7,7 +7,7 @@ import pytest
 from helpers import Recipes, ensure_missing, get_rattler_params
 
 from bioconda_utils import build
-from bioconda_utils._types import BuildSystem
+from bioconda_utils._types import BuildSystem, Config
 from bioconda_utils.conda.recipes import built_package_paths
 from bioconda_utils.containers import pkg_test
 
@@ -69,6 +69,7 @@ def build_pkg(request):
         pkg_paths = [Path(p) for p in built_packages]
 
         build.build(
+            channels=Config().channels,
             recipe=recipe_path,
             global_variants=global_variants,
             tool_config=tool_config,

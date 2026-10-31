@@ -10,15 +10,47 @@ items without aborting the run.
 import asyncio
 import logging
 import threading
+from hashlib import sha256
 
+import aioftp
 import pytest
 
 from bioconda_utils.aiopipe import (
     AsyncFilter,
     AsyncPipeline,
+    AsyncRequests,
     EndProcessing,
     EndProcessingItem,
 )
+
+
+@pytest.mark.parametrize("authenticated", [False, True])
+def test_ftp_listing_and_checksum(tmp_path, authenticated):
+    content = b"archive contents\x00\xff"
+    (tmp_path / "source file.tgz").write_bytes(content)
+    user = (
+        aioftp.User("user@example", "p@ss", base_path=tmp_path)
+        if authenticated
+        else aioftp.User(base_path=tmp_path)
+    )
+
+    async def check():
+        server = aioftp.Server([user])
+        await server.start("127.0.0.1", 0)
+        try:
+            credentials = "user%40example:p%40ss@" if authenticated else ""
+            root = f"ftp://{credentials}127.0.0.1:{server.server_port}"
+            req = AsyncRequests()
+            assert await req.get_ftp_listing(root + "/") == ["/source file.tgz"]
+            assert (
+                await req.get_checksum_from_url(root + "/source%20file.tgz", "source")
+                == sha256(content).hexdigest()
+            )
+        finally:
+            await server.close()
+
+    asyncio.run(check())
+
 
 # keep test output readable
 logging.getLogger("asyncio").setLevel(logging.WARNING)
@@ -43,7 +75,7 @@ class ListPipeline(AsyncPipeline[int]):
         return len(self.items)
 
 
-class Collect(AsyncFilter[int]):
+class Collect(AsyncFilter[int, ListPipeline]):
     """Records every item reaching this filter"""
 
     def __init__(self, pipeline, seen: list[int]) -> None:
@@ -54,7 +86,7 @@ class Collect(AsyncFilter[int]):
         self.seen.append(recipe)
 
 
-class StopAfter(AsyncFilter[int]):
+class StopAfter(AsyncFilter[int, ListPipeline]):
     """Raises EndProcessing once **limit** items were seen"""
 
     def __init__(self, pipeline, seen: list[int], limit: int) -> None:
@@ -95,7 +127,7 @@ def test_pipeline_processes_all_items() -> None:
     seen: list[int] = []
     finalized: list[bool] = []
 
-    class CollectWithFinalize(AsyncFilter[int]):
+    class CollectWithFinalize(AsyncFilter[int, ListPipeline]):
         def __init__(self, pipeline) -> None:
             super().__init__(pipeline)
 
@@ -213,7 +245,7 @@ except KeyboardInterrupt:
 
 
 def test_end_processing_item_skips_single_item() -> None:
-    class SkipOdd(AsyncFilter[int]):
+    class SkipOdd(AsyncFilter[int, ListPipeline]):
         async def apply(self, recipe: int) -> None:
             if recipe % 2:
                 raise EndProcessingItem(recipe, "odd")
@@ -249,7 +281,7 @@ def test_other_filter_errors_fail_the_run() -> None:
 
     from concurrent.futures import BrokenExecutor
 
-    class Explode(AsyncFilter[int]):
+    class Explode(AsyncFilter[int, ListPipeline]):
         async def apply(self, recipe: int) -> None:
             if recipe == 1:
                 raise BrokenExecutor()
@@ -301,6 +333,73 @@ def test_async_requests_cache_is_scoped_to_one_run() -> None:
             assert req.cache == {"url_text": {}, "url_checksum": {}, "ftp_list": {}}
 
     asyncio.run(check())
+
+
+@pytest.mark.parametrize(
+    "url", ["file:///tmp/pkg.tar.gz", "s3://bucket/pkg.tar.gz", "pkg.tar.gz", ""]
+)
+def test_get_checksum_from_url_rejects_unsupported_scheme(url) -> None:
+    """Only http/https and ftp can be fetched.
+
+    The dispatch used to fall through with ``res`` unbound, raising an opaque
+    ``UnboundLocalError`` and writing nothing to the cache. It must instead
+    raise a diagnosable error before any side effect.
+    """
+    from bioconda_utils.aiopipe import AsyncRequests, UnsupportedUrlScheme
+
+    req = AsyncRequests()
+
+    async def check():
+        with pytest.raises(UnsupportedUrlScheme, match="unsupported scheme"):
+            await req.get_checksum_from_url(url, "test")
+        # nothing may be cached for a url we could not fetch
+        assert req.cache["url_checksum"] == {}
+
+    asyncio.run(check())
+
+
+def test_get_checksum_from_url_supported_schemes_still_dispatch(monkeypatch) -> None:
+    """http/https and ftp keep routing to their dedicated fetchers."""
+    from bioconda_utils.aiopipe import AsyncRequests
+
+    req = AsyncRequests()
+    calls: list[tuple[str, str]] = []
+
+    async def fake_http(url: str, desc: str) -> str:
+        calls.append(("http", url))
+        return "a" * 64
+
+    async def fake_ftp(url: str, desc: str | None = None) -> str:
+        calls.append(("ftp", url))
+        return "b" * 64
+
+    monkeypatch.setattr(req, "get_checksum_from_http", fake_http)
+    monkeypatch.setattr(req, "get_checksum_from_ftp", fake_ftp)
+
+    async def check():
+        assert (
+            await req.get_checksum_from_url("https://example.org/a.tgz", "d")
+            == "a" * 64
+        )
+        assert (
+            await req.get_checksum_from_url("ftp://example.org/b.tgz", "d") == "b" * 64
+        )
+        # second call is served from the cache, not the fetcher
+        assert (
+            await req.get_checksum_from_url("https://example.org/a.tgz", "d")
+            == "a" * 64
+        )
+
+    asyncio.run(check())
+
+    assert calls == [
+        ("http", "https://example.org/a.tgz"),
+        ("ftp", "ftp://example.org/b.tgz"),
+    ]
+    assert req.cache["url_checksum"] == {
+        "https://example.org/a.tgz": "a" * 64,
+        "ftp://example.org/b.tgz": "b" * 64,
+    }
 
 
 @pytest.mark.parametrize("nested", [False, True])

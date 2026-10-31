@@ -2,9 +2,13 @@ import json
 import logging
 import os
 import subprocess as sp
+import sys
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
+import typer
+from typer.testing import CliRunner
 
 from bioconda_utils import _types, build, cli
 from bioconda_utils._types import ContainerPlatform, PackageSubdir, PkgBuildRef
@@ -313,12 +317,7 @@ def test_recipe_builder_build_image_passes_target_platform(monkeypatch, tmp_path
     assert commands[0][3] == ContainerPlatform.LINUX_ARM64
 
 
-def test_recipe_builder_reuses_matching_local_base_image(monkeypatch):
-    builder = docker_utils.RecipeBuilder.__new__(docker_utils.RecipeBuilder)
-    builder.docker_base_image = "local-build-env:arm64"
-    builder.target_platform = ContainerPlatform.LINUX_ARM64
-    builder.build_image = False
-    builder.keep_image = False
+def test_ensure_build_image_reuses_matching_local_image(monkeypatch):
     pulls = []
 
     monkeypatch.setattr(
@@ -332,23 +331,164 @@ def test_recipe_builder_reuses_matching_local_base_image(monkeypatch):
         lambda command, **_kwargs: pulls.append(command),
     )
 
-    builder._ensure_base_image()
+    docker_utils.ensure_build_image(
+        "local-build-env:arm64", ContainerPlatform.LINUX_ARM64
+    )
 
     assert pulls == []
 
 
-def test_recipe_builder_pulls_missing_base_image_for_target(monkeypatch):
-    builder = docker_utils.RecipeBuilder.__new__(docker_utils.RecipeBuilder)
-    builder.docker_base_image = "quay.io/bioconda/build-env:latest"
-    builder.target_platform = ContainerPlatform.LINUX_ARM64
-    builder.build_image = False
-    builder.keep_image = False
+@pytest.mark.parametrize(
+    "version,explicit,environment,expected",
+    [
+        (
+            "5.1.1.dev189+gabc",
+            None,
+            None,
+            "quay.io/bioconda/bioconda-utils-build-env-cos7:5.1.1",
+        ),
+        ("5.1.1", None, None, "quay.io/bioconda/bioconda-utils-build-env-cos7:5.1.1"),
+        ("5.1.1.dev189+gabc", "custom:explicit", "custom:env", "custom:explicit"),
+        ("5.1.1.dev189+gabc", None, "custom:env", "custom:env"),
+        ("5.1.1", "custom:explicit", None, "custom:explicit"),
+    ],
+)
+def test_docker_build_image_selection(
+    monkeypatch, version, explicit, environment, expected
+):
+    monkeypatch.setattr(cli, "VERSION", version)
+    monkeypatch.delenv("BUILD_ENV_IMAGE", raising=False)
+    if environment:
+        monkeypatch.setenv("BUILD_ENV_IMAGE", environment)
+    inspect = Mock(return_value=Mock(returncode=0, stdout="linux/arm64\n"))
+    monkeypatch.setattr(docker_utils.sp, "run", inspect)
+
+    assert cli._docker_build_image(explicit, ContainerPlatform.LINUX_ARM64) == expected
+    inspect.assert_called_once()
+
+
+def test_dev_image_failure_is_actionable(monkeypatch, caplog):
+    monkeypatch.setattr(cli, "VERSION", "5.1.1.dev189+gabc")
+    monkeypatch.delenv("BUILD_ENV_IMAGE", raising=False)
+    monkeypatch.setattr(
+        docker_utils.sp, "run", Mock(return_value=Mock(returncode=1, stdout=""))
+    )
+    pull = Mock(side_effect=sp.CalledProcessError(1, ["docker", "pull"]))
+    monkeypatch.setattr(docker_utils, "run", pull)
+
+    app = typer.Typer()
+
+    @app.command()
+    def build_image():
+        cli._docker_build_image(None, ContainerPlatform.LINUX_ARM64)
+
+    result = CliRunner().invoke(app, [])
+
+    assert result.exit_code == 1
+    assert isinstance(result.exception, SystemExit)
+    assert "just docker-image linux/arm64" in caplog.text
+    assert "--docker-base-image" in caplog.text
+    pull.assert_called_once_with(
+        [
+            "docker",
+            "pull",
+            "--platform",
+            ContainerPlatform.LINUX_ARM64,
+            "quay.io/bioconda/bioconda-utils-build-env-cos7:5.1.1",
+        ],
+        live=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "platform,base",
+    [
+        ("linux/amd64", "quay.io/condaforge/linux-anvil-cos7-x86_64"),
+        ("linux/arm64", "quay.io/condaforge/linux-anvil-aarch64"),
+    ],
+)
+def test_local_image_matches_installed_cli_despite_stale_metadata(
+    tmp_path, monkeypatch, platform, base
+):
+    # Reproduce a checkout whose old egg-info disagrees with the installed CLI.
+    checkout = tmp_path / "checkout"
+    scripts = checkout / "scripts"
+    scripts.mkdir(parents=True)
+    source = Path(__file__).resolve().parents[1] / "scripts" / "build-dev-image.sh"
+    script = scripts / source.name
+    script.write_text(source.read_text())
+    metadata = checkout / "bioconda_utils.egg-info"
+    metadata.mkdir()
+    (metadata / "PKG-INFO").write_text(
+        "Metadata-Version: 2.4\nName: bioconda-utils\nVersion: 0.0.0\n"
+    )
+    executable_dir = Path(sys.executable).parent
+    installed_cli = sp.run(
+        [str(executable_dir / "bioconda-utils"), "--version"],
+        cwd=checkout,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    version = installed_cli.stdout.strip().removeprefix(
+        "This is bioconda-utils version "
+    )
+    assert not version.startswith("0.0.0")
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    docker = fake_bin / "docker"
+    docker.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+    docker.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{fake_bin}:{executable_dir}:{os.environ['PATH']}")
+
+    result = sp.run(
+        ["bash", str(script), platform],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert f"BIOCONDA_UTILS_VERSION={version}" in result.stdout
+    assert f"BASE_IMAGE={base}" in result.stdout
+    assert f"--platform\n{platform}\n" in result.stdout
+    assert (
+        f"--tag\nquay.io/bioconda/bioconda-utils-build-env-cos7:{cli.extract_stable_version(version)}\n"
+        in result.stdout
+    )
+
+
+def test_dev_image_uses_published_image_when_not_local(monkeypatch):
+    monkeypatch.setattr(cli, "VERSION", "5.1.1.dev189+gabc")
+    monkeypatch.delenv("BUILD_ENV_IMAGE", raising=False)
+    monkeypatch.setattr(
+        docker_utils.sp, "run", Mock(return_value=Mock(returncode=1, stdout=""))
+    )
+    pull = Mock()
+    monkeypatch.setattr(docker_utils, "run", pull)
+
+    image = cli._docker_build_image(None, ContainerPlatform.LINUX_ARM64)
+
+    assert image == "quay.io/bioconda/bioconda-utils-build-env-cos7:5.1.1"
+    pull.assert_called_once_with(
+        ["docker", "pull", "--platform", ContainerPlatform.LINUX_ARM64, image],
+        live=True,
+    )
+
+
+@pytest.mark.parametrize("local_platform", [None, "linux/amd64"])
+def test_ensure_build_image_pulls_missing_or_wrong_platform_image(
+    monkeypatch, local_platform
+):
     pulls = []
 
     monkeypatch.setattr(
         docker_utils.sp,
         "run",
-        lambda *_args, **_kwargs: Mock(returncode=1, stdout=""),
+        lambda *_args, **_kwargs: Mock(
+            returncode=0 if local_platform else 1, stdout=local_platform or ""
+        ),
     )
     monkeypatch.setattr(
         docker_utils,
@@ -356,7 +496,9 @@ def test_recipe_builder_pulls_missing_base_image_for_target(monkeypatch):
         lambda command, **_kwargs: pulls.append(command),
     )
 
-    builder._ensure_base_image()
+    docker_utils.ensure_build_image(
+        "quay.io/bioconda/build-env:latest", ContainerPlatform.LINUX_ARM64
+    )
 
     assert pulls == [
         [
@@ -369,13 +511,7 @@ def test_recipe_builder_pulls_missing_base_image_for_target(monkeypatch):
     ]
 
 
-def test_recipe_builder_fails_when_base_image_cannot_be_pulled(monkeypatch):
-    builder = docker_utils.RecipeBuilder.__new__(docker_utils.RecipeBuilder)
-    builder.docker_base_image = "missing-build-env:arm64"
-    builder.target_platform = ContainerPlatform.LINUX_ARM64
-    builder.build_image = False
-    builder.keep_image = False
-
+def test_ensure_build_image_fails_when_image_cannot_be_pulled(monkeypatch):
     monkeypatch.setattr(
         docker_utils.sp,
         "run",
@@ -388,7 +524,92 @@ def test_recipe_builder_fails_when_base_image_cannot_be_pulled(monkeypatch):
     monkeypatch.setattr(docker_utils, "run", fail_pull)
 
     with pytest.raises(sp.CalledProcessError):
-        builder._ensure_base_image()
+        docker_utils.ensure_build_image(
+            "missing-build-env:arm64", ContainerPlatform.LINUX_ARM64
+        )
+
+
+def _rattler_run_command(monkeypatch, tmp_path, container_cache):
+    """Run build_recipe for a rattler recipe with a stubbed docker client."""
+    commands = []
+    builder = docker_utils.RecipeBuilder.__new__(docker_utils.RecipeBuilder)
+    builder.container_cache = container_cache
+    builder.container_conda_cache = container_cache / "conda"
+    builder.container_rattler_cache = container_cache / "rattler"
+    builder.container_staging = "/opt/host-conda-bld"
+    builder.container_recipe = "/opt/recipe"
+    builder.pkg_dir = tmp_path
+    builder.user_info = {"uid": 1000}
+    builder.target_platform = None
+    builder.rattler_build_script_template = docker_utils.RATTLER_BUILD_SCRIPT_TEMPLATE
+    builder.build_image = False
+    builder.keep_image = True
+    builder.docker_temp_image = "tmp-bioconda-builder"
+    builder.docker_base_image = "quay.io/bioconda/build-env:latest"
+
+    monkeypatch.setattr(
+        docker_utils,
+        "get_rattler_build_global_variants_paths",
+        list,
+    )
+    monkeypatch.setattr(
+        docker_utils,
+        "run",
+        lambda cmd, **_kwargs: commands.append(cmd),
+    )
+
+    builder.build_recipe(
+        tmp_path,
+        build_args="",
+        rattler_args="",
+        env={},
+        build_system=_types.BuildSystem.RATTLER,
+        live_logs=False,
+    )
+    return commands[0]
+
+
+def test_container_cache_mounts_conda_and_rattler_subdirs(monkeypatch, tmp_path):
+    cache = tmp_path / "container-cache"
+    cmd = _rattler_run_command(monkeypatch, tmp_path, cache)
+
+    assert f"{cache / 'conda'}:/opt/conda/pkgs" in cmd
+    assert f"{cache / 'rattler'}:/opt/rattler/cache" in cmd
+    assert "RATTLER_CACHE_DIR=/opt/rattler/cache" in cmd
+    assert cmd[cmd.index("RATTLER_CACHE_DIR=/opt/rattler/cache") - 1] == "-e"
+
+
+@pytest.mark.parametrize("explicit_cache", [False, True])
+def test_container_cache_uses_shared_root(monkeypatch, tmp_path, explicit_cache):
+    from bioconda_utils.support.caching import get_cache_root
+
+    monkeypatch.setattr(
+        "bioconda_utils.support.caching.platformdirs.user_cache_path",
+        lambda _app: tmp_path / "default-cache",
+    )
+    cli._configure_caches(tmp_path / "custom-cache" if explicit_cache else None, False)
+    root = get_cache_root()
+    root.mkdir(mode=0o700)
+    monkeypatch.setattr(
+        docker_utils,
+        "load_conda_build_config",
+        lambda: Mock(croot=str(tmp_path / "conda-bld"), conda_pkg_format="2"),
+    )
+    monkeypatch.setattr(docker_utils, "get_conda_build_config_files", list)
+    builder = docker_utils.RecipeBuilder(pkg_dir=tmp_path / "packages")
+
+    assert builder.container_cache == root / "containers"
+    assert root.stat().st_mode & 0o777 == 0o700
+    for directory in (
+        builder.container_cache,
+        builder.container_conda_cache,
+        builder.container_rattler_cache,
+    ):
+        assert directory.is_dir()
+        assert directory.stat().st_mode & 0o777 == 0o777
+    cmd = _rattler_run_command(monkeypatch, tmp_path, builder.container_cache)
+    assert f"{root / 'containers/conda'}:/opt/conda/pkgs" in cmd
+    assert f"{root / 'containers/rattler'}:/opt/rattler/cache" in cmd
 
 
 def test_mulled_upload_passes_target_platform(monkeypatch):

@@ -16,7 +16,7 @@ from typer.main import get_command
 from typer.testing import CliRunner
 
 from bioconda_utils import cli
-from bioconda_utils._types import CONDA, RecipePath
+from bioconda_utils._types import CONDA, Config, RecipePath
 from bioconda_utils.containers.artifacts import UploadResult
 from bioconda_utils.containers.pkg_test import CREATE_ENV_IMAGE
 from bioconda_utils.githandler import GitRange
@@ -135,6 +135,8 @@ def test_build_uses_normalized_option_names():
         for option in [*param.opts, *param.secondary_opts]
     }
 
+    assert "--cache" in option_names
+    assert "--container-cache" not in option_names
     assert "--test-only" in option_names
     assert "--mulled-build-and-test" in option_names
     assert "--build-script-template" in option_names
@@ -247,7 +249,7 @@ def test_dag_hides_singletons(monkeypatch, tmp_path):
     name2recipes = {
         name: {RecipePath(Path("recipes") / name, CONDA)} for name in package_dag.nodes
     }
-    monkeypatch.setattr("bioconda_utils.config.load_config", lambda _: {})
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda _: Config())
     monkeypatch.setattr(cli, "get_recipes", lambda *_: [])
     monkeypatch.setattr(
         "bioconda_utils.graph.build", lambda *_: (package_dag, name2recipes)
@@ -281,7 +283,7 @@ def test_dag_text_output_does_not_wrap_recipe_paths(monkeypatch, tmp_path):
         "dependency": {RecipePath(Path("recipes/dependency"), CONDA)},
         "package": {RecipePath(long_recipe, CONDA)},
     }
-    monkeypatch.setattr("bioconda_utils.config.load_config", lambda _: {})
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda _: Config())
     monkeypatch.setattr(cli, "get_recipes", lambda *_: [])
     monkeypatch.setattr(
         "bioconda_utils.graph.build", lambda *_: (package_dag, name2recipes)
@@ -294,6 +296,35 @@ def test_dag_text_output_does_not_wrap_recipe_paths(monkeypatch, tmp_path):
 
     assert result.exit_code == 0, result.output
     assert str(long_recipe) in result.output.splitlines()
+
+
+def test_dag_dot_output_contains_nodes_and_edges(monkeypatch, tmp_path):
+    recipe_folder = tmp_path / "recipes"
+    recipe_folder.mkdir()
+    config = tmp_path / "config.yml"
+    config.write_text("{}")
+    package_dag = nx.DiGraph([("dependency", "package")])
+    name2recipes = {
+        name: {RecipePath(Path("recipes") / name, CONDA)} for name in package_dag.nodes
+    }
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda _: Config())
+    monkeypatch.setattr(cli, "get_recipes", lambda *_: [])
+    monkeypatch.setattr(
+        "bioconda_utils.graph.build", lambda *_: (package_dag, name2recipes)
+    )
+
+    result = runner.invoke(
+        cli.app,
+        ["dag", str(recipe_folder), str(config), "--output-format", "dot"],
+    )
+
+    assert result.exit_code == 0, result.output
+    output = click.unstyle(result.output)
+    # The writer is deterministic; pin the exact bytes so any format drift
+    # (which would break downstream DOT consumers) fails loudly here.
+    assert output == (
+        'digraph {\n  "dependency";\n  "package";\n  "dependency" -> "package";\n}\n'
+    )
 
 
 @pytest.mark.parametrize(
@@ -313,12 +344,83 @@ def test_git_range_parsing(spec, base, ref):
 
 
 @pytest.mark.parametrize(
-    "spec",
-    ["", "main..HEAD", "main....HEAD", "...HEAD", "main...", "a...b...c"],
+    "spec", ["", "main..HEAD", "main....HEAD", "...HEAD", "main...", "a...b...c"]
 )
 def test_invalid_git_ranges_are_rejected(spec):
     with pytest.raises(ValueError):
         GitRange.parse(spec)
+
+
+MISSING_PACKAGES_COMMANDS = ["lint", "build", "dag", "update-pinning", "autobump"]
+
+
+def write_single_recipe_collection(tmp_path):
+    recipe_folder = tmp_path / "recipes"
+    (recipe_folder / "samtools").mkdir(parents=True)
+    (recipe_folder / "samtools" / "meta.yaml").write_text(
+        '{% set version = "1.0" %}\n'
+        "package:\n"
+        "  name: samtools\n"
+        '  version: "{{ version }}"\n'
+    )
+    config = tmp_path / "config.yml"
+    config.write_text("{}")
+    return recipe_folder, config
+
+
+@pytest.mark.parametrize("command", MISSING_PACKAGES_COMMANDS)
+def test_missing_packages_pattern_is_an_error(command, tmp_path):
+    recipe_folder, config = write_single_recipe_collection(tmp_path)
+
+    result = runner.invoke(
+        cli.app,
+        [command, str(recipe_folder), str(config), "--packages", "samtool"],
+    )
+
+    assert result.exit_code == 2, result.output
+    output = ANSI_CODES.sub("", result.output)
+    assert "no recipe directories match" in output
+    assert "'samtool'" in output
+
+
+def test_mixed_packages_with_missing_pattern_is_an_error(tmp_path):
+    # a single typo among valid names must fail, not be silently dropped
+    recipe_folder, config = write_single_recipe_collection(tmp_path)
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "lint",
+            str(recipe_folder),
+            str(config),
+            "--packages",
+            "samtools",
+            "--packages",
+            "samtool",
+        ],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "no recipe directories match" in ANSI_CODES.sub("", result.output)
+
+
+@pytest.mark.parametrize("command", ["lint", "build", "update-pinning"])
+def test_skiplisted_package_alone_is_not_an_error(command, tmp_path):
+    # per contract: recipes that exist but are skiplisted stay a non-error
+    recipe_folder, config = write_single_recipe_collection(tmp_path)
+    (tmp_path / "blacklist.txt").write_text("recipes/samtools\n")
+    config.write_text("blacklists:\n  - blacklist.txt\n")
+
+    result = runner.invoke(
+        cli.app,
+        [command, str(recipe_folder), str(config), "--packages", "samtools"],
+    )
+
+    # lint intentionally lints blacklisted recipes, so it reports lint errors
+    # (exit 1) for the minimal fixture rather than passing; what matters here
+    # is that the missing-package check does not fire.
+    assert result.exit_code != 2, result.output
+    assert "no recipe directories match" not in ANSI_CODES.sub("", result.output)
 
 
 def test_cli_rejects_two_dot_git_range(monkeypatch):
@@ -500,7 +602,7 @@ def test_autobump_closes_git_handler_on_keyboard_interrupt(monkeypatch):
             closed.append(True)
 
     monkeypatch.setattr(cli, "_setup_runtime", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: {})
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: Config())
     monkeypatch.setattr("bioconda_utils.githandler.BiocondaRepo", Repo)
     monkeypatch.setattr(autobump, "RecipeSource", RecipeSource)
     monkeypatch.setattr(autobump, "Scanner", Scanner)
@@ -519,7 +621,7 @@ def test_autobump_closes_git_handler_on_keyboard_interrupt(monkeypatch):
 
 
 @pytest.mark.parametrize("exclude_channels", [["conda-forge"], ["none"]])
-def test_autobump_configures_repodata_cache_independently_of_filters(
+def test_autobump_configures_shared_cache_independently_of_filters(
     monkeypatch, tmp_path, exclude_channels
 ):
     from bioconda_utils import autobump
@@ -542,13 +644,13 @@ def test_autobump_configures_repodata_cache_independently_of_filters(
             pass
 
     monkeypatch.setattr(cli, "_setup_runtime", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: {})
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: Config())
     monkeypatch.setattr(autobump, "RecipeSource", RecipeSource)
     monkeypatch.setattr(autobump, "Scanner", Scanner)
 
     cache = tmp_path / "autobump-cache"
     cli.autobump(
-        repodata_cache=cache,
+        cache=cache,
         no_follow_graph=True,
         ignore_skiplists=True,
         exclude_channels=exclude_channels,
@@ -559,7 +661,7 @@ def test_autobump_configures_repodata_cache_independently_of_filters(
     from bioconda_utils.conda.repodata import RepoData
 
     assert scanner_arguments == [{"status_file": None}]
-    assert RepoData.get_cache_dir() == cache
+    assert RepoData.get_cache_dir() == cache / "repodata-v2"
     exclude_calls = [
         call for call in added_filters if call[0] is autobump.ExcludeOtherChannel
     ]
@@ -571,47 +673,17 @@ def test_autobump_configures_repodata_cache_independently_of_filters(
 
 
 @pytest.mark.parametrize("command", ["lint", "update-pinning", "autobump"])
-def test_legacy_cache_option_reaches_cache_configuration(
-    monkeypatch, tmp_path, command
-):
+def test_separate_repodata_cache_option_is_rejected(tmp_path, command):
     root = tmp_path / "recipes"
     root.mkdir()
     config = tmp_path / "config.yml"
     config.write_text("channels: []\n")
-    prefix = tmp_path / "old-cache.pkl"
-    calls = []
-
-    def configure(directory, refresh, legacy_prefix=None):
-        calls.append((directory, refresh, legacy_prefix))
-        raise RuntimeError("cache configuration reached")
-
-    monkeypatch.setattr(cli, "_configure_caches", configure)
     result = runner.invoke(
-        cli.app, [command, str(root), str(config), "--cache", str(prefix)]
+        cli.app,
+        [command, str(root), str(config), "--repodata-cache", str(tmp_path / "cache")],
     )
-
-    assert isinstance(result.exception, RuntimeError), result.output
-    assert str(result.exception) == "cache configuration reached"
-    assert calls == [(None, False, prefix)]
-
-
-@pytest.mark.parametrize("legacy", [False, True])
-def test_cache_filename_compatibility_preserves_old_snapshot(tmp_path, legacy):
-    from bioconda_utils.conda.repodata import RepoData
-
-    old = tmp_path / "cache.pkl"
-    old.write_bytes(b"old snapshot must not be loaded or overwritten")
-    cli._configure_caches(None if legacy else old, False, old if legacy else None)
-    expected = tmp_path / "cache.pkl.d"
-    assert RepoData.get_cache_dir() == (
-        expected / "repodata-v2" if legacy else expected
-    )
-    assert old.read_bytes() == b"old snapshot must not be loaded or overwritten"
-
-
-def test_cache_options_cannot_silently_override_each_other(tmp_path):
-    with pytest.raises(typer.BadParameter, match="either --cache or --repodata-cache"):
-        cli._configure_caches(tmp_path / "directory", False, tmp_path / "prefix")
+    assert result.exit_code == 2
+    assert "No such option" in result.output
 
 
 def test_list_build_failures_markdown_is_written_verbatim(monkeypatch, tmp_path):
@@ -624,7 +696,7 @@ def test_list_build_failures_markdown_is_written_verbatim(monkeypatch, tmp_path)
     row = {column: f"value-{column}" for column in BUILD_FAILURE_COLUMNS}
     row["build failures"] = "[linux-64](failures/linux-64.yaml)"
     row["recipe"] = "pkg|name\nversion"
-    monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: {})
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: Config())
     monkeypatch.setattr(
         "bioconda_utils.build_failure.collect_build_failure_records",
         lambda *_args, **_kwargs: [row],
@@ -878,7 +950,7 @@ def test_lint_exit_is_not_reported_as_a_command_failure(monkeypatch, caplog, tmp
     whenever a recipe had lint errors.
     """
     monkeypatch.setattr(cli, "_setup_runtime", lambda *args, **kwargs: None)
-    monkeypatch.setattr("bioconda_utils.config.load_config", lambda _path: {})
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda _path: Config())
     monkeypatch.setattr(cli, "get_recipes", lambda *_args, **_kwargs: [])
 
     class ErroringLinter:
@@ -979,8 +1051,8 @@ def test_help_keeps_rich_rendering(monkeypatch, args):
 def test_build_failure_table_preserves_literal_text(monkeypatch, tmp_path, literal):
     from bioconda_utils.build_failure import BUILD_FAILURE_COLUMNS
 
-    monkeypatch.setattr(cli.report_console, "width", 300)
-    monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: {})
+    monkeypatch.setattr(cli.report_console, "size", (300, 25))
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: Config())
     row = dict.fromkeys(BUILD_FAILURE_COLUMNS, "value")
     row["reason"] = literal
     monkeypatch.setattr(
@@ -1001,9 +1073,9 @@ def test_build_failure_table_preserves_literal_text(monkeypatch, tmp_path, liter
 def test_lint_table_preserves_literal_text(monkeypatch, tmp_path, literal):
     from unittest.mock import Mock
 
-    monkeypatch.setattr(cli.report_console, "width", 300)
+    monkeypatch.setattr(cli.report_console, "size", (300, 25))
     monkeypatch.setattr(cli, "_setup_runtime", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: {})
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: Config())
     monkeypatch.setattr(cli, "get_recipes", lambda *_args, **_kwargs: [])
     message = Mock()
     message.get_table_row.return_value = ("ERROR", "recipe", "check", literal)
@@ -1016,3 +1088,34 @@ def test_lint_table_preserves_literal_text(monkeypatch, tmp_path, literal):
     assert result.exit_code == 1
     assert literal in result.output
     assert "MarkupError" not in result.output
+
+
+@pytest.mark.parametrize("command", ["build", "lint", "update-pinning", "autobump"])
+def test_shared_cache_option_reaches_configuration(monkeypatch, tmp_path, command):
+    root = tmp_path / "recipes"
+    root.mkdir()
+    config = tmp_path / "config.yml"
+    config.write_text("channels: []\n")
+    directory = tmp_path / "shared-cache"
+    calls = []
+
+    def configure(path, refresh):
+        calls.append((path, refresh))
+        raise RuntimeError("cache configuration reached")
+
+    monkeypatch.setattr(cli, "_configure_caches", configure)
+    args = [command, str(root), str(config)]
+    result = runner.invoke(
+        cli.app, [*args, "--cache", str(directory), "--refresh-repodata"]
+    )
+    assert isinstance(result.exception, RuntimeError), result.output
+    assert str(result.exception) == "cache configuration reached"
+    assert calls == [(directory, True)]
+
+
+def test_shared_cache_rejects_old_pickle_files(tmp_path):
+    old = tmp_path / "cache.pkl"
+    old.write_bytes(b"old snapshot")
+    with pytest.raises(typer.BadParameter, match="must be a directory"):
+        cli._configure_caches(old, False)
+    assert old.read_bytes() == b"old snapshot"

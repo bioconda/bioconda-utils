@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import networkx as nx
 
 from bioconda_utils import build_failure
-from bioconda_utils._types import RATTLER, RecipePath
+from bioconda_utils._types import RATTLER, Channel, Config, RecipePath
 
 
 def test_recipe_sha_uses_rattler_recipe_file(tmp_path):
@@ -55,7 +55,9 @@ def test_collect_build_failure_records_supports_rattler_recipes(monkeypatch, tmp
     )
     monkeypatch.setattr(build_failure, "get_package_downloads", lambda *_: 0)
 
-    rows = build_failure.collect_build_failure_records(recipe_folder, {}, "bioconda")
+    rows = build_failure.collect_build_failure_records(
+        recipe_folder, Config(), Channel("bioconda")
+    )
 
     assert len(rows) == 1
     assert rows[0]["recipe"] == "foo"

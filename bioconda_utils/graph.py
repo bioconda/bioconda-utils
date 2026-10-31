@@ -7,13 +7,10 @@ from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from fnmatch import fnmatch
 from itertools import chain
-from typing import (
-    Any,
-)
 
 import networkx as nx
 
-from ._types import QueryableRecipe
+from ._types import Config, QueryableRecipe
 from .recipe import Recipe
 from .recipes import RecipePath, load_meta_and_recipe_fast
 from .skiplist import Skiplist
@@ -24,7 +21,7 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 def build(
     recipes: Iterable[RecipePath],
-    config: dict[str, Any],
+    config: Config,
     blacklist: Skiplist | None = None,
     restrict: bool = True,
 ) -> tuple[nx.DiGraph, defaultdict[str, set[RecipePath]]]:

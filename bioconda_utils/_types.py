@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import platform
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Sequence
-from dataclasses import dataclass
+from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from typing import (
@@ -12,6 +12,7 @@ from typing import (
     NamedTuple,
     NewType,
     Protocol,
+    Self,
     TypedDict,
 )
 
@@ -120,10 +121,6 @@ class QueryableV1Recipe(QueryableRecipe):
         return result
 
 
-class Config(dict[str, Any]):
-    """Validated Bioconda configuration with defaults applied."""
-
-
 #: Docker/OCI platform notation used by Docker, buildx, skopeo, registry
 #: manifests, and mulled-build's ``--target-platform``.
 class ContainerPlatform(StrEnum):
@@ -166,6 +163,113 @@ BuildFailureOutputFormat = Literal["table", "markdown"]
 
 #: Conda repodata subdir notation, including ``noarch``.
 type Subdir = PackageSubdir | Literal["noarch"]
+
+
+class Channel(str):
+    """Normalized, nonempty conda channel name or URL.
+
+    Channels are an open set, including anaconda.org namespaces, mirror URLs,
+    and local ``file://`` paths. Construction validates and normalizes input.
+    """
+
+    __slots__ = ()
+
+    def __new__(cls, value: str) -> Self:
+        if not isinstance(value, str):
+            raise TypeError(f"Channel names must be strings, not {value!r}")
+        if isinstance(value, cls):
+            return value
+        channel = value.strip().rstrip("/")
+        if not channel:
+            raise ValueError("Channel names must not be empty")
+        return super().__new__(cls, channel)
+
+
+@dataclass(slots=True, kw_only=True)
+class Config:
+    """Normalized configuration. Parse raw YAML with ``normalize_config`` first."""
+
+    channels: list[Channel] = field(
+        default_factory=lambda: [Channel("conda-forge"), Channel("bioconda")]
+    )
+    upload_channel: Channel = field(default_factory=lambda: Channel("bioconda"))
+    blacklists: list[Path] = field(default_factory=list)
+    primary_platforms: list[PackageSubdir] = field(
+        default_factory=lambda: list(DEFAULT_PRIMARY_PLATFORMS)
+    )
+    requirements: Any = None
+    docker_image: str | None = None
+    conda_build_version: str | None = None
+    setup: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.channels, list) or not all(
+            isinstance(channel, Channel) for channel in self.channels
+        ):
+            raise TypeError("Config channels must be a list of Channel values")
+        if not isinstance(self.upload_channel, Channel):
+            raise TypeError("Config upload_channel must be a Channel")
+
+
+#: Identity of a repodata repository: its channel and subdir.
+type RepoDataKey = tuple[Channel, Subdir]
+
+
+class PackageRecord(NamedTuple):
+    """The repodata fields bioconda-utils indexes for package queries.
+
+    Full repodata and CEP-16 package shards are both normalized to this shape
+    before being written to the SQLite cache, so shard queries and full-repodata
+    fallbacks return identical results.
+    """
+
+    name: str
+    version: str
+    build: str
+    build_number: int
+    depends: tuple[str, ...] | None
+
+
+def parse_package_record(
+    raw: object, *, default_name: str | None = None
+) -> PackageRecord:
+    """Validate and normalize one repodata package record.
+
+    Raises :class:`TypeError` for malformed records, allowing shard downloads
+    to fall back to full repodata instead of caching corrupt dependency data.
+    """
+    if not isinstance(raw, Mapping):
+        raise TypeError("package record is not a mapping")
+    name = raw.get("name", default_name)
+    if not isinstance(name, str):
+        raise TypeError("package record has no valid name")
+    version = raw.get("version")
+    if not isinstance(version, (str, int, float)):
+        raise TypeError("package record has no valid version")
+    build = raw.get("build", "")
+    if not isinstance(build, str):
+        raise TypeError("package record has no valid build string")
+    build_number = raw.get("build_number", 0)
+    if not isinstance(build_number, int):
+        raise TypeError("package record has no valid build number")
+    depends = raw.get("depends", ())
+    if depends is None:
+        normalized_depends = None
+    elif isinstance(depends, (list, tuple)) and all(
+        isinstance(depend, str) for depend in depends
+    ):
+        normalized_depends = tuple(depends)
+    else:
+        raise TypeError("package record has no valid depends list")
+    return PackageRecord(
+        name=name,
+        version=str(version),
+        build=build,
+        build_number=build_number,
+        depends=normalized_depends,
+    )
+
+
 #: A two-part OS label -- the form conda-build's ``config.platform`` and its
 #: ``DEFAULT_COMPILERS`` table require (see ``conda_build.variants``). This is
 #: *not* a subdir: ``"linux-64"`` is not a valid ``OsLabel``.
@@ -363,7 +467,7 @@ class RecipeMetaLike(Protocol):
     def get_value(self, key: str, default: Any = None) -> Any: ...
 
 
-def ensure_list(obj):
+def ensure_list[T](obj: T) -> Sequence[T]:
     """Wraps **obj** in a list if necessary
 
     >>> ensure_list("one")

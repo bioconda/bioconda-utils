@@ -1,10 +1,11 @@
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 from ruamel.yaml import YAML
 
 from bioconda_utils import lint
-from bioconda_utils._types import CONDA, RecipePath, ensure_list
+from bioconda_utils._types import CONDA, Config, RecipePath, ensure_list
 from bioconda_utils.config import load_config
 
 yaml = YAML(typ="rt")  # pylint: disable=invalid-name
@@ -89,3 +90,78 @@ def test_rattler_lint_message_formatting():
         "rattler_build",
         "warning message",
     )
+
+
+@pytest.mark.parametrize("mode", ["pass", "fail", "skip"])
+def test_lint_dependency_order_and_transitive_skips(monkeypatch, tmp_path, mode):
+    monkeypatch.setattr(lint.LintCheck, "registry", [])
+    monkeypatch.setenv("LINT_SKIP", "")
+    calls = []
+
+    class prerequisite(lint.LintCheck):
+        """Prerequisite check."""
+
+        def check_recipe(self, recipe):
+            calls.append("prerequisite")
+            if mode == "fail":
+                self.message(section="package/name")
+
+    class dependent(lint.LintCheck):
+        """Dependent check."""
+
+        requires: ClassVar = [prerequisite]
+
+        def check_recipe(self, recipe):
+            calls.append("dependent")
+
+    class transitive(lint.LintCheck):
+        """Transitively dependent check."""
+
+        requires: ClassVar = [dependent]
+
+        def check_recipe(self, recipe):
+            calls.append("transitive")
+
+    monkeypatch.setattr(
+        lint, "get_checks", lambda: [transitive, dependent, prerequisite]
+    )
+    recipe_dir = tmp_path / "example"
+    recipe_dir.mkdir()
+    (recipe_dir / "meta.yaml").write_text(
+        "package:\n  name: example\n  version: '1.0'\nbuild:\n  number: 0\n"
+    )
+    linter = lint.Linter(
+        Config(),
+        tmp_path,
+        exclude=["prerequisite"] if mode == "skip" else [],
+        nocatch=True,
+    )
+
+    assert linter.lint([RecipePath(recipe_dir, CONDA)]) == (mode == "fail")
+    assert (
+        calls
+        == {
+            "pass": ["prerequisite", "dependent", "transitive"],
+            "fail": ["prerequisite"],
+            "skip": [],
+        }[mode]
+    )
+
+
+def test_lint_rejects_unregistered_dependency(monkeypatch, tmp_path):
+    monkeypatch.setattr(lint.LintCheck, "registry", [])
+    monkeypatch.setenv("LINT_SKIP", "")
+
+    class unregistered(lint.LintCheck):
+        """Unregistered prerequisite."""
+
+    class dependent(lint.LintCheck):
+        """Dependent check."""
+
+        requires: ClassVar = [unregistered]
+
+    monkeypatch.setattr(lint, "get_checks", lambda: [dependent])
+    with pytest.raises(
+        ValueError, match="Unregistered lint dependency.*required by dependent"
+    ):
+        lint.Linter(Config(), tmp_path)

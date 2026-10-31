@@ -1,11 +1,31 @@
 import asyncio
 import json
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 from ruamel.yaml import YAML
 
 from bioconda_utils.hosters import Hoster, PyPi
+
+
+def test_concrete_hoster_requires_class_configuration():
+    with pytest.raises(TypeError, match="must define url_pattern"):
+
+        class CustomIncompleteHoster(Hoster):
+            async def get_versions(self, req, orig_version):
+                return []
+
+
+def test_abstract_hoster_is_not_registered_or_instantiable():
+    class CustomAbstractHoster(Hoster, abstract=True):
+        async def get_versions(self, req, orig_version):
+            return []
+
+    assert CustomAbstractHoster not in Hoster.hoster_types
+    with pytest.raises(TypeError, match="Cannot instantiate abstract hoster"):
+        CustomAbstractHoster("unused", Mock())
+
 
 with (Path(__file__).parent / "hoster_cases.yaml").open() as data:
     TEST_CASES = YAML(typ="safe").load(data)

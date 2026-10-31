@@ -1,7 +1,7 @@
 """Shared helpers for asynchronous HTTP access
 
 This module centralizes the pieces shared between the async download
-helpers in :py:mod:`bioconda_utils.conda.repodata` and
+helpers in :py:mod:`bioconda_utils.conda.fetch` and
 :py:mod:`bioconda_utils.aiopipe`: the user agent we identify ourselves
 with, the retry policy applied to transient HTTP errors and the progress
 monitor used while streaming response bodies.
@@ -15,7 +15,7 @@ import inspect
 import logging
 import os
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from functools import wraps
 from pathlib import Path
 from time import monotonic
@@ -52,7 +52,7 @@ HTTP_OPERATION_TIMEOUT = 300
 
 def retry_on_transient[**P, R](
     func: Callable[P, Awaitable[R]],
-) -> Callable[P, Awaitable[R]]:
+) -> Callable[P, Coroutine[Any, Any, R]]:
     retried = backoff.on_exception(
         backoff.fibo,
         (
@@ -175,7 +175,7 @@ async def stream_to_sink(
 
 async def download_to_file(
     resp: aiohttp.ClientResponse,
-    fname: Path | str,
+    fname: Path,
     desc: str,
     *,
     block_size: int = 1024 * 1024,
@@ -191,7 +191,6 @@ async def download_to_file(
     the same destination (e.g. duplicate sources sharing the source cache)
     cannot stream into the same file.
     """
-    fname = Path(fname)
     tmp = fname.with_name(f"{fname.name}.{uuid.uuid4().hex}.part")
     try:
         async with aiofiles.open(tmp, "wb") as f:
