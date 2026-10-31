@@ -20,7 +20,9 @@ def _pack_shard(data):
 
 
 def index_url(repository, channel, subdir="noarch"):
-    return ShardClient.shards_index_url(repository._make_repodata_url(channel, subdir))
+    return ShardClient.shards_index_url(
+        repository._make_repodata_url(Channel(channel), subdir)
+    )
 
 
 @pytest.mark.parametrize(
@@ -207,7 +209,7 @@ def test_shards_share_sql_filters_and_do_not_download_full_repodata(
     rows = list(
         repository.get_package_data(
             ["name", "version", "depends", "channel", "subdir"],
-            channels="high",
+            channels=Channel("high"),
             name="example",
             version=[1],
             build_number=[0],
@@ -219,12 +221,16 @@ def test_shards_share_sql_filters_and_do_not_download_full_repodata(
     assert rows[0].depends == ["zlib"]
     assert rows[0].channel == "high"
     assert rows[0].subdir == "noarch"
-    assert repository.get_package_data("version", channels="high", name="example") == [
+    assert repository.get_package_data(
+        "version", channels=Channel("high"), name="example"
+    ) == [
         "1",
         "2",
     ]
-    assert repository.get_package_data(channels="high", name="missing") is False
-    assert repository.get_package_data("name", channels="high", name=[]) == []
+    assert (
+        repository.get_package_data(channels=Channel("high"), name="missing") is False
+    )
+    assert repository.get_package_data("name", channels=Channel("high"), name=[]) == []
     assert len(requests) == 2
     assert loads == []
 
@@ -259,7 +265,7 @@ def test_partial_package_failure_replaces_repository_without_duplicates(
     set_shard(repository, bodies, [record()], shard_hash="good")
     loads = fallback(repository, monkeypatch, [record(), record(name="other")])
     assert repository.get_package_data(
-        "name", channels="high", name=["example", "other"]
+        "name", channels=Channel("high"), name=["example", "other"]
     ) == ["example", "other"]
     assert loads == [("high", "noarch")]
 
@@ -268,21 +274,21 @@ def test_expired_indexes_and_changed_hashes_refetch(sharded, monkeypatch):
     repository, bodies, requests = sharded
     set_index(repository, bodies, example="old")
     set_shard(repository, bodies, [record(version="old")], shard_hash="old")
-    assert repository.get_package_data("version", channels="high", name="example") == [
-        "old"
-    ]
+    assert repository.get_package_data(
+        "version", channels=Channel("high"), name="example"
+    ) == ["old"]
     url = index_url(repository, "high")
     ShardClient._shard_index_cache[url].fetched_at -= datetime.timedelta(minutes=16)
     set_index(repository, bodies, example="new")
     set_shard(repository, bodies, [record(version="new")], shard_hash="new")
-    assert repository.get_package_data("version", channels="high", name="example") == [
-        "new"
-    ]
+    assert repository.get_package_data(
+        "version", channels=Channel("high"), name="example"
+    ) == ["new"]
     assert requests.count(url) == 2
     RepoData.configure_cache(repository.get_cache_dir(), refresh=True)
-    assert repository.get_package_data("version", channels="high", name="example") == [
-        "new"
-    ]
+    assert repository.get_package_data(
+        "version", channels=Channel("high"), name="example"
+    ) == ["new"]
     assert requests.count(url) == 3
 
 
@@ -290,15 +296,15 @@ def test_negative_index_cache_expires(sharded, monkeypatch):
     repository, bodies, requests = sharded
     loads = fallback(repository, monkeypatch, [record()])
     for _ in range(2):
-        assert repository.get_package_data(channels="high", name="example")
+        assert repository.get_package_data(channels=Channel("high"), name="example")
     url = index_url(repository, "high")
     assert requests == [url]
     ShardClient._shards_unavailable[url] -= datetime.timedelta(minutes=6)
     set_index(repository, bodies, example="hash")
     set_shard(repository, bodies, [record(version="sharded")])
-    assert repository.get_package_data("version", channels="high", name="example") == [
-        "sharded"
-    ]
+    assert repository.get_package_data(
+        "version", channels=Channel("high"), name="example"
+    ) == ["sharded"]
     assert requests.count(url) == 2
     assert len(loads) == 1
 
@@ -307,15 +313,15 @@ def test_shard_cache_identity_includes_repository_url(sharded):
     repository, bodies, _ = sharded
     set_index(repository, bodies, example="hash")
     set_shard(repository, bodies, [record(version="first")])
-    assert repository.get_package_data("version", channels="high", name="example") == [
-        "first"
-    ]
+    assert repository.get_package_data(
+        "version", channels=Channel("high"), name="example"
+    ) == ["first"]
     repository.REPODATA_URL = "https://other.example/{channel}/{subdir}/repodata.json"
     set_index(repository, bodies, example="hash")
     set_shard(repository, bodies, [record(version="second")])
-    assert repository.get_package_data("version", channels="high", name="example") == [
-        "second"
-    ]
+    assert repository.get_package_data(
+        "version", channels=Channel("high"), name="example"
+    ) == ["second"]
 
 
 def test_async_downloads_preserve_input_order_and_isolate_errors(monkeypatch):

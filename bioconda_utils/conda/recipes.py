@@ -217,7 +217,7 @@ def check_recipe_skippable(
     return False
 
 
-def _filter_existing_packages(metas, check_channels):
+def _filter_existing_packages(metas, check_channels: list[Channel]):
     new_metas = []  # MetaData instances of packages not yet in channel
     existing_metas = []  # MetaData instances of packages already in channel
     divergent_builds = set()  # set of Dist (i.e., name-version-build) strings

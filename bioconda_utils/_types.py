@@ -12,8 +12,8 @@ from typing import (
     NamedTuple,
     NewType,
     Protocol,
+    Self,
     TypedDict,
-    cast,
 )
 
 
@@ -126,11 +126,19 @@ class Config(dict[str, Any]):
 
     @property
     def channels(self) -> list[Channel]:
-        return cast(list[Channel], self["channels"])
+        channels = self["channels"]
+        if not isinstance(channels, list):
+            raise TypeError("Config channels must be a list")
+        # Preserve the mutable list used by callers that extend configuration.
+        normalized = [Channel(channel) for channel in channels]
+        channels[:] = normalized
+        return channels
 
     @property
     def upload_channel(self) -> Channel:
-        return cast(Channel, self["upload_channel"])
+        channel = Channel(self["upload_channel"])
+        self["upload_channel"] = channel
+        return channel
 
 
 #: Docker/OCI platform notation used by Docker, buildx, skopeo, registry
@@ -175,13 +183,28 @@ BuildFailureOutputFormat = Literal["table", "markdown"]
 
 #: Conda repodata subdir notation, including ``noarch``.
 type Subdir = PackageSubdir | Literal["noarch"]
-#: Conda channel name. Channels are an open set (any anaconda.org namespace,
-#: mirror URL, or ``file://`` path), so this cannot be an enum. ``NewType``
-#: makes the distinction nominal for type checkers: arbitrary strings are not
-#: accepted where a :class:`Channel` is expected. Values must be parsed with
-#: :func:`parse_channel` at input boundaries; ``NewType`` itself performs no
-#: runtime validation.
-Channel = NewType("Channel", str)
+
+
+class Channel(str):
+    """Normalized, nonempty conda channel name or URL.
+
+    Channels are an open set, including anaconda.org namespaces, mirror URLs,
+    and local ``file://`` paths. Construction validates and normalizes input.
+    """
+
+    __slots__ = ()
+
+    def __new__(cls, value: str) -> Self:
+        if not isinstance(value, str):
+            raise TypeError(f"Channel names must be strings, not {value!r}")
+        if isinstance(value, cls):
+            return value
+        channel = value.strip().rstrip("/")
+        if not channel:
+            raise ValueError("Channel names must not be empty")
+        return super().__new__(cls, channel)
+
+
 #: Identity of a repodata repository: its channel and subdir.
 type RepoDataKey = tuple[Channel, Subdir]
 
@@ -239,14 +262,6 @@ def parse_package_record(
         build_number=build_number,
         depends=normalized_depends,
     )
-
-
-def parse_channel(value: str) -> Channel:
-    """Normalize and validate a channel name or URL at an input boundary."""
-    channel = value.strip().rstrip("/")
-    if not channel:
-        raise ValueError("Channel names must not be empty")
-    return Channel(channel)
 
 
 #: A two-part OS label -- the form conda-build's ``config.platform`` and its

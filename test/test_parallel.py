@@ -7,6 +7,7 @@ from multiprocessing import get_start_method
 
 import pytest
 
+from bioconda_utils._types import Config
 from bioconda_utils.conda.repodata import RepoData
 from bioconda_utils.support import logsetup, parallel
 from bioconda_utils.support.parallel import parallel_iter, worker_pool
@@ -25,7 +26,7 @@ def worker_info(_item=None):
 
 
 def test_worker_logging_cannot_inherit_locked_console(monkeypatch, caplog, tmp_path):
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
+    monkeypatch.setattr(RepoData, "config", Config({"channels": ["bioconda"]}))
     held, release = threading.Event(), threading.Event()
 
     def hold_console():
@@ -56,7 +57,7 @@ def test_worker_logging_cannot_inherit_locked_console(monkeypatch, caplog, tmp_p
 
 
 def test_parallel_iteration_uses_initialized_workers(monkeypatch):
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
+    monkeypatch.setattr(RepoData, "config", Config({"channels": ["bioconda"]}))
     with logsetup.progress_display.live:
         (result,) = parallel_iter(worker_info, [1], "Processing")
     assert result[0] != os.getpid()
@@ -67,7 +68,7 @@ def test_parallel_iteration_uses_initialized_workers(monkeypatch):
 def test_async_pipeline_uses_spawned_workers(monkeypatch, caplog):
     from bioconda_utils.aiopipe import AsyncFilter, AsyncPipeline
 
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
+    monkeypatch.setattr(RepoData, "config", Config({"channels": ["bioconda"]}))
     results = []
 
     class ProcessFilter(AsyncFilter):

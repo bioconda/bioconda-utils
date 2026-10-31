@@ -16,7 +16,6 @@ from .._types import (
     Channel,
     ContainerPlatform,
     PkgBuildRef,
-    parse_channel,
 )
 from ..support.subproc import run
 
@@ -317,7 +316,7 @@ def _test_inputs(
         raise ValueError('"local" must be in channel list')
 
     resolved_channels = [
-        parse_channel(f"file://{conda_bld_dir}") if channel == "local" else channel
+        Channel(f"file://{conda_bld_dir}") if channel == "local" else channel
         for channel in channels
     ]
 

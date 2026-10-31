@@ -29,7 +29,6 @@ from bioconda_utils._types import (
     ContainerPlatform,
     PackageSubdir,
     RecipePath,
-    parse_channel,
 )
 from bioconda_utils.conda import conda_build_bridge
 from bioconda_utils.conda import recipes as conda_recipes
@@ -1309,7 +1308,7 @@ def test_load_platform_metas_preserves_complete_target_platform(
 
 
 def test_filter_existing_packages_queries_rendered_target_subdir(monkeypatch):
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
+    monkeypatch.setattr(RepoData, "config", Config({"channels": ["bioconda"]}))
     meta = Mock()
     meta.name.return_value = "samtools"
     meta.version.return_value = "1.24"
@@ -1324,10 +1323,10 @@ def test_filter_existing_packages_queries_rendered_target_subdir(monkeypatch):
         queried_platforms.append(kwargs["platform"])
         return []
 
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
+    monkeypatch.setattr(RepoData, "config", Config({"channels": ["bioconda"]}))
     monkeypatch.setattr(RepoData, "get_package_data", get_package_data)
 
-    assert conda_recipes._filter_existing_packages([meta], ["bioconda"]) == (
+    assert conda_recipes._filter_existing_packages([meta], [Channel("bioconda")]) == (
         [meta],
         [],
         set(),
@@ -1395,7 +1394,7 @@ def test_get_package_paths_force_builds_existing_and_logs_force(caplog, monkeypa
         )
     ]
 
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
+    monkeypatch.setattr(RepoData, "config", Config({"channels": ["bioconda"]}))
     monkeypatch.setattr(
         conda_recipes,
         "_load_platform_metas",
@@ -1465,7 +1464,9 @@ def test_get_package_paths_reports_channels_per_multi_output(caplog, monkeypatch
         "r-seuratdata": [ExistingBuild("conda-forge", "noarch", "py311_0")],
     }
 
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda", "conda-forge"]})
+    monkeypatch.setattr(
+        RepoData, "config", Config({"channels": ["bioconda", "conda-forge"]})
+    )
     monkeypatch.setattr(
         conda_recipes,
         "_load_platform_metas",
@@ -1558,7 +1559,9 @@ def test_check_recipe_skippable_logs_channels_with_build(
         "_load_platform_metas",
         lambda *_a, **_k: (PackageSubdir.LINUX_64, [meta]),
     )
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda", "conda-forge"]})
+    monkeypatch.setattr(
+        RepoData, "config", Config({"channels": ["bioconda", "conda-forge"]})
+    )
     rows = [("conda-forge", "h123_1", PackageSubdir.LINUX_64)]
     if duplicate_channel:
         rows.append(("bioconda", "h123_1", PackageSubdir.LINUX_64))
@@ -2362,14 +2365,14 @@ def test_load_meta_fast_allows_duplicate_keys(tmp_path):
         ("file:///tmp/channel/", "file:///tmp/channel"),
     ],
 )
-def test_parse_channel_normalizes_names_and_urls(value, expected):
-    assert parse_channel(value) == expected
+def test_channel_normalizes_names_and_urls(value, expected):
+    assert Channel(value) == expected
 
 
 @pytest.mark.parametrize("value", ["", "  ", " / "])
-def test_parse_channel_rejects_empty_names(value):
+def test_channel_rejects_empty_names(value):
     with pytest.raises(ValueError, match="must not be empty"):
-        parse_channel(value)
+        Channel(value)
 
 
 def test_normalize_config_normalizes_and_deduplicates_channels():

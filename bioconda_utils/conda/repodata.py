@@ -101,7 +101,6 @@ class RepoData:
 
     REPODATA_URL = "https://conda.anaconda.org/{channel}/{subdir}/repodata.json"
     REPODATA_DEFAULTS_URL = "https://repo.anaconda.com/pkgs/main/{subdir}/repodata.json"
-    LOCAL_REPODATA = "{channel}/{subdir}/repodata.json"
 
     _load_columns: ClassVar = ["build", "build_number", "name", "version", "depends"]
 
@@ -334,18 +333,14 @@ class RepoData:
             yield connection
 
     def _make_repodata_url(self, channel: Channel, subdir: Subdir) -> str:
+        if channel.startswith(("http://", "https://", "file://")):
+            return f"{channel}/{subdir}/repodata.json"
         if channel == "defaults":
             # caveat: this only gets defaults main, not 'free', 'r' or 'pro'
             url_template = self.REPODATA_DEFAULTS_URL
         else:
             url_template = self.REPODATA_URL
-        local_url_template = self.LOCAL_REPODATA
-
-        if channel.startswith("file://"):  # Allow local channels
-            url = local_url_template.format(channel=channel, subdir=subdir)
-        else:
-            url = url_template.format(channel=channel, subdir=subdir)
-        return url
+        return url_template.format(channel=channel, subdir=subdir)
 
     @staticmethod
     def native_subdir() -> PackageSubdir:
@@ -404,9 +399,9 @@ class RepoData:
         if channels is None:
             requested_channels = self.channels
         elif isinstance(channels, str):
-            requested_channels = [cast(Channel, channels)]
+            requested_channels = [Channel(channels)]
         else:
-            requested_channels = list(channels)
+            requested_channels = [Channel(channel) for channel in channels]
 
         if isinstance(platform, str):
             requested_subdirs = [cast(Subdir, platform)]

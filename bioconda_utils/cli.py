@@ -38,7 +38,6 @@ from ._types import (
     PackageSubdir,
     QuayUploadTarget,
     package_subdir_to_container_platform,
-    parse_channel,
     parse_quay_upload_target,
 )
 from .containers.pkg_test import CREATE_ENV_IMAGE
@@ -177,7 +176,7 @@ def _parse_quay_upload_target(value: str | None) -> QuayUploadTarget | None:
 
 
 def _parse_channels(values: list[str] | None) -> list[Channel] | None:
-    return None if values is None else [parse_channel(value) for value in values]
+    return None if values is None else [Channel(value) for value in values]
 
 
 def _resolve_image_records_dir(
@@ -1083,7 +1082,7 @@ def duplicates(
     from .config import load_config
 
     config_data = load_config(config)
-    our_channel = parse_channel(channel)
+    our_channel = Channel(channel)
     if our_channel not in config_data.channels:
         raise ValueError("Channel given with --channel must be in config channels")
     channels = [c for c in config_data.channels if c != our_channel]
@@ -1217,7 +1216,7 @@ def update_pinning(
         config_data = load_config(config)
         if skip_additional_channels:
             config_data.channels.extend(
-                parse_channel(channel) for channel in skip_additional_channels
+                Channel(channel) for channel in skip_additional_channels
             )
         variant_keys = frozenset(skip_variants or ())
         _error_on_missing_packages(recipe_folder, packages)
@@ -1709,7 +1708,7 @@ def autobump(
         if excluded_channels != ["none"]:
             scanner.add(
                 autobump.ExcludeOtherChannel,
-                [parse_channel(channel) for channel in excluded_channels],
+                [Channel(channel) for channel in excluded_channels],
             )
         # Test if due to pinnings, the package hash would change and a rebuild
         # has become necessary. If so, bump the buildnumber.
@@ -2044,7 +2043,7 @@ def list_build_failures(
     records = collect_build_failure_records(
         recipe_folder,
         config_data,
-        parse_channel(channel),
+        Channel(channel),
         link_fmt=output_format,
         link_prefix=link_prefix,
         git_range=parsed_git_range,
