@@ -115,6 +115,13 @@ def test_workers_exit_when_parent_is_terminated(tmp_path, kill):
 
     import psutil
 
+    def worker_is_alive(process):
+        try:
+            return process.is_running() and process.status() != psutil.STATUS_ZOMBIE
+        except psutil.NoSuchProcess:
+            # The worker can exit between the liveness and status checks.
+            return False
+
     marker = tmp_path / "worker.pid"
     script = """
 import os, time
@@ -140,13 +147,9 @@ with worker_pool(1) as pool:
         (parent.kill if kill else parent.terminate)()
         parent.wait(timeout=5)
         deadline = time.monotonic() + 5
-        while (
-            worker.is_running()
-            and worker.status() != psutil.STATUS_ZOMBIE
-            and time.monotonic() < deadline
-        ):
+        while worker_is_alive(worker) and time.monotonic() < deadline:
             time.sleep(0.05)
-        assert not worker.is_running() or worker.status() == psutil.STATUS_ZOMBIE
+        assert not worker_is_alive(worker)
     finally:
         if parent.poll() is None:
             parent.kill()
