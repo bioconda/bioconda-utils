@@ -10,7 +10,7 @@ import os
 import shutil
 import subprocess as sp
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import NamedTuple
 
@@ -137,9 +137,9 @@ def build(
     render_config: rb.RenderConfig,
     rattler_output_dir: Path,
     force: bool,
+    channels: Sequence[Channel],
     pkg_paths: list[Path] | None = None,
     mulled_build_and_test: bool = True,
-    channels: list[Channel] | None = None,
     docker_builder: docker_utils.RecipeBuilder | None = None,
     raise_error: bool = False,
     linter: lint.Linter | None = None,
@@ -165,8 +165,7 @@ def build(
       pkg_paths: List of paths to expected packages
       mulled_build_and_test: Build the mulled container and run the recipe's
         tests inside it (wraps `mulled-build build-and-test`).
-      channels: Channels to include via the ``--channel`` argument to
-        conda-build. Higher priority channels should come first.
+      channels: Explicit channels for dependency resolution, highest priority first.
       docker_builder : docker_utils.RecipeBuilder object
         Use this docker builder to build the recipe, copying over the built
         recipe to the host's conda-bld directory.
@@ -234,7 +233,7 @@ def build(
     if recipe.build_system == BuildSystem.CONDA:
         args = ["--override-channels", "--no-anaconda-upload"]
 
-        channels_to_use = ["local"] + [c for c in (channels or []) if c != "local"]
+        channels_to_use = ["local"] + [c for c in channels if c != "local"]
         for channel in channels_to_use:
             args += ["-c", channel]
 
@@ -270,7 +269,7 @@ def build(
             rattler_args += ['--skip-existing "none"']
         else:
             rattler_args += ['--skip-existing "all"']
-        channels_to_use = ["local"] + [c for c in (channels or []) if c != "local"]
+        channels_to_use = ["local"] + [c for c in channels if c != "local"]
         for channel in channels_to_use:
             rattler_args += ["-c", channel]
 
@@ -332,6 +331,8 @@ def build(
                         cmd += [str(recipe.path / "meta.yaml")]
                         run(cmd, live=live_logs, status="Building recipe...")
                 case BuildSystem.RATTLER:
+                    # Convert domain values once for py-rattler-build's string API.
+                    rattler_channels = [str(channel) for channel in channels]
                     recipe_file: Path = recipe.path / "recipe.yaml"
                     local_variants_path: Path = recipe.path / "variants.yaml"
 
@@ -354,7 +355,7 @@ def build(
                         # terminal, so no spinner is wrapped around it here.
                         result = variant.run_build(
                             tool_config,
-                            channels=list(channels) if channels is not None else None,
+                            channels=rattler_channels,
                             output_dir=rattler_output_dir,
                         )
                         built_package_names.extend(

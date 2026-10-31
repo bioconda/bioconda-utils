@@ -169,6 +169,7 @@ def single_build(request, recipes_fixture, config_fixture):
     )
 
     build.build(
+        channels=Config().channels,
         recipe=recipe_path,
         global_variants=global_variants,
         tool_config=tool_config,
@@ -303,6 +304,7 @@ def single_upload(request):
     pkg_paths: list[Path] = r.pkgs[name]
 
     build_result = build.build(
+        channels=Config().channels,
         recipe=recipe_path,
         global_variants=global_variants,
         tool_config=tool_config,
@@ -392,6 +394,7 @@ def test_single_build_pkg_dir(recipes_fixture):
     pkg_paths: list[Path] = recipes_fixture.pkgs["one"]
 
     res = build.build(
+        channels=Config().channels,
         recipe=recipe_path,
         global_variants=global_variants,
         tool_config=tool_config,
@@ -868,6 +871,7 @@ def test_rendering_sandboxing():
             pkg_paths = conda_recipes.built_package_paths(r.recipe_dirs["one"])
 
             build.build(
+                channels=Config().channels,
                 recipe=recipe_path,
                 global_variants=global_variants,
                 tool_config=tool_config,
@@ -895,6 +899,7 @@ def test_rendering_sandboxing():
             pkg_paths = conda_recipes.built_package_paths(r.recipe_dirs["one"])
 
             build.build(
+                channels=Config().channels,
                 recipe=recipe_path,
                 global_variants=global_variants,
                 tool_config=tool_config,
@@ -1004,6 +1009,7 @@ def test_env_sandboxing():
         pkg_paths = [Path(p) for p in pkg_paths]
 
         build.build(
+            channels=Config().channels,
             recipe=recipe_path,
             global_variants=global_variants,
             tool_config=tool_config,
@@ -1131,6 +1137,7 @@ def test_build_empty_extra_container():
     pkg_paths = [Path(p) for p in pkgs]
 
     build_result = build.build(
+        channels=Config().channels,
         recipe=recipe_path,
         global_variants=global_variants,
         tool_config=tool_config,
@@ -1188,6 +1195,7 @@ def test_build_container_no_default_gcc(tmp_path):
     )
 
     build_result = build.build(
+        channels=Config().channels,
         recipe=recipe_path,
         global_variants=global_variants,
         tool_config=tool_config,
