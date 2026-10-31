@@ -36,6 +36,14 @@ logger = logging.getLogger(__name__)
 SHARDS_INDEX_FILENAME = "repodata_shards.msgpack.zst"
 
 
+class ShardsUnavailable(Exception):
+    """Full repodata is needed because sharding is unavailable."""
+
+
+class ShardError(ShardsUnavailable):
+    """An unexpected shard failure requires a warning and full repodata."""
+
+
 def _unpack_msgpack_zst(data: bytes) -> Any:
     """Decompress zstandard-compressed msgpack data."""
     decompressed = zstandard.ZstdDecompressor().stream_reader(data).read()
@@ -101,11 +109,7 @@ class ShardClient:
         return urljoin(shard_index.shards_base_url, f"{hex_hash}.msgpack.zst")
 
     @staticmethod
-    def _parse_shard_index(
-        data: bytes | None, index_url: str
-    ) -> _CachedShardIndex | None:
-        if not data:
-            return None
+    def _parse_shard_index(data: bytes, index_url: str) -> _CachedShardIndex:
         try:
             raw = _unpack_msgpack_zst(data)
 
@@ -141,12 +145,7 @@ class ShardClient:
             TypeError,
             OSError,
         ) as exc:
-            logger.debug(
-                "Failed to decompress/unpack shards index at %s: %s",
-                index_url,
-                exc,
-            )
-            return None
+            raise ShardError(f"Invalid shard index at {index_url}: {exc}") from exc
 
         return _CachedShardIndex(
             shards=shards_map,
@@ -156,11 +155,9 @@ class ShardClient:
 
     @staticmethod
     def _parse_package_shard(
-        data: bytes | None,
+        data: bytes,
         meta_data: tuple[Channel, Subdir, str],
-    ) -> tuple[PackageRecord, ...] | None:
-        if not data:
-            return None
+    ) -> tuple[PackageRecord, ...]:
         channel, subdir, package_name = meta_data
         try:
             shard = _unpack_msgpack_zst(data)
@@ -189,21 +186,16 @@ class ShardClient:
             TypeError,
             OSError,
         ) as exc:
-            logger.debug(
-                "Failed to decompress/unpack shard for %s/%s/%s: %s",
-                channel,
-                subdir,
-                package_name,
-                exc,
-            )
-            return None
+            raise ShardError(
+                f"Invalid package shard for {channel}/{subdir}/{package_name}: {exc}"
+            ) from exc
         return records
 
     @classmethod
     def _get_shard_index(
         cls, channel: Channel, subdir: Subdir, repodata_url: str
-    ) -> _CachedShardIndex | None:
-        """Return a fresh shard index, or None when shards are unavailable."""
+    ) -> _CachedShardIndex:
+        """Return a fresh shard index or raise ShardsUnavailable."""
         index_url = cls.shards_index_url(repodata_url)
         now = datetime.datetime.now(datetime.UTC)
         unavailable_at = cls._shards_unavailable.get(index_url)
@@ -213,7 +205,7 @@ class ShardClient:
             <= (now - unavailable_at).total_seconds()
             <= cls.shards_unavailable_timeout
         ):
-            return None
+            raise ShardsUnavailable("Shard index retry cooldown is active")
         cls._shards_unavailable.pop(index_url, None)
         cached = cls._shard_index_cache.get(index_url)
         if (
@@ -228,21 +220,19 @@ class ShardClient:
             [raw] = fetch(
                 [FetchRequest(index_url, f"{channel}/{subdir} shards index")],
                 allow_404=True,
-                return_exceptions=True,
             )
         except (aiohttp.ClientError, OSError, TimeoutError, RuntimeError) as exc:
-            logger.debug(
-                "Error fetching shard index for %s/%s: %s", channel, subdir, exc
-            )
-            raw = exc
-        index = (
-            None
-            if isinstance(raw, Exception)
-            else cls._parse_shard_index(raw, index_url)
-        )
-        if index is None:
-            cls._shards_unavailable[index_url] = now
-            return None
+            cls._shards_unavailable[index_url] = datetime.datetime.now(datetime.UTC)
+            raise ShardError(
+                f"Failed to download shard index at {index_url}: {exc}"
+            ) from exc
+        try:
+            if raw is None:
+                raise ShardsUnavailable(f"No shard index at {index_url}")
+            index = cls._parse_shard_index(raw, index_url)
+        except ShardsUnavailable:
+            cls._shards_unavailable[index_url] = datetime.datetime.now(datetime.UTC)
+            raise
         cls._shard_index_cache[index_url] = index
         return index
 
@@ -251,11 +241,11 @@ class ShardClient:
         cls,
         shard_name_by_url: dict[str, str],
         records_by_url: dict[str, tuple[PackageRecord, ...]],
-    ) -> dict[str, str] | None:
+    ) -> dict[str, str]:
         """Fill **records_by_url** from cached shard records.
 
-        Returns the url->name mapping of shards still to download, or None
-        when a requested shard is unavailable within its retry timeout.
+        Return the url->name mapping of shards still to download. Raise
+        ShardsUnavailable when a requested shard is within its retry timeout.
         """
         missing: dict[str, str] = {}
         now = datetime.datetime.now(datetime.UTC)
@@ -272,7 +262,7 @@ class ShardClient:
                 <= (now - unavailable_at).total_seconds()
                 < cls.package_shards_unavailable_timeout
             ):
-                return None
+                raise ShardsUnavailable("Package shard retry cooldown is active")
             missing[url] = name
         return missing
 
@@ -283,38 +273,47 @@ class ShardClient:
         subdir: Subdir,
         missing: dict[str, str],
         records_by_url: dict[str, tuple[PackageRecord, ...]],
-    ) -> bool:
-        """Download and parse shards into **records_by_url**.
-
-        Returns False when any shard failed, requesting fallback to full
-        repodata for the whole repository.
-        """
-        results = fetch(
-            [
-                FetchRequest(url, f"{channel}/{subdir}/{name} shard")
-                for url, name in missing.items()
-            ],
-            allow_404=True,
-            return_exceptions=True,
-        )
-        failed = False
-        now = datetime.datetime.now(datetime.UTC)
-        for (url, name), raw in zip(missing.items(), results):
-            records = (
-                None
-                if isinstance(raw, Exception)
-                else cls._parse_package_shard(raw, (channel, subdir, name))
+    ) -> None:
+        """Cache successful downloads; raise ShardError if any shard fails."""
+        try:
+            results = fetch(
+                [
+                    FetchRequest(url, f"{channel}/{subdir}/{name} shard")
+                    for url, name in missing.items()
+                ],
+                allow_404=True,
+                return_exceptions=True,
             )
-            if records is None:
+        except (aiohttp.ClientError, OSError, TimeoutError, RuntimeError) as exc:
+            cls._package_shards_unavailable.update(
+                dict.fromkeys(missing, datetime.datetime.now(datetime.UTC))
+            )
+            raise ShardError(f"Failed to download package shards: {exc}") from exc
+        now = datetime.datetime.now(datetime.UTC)
+        failures: list[tuple[str, ShardError]] = []
+        for (url, name), raw in zip(missing.items(), results, strict=True):
+            try:
+                if isinstance(raw, Exception):
+                    raise ShardError(
+                        f"Failed to download package shard at {url}: {raw}"
+                    ) from raw
+                if raw is None:
+                    raise ShardError(f"Advertised package shard is missing at {url}")
+                records = cls._parse_package_shard(raw, (channel, subdir, name))
+            except ShardError as exc:
                 cls._package_shards_unavailable[url] = now
-                failed = True
+                failures.append((url, exc))
                 continue
             cls._package_shards_unavailable.pop(url, None)
             cls._package_shard_cache[url] = _CachedPackageShard(records)
             while len(cls._package_shard_cache) > cls.package_shard_cache_max_entries:
                 cls._package_shard_cache.popitem(last=False)
             records_by_url[url] = records
-        return not failed
+        if failures:
+            url, error = failures[0]
+            raise ShardError(
+                f"{error} (URL: {url}; {len(failures)} package shards failed)"
+            ) from error
 
     @classmethod
     def get_repository_shards(
@@ -329,28 +328,33 @@ class ShardClient:
             return []
         if channel.startswith("file://"):
             return None
-        index = cls._get_shard_index(channel, subdir, repodata_url)
-        if index is None:
+        try:
+            index = cls._get_shard_index(channel, subdir, repodata_url)
+            shard_name_by_url: dict[str, str] = {}
+            for name in dict.fromkeys(names):
+                shard_hash = index.shards.get(name)
+                if shard_hash is None:
+                    # A missing name in a valid index is authoritative.
+                    continue
+                shard_name_by_url.setdefault(cls.shard_url(index, shard_hash), name)
+            records_by_url: dict[str, tuple[PackageRecord, ...]] = {}
+            missing = cls._cached_shards(shard_name_by_url, records_by_url)
+            if missing:
+                cls._download_shards(channel, subdir, missing, records_by_url)
+            wanted = set(names)
+            return [
+                record
+                for records in records_by_url.values()
+                for record in records
+                if record.name in wanted
+            ]
+        except ShardError as exc:
+            logger.warning(
+                "Sharded repodata failed for %s/%s; falling back to full repodata: %s",
+                channel,
+                subdir,
+                exc,
+            )
             return None
-        shard_name_by_url: dict[str, str] = {}
-        for name in dict.fromkeys(names):
-            shard_hash = index.shards.get(name)
-            if shard_hash is None:
-                # A missing name in a valid index is authoritative.
-                continue
-            shard_name_by_url.setdefault(cls.shard_url(index, shard_hash), name)
-        records_by_url: dict[str, tuple[PackageRecord, ...]] = {}
-        missing = cls._cached_shards(shard_name_by_url, records_by_url)
-        if missing is None:
+        except ShardsUnavailable:
             return None
-        if missing and not cls._download_shards(
-            channel, subdir, missing, records_by_url
-        ):
-            return None
-        wanted = set(names)
-        return [
-            record
-            for records in records_by_url.values()
-            for record in records
-            if record.name in wanted
-        ]
