@@ -709,10 +709,7 @@ def build_recipes(
 
     # get channels to check
     if check_channels is None:
-        if config.channels:
-            check_channels = [c for c in config.channels if c != "defaults"]
-        else:
-            check_channels = []
+        check_channels = [c for c in config.channels if c != "defaults"]
 
     # setup linting
     if do_lint:
