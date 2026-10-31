@@ -3,6 +3,7 @@
 import asyncio
 import datetime
 import json
+import logging
 
 import msgpack
 import pytest
@@ -36,13 +37,11 @@ def index_url(repository, channel, subdir="noarch"):
     ],
 )
 def test_repodata_rejects_invalid_shard_indexes(data):
-    assert (
+    with pytest.raises(shards.ShardError, match="Invalid shard index"):
         ShardClient._parse_shard_index(
             _pack_shard(data),
             "https://conda.anaconda.org/bioconda/linux-64/repodata_shards.msgpack.zst",
         )
-        is None
-    )
 
 
 @pytest.mark.parametrize(
@@ -83,13 +82,11 @@ def test_repodata_rejects_invalid_shard_indexes(data):
     ],
 )
 def test_repodata_rejects_invalid_package_shards(data):
-    assert (
+    with pytest.raises(shards.ShardError, match="Invalid package shard"):
         ShardClient._parse_package_shard(
             _pack_shard(data),
             (Channel("bioconda"), PackageSubdir.LINUX_64, "pkg"),
         )
-        is None
-    )
 
 
 @pytest.mark.parametrize(
@@ -116,7 +113,6 @@ def test_repodata_resolves_shards_base_url(shards_base_url, expected):
         ),
         index_url(repository, "bioconda", PackageSubdir.LINUX_64),
     )
-    assert index is not None
     assert ShardClient.shard_url(index, "hash") == expected
 
 
@@ -134,7 +130,12 @@ def sharded(monkeypatch):
         result = []
         for request in downloads:
             requests.append(request.url)
-            result.append(bodies.get(request.url))
+            body = bodies.get(request.url)
+            if isinstance(body, Exception) and not kwargs.get(
+                "return_exceptions", False
+            ):
+                raise body
+            result.append(body)
         return result
 
     monkeypatch.setattr(shards, "fetch", download)
@@ -240,7 +241,7 @@ def test_shards_share_sql_filters_and_do_not_download_full_repodata(
 @pytest.mark.parametrize("failure", [None, b"corrupt", OSError("unavailable")])
 @pytest.mark.parametrize("broken_channel", ["high", "low"])
 def test_failed_shards_fall_back_once_and_preserve_channel_order(
-    sharded, monkeypatch, failure, broken_channel
+    sharded, monkeypatch, failure, broken_channel, caplog
 ):
     repository, bodies, requests = sharded
     for channel in ["high", "low"]:
@@ -257,6 +258,10 @@ def test_failed_shards_fall_back_once_and_preserve_channel_order(
         assert repository.get_package_data("version", name="example") == expected
     assert loads == [(broken_channel, "noarch")]
     assert requests.count(broken_url) == 1
+    assert len(caplog.records) == 1
+    assert caplog.records[0].levelno == logging.WARNING
+    assert "falling back to full repodata" in caplog.text
+    assert broken_url in caplog.text
 
 
 def test_partial_package_failure_replaces_repository_without_duplicates(
@@ -270,6 +275,86 @@ def test_partial_package_failure_replaces_repository_without_duplicates(
         "name", channels=Channel("high"), name=["example", "other"]
     ) == ["example", "other"]
     assert loads == [("high", "noarch")]
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [b"", b"corrupt", _pack_shard({}), OSError("connection failed")],
+)
+def test_failed_indexes_warn_once_and_fall_back(sharded, monkeypatch, caplog, failure):
+    repository, bodies, requests = sharded
+    url = index_url(repository, "high")
+    bodies[url] = failure
+    loads = fallback(repository, monkeypatch, [record()])
+    for _ in range(2):
+        assert repository.get_package_data(
+            "name", channels=Channel("high"), name="example"
+        ) == ["example"]
+    assert requests == [url]
+    assert loads == [("high", "noarch")]
+    assert len(caplog.records) == 1
+    assert caplog.records[0].levelno == logging.WARNING
+    assert url in caplog.text
+    assert "falling back to full repodata" in caplog.text
+
+
+def test_batch_download_failure_warns_once_and_backs_off(sharded, monkeypatch, caplog):
+    repository, bodies, _requests = sharded
+    set_index(repository, bodies, example="hash")
+    download = shards.fetch
+    batches = []
+
+    def fail_shards(downloads, **kwargs):
+        if kwargs.get("return_exceptions"):
+            batches.append(downloads)
+            raise OSError("batch failed")
+        return download(downloads, **kwargs)
+
+    monkeypatch.setattr(shards, "fetch", fail_shards)
+    fallback(repository, monkeypatch, [record()])
+    for _ in range(2):
+        assert repository.get_package_data(
+            "name", channels=Channel("high"), name="example"
+        ) == ["example"]
+    assert len(batches) == 1
+    assert len(caplog.records) == 1
+    assert "batch failed" in caplog.text
+    assert "falling back to full repodata" in caplog.text
+
+
+def test_failed_shard_retry_keeps_successful_siblings(sharded, monkeypatch, caplog):
+    repository, bodies, requests = sharded
+    set_index(repository, bodies, example="good", other="bad")
+    set_shard(repository, bodies, [record()], shard_hash="good")
+    loads = fallback(repository, monkeypatch, [record(), record(name="other")])
+    for _ in range(2):
+        assert repository.get_package_data(
+            "name", channels=Channel("high"), name=["example", "other"]
+        ) == ["example", "other"]
+    assert len(caplog.records) == 1
+    bad_url = next(iter(ShardClient._package_shards_unavailable))
+    ShardClient._package_shards_unavailable[bad_url] -= datetime.timedelta(minutes=6)
+    set_shard(repository, bodies, [record(name="other")], shard_hash="bad")
+    assert repository.get_package_data(
+        "name", channels=Channel("high"), name=["example", "other"]
+    ) == ["example", "other"]
+    assert requests.count(bad_url) == 2
+    assert len([url for url in requests if url.endswith("/good.msgpack.zst")]) == 1
+    assert loads == [("high", "noarch")]
+    assert not ShardClient._package_shards_unavailable
+    assert len(caplog.records) == 1
+
+
+def test_unexpected_programming_errors_propagate(sharded, monkeypatch):
+    repository, bodies, _requests = sharded
+    set_index(repository, bodies, example="hash")
+
+    def broken_parser(*args):
+        raise AssertionError("programming error")
+
+    monkeypatch.setattr(ShardClient, "_parse_shard_index", broken_parser)
+    with pytest.raises(AssertionError, match="programming error"):
+        repository.get_package_data("name", channels=Channel("high"), name="example")
 
 
 def test_expired_indexes_and_changed_hashes_refetch(sharded, monkeypatch):
@@ -294,7 +379,7 @@ def test_expired_indexes_and_changed_hashes_refetch(sharded, monkeypatch):
     assert requests.count(url) == 3
 
 
-def test_negative_index_cache_expires(sharded, monkeypatch):
+def test_negative_index_cache_expires(sharded, monkeypatch, caplog):
     repository, bodies, requests = sharded
     loads = fallback(repository, monkeypatch, [record()])
     for _ in range(2):
@@ -309,6 +394,7 @@ def test_negative_index_cache_expires(sharded, monkeypatch):
     ) == ["sharded"]
     assert requests.count(url) == 2
     assert len(loads) == 1
+    assert not caplog.records
 
 
 def test_shard_cache_identity_includes_repository_url(sharded):
