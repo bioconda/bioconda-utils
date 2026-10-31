@@ -7,31 +7,32 @@ from bioconda_utils._types import Channel, Config
 from bioconda_utils.conda import repodata
 from bioconda_utils.conda.conda_build_bridge import load_first_metadata
 
-config = {"channels": ["conda-forge", "bioconda"]}
+config = Config()
 
 
-def test_write_recipe_normalizes_raw_config_at_boundary(monkeypatch, tmp_path):
-    class NormalizationObserved(Exception):
+def test_write_recipe_registers_normalized_config(monkeypatch, tmp_path):
+    class ConfigObserved(Exception):
         pass
 
+    expected_config = Config(channels=[])
     captured = {}
 
     def register_config(config):
         captured["config"] = config
 
     def observe_config(*_args, **_kwargs):
-        assert isinstance(captured["config"], Config)
-        assert captured["config"]["requirements"] is None
-        raise NormalizationObserved
+        assert captured["config"] is expected_config
+        assert captured["config"].requirements is None
+        raise ConfigObserved
 
     monkeypatch.setattr(repodata.RepoData, "register_config", register_config)
     monkeypatch.setattr(bioconductor_skeleton, "BioCProjectPage", observe_config)
 
-    with pytest.raises(NormalizationObserved):
+    with pytest.raises(ConfigObserved):
         bioconductor_skeleton.write_recipe(
             "example",
             tmp_path,
-            {"channels": []},
+            expected_config,
         )
 
 
@@ -106,7 +107,7 @@ def test_bioc_write_recipe_no_skipping(tmp_path, bioc_fetch):
 
 @pytest.mark.skip(reason="Does not work since new bioconductor release?")
 def test_meta_contents(tmp_path, bioc_fetch):
-    config = {"channels": ["conda-forge", "bioconda"]}
+    config = Config()
     bioconductor_skeleton.write_recipe(
         "edgeR",
         recipe_dir=tmp_path,

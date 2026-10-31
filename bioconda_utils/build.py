@@ -12,7 +12,7 @@ import subprocess as sp
 from collections import defaultdict
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
 import networkx as nx
 import psutil
@@ -35,6 +35,7 @@ from ._types import (
     ALL_PACKAGE_SUBDIRS,
     DEFAULT_PRIMARY_PLATFORMS,
     Channel,
+    Config,
     ContainerPlatform,
     PackageSubdir,
     PkgBuildRef,
@@ -55,7 +56,6 @@ from .conda.recipes import (
     recipe_requires_finalized_render,
 )
 from .conda.repodata import RepoData
-from .config import normalize_config
 from .containers import docker_utils, pkg_test, upload
 from .containers.container_manifests import write_image_record
 from .recipes import BuildSystem, get_package_paths
@@ -629,7 +629,7 @@ def should_skip_platform(
 
 def build_recipes(
     recipe_folder: Path,
-    config: dict[str, Any],
+    config: Config,
     recipes: list[RecipePath],
     mulled_build_and_test: bool = True,
     force: bool = False,
@@ -660,7 +660,7 @@ def build_recipes(
 
     Arguments:
       recipe_folder: Directory containing possibly many, and possibly nested, recipes.
-      config: Parsed Bioconda configuration, normalized at this boundary.
+      config: Normalized Bioconda configuration.
       packages: Glob indicating which packages should be considered. Note that packages
         matching the glob will still be filtered out by any blacklists
         specified in the config.
@@ -695,7 +695,6 @@ def build_recipes(
         logger.info("Nothing to be done.")
         return True
 
-    config = normalize_config(config)
     RepoData.register_config(config)
     blacklist = Skiplist(config, recipe_folder)
     global_variants: rb.VariantConfig = load_rattler_build_global_variants(
@@ -773,7 +772,7 @@ def build_recipes(
             recipe_folder,
             recipe,
             platform,
-            primary_platforms=config.get("primary_platforms"),
+            primary_platforms=config.primary_platforms,
         ):
             logger.info(
                 "BUILD SKIP: skipping %s for additional platform %s",

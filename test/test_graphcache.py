@@ -3,6 +3,7 @@
 import pytest
 
 from bioconda_utils import graph
+from bioconda_utils._types import Config
 from bioconda_utils.support import graphcache
 from bioconda_utils.support.caching import get_cache_root
 
@@ -96,7 +97,7 @@ def test_skiplists_are_applied_after_metadata_cache(collection):
 
     source = RecipeGraphSource.__new__(RecipeGraphSource)
     source.recipe_base = collection
-    source.config = {"channels": [], "blacklists": []}
+    source.config = Config(channels=[])
     assert len(source.load_graph()) == 2
     failure = BuildFailureRecord(collection / "consumer")
     failure.fill(skiplist=True)

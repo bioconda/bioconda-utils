@@ -3,7 +3,7 @@ from __future__ import annotations
 import platform
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from typing import (
@@ -121,26 +121,6 @@ class QueryableV1Recipe(QueryableRecipe):
         return result
 
 
-class Config(dict[str, Any]):
-    """Validated Bioconda configuration with defaults applied."""
-
-    @property
-    def channels(self) -> list[Channel]:
-        channels = self["channels"]
-        if not isinstance(channels, list):
-            raise TypeError("Config channels must be a list")
-        # Preserve the mutable list used by callers that extend configuration.
-        normalized = [Channel(channel) for channel in channels]
-        channels[:] = normalized
-        return channels
-
-    @property
-    def upload_channel(self) -> Channel:
-        channel = Channel(self["upload_channel"])
-        self["upload_channel"] = channel
-        return channel
-
-
 #: Docker/OCI platform notation used by Docker, buildx, skopeo, registry
 #: manifests, and mulled-build's ``--target-platform``.
 class ContainerPlatform(StrEnum):
@@ -203,6 +183,32 @@ class Channel(str):
         if not channel:
             raise ValueError("Channel names must not be empty")
         return super().__new__(cls, channel)
+
+
+@dataclass(slots=True, kw_only=True)
+class Config:
+    """Normalized configuration. Parse raw YAML with ``normalize_config`` first."""
+
+    channels: list[Channel] = field(
+        default_factory=lambda: [Channel("conda-forge"), Channel("bioconda")]
+    )
+    upload_channel: Channel = field(default_factory=lambda: Channel("bioconda"))
+    blacklists: list[Path] = field(default_factory=list)
+    primary_platforms: list[PackageSubdir] = field(
+        default_factory=lambda: list(DEFAULT_PRIMARY_PLATFORMS)
+    )
+    requirements: Any = None
+    docker_image: str | None = None
+    conda_build_version: str | None = None
+    setup: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.channels, list) or not all(
+            isinstance(channel, Channel) for channel in self.channels
+        ):
+            raise TypeError("Config channels must be a list of Channel values")
+        if not isinstance(self.upload_channel, Channel):
+            raise TypeError("Config upload_channel must be a Channel")
 
 
 #: Identity of a repodata repository: its channel and subdir.

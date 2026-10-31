@@ -99,7 +99,7 @@ class recipe_is_blacklisted(LintCheck):
     def __init__(self, linter: Linter) -> None:
         super().__init__(linter)
         self.skiplist = linter.get_skiplist()
-        self.blacklists: list[Path] = linter.config.get("blacklists", [])
+        self.blacklists: list[Path] = linter.config.blacklists
 
     def check_recipe(self, recipe: Recipe) -> None:
         if self.skiplist.is_skiplisted(recipe):

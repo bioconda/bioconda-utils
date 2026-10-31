@@ -18,6 +18,7 @@ from bioconda_utils._types import (
     ALL_PACKAGE_SUBDIRS,
     BuildFailureOutputFormat,
     Channel,
+    Config,
     PackageSubdir,
     RecipePath,
 )
@@ -295,7 +296,7 @@ BUILD_FAILURE_COLUMNS: list[str] = [
 
 def collect_build_failure_records(
     recipe_folder: Path,
-    config: dict[str, Any],
+    config: Config,
     channel: Channel,
     link_fmt: BuildFailureOutputFormat = "table",
     link_prefix: str = "",

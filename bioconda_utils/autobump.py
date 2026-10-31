@@ -64,7 +64,7 @@ from packaging.version import parse as _pep440_parse
 from bioconda_utils.skiplist import Skiplist
 
 from . import __version__, graph, update_pinnings
-from ._types import BuildSystem, Channel, RecipePath, ensure_list
+from ._types import BuildSystem, Channel, Config, RecipePath, ensure_list
 from .aiopipe import (
     AsyncFilter,
     AsyncPipeline,
@@ -184,7 +184,7 @@ class RecipeGraphSource(RecipeSource):
         packages: list[str],
         exclude: list[str],
         shuffle: bool,
-        config: dict[str, Any],
+        config: Config,
     ) -> None:
         super().__init__(recipe_base, packages, exclude, shuffle)
         self.config = config
@@ -411,11 +411,9 @@ class ExcludeBlacklisted(Filter):
         template = "is blacklisted"
         level = logging.DEBUG
 
-    def __init__(
-        self, scanner: Scanner, recipe_base: Path, config: dict[str, Any]
-    ) -> None:
+    def __init__(self, scanner: Scanner, recipe_base: Path, config: Config) -> None:
         super().__init__(scanner)
-        self.blacklists: list[Path] = config.get("blacklists", [])
+        self.blacklists: list[Path] = config.blacklists
         self.skiplist = Skiplist(config, recipe_base)
         logger.warning("Excluding blacklisted recipes")
 

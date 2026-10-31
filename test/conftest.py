@@ -5,12 +5,13 @@ import sqlite3
 from collections import OrderedDict
 from contextlib import closing, contextmanager
 from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 from ruamel.yaml import YAML
 
-from bioconda_utils._types import Config
+from bioconda_utils._types import Channel, Config
 from bioconda_utils.conda import repodata, shards
 
 yaml = YAML(typ="rt")  # pylint: disable=invalid-name
@@ -71,22 +72,20 @@ def mock_repodata(case, monkeypatch):
                 }
                 records.setdefault((channel, record["platform"]), []).append(record)
 
-    config = repodata.RepoData.config or {}
+    config = repodata.RepoData.config or Config()
     monkeypatch.setattr(
         repodata.RepoData,
         "config",
-        Config(
-            {
-                **config,
-                "channels": list(
-                    dict.fromkeys(
-                        [
-                            *config.get("channels", []),
-                            *(channel for channel, _subdir in records),
-                        ]
-                    )
-                ),
-            }
+        replace(
+            config,
+            channels=list(
+                dict.fromkeys(
+                    [
+                        *config.channels,
+                        *(Channel(channel) for channel, _subdir in records),
+                    ]
+                )
+            ),
         ),
     )
 

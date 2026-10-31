@@ -5,7 +5,7 @@ import pytest
 from ruamel.yaml import YAML
 
 from bioconda_utils import lint
-from bioconda_utils._types import CONDA, RecipePath, ensure_list
+from bioconda_utils._types import CONDA, Config, RecipePath, ensure_list
 from bioconda_utils.config import load_config
 
 yaml = YAML(typ="rt")  # pylint: disable=invalid-name
@@ -131,7 +131,10 @@ def test_lint_dependency_order_and_transitive_skips(monkeypatch, tmp_path, mode)
         "package:\n  name: example\n  version: '1.0'\nbuild:\n  number: 0\n"
     )
     linter = lint.Linter(
-        {}, tmp_path, exclude=["prerequisite"] if mode == "skip" else [], nocatch=True
+        Config(),
+        tmp_path,
+        exclude=["prerequisite"] if mode == "skip" else [],
+        nocatch=True,
     )
 
     assert linter.lint([RecipePath(recipe_dir, CONDA)]) == (mode == "fail")
@@ -161,4 +164,4 @@ def test_lint_rejects_unregistered_dependency(monkeypatch, tmp_path):
     with pytest.raises(
         ValueError, match="Unregistered lint dependency.*required by dependent"
     ):
-        lint.Linter({}, tmp_path)
+        lint.Linter(Config(), tmp_path)

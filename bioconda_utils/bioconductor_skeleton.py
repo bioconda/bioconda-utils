@@ -21,10 +21,9 @@ import networkx as nx
 import requests
 from ruamel.yaml import YAML
 
-from ._types import Channel
+from ._types import Channel, Config
 from .conda.conda_build_bridge import load_first_metadata
 from .conda.repodata import RepoData
-from .config import normalize_config
 from .support.caching import memoize
 
 logger = logging.getLogger(__name__)
@@ -1312,7 +1311,7 @@ def updateDataPackages(
 def write_recipe(
     package,
     recipe_dir: Path,
-    config: dict[str, Any],
+    config: Config,
     bioc_data_packages: Path | None = None,
     force=False,
     bioc_version=None,
@@ -1378,7 +1377,6 @@ def write_recipe(
         If None, we need to determine if this requires X and therefore additional
         build dependencies and test environment variables.
     """
-    config = normalize_config(config)
     RepoData.register_config(config)
     proj = BioCProjectPage(package, bioc_version, pkg_version, packages=packages)
     logger.info(f"Making recipe for: {package}")

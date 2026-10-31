@@ -12,7 +12,6 @@ from jsonschema import validate
 from ruamel.yaml import YAML
 
 from bioconda_utils._types import (
-    DEFAULT_PRIMARY_PLATFORMS,
     Channel,
     Config,
     PackageSubdir,
@@ -42,9 +41,6 @@ def normalize_config(config: dict[str, Any], *, base_dir: Path | None = None) ->
     otherwise left as-is for the caller to interpret relative to the working
     directory.
     """
-    if isinstance(config, Config):
-        return config
-
     validate_config(config)
 
     def get_list(key):
@@ -54,42 +50,34 @@ def normalize_config(config: dict[str, Any], *, base_dir: Path | None = None) ->
             return []
         return value
 
-    default_config = Config(
-        {
-            "blacklists": [],
-            "channels": [Channel("conda-forge"), Channel("bioconda")],
-            "requirements": None,
-            "upload_channel": Channel("bioconda"),
-            "primary_platforms": list(DEFAULT_PRIMARY_PLATFORMS),
-        }
+    defaults = Config()
+    channels = (
+        list(dict.fromkeys(Channel(channel) for channel in get_list("channels")))
+        if "channels" in config
+        else defaults.channels
     )
-    default_config.update(config)
-    if "blacklists" in config:
-        default_config["blacklists"] = [
+    return Config(
+        channels=channels,
+        upload_channel=Channel(config.get("upload_channel", defaults.upload_channel)),
+        blacklists=[
             base_dir / item if base_dir is not None else Path(item)
             for item in get_list("blacklists")
-        ]
-    if "channels" in config:
-        normalized_channels: list[Channel] = []
-        for channel in get_list("channels"):
-            parsed = Channel(channel)
-            if parsed not in normalized_channels:
-                normalized_channels.append(parsed)
-        default_config["channels"] = normalized_channels
-    if "upload_channel" in config:
-        default_config["upload_channel"] = Channel(default_config["upload_channel"])
-    if "primary_platforms" in config:
-        default_config["primary_platforms"] = [
-            PackageSubdir(p) for p in get_list("primary_platforms")
-        ]
-
-    return default_config
+        ],
+        primary_platforms=[
+            PackageSubdir(p)
+            for p in config.get("primary_platforms", defaults.primary_platforms)
+        ],
+        requirements=config.get("requirements"),
+        docker_image=config.get("docker_image"),
+        conda_build_version=config.get("conda_build_version"),
+        setup=config.get("setup") or [],
+    )
 
 
 def load_config(path: Path) -> Config:
     """Load and normalize a YAML configuration file."""
     with path.open(encoding="utf-8") as fh:
-        config = YAML(typ="safe").load(fh)
-    config = normalize_config(config, base_dir=path.parent)
+        raw_config = YAML(typ="safe").load(fh)
+    config = normalize_config(raw_config, base_dir=path.parent)
     RepoData.register_config(config)
     return config

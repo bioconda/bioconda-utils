@@ -122,7 +122,9 @@ def test_repodata_resolves_shards_base_url(shards_base_url, expected):
 
 @pytest.fixture
 def sharded(monkeypatch):
-    monkeypatch.setattr(RepoData, "config", Config({"channels": ["high", "low"]}))
+    monkeypatch.setattr(
+        RepoData, "config", Config(channels=[Channel("high"), Channel("low")])
+    )
     monkeypatch.setattr(RepoData, "platforms", ["noarch"])
     repository = RepoData()
     requests = []
@@ -393,7 +395,9 @@ def test_http_shards_and_missing_index_fallback(monkeypatch):
             "REPODATA_URL",
             f"http://127.0.0.1:{server.server_port}/{{channel}}/{{subdir}}/repodata.json",
         )
-        monkeypatch.setattr(RepoData, "config", Config({"channels": ["high", "low"]}))
+        monkeypatch.setattr(
+            RepoData, "config", Config(channels=[Channel("high"), Channel("low")])
+        )
         monkeypatch.setattr(RepoData, "platforms", ["noarch"])
         repository = RepoData()
         for _ in range(2):

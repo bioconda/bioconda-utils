@@ -16,7 +16,7 @@ from typer.main import get_command
 from typer.testing import CliRunner
 
 from bioconda_utils import cli
-from bioconda_utils._types import CONDA, RecipePath
+from bioconda_utils._types import CONDA, Config, RecipePath
 from bioconda_utils.containers.artifacts import UploadResult
 from bioconda_utils.containers.pkg_test import CREATE_ENV_IMAGE
 from bioconda_utils.githandler import GitRange
@@ -249,7 +249,7 @@ def test_dag_hides_singletons(monkeypatch, tmp_path):
     name2recipes = {
         name: {RecipePath(Path("recipes") / name, CONDA)} for name in package_dag.nodes
     }
-    monkeypatch.setattr("bioconda_utils.config.load_config", lambda _: {})
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda _: Config())
     monkeypatch.setattr(cli, "get_recipes", lambda *_: [])
     monkeypatch.setattr(
         "bioconda_utils.graph.build", lambda *_: (package_dag, name2recipes)
@@ -283,7 +283,7 @@ def test_dag_text_output_does_not_wrap_recipe_paths(monkeypatch, tmp_path):
         "dependency": {RecipePath(Path("recipes/dependency"), CONDA)},
         "package": {RecipePath(long_recipe, CONDA)},
     }
-    monkeypatch.setattr("bioconda_utils.config.load_config", lambda _: {})
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda _: Config())
     monkeypatch.setattr(cli, "get_recipes", lambda *_: [])
     monkeypatch.setattr(
         "bioconda_utils.graph.build", lambda *_: (package_dag, name2recipes)
@@ -307,7 +307,7 @@ def test_dag_dot_output_contains_nodes_and_edges(monkeypatch, tmp_path):
     name2recipes = {
         name: {RecipePath(Path("recipes") / name, CONDA)} for name in package_dag.nodes
     }
-    monkeypatch.setattr("bioconda_utils.config.load_config", lambda _: {})
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda _: Config())
     monkeypatch.setattr(cli, "get_recipes", lambda *_: [])
     monkeypatch.setattr(
         "bioconda_utils.graph.build", lambda *_: (package_dag, name2recipes)
@@ -602,7 +602,7 @@ def test_autobump_closes_git_handler_on_keyboard_interrupt(monkeypatch):
             closed.append(True)
 
     monkeypatch.setattr(cli, "_setup_runtime", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: {})
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: Config())
     monkeypatch.setattr("bioconda_utils.githandler.BiocondaRepo", Repo)
     monkeypatch.setattr(autobump, "RecipeSource", RecipeSource)
     monkeypatch.setattr(autobump, "Scanner", Scanner)
@@ -644,7 +644,7 @@ def test_autobump_configures_shared_cache_independently_of_filters(
             pass
 
     monkeypatch.setattr(cli, "_setup_runtime", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: {})
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: Config())
     monkeypatch.setattr(autobump, "RecipeSource", RecipeSource)
     monkeypatch.setattr(autobump, "Scanner", Scanner)
 
@@ -696,7 +696,7 @@ def test_list_build_failures_markdown_is_written_verbatim(monkeypatch, tmp_path)
     row = {column: f"value-{column}" for column in BUILD_FAILURE_COLUMNS}
     row["build failures"] = "[linux-64](failures/linux-64.yaml)"
     row["recipe"] = "pkg|name\nversion"
-    monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: {})
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: Config())
     monkeypatch.setattr(
         "bioconda_utils.build_failure.collect_build_failure_records",
         lambda *_args, **_kwargs: [row],
@@ -950,7 +950,7 @@ def test_lint_exit_is_not_reported_as_a_command_failure(monkeypatch, caplog, tmp
     whenever a recipe had lint errors.
     """
     monkeypatch.setattr(cli, "_setup_runtime", lambda *args, **kwargs: None)
-    monkeypatch.setattr("bioconda_utils.config.load_config", lambda _path: {})
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda _path: Config())
     monkeypatch.setattr(cli, "get_recipes", lambda *_args, **_kwargs: [])
 
     class ErroringLinter:
@@ -1052,7 +1052,7 @@ def test_build_failure_table_preserves_literal_text(monkeypatch, tmp_path, liter
     from bioconda_utils.build_failure import BUILD_FAILURE_COLUMNS
 
     monkeypatch.setattr(cli.report_console, "size", (300, 25))
-    monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: {})
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: Config())
     row = dict.fromkeys(BUILD_FAILURE_COLUMNS, "value")
     row["reason"] = literal
     monkeypatch.setattr(
@@ -1075,7 +1075,7 @@ def test_lint_table_preserves_literal_text(monkeypatch, tmp_path, literal):
 
     monkeypatch.setattr(cli.report_console, "size", (300, 25))
     monkeypatch.setattr(cli, "_setup_runtime", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: {})
+    monkeypatch.setattr("bioconda_utils.config.load_config", lambda *_args: Config())
     monkeypatch.setattr(cli, "get_recipes", lambda *_args, **_kwargs: [])
     message = Mock()
     message.get_table_row.return_value = ("ERROR", "recipe", "check", literal)

@@ -38,7 +38,9 @@ def repodata(name="example", version="1", subdir="noarch", records=None):
 @pytest.fixture
 def repository(monkeypatch):
     monkeypatch.setattr(
-        RepoData, "config", Config({"channels": ["bioconda", "conda-forge"]})
+        RepoData,
+        "config",
+        Config(channels=[Channel("bioconda"), Channel("conda-forge")]),
     )
     monkeypatch.setattr(RepoData, "platforms", ["linux-64", "noarch"])
     monkeypatch.setattr(
@@ -89,7 +91,7 @@ def test_explicit_http_channel_downloads_and_reuses_cache(repository, monkeypatc
     thread.start()
     try:
         channel = Channel(f"http://127.0.0.1:{server.server_port}/mirror/bioconda/")
-        monkeypatch.setattr(RepoData, "config", Config({"channels": [channel]}))
+        monkeypatch.setattr(RepoData, "config", Config(channels=[Channel(channel)]))
         for _ in range(2):
             assert RepoData().get_package_data(
                 "name", channels=channel, platform="noarch"
@@ -217,7 +219,7 @@ def test_configuration_changes_cannot_leak_other_channels(repository, monkeypatc
         "bioconda",
         "conda-forge",
     ]
-    monkeypatch.setattr(RepoData, "config", Config({"channels": ["bioconda"]}))
+    monkeypatch.setattr(RepoData, "config", Config(channels=[Channel("bioconda")]))
     assert repository.get_package_data("name", platform="noarch") == ["bioconda"]
     assert not repository.get_package_data(
         channels=Channel("conda-forge"), platform="noarch"
@@ -254,7 +256,7 @@ def test_local_channels_are_always_read_fresh(repository, monkeypatch, tmp_path)
     channel = (tmp_path / "channel").as_uri()
     path = tmp_path / "channel" / "noarch" / "repodata.json"
     path.parent.mkdir(parents=True)
-    monkeypatch.setattr(RepoData, "config", Config({"channels": [channel]}))
+    monkeypatch.setattr(RepoData, "config", Config(channels=[Channel(channel)]))
 
     def write(name):
         path.write_text(

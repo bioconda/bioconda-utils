@@ -111,7 +111,7 @@ import yaml
 from conda_smithy.lint_recipe import lintify_meta_yaml
 from jsonschema.exceptions import ValidationError
 
-from bioconda_utils._types import BuildSystem, RecipePath
+from bioconda_utils._types import BuildSystem, Config, RecipePath
 from bioconda_utils.skiplist import Skiplist
 
 from .. import recipe as _recipe
@@ -554,7 +554,7 @@ class Linter:
     """Lint executor
 
     Arguments:
-      config: Configuration dict as provided by `config.load_config()`.
+      config: Configuration as provided by `config.load_config()`.
       recipe_folder: Folder which recipes are located.
       exclude: List of function names in ``registry`` to skip globally.
                When running on CI, this will be merged with anything
@@ -570,7 +570,7 @@ class Linter:
 
     def __init__(
         self,
-        config: dict[str, Any],
+        config: Config,
         recipe_folder: Path,
         exclude: list[str] | None = None,
         nocatch: bool = False,

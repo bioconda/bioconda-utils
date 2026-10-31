@@ -30,29 +30,49 @@ def test_channel_works_with_json_and_sqlite():
         assert connection.execute("SELECT ?", (channel,)).fetchone() == ("bioconda",)
 
 
-def test_config_accessors_validate_raw_channels_and_preserve_list_identity():
-    channels = [" bioconda/ "]
-    config = Config({"channels": channels, "upload_channel": " bioconda/ "})
+def test_config_stores_typed_channels_without_changing_them_on_read():
+    channels = [Channel("bioconda")]
+    config = Config(channels=channels, upload_channel=Channel("bioconda"))
     assert config.channels is channels
-    assert isinstance(config.channels[0], Channel)
-    assert config.channels == ["bioconda"]
+    assert config.channels[0] is channels[0]
     assert isinstance(config.upload_channel, Channel)
-    assert config.upload_channel == "bioconda"
     config.channels.append(Channel("conda-forge"))
-    assert config.channels == ["bioconda", "conda-forge"]
+    assert config.channels == [Channel("bioconda"), Channel("conda-forge")]
 
 
-@pytest.mark.parametrize("key", ["channels", "upload_channel"])
-def test_config_accessors_reject_invalid_mutations(key):
-    config = normalize_config({})
-    if key == "channels":
-        config["channels"].append(" ")
-    else:
-        config["upload_channel"] = " "
-    with pytest.raises(ValueError, match="must not be empty"):
-        getattr(config, key)
+@pytest.mark.parametrize("channels", ["bioconda", ["bioconda"], [" "]])
+def test_config_rejects_unparsed_channels(channels):
+    with pytest.raises(TypeError, match="must be a list of Channel"):
+        Config(channels=channels)
 
 
-def test_config_channels_rejects_a_scalar():
-    with pytest.raises(TypeError, match="must be a list"):
-        _ = Config({"channels": "bioconda"}).channels
+@pytest.mark.parametrize("channel", ["bioconda", " ", None])
+def test_config_rejects_unparsed_upload_channel(channel):
+    with pytest.raises(TypeError, match="upload_channel must be a Channel"):
+        Config(upload_channel=channel)
+
+
+def test_normalized_config_contains_typed_channels_before_reading():
+    config = normalize_config(
+        {
+            "channels": [" bioconda/ "],
+            "upload_channel": " bioconda/ ",
+        }
+    )
+    assert isinstance(config.channels[0], Channel)
+    assert isinstance(config.upload_channel, Channel)
+    assert config.channels == [Channel("bioconda")]
+
+
+def test_config_defaults_do_not_share_mutable_lists():
+    first, second = Config(), Config()
+    first.channels.append(Channel("example"))
+    assert Channel("example") not in second.channels
+
+
+def test_config_preserves_typed_channels_through_process_pickling():
+    config = normalize_config({"channels": [" bioconda/ "]})
+    restored = pickle.loads(pickle.dumps(config))
+    assert restored == config
+    assert isinstance(restored.channels[0], Channel)
+    assert isinstance(restored.upload_channel, Channel)

@@ -20,7 +20,7 @@ import warnings
 from collections import Counter, defaultdict
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Literal
 
 import typer
 from rich.syntax import Syntax
@@ -34,6 +34,7 @@ from ._types import (
     ArtifactSource,
     BuildFailureOutputFormat,
     Channel,
+    Config,
     ContainerPlatform,
     PackageSubdir,
     QuayUploadTarget,
@@ -398,7 +399,7 @@ def get_recipes_to_build(git_range: GitRange, recipe_folder: Path) -> list[Path]
 
 
 def get_recipes(
-    config: dict[str, Any],
+    config: Config,
     recipe_folder: Path,
     packages: PackagePatterns,
     git_range: GitRange | None,
@@ -757,7 +758,7 @@ def build(
     # TODO: should we also load the rattler variants config here?
     # currently it is loaded by rattler.ratter_build_bridge.load_rattler_build_global_variants
     # using a semi-hardcoded path
-    setup = cfg.get("setup", None)
+    setup = cfg.setup
     if setup:
         logger.debug("Running setup: %s", setup)
         for cmd in setup:
@@ -1632,7 +1633,7 @@ def autobump(
 
     try:
         # load and register config
-        config_dict = load_config(config)
+        config_data = load_config(config)
 
         _error_on_missing_packages(recipe_folder, packages)
         _configure_caches(cache, refresh_repodata)
@@ -1648,7 +1649,7 @@ def autobump(
                 package_patterns,
                 exclude or [],
                 not no_shuffle,
-                config_dict,
+                config_data,
             )
         # Setup scanning pipeline
         scanner = autobump.Scanner(
@@ -1661,7 +1662,7 @@ def autobump(
 
         # Exclude packages that are on the blacklist
         if not ignore_skiplists:
-            scanner.add(autobump.ExcludeBlacklisted, recipe_folder, config_dict)
+            scanner.add(autobump.ExcludeBlacklisted, recipe_folder, config_data)
 
         # Exclude sub-recipes
         if exclude_subrecipes != "never":
