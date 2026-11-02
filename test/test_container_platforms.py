@@ -392,9 +392,9 @@ def test_dev_image_failure_is_actionable(monkeypatch, caplog):
         [
             "docker",
             "pull",
+            "quay.io/bioconda/bioconda-utils-build-env-cos7:5.1.1",
             "--platform",
             ContainerPlatform.LINUX_ARM64,
-            "quay.io/bioconda/bioconda-utils-build-env-cos7:5.1.1",
         ],
         live=True,
     )
@@ -472,7 +472,7 @@ def test_dev_image_uses_published_image_when_not_local(monkeypatch):
 
     assert image == "quay.io/bioconda/bioconda-utils-build-env-cos7:5.1.1"
     pull.assert_called_once_with(
-        ["docker", "pull", "--platform", ContainerPlatform.LINUX_ARM64, image],
+        ["docker", "pull", image, "--platform", ContainerPlatform.LINUX_ARM64],
         live=True,
     )
 
@@ -504,9 +504,9 @@ def test_ensure_build_image_pulls_missing_or_wrong_platform_image(
         [
             "docker",
             "pull",
+            "quay.io/bioconda/build-env:latest",
             "--platform",
             ContainerPlatform.LINUX_ARM64,
-            "quay.io/bioconda/build-env:latest",
         ]
     ]
 

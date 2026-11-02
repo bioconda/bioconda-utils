@@ -102,10 +102,9 @@ def ensure_build_image(image: str, target_platform: ContainerPlatform | None) ->
         return
 
     logger.info("Pulling Docker build image %s", image)
-    command = ["docker", "pull"]
+    command = ["docker", "pull", image]
     if target_platform is not None:
         command += ["--platform", target_platform]
-    command.append(image)
     run(command, live=True)
 
 
