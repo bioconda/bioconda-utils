@@ -238,6 +238,36 @@ def test_shards_share_sql_filters_and_do_not_download_full_repodata(
     assert loads == []
 
 
+@pytest.mark.parametrize("shared_shard", [False, True])
+def test_repeated_names_and_shared_shards_do_not_duplicate_results(
+    sharded, shared_shard
+):
+    repository, bodies, requests = sharded
+    example_records = [record(version="1"), record(version="2")]
+    other_records = [record(name="other")]
+    set_index(
+        repository, bodies, example="hash", other="hash" if shared_shard else "other"
+    )
+    set_shard(
+        repository,
+        bodies,
+        example_records + other_records if shared_shard else example_records,
+    )
+    if not shared_shard:
+        set_shard(repository, bodies, other_records, shard_hash="other")
+
+    # Exercise both downloads and subsequent cache hits; retain distinct versions.
+    for _ in range(2):
+        rows = repository.get_package_data(
+            ["name", "version"],
+            channels=Channel("high"),
+            name=["example", "example", "other", "other"],
+        )
+        assert sorted(rows) == [("example", "1"), ("example", "2"), ("other", "1")]
+    assert len(requests) == (2 if shared_shard else 3)
+    assert len(requests) == len(set(requests))
+
+
 @pytest.mark.parametrize("failure", [None, b"corrupt", OSError("unavailable")])
 @pytest.mark.parametrize("broken_channel", ["high", "low"])
 def test_failed_shards_fall_back_once_and_preserve_channel_order(

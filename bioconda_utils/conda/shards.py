@@ -331,11 +331,12 @@ class ShardClient:
         try:
             index = cls._get_shard_index(channel, subdir, repodata_url)
             shard_name_by_url: dict[str, str] = {}
-            for name in dict.fromkeys(names):
+            for name in names:
                 shard_hash = index.shards.get(name)
                 if shard_hash is None:
                     # A missing name in a valid index is authoritative.
                     continue
+                # Repeated names and names sharing a shard need only one URL.
                 shard_name_by_url.setdefault(cls.shard_url(index, shard_hash), name)
             records_by_url: dict[str, tuple[PackageRecord, ...]] = {}
             missing = cls._cached_shards(shard_name_by_url, records_by_url)
