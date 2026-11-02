@@ -21,10 +21,10 @@ import networkx as nx
 import requests
 from ruamel.yaml import YAML
 
+from ._types import Channel, Config
 from .conda.conda_build_bridge import load_first_metadata
 from .conda.repodata import RepoData
-from .config import normalize_config
-from .support.caching import disk_cache
+from .support.caching import memoize
 
 logger = logging.getLogger(__name__)
 
@@ -182,7 +182,7 @@ class PageNotFoundError(Exception):
     pass
 
 
-@disk_cache.memoize(expire=86400)
+@memoize(expire=86400)
 def bioconductor_versions():
     """
     Returns a list of available Bioconductor versions scraped from the
@@ -335,7 +335,7 @@ def cargoport_url(package, pkg_version, bioc_version=None):
     )
 
 
-@disk_cache.memoize(expire=604800)
+@memoize(expire=604800)
 def find_best_bioc_version(package, version):
     """
     Given a package version number, identifies which BioC version[s] it is in
@@ -385,7 +385,7 @@ def find_best_bioc_version(package, version):
     )
 
 
-@disk_cache.memoize(expire=86400)
+@memoize(expire=86400)
 def fetchPackages(bioc_version):
     """
     Return a dictionary of all bioconductor packages in a given release::
@@ -606,17 +606,23 @@ class BioCProjectPage:
     @property
     def tarball_url(self):
         if not self._tarball_url:
+            # Each candidate is optional and yields None when that mirror does
+            # not carry the package. Filter here so both the retry loop and the
+            # "Tried the following" message only ever deal with real urls.
             urls = [
-                self.bioconductor_tarball_url,
-                self.bioarchive_url,
-                self.cargoport_url,
+                url
+                for url in (
+                    self.bioconductor_tarball_url,
+                    self.bioarchive_url,
+                    self.cargoport_url,
+                )
+                if url is not None
             ]
             for url in urls:
-                if url is not None:
-                    response = requests.head(url, allow_redirects=True, timeout=20)
-                    if response.status_code == 200:
-                        self._tarball_url = url
-                        return url
+                response = requests.head(url, allow_redirects=True, timeout=20)
+                if response.status_code == 200:
+                    self._tarball_url = url
+                    return url
 
             logger.error(
                 "No working URL for %s==%s in Bioconductor %s. "
@@ -1305,7 +1311,7 @@ def updateDataPackages(
 def write_recipe(
     package,
     recipe_dir: Path,
-    config: dict[str, Any],
+    config: Config,
     bioc_data_packages: Path | None = None,
     force=False,
     bioc_version=None,
@@ -1314,7 +1320,7 @@ def write_recipe(
     recursive=False,
     seen_dependencies=None,
     packages=None,
-    skip_if_in_channels=None,
+    skip_if_in_channels: list[Channel] | None = None,
     needs_x=None,
 ):
     """
@@ -1371,7 +1377,6 @@ def write_recipe(
         If None, we need to determine if this requires X and therefore additional
         build dependencies and test environment variables.
     """
-    config = normalize_config(config)
     RepoData.register_config(config)
     proj = BioCProjectPage(package, bioc_version, pkg_version, packages=packages)
     logger.info(f"Making recipe for: {package}")

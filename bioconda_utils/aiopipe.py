@@ -5,11 +5,12 @@ from __future__ import annotations
 import abc
 import asyncio
 import logging
+from collections.abc import Callable
 from concurrent.futures import BrokenExecutor, ProcessPoolExecutor
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Self
-from urllib.parse import urlparse
+from typing import Any, Concatenate, Self
+from urllib.parse import unquote, urlparse
 
 import aioftp
 import aiohttp
@@ -24,6 +25,16 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 class EndProcessing(BaseException):
     """Raised by `AsyncFilter` to tell `AsyncPipeline` to stop processing"""
+
+
+class UnsupportedUrlScheme(ValueError):
+    """Raised when a URL's scheme cannot be fetched
+
+    Only ``http``/``https`` and ``ftp`` are supported. Subclasses
+    :class:`ValueError` so that callers can catch either, while still
+    remaining distinguishable from unrelated ``ValueError`` errors raised
+    deeper in the fetch path.
+    """
 
 
 class EndProcessingItem(Exception):
@@ -41,7 +52,7 @@ class EndProcessingItem(Exception):
     template = "broken: %s"
     level = logging.INFO
 
-    def __init__(self, item: Any, *args) -> None:
+    def __init__(self, item: object, *args) -> None:
         super().__init__(item, *args)
         self.item = item
         self.args = args
@@ -61,11 +72,16 @@ class EndProcessingItem(Exception):
         return self.__class__.__name__
 
 
-class AsyncFilter[ITEM](abc.ABC):
+class AsyncFilter[ITEM, PIPELINE](abc.ABC):
     """Function object type called by Scanner"""
 
-    def __init__(self, pipeline: AsyncPipeline[ITEM], *_args, **_kwargs) -> None:
-        self.pipeline = pipeline
+    def __init__(self, pipeline: PIPELINE, *_args, **_kwargs) -> None:
+        self._pipeline = pipeline
+
+    @property
+    def pipeline(self) -> PIPELINE:
+        """The pipeline that owns this filter."""
+        return self._pipeline
 
     @abc.abstractmethod
     async def apply(self, recipe: ITEM):
@@ -100,13 +116,18 @@ class AsyncPipeline[ITEM]:
         #: (used by PyPi when running skeleton)
         self.conda_sem: asyncio.Semaphore = asyncio.Semaphore(1)
         #: the filters successively applied to each item
-        self.filters: list[AsyncFilter[ITEM]] = []
+        self.filters: list[AsyncFilter[ITEM, object]] = []
         #: executor running things in separate python processes
         self.proc_pool_executor: ProcessPoolExecutor | None = None
 
         self._shutting_down = False
 
-    def add(self, filt: type[AsyncFilter[ITEM]], *args, **kwargs) -> None:
+    def add[**P](
+        self,
+        filt: Callable[Concatenate[Self, P], AsyncFilter[ITEM, object]],
+        *args: P.args,
+        **kwargs: P.kwargs,
+    ) -> None:
         """Adds `Filter` to this `Scanner`"""
         self.filters.append(filt(self, *args, **kwargs))
 
@@ -331,6 +352,11 @@ class AsyncRequests:
             res = await self.get_checksum_from_http(url, desc)
         elif parsed.scheme == "ftp":
             res = await self.get_checksum_from_ftp(url, desc)
+        else:
+            raise UnsupportedUrlScheme(
+                f"Cannot compute checksum for {url}: "
+                f"unsupported scheme {parsed.scheme!r}"
+            )
 
         self.cache["url_checksum"][url] = res
 
@@ -363,10 +389,8 @@ class AsyncRequests:
             return self.cache["ftp_list"][url]
 
         parsed = urlparse(url)
-        async with aioftp.Client.context(
-            parsed.netloc, password=http.USER_AGENT + "@", trust_env=True
-        ) as client:
-            res = [str(path) for path, _info in await client.list(parsed.path)]
+        async with self._ftp_client(url) as client:
+            res = [str(path) for path, _info in await client.list(unquote(parsed.path))]
         self.cache["ftp_list"][url] = res
         return res
 
@@ -379,11 +403,27 @@ class AsyncRequests:
         parsed = urlparse(url)
         checksum = sha256()
         async with (
-            aioftp.Client.context(
-                parsed.netloc, password=http.USER_AGENT + "@", trust_env=True
-            ) as client,
-            client.download_stream(parsed.path) as stream,
+            self._ftp_client(url) as client,
+            client.download_stream(unquote(parsed.path)) as stream,
         ):
             async for block in stream.iter_by_block():
                 checksum.update(block)
         return checksum.hexdigest()
+
+    @staticmethod
+    def _ftp_client(url: str):
+        parsed = urlparse(url)
+        if parsed.scheme != "ftp" or parsed.hostname is None:
+            raise ValueError("FTP URL must include a hostname")
+        return aioftp.Client.context(
+            parsed.hostname,
+            port=parsed.port if parsed.port is not None else 21,
+            user=unquote(parsed.username)
+            if parsed.username is not None
+            else "anonymous",
+            password=(
+                unquote(parsed.password)
+                if parsed.password is not None
+                else http.USER_AGENT + "@"
+            ),
+        )

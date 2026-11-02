@@ -9,7 +9,7 @@ from collections.abc import AsyncIterator
 from copy import copy
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import backoff
 import cachetools
@@ -68,7 +68,7 @@ class GitHubHandler:
         #: Name of the Repo
         self.repo = to_repo
         #: Default variables for API calls
-        self.var_default: dict[str, Any] = {"user": to_user, "repo": to_repo}
+        self.var_default: dict[str, str] = {"user": to_user, "repo": to_repo}
 
         # filled in by login():
         #: Gidgethub API object
@@ -232,9 +232,8 @@ class GitHubHandler:
         from_branch: str | None = None,
         from_user: str | None = None,
         to_branch: str | None = None,
-        number: int | None = None,
         state: IssueState | None = None,
-    ) -> Any:
+    ) -> list[dict[str, Any]]:
         """Retrieve list of PRs matching parameters
 
         Arguments:
@@ -242,7 +241,6 @@ class GitHubHandler:
           from_user: Name of user/org in from which to pull
                      (default: from auth)
           to_branch: Name of branch into which to pull (default: master)
-          number: PR number
         """
         var_data = copy(self.var_default)
         if not from_user:
@@ -254,18 +252,19 @@ class GitHubHandler:
                 var_data["head"] = from_branch
         if to_branch:
             var_data["base"] = to_branch
-        if number:
-            var_data["number"] = str(number)
         if state:
             var_data["state"] = state.name.lower()
 
         accept = "application/vnd.github.shadow-cat-preview"  # for draft
         try:
-            return await self.api.getitem(self.PULLS, var_data, accept=accept)
+            # GitHub returns an array here, but gidgethub's ``getitem`` is
+            # annotated as returning a single object.
+            return cast(
+                "list[dict[str, Any]]",
+                await self.api.getitem(self.PULLS, var_data, accept=accept),
+            )
         except gidgethub.BadRequest as exc:
             if exc.status_code == 404:
-                if number:
-                    return {}
                 return []
             raise
 
@@ -279,7 +278,7 @@ class GitHubHandler:
         body: str | None = None,
         maintainer_can_modify: bool = True,
         draft: bool = False,
-    ) -> dict[Any, Any]:
+    ) -> dict[str, Any]:
         """Create new PR
 
         Arguments:
@@ -327,7 +326,7 @@ class GitHubHandler:
         labels: list[str] | None = None,
         title: str | None = None,
         body: str | None = None,
-    ) -> dict[Any, Any]:
+    ) -> dict[str, Any]:
         """Modify existing issue (PRs are issues)
 
         Arguments:

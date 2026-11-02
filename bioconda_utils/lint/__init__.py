@@ -111,7 +111,7 @@ import yaml
 from conda_smithy.lint_recipe import lintify_meta_yaml
 from jsonschema.exceptions import ValidationError
 
-from bioconda_utils._types import BuildSystem, RecipePath
+from bioconda_utils._types import BuildSystem, Config, RecipePath
 from bioconda_utils.skiplist import Skiplist
 
 from .. import recipe as _recipe
@@ -265,7 +265,7 @@ class LintCheck(metaclass=LintCheckMeta):
     severity: Severity = ERROR
 
     #: Checks that must have passed for this check to be executed.
-    requires: ClassVar[list[LintCheck]] = []
+    requires: ClassVar[list[type[LintCheck]]] = []
 
     def __init__(self, _linter: Linter) -> None:
         #: Messages collected running tests
@@ -373,7 +373,7 @@ class LintCheck(metaclass=LintCheckMeta):
 
         """
 
-    def fix(self, _message, _data, /) -> bool:
+    def fix(self, _message: LintMessage, _data: Any, /) -> bool:
         """Attempt to fix the problem"""
         return False
 
@@ -554,7 +554,7 @@ class Linter:
     """Lint executor
 
     Arguments:
-      config: Configuration dict as provided by `config.load_config()`.
+      config: Configuration as provided by `config.load_config()`.
       recipe_folder: Folder which recipes are located.
       exclude: List of function names in ``registry`` to skip globally.
                When running on CI, this will be merged with anything
@@ -570,7 +570,7 @@ class Linter:
 
     def __init__(
         self,
-        config: dict[str, Any],
+        config: Config,
         recipe_folder: Path,
         exclude: list[str] | None = None,
         nocatch: bool = False,
@@ -582,13 +582,17 @@ class Linter:
         self.nocatch = nocatch
         self._messages: list[LintMessage] = []
 
+        checks = get_checks()
+        registered_checks = set(checks)
         dag = nx.DiGraph()
-        dag.add_nodes_from(str(check) for check in get_checks())
-        dag.add_edges_from(
-            (str(check), str(check_dep))
-            for check in get_checks()
-            for check_dep in check.requires
-        )
+        dag.add_nodes_from(str(check) for check in checks)
+        for check in checks:
+            for dependency in check.requires:
+                if dependency not in registered_checks:
+                    raise ValueError(
+                        f"Unregistered lint dependency {dependency!r} required by {check}"
+                    )
+                dag.add_edge(str(check), str(dependency))
         self.checks_dag = dag
 
     def order_and_load_checks(self) -> None:

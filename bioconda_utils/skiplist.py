@@ -1,16 +1,16 @@
 import os
 from pathlib import Path
-from typing import Any
 
+from bioconda_utils._types import Config
 from bioconda_utils.recipe import Recipe
 
 
 class Skiplist:
-    def __init__(self, config: dict[str, Any], recipe_folder: Path) -> None:
+    def __init__(self, config: Config, recipe_folder: Path) -> None:
         self.recipe_folder = recipe_folder.resolve()
         self.global_list: set[Path] = set()
 
-        for p in config.get("blacklists", []):
+        for p in config.blacklists:
             lines = p.read_text(encoding="utf8").splitlines()
             self.global_list.update(
                 [

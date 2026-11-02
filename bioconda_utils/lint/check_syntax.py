@@ -11,7 +11,7 @@ from typing import Any, ClassVar
 from bioconda_utils._types import ALL_PACKAGE_SUBDIRS
 
 from ..recipe import Recipe
-from . import LintCheck
+from . import LintCheck, LintMessage
 
 
 class version_constraints_missing_whitespace(LintCheck):
@@ -38,7 +38,7 @@ class version_constraints_missing_whitespace(LintCheck):
                     if not space_separated:
                         self.message(section=f"{path}/{n}", data=True)
 
-    def fix(self, _message: Any, _data: Any) -> bool:
+    def fix(self, _message: LintMessage, _data: Any) -> bool:
         check_paths = []
         for section in ("build", "run", "host"):
             check_paths.append(f"requirements/{section}")

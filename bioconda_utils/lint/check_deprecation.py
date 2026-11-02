@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from . import LintCheck
+from . import LintCheck, LintMessage
 
 
 class uses_perl_threaded(LintCheck):
@@ -16,7 +16,7 @@ class uses_perl_threaded(LintCheck):
         if "perl-threaded" in deps:
             self.message(data=True)
 
-    def fix(self, _message: Any, _data: Any) -> bool:
+    def fix(self, _message: LintMessage, _data: Any) -> bool:
         self.recipe.replace("perl-threaded", "perl", within=("requirements", "outputs"))
         self.recipe.render()
         return True
@@ -33,7 +33,7 @@ class uses_javajdk(LintCheck):
         if "java-jdk" in deps:
             self.message(data=True)
 
-    def fix(self, _message: Any, _data: Any) -> bool:
+    def fix(self, _message: LintMessage, _data: Any) -> bool:
         self.recipe.replace("java-jdk", "openjdk", within=("requirements", "outputs"))
         return True
 
@@ -53,7 +53,7 @@ class deprecated_numpy_spec(LintCheck):
             if "x.x" in line:
                 self.message(section=path, data=True)
 
-    def fix(self, _message: Any, _data: Any) -> bool:
+    def fix(self, _message: LintMessage, _data: Any) -> bool:
         self.recipe.replace("numpy x.x", "numpy", within=("requirements", "outputs"))
         return True
 
@@ -70,7 +70,7 @@ class uses_matplotlib(LintCheck):
         if "matplotlib" in deps:
             self.message(data=True)
 
-    def fix(self, _message: Any, _data: Any) -> bool:
+    def fix(self, _message: LintMessage, _data: Any) -> bool:
         self.recipe.replace(
             "matplotlib", "matplotlib-base", within=("requirements", "outputs")
         )

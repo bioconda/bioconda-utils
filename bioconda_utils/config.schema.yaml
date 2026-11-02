@@ -8,6 +8,9 @@ properties:
         type: string
     channels:
         type: array
+        items:
+            type: string
+            minLength: 1
     conda_build_version:
         type: string
     primary_platforms:

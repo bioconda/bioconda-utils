@@ -10,9 +10,9 @@ import os
 import shutil
 import subprocess as sp
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
 import networkx as nx
 import psutil
@@ -23,7 +23,7 @@ from conda_build.exceptions import DependencyNeedsBuildingError
 
 from bioconda_utils.build_failure import BuildFailureRecord
 from bioconda_utils.rattler.rattler_build_bridge import (
-    CURR_RATTLER_CACHE_DIR_PATH,
+    get_rattler_cache_dir_path,
     load_rattler_build_global_variants,
     render_rattler_recipe,
 )
@@ -34,6 +34,8 @@ from . import recipe as _recipe
 from ._types import (
     ALL_PACKAGE_SUBDIRS,
     DEFAULT_PRIMARY_PLATFORMS,
+    Channel,
+    Config,
     ContainerPlatform,
     PackageSubdir,
     PkgBuildRef,
@@ -54,7 +56,6 @@ from .conda.recipes import (
     recipe_requires_finalized_render,
 )
 from .conda.repodata import RepoData
-from .config import normalize_config
 from .containers import docker_utils, pkg_test, upload
 from .containers.container_manifests import write_image_record
 from .recipes import BuildSystem, get_package_paths
@@ -136,9 +137,9 @@ def build(
     render_config: rb.RenderConfig,
     rattler_output_dir: Path,
     force: bool,
+    channels: Sequence[Channel],
     pkg_paths: list[Path] | None = None,
     mulled_build_and_test: bool = True,
-    channels: list[str] | None = None,
     docker_builder: docker_utils.RecipeBuilder | None = None,
     raise_error: bool = False,
     linter: lint.Linter | None = None,
@@ -164,8 +165,7 @@ def build(
       pkg_paths: List of paths to expected packages
       mulled_build_and_test: Build the mulled container and run the recipe's
         tests inside it (wraps `mulled-build build-and-test`).
-      channels: Channels to include via the ``--channel`` argument to
-        conda-build. Higher priority channels should come first.
+      channels: Explicit channels for dependency resolution, highest priority first.
       docker_builder : docker_utils.RecipeBuilder object
         Use this docker builder to build the recipe, copying over the built
         recipe to the host's conda-bld directory.
@@ -233,7 +233,7 @@ def build(
     if recipe.build_system == BuildSystem.CONDA:
         args = ["--override-channels", "--no-anaconda-upload"]
 
-        channels_to_use = ["local"] + [c for c in (channels or []) if c != "local"]
+        channels_to_use = ["local"] + [c for c in channels if c != "local"]
         for channel in channels_to_use:
             args += ["-c", channel]
 
@@ -269,7 +269,7 @@ def build(
             rattler_args += ['--skip-existing "none"']
         else:
             rattler_args += ['--skip-existing "all"']
-        channels_to_use = ["local"] + [c for c in (channels or []) if c != "local"]
+        channels_to_use = ["local"] + [c for c in channels if c != "local"]
         for channel in channels_to_use:
             rattler_args += ["-c", channel]
 
@@ -331,6 +331,8 @@ def build(
                         cmd += [str(recipe.path / "meta.yaml")]
                         run(cmd, live=live_logs, status="Building recipe...")
                 case BuildSystem.RATTLER:
+                    # Convert domain values once for py-rattler-build's string API.
+                    rattler_channels = [str(channel) for channel in channels]
                     recipe_file: Path = recipe.path / "recipe.yaml"
                     local_variants_path: Path = recipe.path / "variants.yaml"
 
@@ -353,7 +355,7 @@ def build(
                         # terminal, so no spinner is wrapped around it here.
                         result = variant.run_build(
                             tool_config,
-                            channels=channels,
+                            channels=rattler_channels,
                             output_dir=rattler_output_dir,
                         )
                         built_package_names.extend(
@@ -461,7 +463,11 @@ def build(
 
 
 def store_build_failure_record(
-    recipe: Path, output: Any, package_name: str, dag: nx.DiGraph, skiplist_leaves: bool
+    recipe: Path,
+    output: str | bytes | None,
+    package_name: str,
+    dag: nx.DiGraph,
+    skiplist_leaves: bool,
 ) -> None:
     """
     Write the exception to a file next to the meta.yaml
@@ -471,6 +477,8 @@ def store_build_failure_record(
     build_failure_record = BuildFailureRecord(recipe)
     # if recipe is a leaf (i.e. not used by others as dependency)
     # we can automatically blacklist it if desired
+    if isinstance(output, bytes):
+        output = output.decode(errors="replace")
     build_failure_record.fill(log=output, skiplist=skiplist_leaves and is_leaf)
 
     build_failure_record.write()
@@ -622,7 +630,7 @@ def should_skip_platform(
 
 def build_recipes(
     recipe_folder: Path,
-    config: dict[str, Any],
+    config: Config,
     recipes: list[RecipePath],
     mulled_build_and_test: bool = True,
     force: bool = False,
@@ -630,7 +638,7 @@ def build_recipes(
     label: str | None = None,
     anaconda_upload: bool = False,
     mulled_upload_target: QuayUploadTarget | None = None,
-    check_channels: list[str] | None = None,
+    check_channels: list[Channel] | None = None,
     do_lint: bool | None = None,
     lint_exclude: list[str] | None = None,
     n_workers: int = 1,
@@ -653,7 +661,7 @@ def build_recipes(
 
     Arguments:
       recipe_folder: Directory containing possibly many, and possibly nested, recipes.
-      config: Parsed Bioconda configuration, normalized at this boundary.
+      config: Normalized Bioconda configuration.
       packages: Glob indicating which packages should be considered. Note that packages
         matching the glob will still be filtered out by any blacklists
         specified in the config.
@@ -688,7 +696,6 @@ def build_recipes(
         logger.info("Nothing to be done.")
         return True
 
-    config = normalize_config(config)
     RepoData.register_config(config)
     blacklist = Skiplist(config, recipe_folder)
     global_variants: rb.VariantConfig = load_rattler_build_global_variants(
@@ -702,10 +709,7 @@ def build_recipes(
 
     # get channels to check
     if check_channels is None:
-        if config["channels"]:
-            check_channels = [c for c in config["channels"] if c != "defaults"]
-        else:
-            check_channels = []
+        check_channels = [c for c in config.channels if c != "defaults"]
 
     # setup linting
     if do_lint:
@@ -766,7 +770,7 @@ def build_recipes(
             recipe_folder,
             recipe,
             platform,
-            primary_platforms=config.get("primary_platforms"),
+            primary_platforms=config.primary_platforms,
         ):
             logger.info(
                 "BUILD SKIP: skipping %s for additional platform %s",
@@ -861,7 +865,7 @@ def build_recipes(
             force=force,
             pkg_paths=pkg_paths,
             mulled_build_and_test=mulled_build_and_test,
-            channels=config["channels"],
+            channels=config.channels,
             docker_builder=docker_builder,
             linter=linter,
             mulled_conda_image=mulled_conda_image,
@@ -900,7 +904,7 @@ def build_recipes(
         # remove traces of the build
         if not keep_old_work:
             conda_build_purge()
-            rattler_cache: Path = CURR_RATTLER_CACHE_DIR_PATH
+            rattler_cache = get_rattler_cache_dir_path()
             rattler_build_purge(rattler_cache, rattler_output_dir)
             # prune stopped containers
             if docker_builder is not None:

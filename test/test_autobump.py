@@ -4,8 +4,44 @@ import asyncio
 
 import pytest
 
-from bioconda_utils.autobump import RecipeSource, Scanner, UpdateVersion
+from bioconda_utils.autobump import (
+    RecipeSource,
+    Scanner,
+    UpdateChecksums,
+    UpdateVersion,
+)
 from bioconda_utils.recipe import Recipe
+
+
+@pytest.mark.parametrize("valid_mirror", [False, True])
+def test_checksum_update_handles_unsupported_url_scheme(
+    tmp_path, monkeypatch, valid_mirror
+):
+    old_checksum, new_checksum = "a" * 64, "b" * 64
+    recipe = Recipe(tmp_path / "example", tmp_path)
+    recipe.load_from_string(
+        "package:\n  name: example\n  version: '1.0'\n"
+        "build:\n  number: 0\n"
+        "source:\n  url:\n    - s3://bucket/source.tgz\n"
+        + ("    - https://example.org/source.tgz\n" if valid_mirror else "")
+        + f"  sha256: {old_checksum}\n"
+    )
+    scanner = Scanner(RecipeSource(tmp_path, ["*"], [], False))
+    update = UpdateChecksums(scanner)
+
+    async def checksum(url, desc):
+        return new_checksum
+
+    monkeypatch.setattr(scanner.req, "get_checksum_from_http", checksum)
+    operation = update.update_source(recipe, recipe.meta["source"], 0)
+    if valid_mirror:
+        asyncio.run(operation)
+        recipe.render()
+        assert recipe.meta["source"]["sha256"] == new_checksum
+    else:
+        with pytest.raises(UpdateChecksums.NoValidUrls):
+            asyncio.run(operation)
+    assert update.failed_urls == ["unsupported scheme\ts3://bucket/source.tgz"]
 
 
 @pytest.mark.parametrize(

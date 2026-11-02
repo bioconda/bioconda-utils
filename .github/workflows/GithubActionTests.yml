@@ -58,9 +58,11 @@ jobs:
           docker build -t quay.io/bioconda/bioconda-utils-build-env-cos7:latest ./
           docker history quay.io/bioconda/bioconda-utils-build-env-cos7:latest
           docker run --rm -t quay.io/bioconda/bioconda-utils-build-env-cos7:latest sh -lec 'type -t conda && conda info --verbose && conda list'
-          docker build -t quay.io/bioconda/bioconda-utils-test-env-cos7:latest -f ./Dockerfile.test ./
+          docker build --build-arg base=quay.io/bioconda/bioconda-utils-build-env-cos7:latest -f ./Dockerfile.test ./
 
       - name: Run tests '${{ matrix.py_test_marker }}'
+        env:
+          BIOCONDA_UTILS_CONTAINER_CACHE: /tmp/bioconda-container-cache
         run: |
           if git diff --name-only origin/master...HEAD | grep -vE ^docs; then
               py.test --durations=0 test/ -v --log-level=DEBUG --tb=native -m '${{ matrix.py_test_marker }}'

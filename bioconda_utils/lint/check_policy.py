@@ -7,10 +7,12 @@ can be mechanically checked).
 
 from typing import Any, ClassVar
 
+from bioconda_utils._types import Channel
 from bioconda_utils.conda.repodata import RepoData
 
 from ..recipe import Recipe
 from . import WARNING, LintCheck
+from .check_completeness import missing_license
 
 
 class uses_vcs_url(LintCheck):
@@ -57,7 +59,7 @@ class gpl_requires_license_distributed(LintCheck):
     """
 
     severity = WARNING
-    requires: ClassVar = ["missing_license"]
+    requires: ClassVar = [missing_license]
 
     def check_recipe(self, recipe: Recipe) -> None:
         if "gpl" in recipe.get("about/license").lower() and not recipe.get(
@@ -136,7 +138,7 @@ class cran_packages_to_conda_forge(LintCheck):
             "R" in deps
             and any("run" in dep for dep in deps["R"])
             and all(
-                RepoData().get_package_data(name=dep, channels="conda-forge")
+                RepoData().get_package_data(name=dep, channels=Channel("conda-forge"))
                 for dep in deps
             )
         ):

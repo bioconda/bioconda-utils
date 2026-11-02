@@ -7,11 +7,21 @@ from unittest.mock import Mock
 import pytest
 
 from bioconda_utils import build
-from bioconda_utils._types import RATTLER, RecipePath
+from bioconda_utils._types import RATTLER, Channel, RecipePath
 
 
 @pytest.mark.parametrize("variant_count", [1, 2])
-def test_rattler_logs_one_success_summary(monkeypatch, tmp_path, caplog, variant_count):
+@pytest.mark.parametrize(
+    "channels",
+    [
+        (),
+        (Channel("conda-forge"),),
+        (Channel("https://example.org/channel"), Channel("bioconda")),
+    ],
+)
+def test_rattler_logs_one_success_summary(
+    monkeypatch, tmp_path, caplog, variant_count, channels
+):
     variants = [
         SimpleNamespace(
             run_build=Mock(
@@ -35,6 +45,7 @@ def test_rattler_logs_one_success_summary(monkeypatch, tmp_path, caplog, variant
         render_config=Mock(),
         rattler_output_dir=tmp_path,
         force=False,
+        channels=channels,
         mulled_build_and_test=False,
     )
     messages = [
@@ -47,3 +58,6 @@ def test_rattler_logs_one_success_summary(monkeypatch, tmp_path, caplog, variant
     ]
     for variant in variants:
         variant.run_build.assert_called_once()
+        backend_channels = variant.run_build.call_args.kwargs["channels"]
+        assert backend_channels == list(channels)
+        assert all(type(channel) is str for channel in backend_channels)

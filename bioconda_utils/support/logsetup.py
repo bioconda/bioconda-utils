@@ -111,7 +111,7 @@ def format_recipes(recipes: Iterable[RecipePath | Path], separator: str = ", ") 
 
 
 def ellipsize_recipes(
-    recipes: Collection[os.PathLike[str]],
+    recipes: Collection[RecipePath | Path],
     recipe_folder: Path,
     n: int = 5,
     m: int = 50,

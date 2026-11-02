@@ -15,6 +15,10 @@ format:
 global-install:
     pixi run global-install
 
+# Build the local development environment. Rebuild after source/dependency changes.
+docker-image platform="":
+    pixi run docker-image {{platform}}
+
 # run typechecks and linters, use after a moderate amount of changes
 check: shellcheck
     pixi run check

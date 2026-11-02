@@ -20,7 +20,7 @@ import warnings
 from collections import Counter, defaultdict
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Literal
 
 import typer
 from rich.syntax import Syntax
@@ -33,6 +33,8 @@ from ._types import (
     ALL_PACKAGE_SUBDIRS,
     ArtifactSource,
     BuildFailureOutputFormat,
+    Channel,
+    Config,
     ContainerPlatform,
     PackageSubdir,
     QuayUploadTarget,
@@ -46,12 +48,14 @@ from .support.logsetup import err_console as error_console
 
 if TYPE_CHECKING:
     # Annotation-only: imported lazily inside the functions that need it.
+    from networkx import DiGraph
+
     from ._types import RecipePath
     from .githandler import GitRange
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 
-# Everything else a command needs -- networkx, conda-build, GitPython,
+# Everything else a command needs -- networkx, conda-build,
 # PyGithub, aiohttp, the repo/graph/config helpers -- is imported inside the
 # command bodies below. Rendering ``--help`` only requires the command
 # callables and the parameter types above, so importing the rest eagerly made
@@ -63,10 +67,40 @@ def is_stable_version(version: str) -> bool:
 
 
 def extract_stable_version(version: str) -> str:
-    m = re.match(r"^(\d+\.\d+\.\d+)", version)
-    if m is None:
+    match = re.match(r"^(\d+\.\d+\.\d+)", version)
+    if match is None:
         raise ValueError(f"Could not extract stable version from {version}")
-    return m.group(1)
+    return match.group(1)
+
+
+def _docker_build_image(
+    explicit_image: str | None, target_platform: ContainerPlatform | None
+) -> str:
+    """Resolve the build image and check availability before recipe rendering."""
+    import subprocess
+
+    from .containers import docker_utils
+
+    override = explicit_image or os.getenv("BUILD_ENV_IMAGE")
+    image = override or (
+        f"quay.io/bioconda/bioconda-utils-build-env-cos7:{extract_stable_version(VERSION)}"
+    )
+    # Docker can pull on demand, but that would fail after expensive host-side
+    # rendering. Check once here so missing development images get useful guidance.
+    try:
+        docker_utils.ensure_build_image(image, target_platform)
+    except subprocess.CalledProcessError:
+        if override or is_stable_version(VERSION):
+            raise
+        platform_arg = f" {target_platform}" if target_platform else ""
+        logger.error(
+            f"Could not obtain Docker build image {image}. "
+            f"Run `just docker-image{platform_arg}` from your bioconda-utils "
+            "checkout to build it locally, or specify --docker-base-image "
+            "(or BUILD_ENV_IMAGE). Check the Docker error above for details."
+        )
+        raise typer.Exit(code=1) from None
+    return image
 
 
 app = typer.Typer(
@@ -86,6 +120,36 @@ def _write_output(text: str) -> None:
     logs, progress, and errors belong on stderr.
     """
     sys.stdout.write(text)
+
+
+def _dot_quote(label: str) -> str:
+    """Quote a string for use as a DOT node identifier."""
+    escaped = label.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def _write_dot(dag: DiGraph) -> None:
+    """Serialize a package DAG as DOT (Graphviz) to stdout.
+
+    Nodes are package names, used directly as (quoted) node identifiers.
+
+    Deliberately dependency-free: ``networkx.drawing.nx_pydot.write_dot``
+    needs pydot, which on conda-forge hard-depends on graphviz and its GUI
+    stack -- GTK3, X11, Wayland, cups, librsvg, pango, cairo, fontconfig and
+    a font set: 63 packages / 35 MB download *per platform* (measured
+    2026-10-23). Because runtime deps ship in
+    ``bioconda_utils-requirements.txt``, that cost lands in the CI build
+    docker images and every user environment. bioconda-utils uses none of
+    pydot's features (parsing DOT, attributed graphs, rendering); it only
+    emits this flat quoted edge list. Revisit pydot only if dot output ever
+    needs graph attributes or styling.
+    """
+    _write_output("digraph {\n")
+    for node in dag.nodes:
+        _write_output(f"  {_dot_quote(str(node))};\n")
+    for source, target in dag.edges:
+        _write_output(f"  {_dot_quote(str(source))} -> {_dot_quote(str(target))};\n")
+    _write_output("}\n")
 
 
 # A package is the name of the software package, like `bowtie`.
@@ -112,6 +176,10 @@ def _parse_quay_upload_target(value: str | None) -> QuayUploadTarget | None:
         raise typer.BadParameter(str(exc)) from exc
 
 
+def _parse_channels(values: list[str] | None) -> list[Channel] | None:
+    return None if values is None else [Channel(value) for value in values]
+
+
 def _resolve_image_records_dir(
     records: Path | None, upload_target: QuayUploadTarget | None
 ) -> Path | None:
@@ -128,6 +196,29 @@ def _validate_positive_int(value: int) -> int:
     if value < 1:
         raise typer.BadParameter("must be a positive integer")
     return value
+
+
+def _error_on_missing_packages(recipe_folder: Path, packages: list[str] | None) -> None:
+    """Error when an explicitly supplied ``--packages`` pattern matches nothing.
+
+    Patterns match recipe folder names, so an unmatched pattern is almost
+    always a typo that would otherwise silently become an empty, but
+    successful, run. Recipes that exist but are skiplisted are unaffected:
+    filtering them out happens later and remains a non-error.
+    """
+    if packages is None:
+        return
+    from .recipes import get_recipes as find_recipes
+
+    unmatched = [p for p in packages if not any(find_recipes(recipe_folder, [p]))]
+    if unmatched:
+        raise typer.BadParameter(
+            "no recipe directories match: "
+            + ", ".join(repr(p) for p in unmatched)
+            + ". Patterns match recipe folder names (e.g. 'bwa' or 'bwa*'), "
+            "not package names",
+            param_hint="--packages",
+        )
 
 
 def _parse_git_range(value: str) -> GitRange:
@@ -181,18 +272,11 @@ LogfileOpt = Annotated[Path | None, typer.Option("--logfile", help="Write log to
 LogfileLevelOpt = Annotated[
     LogLevel, typer.Option("--logfile-level", help="Log level for log file")
 ]
-RepodataCacheOpt = Annotated[
-    Path | None,
-    typer.Option(
-        "--repodata-cache",
-        help="Repodata cache directory (default: platform/XDG cache directory). Entries expire after 8 hours.",
-    ),
-]
-LegacyCacheOpt = Annotated[
+CacheOpt = Annotated[
     Path | None,
     typer.Option(
         "--cache",
-        help="Cache filename prefix (compatible with older scripts). Caches are stored under PREFIX.d; --repodata-cache overrides only the repodata directory.",
+        help="Shared cache directory for repodata, recipe graphs, upstream downloads, rattler-build downloads, and Docker build caches (default: platform/XDG cache directory).",
     ),
 ]
 RefreshRepodataOpt = Annotated[
@@ -203,22 +287,18 @@ RefreshRepodataOpt = Annotated[
 ]
 
 
-def _configure_caches(
-    directory: Path | None, refresh: bool, legacy_prefix: Path | None = None
-) -> None:
+def _configure_caches(directory: Path | None, refresh: bool) -> None:
     from .conda.repodata import RepoData
     from .support.caching import configure_cache_root
 
-    configure_cache_root(None)
-    if legacy_prefix is not None:
-        if directory is not None:
-            raise typer.BadParameter("Use either --cache or --repodata-cache, not both")
-        configure_cache_root(legacy_prefix.with_name(legacy_prefix.name + ".d"))
-    elif directory is not None and directory.is_file():
-        # Older build scripts passed a pickle filename to --repodata-cache.
-        # Leave that file intact and use a sibling directory for current entries.
-        directory = directory.with_name(directory.name + ".d")
-    RepoData.configure_cache(directory, refresh=refresh)
+    if directory is not None:
+        directory = directory.expanduser()
+        if directory.exists() and not directory.is_dir():
+            raise typer.BadParameter(
+                "Cache path must be a directory", param_hint="--cache"
+            )
+    configure_cache_root(directory)
+    RepoData.configure_cache(refresh=refresh)
 
 
 RecipeFolderArg = Annotated[
@@ -257,7 +337,9 @@ PackagesOpt = Annotated[
     list[str] | None,
     typer.Option(
         "--packages",
-        help="Package name(s) or glob pattern(s). Can be specified more than once.",
+        help="Package name(s) or glob pattern(s) matching recipe folder names. "
+        "Can be specified more than once. A pattern that matches no recipe "
+        "folder is an error.",
     ),
 ]
 PdbOpt = Annotated[
@@ -317,7 +399,7 @@ def get_recipes_to_build(git_range: GitRange, recipe_folder: Path) -> list[Path]
 
 
 def get_recipes(
-    config: dict[str, Any],
+    config: Config,
     recipe_folder: Path,
     packages: PackagePatterns,
     git_range: GitRange | None,
@@ -622,17 +704,6 @@ def build(
     ] = False,
     image_records_dir: ImageRecordsDirOpt = None,
     use_existing_auth: UseExistingAuthOpt = False,
-    container_pkgs_cache: Annotated[
-        Path | None,
-        typer.Option(
-            "--container-pkgs-cache",
-            help="Host directory bind-mounted at /opt/conda/pkgs in build "
-            "containers (--docker) so repodata, shards indexes and "
-            "downloaded build/host env packages persist across the "
-            "containers of one build run. Falls back to the "
-            "BIOCONDA_UTILS_CONTAINER_PKGS_CACHE environment variable.",
-        ),
-    ] = None,
     exclude: Annotated[
         list[str] | None,
         typer.Option("--exclude", help="Packages to exclude during this run"),
@@ -645,7 +716,7 @@ def build(
         ),
     ] = None,
     threads: ThreadsOpt = 16,
-    repodata_cache: RepodataCacheOpt = None,
+    cache: CacheOpt = None,
     refresh_repodata: RefreshRepodataOpt = False,
     loglevel: LoglevelOpt = "info",
     logfile: LogfileOpt = None,
@@ -672,29 +743,28 @@ def build(
     from .config import load_config
     from .containers import docker_utils
     from .rattler.rattler_build_bridge import (
-        get_default_rattler_cache_dir_path,
+        get_rattler_cache_dir_path,
         set_rattler_cache_to_dir,
     )
     from .support.subproc import run
 
     cfg = load_config(config)
 
-    # setting the rattler cache to custom path
-    # TODO (rb): should this be exposed to the user?
-    # how should this be handled for docker containers?
-    rattler_cache_dir: Path = get_default_rattler_cache_dir_path()
+    _configure_caches(cache, refresh_repodata)
+
+    rattler_cache_dir: Path = get_rattler_cache_dir_path()
     set_rattler_cache_to_dir(rattler_cache_dir)
 
     # TODO: should we also load the rattler variants config here?
     # currently it is loaded by rattler.ratter_build_bridge.load_rattler_build_global_variants
     # using a semi-hardcoded path
-    _configure_caches(repodata_cache, refresh_repodata)
-    setup = cfg.get("setup", None)
+    setup = cfg.setup
     if setup:
         logger.debug("Running setup: %s", setup)
         for cmd in setup:
             run(shlex.split(cmd))
 
+    _error_on_missing_packages(recipe_folder, packages)
     recipes: list[RecipePath] = get_recipes(
         cfg, recipe_folder, package_patterns, parsed_git_range
     )
@@ -707,18 +777,7 @@ def build(
             use_host_conda_bld = True
         else:
             use_host_conda_bld = False
-        if not is_stable_version(VERSION):
-            image_tag = extract_stable_version(VERSION)
-            logger.warning(
-                f"Using tag {image_tag} for docker image, since there is no image for a not yet release version ({VERSION})."
-            )
-        else:
-            image_tag = VERSION
-        docker_base_image = (
-            docker_base_image
-            or os.getenv("BUILD_ENV_IMAGE", None)
-            or f"quay.io/bioconda/bioconda-utils-build-env-cos7:{image_tag}"
-        )
+        docker_base_image = _docker_build_image(docker_base_image, target_platform)
         logger.info(f"Using docker image {docker_base_image} for building.")
         docker_builder = docker_utils.RecipeBuilder(
             build_script_template=build_script_content,
@@ -728,7 +787,6 @@ def build(
             build_image=build_image,
             docker_base_image=docker_base_image,
             target_platform=target_platform,
-            container_pkgs_cache=container_pkgs_cache,
         )
     else:
         docker_builder = None
@@ -746,7 +804,7 @@ def build(
         mulled_upload_target=parsed_upload_target,
         do_lint=lint,
         lint_exclude=lint_exclude,
-        check_channels=check_channels,
+        check_channels=_parse_channels(check_channels),
         label=label,
         n_workers=n_workers,
         worker_offset=worker_offset,
@@ -803,6 +861,7 @@ def dag(
     from .recipes import get_recipes as find_recipes
 
     config_data = load_config(config)
+    _error_on_missing_packages(recipe_folder, packages)
     dag, name2recipes = graph.build(
         find_recipes(recipe_folder, package_patterns), config_data
     )
@@ -811,9 +870,7 @@ def dag(
     if output_format == "gml":
         nx.write_gml(dag, sys.stdout.buffer)
     elif output_format == "dot":
-        from networkx.drawing.nx_pydot import write_dot
-
-        write_dot(dag, sys.stdout)
+        _write_dot(dag)
     elif output_format == "txt":
         subdags: list[list[str]] = sorted(
             map(sorted, nx.connected_components(dag.to_undirected()))
@@ -906,8 +963,7 @@ def lint(
     recipe_folder: LintRecipeFolderArg = Path("recipes/"),
     config: LintConfigArg = Path("config.yml"),
     packages: PackagesOpt = None,
-    repodata_cache: RepodataCacheOpt = None,
-    cache: LegacyCacheOpt = None,
+    cache: CacheOpt = None,
     refresh_repodata: RefreshRepodataOpt = False,
     list_checks: Annotated[
         bool,
@@ -948,7 +1004,8 @@ def lint(
         _validate_path_exists(recipe_folder)
         _validate_path_exists(config)
         config_data = load_config(config)
-        _configure_caches(repodata_cache, refresh_repodata, cache)
+        _configure_caches(cache, refresh_repodata)
+        _error_on_missing_packages(recipe_folder, packages)
         recipes: list[RecipePath] = get_recipes(
             config_data,
             Path(recipe_folder),
@@ -1026,10 +1083,10 @@ def duplicates(
     from .config import load_config
 
     config_data = load_config(config)
-    if channel not in config_data["channels"]:
+    our_channel = Channel(channel)
+    if our_channel not in config_data.channels:
         raise ValueError("Channel given with --channel must be in config channels")
-    our_channel = channel
-    channels = [c for c in config_data["channels"] if c != our_channel]
+    channels = [c for c in config_data.channels if c != our_channel]
     logger.info(
         "Checking for packages from %s also present in %s", our_channel, channels
     )
@@ -1136,8 +1193,7 @@ def update_pinning(
             "--no-leaves", help="Only update recipes with dependent packages."
         ),
     ] = False,
-    repodata_cache: RepodataCacheOpt = None,
-    cache: LegacyCacheOpt = None,
+    cache: CacheOpt = None,
     refresh_repodata: RefreshRepodataOpt = False,
     pdb: PdbOpt = False,
     threads: ThreadsOpt = 16,
@@ -1160,9 +1216,12 @@ def update_pinning(
     try:
         config_data = load_config(config)
         if skip_additional_channels:
-            config_data["channels"] += skip_additional_channels
+            config_data.channels.extend(
+                Channel(channel) for channel in skip_additional_channels
+            )
         variant_keys = frozenset(skip_variants or ())
-        _configure_caches(repodata_cache, refresh_repodata, cache)
+        _error_on_missing_packages(recipe_folder, packages)
+        _configure_caches(cache, refresh_repodata)
         build_config = load_conda_build_config()
         skiplist = Skiplist(config_data, recipe_folder)
         from . import recipe
@@ -1228,6 +1287,9 @@ def update_pinning(
             report_console.print(
                 f"The build numbers in the following recipes could not be incremented: {list(bumpErrors)}"
             )
+    except (typer.Exit, typer.BadParameter):
+        # Control flow and user errors, not failures (see lint).
+        raise
     except Exception:
         if _handle_pdb_exception("Update-pinning", pdb):
             return
@@ -1325,10 +1387,11 @@ def bioconductor_skeleton(
     from .config import load_config
 
     config_data = load_config(config)
-    skip_if_in_channels = (
-        skip_if_in_channels
-        if skip_if_in_channels is not None
-        else ["conda-forge", "bioconda"]
+    parsed_skip_channels = _parse_channels(skip_if_in_channels)
+    skip_channels = (
+        parsed_skip_channels
+        if parsed_skip_channels is not None
+        else [Channel("conda-forge"), Channel("bioconda")]
     )
     seen_dependencies = set()
     if bioc_data_packages is None:
@@ -1351,7 +1414,7 @@ def bioconductor_skeleton(
                     pkg_version=v["Version"],
                     versioned=versioned,
                     packages=all_packages,
-                    skip_if_in_channels=skip_if_in_channels,
+                    skip_if_in_channels=skip_channels,
                     needs_x=k in needs_x,
                 )
             except (OSError, RuntimeError, ValueError, requests.RequestException):
@@ -1377,7 +1440,7 @@ def bioconductor_skeleton(
                 versioned=versioned,
                 recursive=recursive,
                 seen_dependencies=seen_dependencies,
-                skip_if_in_channels=skip_if_in_channels,
+                skip_if_in_channels=skip_channels,
             )
     else:
         raise typer.BadParameter("Either --packages or --update-all must be specified.")
@@ -1432,8 +1495,7 @@ def autobump(
             help="Globs for package[s] to exclude from scan. Can be specified more than once",
         ),
     ] = None,
-    repodata_cache: RepodataCacheOpt = None,
-    cache: LegacyCacheOpt = None,
+    cache: CacheOpt = None,
     refresh_repodata: RefreshRepodataOpt = False,
     failed_urls: Annotated[
         Path | None,
@@ -1571,9 +1633,10 @@ def autobump(
 
     try:
         # load and register config
-        config_dict = load_config(config)
+        config_data = load_config(config)
 
-        _configure_caches(repodata_cache, refresh_repodata, cache)
+        _error_on_missing_packages(recipe_folder, packages)
+        _configure_caches(cache, refresh_repodata)
         from . import autobump, githubhandler
 
         if no_follow_graph:
@@ -1586,7 +1649,7 @@ def autobump(
                 package_patterns,
                 exclude or [],
                 not no_shuffle,
-                config_dict,
+                config_data,
             )
         # Setup scanning pipeline
         scanner = autobump.Scanner(
@@ -1599,7 +1662,7 @@ def autobump(
 
         # Exclude packages that are on the blacklist
         if not ignore_skiplists:
-            scanner.add(autobump.ExcludeBlacklisted, recipe_folder, config_dict)
+            scanner.add(autobump.ExcludeBlacklisted, recipe_folder, config_data)
 
         # Exclude sub-recipes
         if exclude_subrecipes != "never":
@@ -1646,7 +1709,7 @@ def autobump(
         if excluded_channels != ["none"]:
             scanner.add(
                 autobump.ExcludeOtherChannel,
-                excluded_channels,
+                [Channel(channel) for channel in excluded_channels],
             )
         # Test if due to pinnings, the package hash would change and a rebuild
         # has become necessary. If so, bump the buildnumber.
@@ -1668,18 +1731,19 @@ def autobump(
         # Write the recipe. For making PRs, the recipe should be written to a branch
         # of its own.
         if create_branch or create_pr:
+            assert git_handler is not None
             scanner.add(autobump.GitWriteRecipe, git_handler)
+            if create_pr:
+                token = os.environ.get("GITHUB_TOKEN")
+                if not token and (not dry_run):
+                    logger.critical("GITHUB_TOKEN required to create PRs")
+                    sys.exit(1)
+                github_handler = githubhandler.AiohttpGitHubHandler(
+                    token, dry_run, "bioconda", "bioconda-recipes"
+                )
+                scanner.add(autobump.CreatePullRequest, git_handler, github_handler)
         else:
             scanner.add(autobump.WriteRecipe)
-        if create_pr:
-            token = os.environ.get("GITHUB_TOKEN")
-            if not token and (not dry_run):
-                logger.critical("GITHUB_TOKEN required to create PRs")
-                sys.exit(1)
-            github_handler = githubhandler.AiohttpGitHubHandler(
-                token, dry_run, "bioconda", "bioconda-recipes"
-            )
-            scanner.add(autobump.CreatePullRequest, git_handler, github_handler)
 
         # Terminate the scanning pipeline after x recipes have reached this point.
         if max_updates:
@@ -1688,12 +1752,15 @@ def autobump(
         # And go.
         scanner.run()
 
+    except (typer.Exit, typer.BadParameter):
+        # Control flow and user errors, not failures (see lint).
+        raise
     except Exception:
         if _handle_pdb_exception("Autobump", pdb):
             return
         raise
     finally:
-        # In addition to releasing GitPython's resources, BiocondaRepo.close()
+        # BiocondaRepo.close()
         # restores the branch that was active before autobump started.  This
         # must also happen for BaseExceptions such as KeyboardInterrupt.
         if git_handler is not None:
@@ -1977,7 +2044,7 @@ def list_build_failures(
     records = collect_build_failure_records(
         recipe_folder,
         config_data,
-        channel,
+        Channel(channel),
         link_fmt=output_format,
         link_prefix=link_prefix,
         git_range=parsed_git_range,

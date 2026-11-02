@@ -2,14 +2,17 @@ import json
 import os
 import shutil
 import sqlite3
+from collections import OrderedDict
 from contextlib import closing, contextmanager
 from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 from ruamel.yaml import YAML
 
-from bioconda_utils.conda import repodata
+from bioconda_utils._types import Channel, Config
+from bioconda_utils.conda import repodata, shards
 
 yaml = YAML(typ="rt")  # pylint: disable=invalid-name
 
@@ -69,21 +72,21 @@ def mock_repodata(case, monkeypatch):
                 }
                 records.setdefault((channel, record["platform"]), []).append(record)
 
-    config = repodata.RepoData.config or {}
+    config = repodata.RepoData.config or Config()
     monkeypatch.setattr(
         repodata.RepoData,
         "config",
-        {
-            **config,
-            "channels": list(
+        replace(
+            config,
+            channels=list(
                 dict.fromkeys(
                     [
-                        *config.get("channels", []),
-                        *(channel for channel, _subdir in records),
+                        *config.channels,
+                        *(Channel(channel) for channel, _subdir in records),
                     ]
                 )
             ),
-        },
+        ),
     )
 
     monkeypatch.setattr(
@@ -110,6 +113,11 @@ def mock_repodata(case, monkeypatch):
             yield connection
 
     monkeypatch.setattr(repodata.RepoData, "_open_repository", open_repository)
+    monkeypatch.setattr(
+        shards.ShardClient,
+        "get_repository_shards",
+        lambda channel, subdir, names, repodata_url: None,
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -127,6 +135,10 @@ def isolated_repodata_cache(monkeypatch, tmp_path):
     monkeypatch.setattr(caching, "_cache_root", None)
     monkeypatch.setattr(repodata.RepoData, "cache_dir", tmp_path / "repodata")
     monkeypatch.setattr(repodata.RepoData, "refresh_after", None)
+    monkeypatch.setattr(shards.ShardClient, "_shard_index_cache", {})
+    monkeypatch.setattr(shards.ShardClient, "_package_shard_cache", OrderedDict())
+    monkeypatch.setattr(shards.ShardClient, "_shards_unavailable", {})
+    monkeypatch.setattr(shards.ShardClient, "_package_shards_unavailable", {})
 
 
 @pytest.fixture

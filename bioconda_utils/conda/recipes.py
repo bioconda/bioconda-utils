@@ -16,7 +16,11 @@ from pathlib import Path
 
 from conda_build import api
 
-from .._types import ContainerPlatform, container_platform_to_package_subdir
+from .._types import (
+    Channel,
+    ContainerPlatform,
+    container_platform_to_package_subdir,
+)
 from .conda_build_bridge import load_all_meta, load_conda_build_config
 from .repodata import RepoData
 
@@ -152,7 +156,7 @@ def _meta_build_key(meta):
 
 
 def check_recipe_skippable(
-    recipe: Path, check_channels: list[str], target_platform=None
+    recipe: Path, check_channels: list[Channel], target_platform=None
 ):
     """
     Return True if the same number of builds (per subdir) defined by the recipe
@@ -213,7 +217,7 @@ def check_recipe_skippable(
     return False
 
 
-def _filter_existing_packages(metas, check_channels):
+def _filter_existing_packages(metas, check_channels: list[Channel]):
     new_metas = []  # MetaData instances of packages not yet in channel
     existing_metas = []  # MetaData instances of packages already in channel
     divergent_builds = set()  # set of Dist (i.e., name-version-build) strings
@@ -264,7 +268,7 @@ def _filter_existing_packages(metas, check_channels):
 
 def get_package_paths(
     recipe: Path,
-    check_channels: list[str],
+    check_channels: list[Channel],
     force: bool = False,
     finalize: bool = True,
     target_platform: ContainerPlatform | None = None,
@@ -289,7 +293,13 @@ def get_package_paths(
     )
 
     if divergent_builds:
-        raise DivergentBuildsError(*sorted(divergent_builds))
+        local_builds = sorted(
+            {f"{meta.name()}-{meta.version()}-{meta.build_id()}" for meta in metas}
+        )
+        raise DivergentBuildsError(
+            f"published: {', '.join(sorted(divergent_builds))}; "
+            f"locally calculated: {', '.join(local_builds)}"
+        )
 
     if force:
         for meta in existing_metas:

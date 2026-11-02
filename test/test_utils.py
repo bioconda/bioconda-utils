@@ -10,9 +10,9 @@ import tempfile
 import uuid
 from collections import namedtuple
 from collections.abc import Generator
+from dataclasses import replace
 from pathlib import Path
 from textwrap import dedent
-from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -24,6 +24,7 @@ from bioconda_utils import __version__, build
 from bioconda_utils import recipes as _recipes
 from bioconda_utils._types import (
     BuildSystem,
+    Channel,
     Config,
     ContainerPlatform,
     PackageSubdir,
@@ -53,9 +54,14 @@ TEST_LABEL = "bioconda-utils-test"
 # any tests that depend on a fixture that uses PARAMS will run twice (once with
 # docker, once without). On OSX, only the non-docker runs.
 
-# Docker ref for build container
+# Docker ref for build container. This must be a pushed, public image so fresh
+# clones can `docker pull` it. (The `...-test-env-...` tag used here
+# historically never existed remotely; CI only ever built it locally via
+# `docker build -f ./Dockerfile.test`, which failed for everyone else with a
+# cryptic 401.) To test local Dockerfile changes, build the tag locally first:
+# `docker build -t quay.io/bioconda/bioconda-utils-build-env-cos7:latest ./`
 BUILD_ENV_IMAGE = os.getenv(
-    "BUILD_ENV_IMAGE", "quay.io/bioconda/bioconda-utils-test-env-cos7:latest"
+    "BUILD_ENV_IMAGE", "quay.io/bioconda/bioconda-utils-build-env-cos7:latest"
 )
 
 SKIP_DOCKER_TESTS = sys.platform.startswith("darwin")
@@ -163,6 +169,7 @@ def single_build(request, recipes_fixture, config_fixture):
     )
 
     build.build(
+        channels=Config().channels,
         recipe=recipe_path,
         global_variants=global_variants,
         tool_config=tool_config,
@@ -200,7 +207,7 @@ def multi_build(request, recipes_fixture, config_fixture):
         "within docker" if docker_builder else "locally",
     )
     recipe_folder: Path = Path(recipes_fixture.basedir)
-    config: dict[str, Any] = config_fixture
+    config: Config = config_fixture
     recipes: list[RecipePath] = [
         RecipePath(path=p, build_system=CONDA) for p in recipes_fixture.recipe_dirnames
     ]
@@ -241,7 +248,7 @@ def multi_build_exclude(request, recipes_fixture, config_fixture):
         "within docker" if docker_builder else "locally",
     )
     recipe_folder: Path = Path(recipes_fixture.basedir)
-    config: dict[str, Any] = config_fixture
+    config: Config = config_fixture
     recipes: list[RecipePath] = [
         RecipePath(path=p, build_system=CONDA) for p in recipes_fixture.recipe_dirnames
     ]
@@ -297,6 +304,7 @@ def single_upload(request):
     pkg_paths: list[Path] = r.pkgs[name]
 
     build_result = build.build(
+        channels=Config().channels,
         recipe=recipe_path,
         global_variants=global_variants,
         tool_config=tool_config,
@@ -386,6 +394,7 @@ def test_single_build_pkg_dir(recipes_fixture):
     pkg_paths: list[Path] = recipes_fixture.pkgs["one"]
 
     res = build.build(
+        channels=Config().channels,
         recipe=recipe_path,
         global_variants=global_variants,
         tool_config=tool_config,
@@ -483,7 +492,7 @@ def test_docker_build_fails(recipes_fixture, config_fixture):
     )
     assert docker_builder.build_script_template == "exit 1"
     recipe_folder: Path = Path(recipes_fixture.basedir)
-    config: dict[str, Any] = config_fixture
+    config: Config = config_fixture
     recipes: list[RecipePath] = [
         RecipePath(path=p, build_system=CONDA) for p in recipes_fixture.recipe_dirnames
     ]
@@ -571,7 +580,7 @@ def test_conda_as_dep(config_fixture, mulled_build_and_test):
     )
     r.write_recipes()
     recipe_folder: Path = Path(r.basedir)
-    config: dict[str, Any] = config_fixture
+    config: Config = config_fixture
     recipes: list[RecipePath] = [
         RecipePath(path=p, build_system=CONDA) for p in r.recipe_dirnames
     ]
@@ -862,6 +871,7 @@ def test_rendering_sandboxing():
             pkg_paths = conda_recipes.built_package_paths(r.recipe_dirs["one"])
 
             build.build(
+                channels=Config().channels,
                 recipe=recipe_path,
                 global_variants=global_variants,
                 tool_config=tool_config,
@@ -889,6 +899,7 @@ def test_rendering_sandboxing():
             pkg_paths = conda_recipes.built_package_paths(r.recipe_dirs["one"])
 
             build.build(
+                channels=Config().channels,
                 recipe=recipe_path,
                 global_variants=global_variants,
                 tool_config=tool_config,
@@ -998,6 +1009,7 @@ def test_env_sandboxing():
         pkg_paths = [Path(p) for p in pkg_paths]
 
         build.build(
+            channels=Config().channels,
             recipe=recipe_path,
             global_variants=global_variants,
             tool_config=tool_config,
@@ -1053,7 +1065,7 @@ def test_skip_dependencies(config_fixture):
             ensure_missing(pkg)
 
     recipe_folder: Path = Path(r.basedir)
-    config: dict[str, Any] = config_fixture
+    config: Config = config_fixture
     recipes: list[RecipePath] = [
         RecipePath(path=p, build_system=CONDA) for p in r.recipe_dirnames
     ]
@@ -1081,7 +1093,7 @@ def test_skip_dependencies(config_fixture):
 class TestSubdags:
     def _build(self, recipes_fixture, config_fixture, n_workers, worker_offset):
         recipe_folder: Path = Path(recipes_fixture.basedir)
-        config: dict[str, Any] = config_fixture
+        config: Config = config_fixture
         recipes: list[RecipePath] = [
             RecipePath(path=p, build_system=CONDA)
             for p in recipes_fixture.recipe_dirnames
@@ -1125,6 +1137,7 @@ def test_build_empty_extra_container():
     pkg_paths = [Path(p) for p in pkgs]
 
     build_result = build.build(
+        channels=Config().channels,
         recipe=recipe_path,
         global_variants=global_variants,
         tool_config=tool_config,
@@ -1182,6 +1195,7 @@ def test_build_container_no_default_gcc(tmp_path):
     )
 
     build_result = build.build(
+        channels=Config().channels,
         recipe=recipe_path,
         global_variants=global_variants,
         tool_config=tool_config,
@@ -1221,7 +1235,7 @@ def test_bioconda_pins(caplog, config_fixture):
     r.write_recipes()
 
     recipe_folder: Path = Path(r.basedir)
-    config: dict[str, Any] = config_fixture
+    config: Config = config_fixture
     recipes: list[RecipePath] = [
         RecipePath(path=p, build_system=CONDA) for p in r.recipe_dirnames
     ]
@@ -1302,6 +1316,7 @@ def test_load_platform_metas_preserves_complete_target_platform(
 
 
 def test_filter_existing_packages_queries_rendered_target_subdir(monkeypatch):
+    monkeypatch.setattr(RepoData, "config", Config(channels=[Channel("bioconda")]))
     meta = Mock()
     meta.name.return_value = "samtools"
     meta.version.return_value = "1.24"
@@ -1316,16 +1331,57 @@ def test_filter_existing_packages_queries_rendered_target_subdir(monkeypatch):
         queried_platforms.append(kwargs["platform"])
         return []
 
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
+    monkeypatch.setattr(RepoData, "config", Config(channels=[Channel("bioconda")]))
     monkeypatch.setattr(RepoData, "get_package_data", get_package_data)
 
-    assert conda_recipes._filter_existing_packages([meta], ["bioconda"]) == (
+    assert conda_recipes._filter_existing_packages([meta], [Channel("bioconda")]) == (
         [meta],
         [],
         set(),
         {},
     )
     assert queried_platforms == [[PackageSubdir.LINUX_AARCH64, "noarch"]]
+
+
+@pytest.mark.parametrize(
+    "local_builds",
+    [["h1111111_12"], ["h2222222_12", "h1111111_12"]],
+)
+def test_divergent_build_error_shows_published_and_local_builds(
+    monkeypatch, local_builds
+):
+    ExistingBuild = namedtuple("ExistingBuild", ["channel", "subdir", "build"])
+    metas = []
+    for build_id in local_builds:
+        meta = Mock()
+        meta.name.return_value = "samtools"
+        meta.version.return_value = "1.3.1"
+        meta.build_number.return_value = 12
+        meta.build_id.return_value = build_id
+        meta.noarch = False
+        meta.noarch_python = False
+        meta.config.host_subdir = PackageSubdir.LINUX_64
+        metas.append(meta)
+    render = Mock(return_value=(PackageSubdir.LINUX_64, metas))
+    monkeypatch.setattr(conda_recipes, "_load_platform_metas", render)
+    monkeypatch.setattr(
+        RepoData,
+        "get_package_data",
+        lambda *_args, **_kwargs: [
+            ExistingBuild("bioconda", PackageSubdir.LINUX_64, "h60f3df9_12")
+        ],
+    )
+
+    with pytest.raises(conda_recipes.DivergentBuildsError) as error:
+        conda_recipes.get_package_paths(
+            Path("recipes/samtools/1.3.1"), [Channel("bioconda")], force=True
+        )
+
+    expected_local = ", ".join(f"samtools-1.3.1-{b}" for b in sorted(local_builds))
+    assert str(error.value) == (
+        f"published: samtools-1.3.1-h60f3df9_12; locally calculated: {expected_local}"
+    )
+    render.assert_called_once()
 
 
 def test_get_package_paths_force_builds_existing_and_logs_force(caplog, monkeypatch):
@@ -1346,7 +1402,7 @@ def test_get_package_paths_force_builds_existing_and_logs_force(caplog, monkeypa
         )
     ]
 
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda"]})
+    monkeypatch.setattr(RepoData, "config", Config(channels=[Channel("bioconda")]))
     monkeypatch.setattr(
         conda_recipes,
         "_load_platform_metas",
@@ -1370,7 +1426,7 @@ def test_get_package_paths_force_builds_existing_and_logs_force(caplog, monkeypa
 
     caplog.set_level(logging.INFO, logger="bioconda_utils.conda.recipes")
     paths = conda_recipes.get_package_paths(
-        Path("recipes/samtools"), ["bioconda"], force=True
+        Path("recipes/samtools"), [Channel("bioconda")], force=True
     )
     assert paths == [Path("/tmp/samtools-1.24-h391949c_1.tar.bz2")]
     assert "FORCE: building samtools-1.24-h391949c_1" in caplog.text
@@ -1379,7 +1435,7 @@ def test_get_package_paths_force_builds_existing_and_logs_force(caplog, monkeypa
 
     caplog.clear()
     paths = conda_recipes.get_package_paths(
-        Path("recipes/samtools"), ["bioconda"], force=False
+        Path("recipes/samtools"), [Channel("bioconda")], force=False
     )
     assert paths == []
     assert "channel(s) [bioconda]" in caplog.text
@@ -1416,7 +1472,11 @@ def test_get_package_paths_reports_channels_per_multi_output(caplog, monkeypatch
         "r-seuratdata": [ExistingBuild("conda-forge", "noarch", "py311_0")],
     }
 
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda", "conda-forge"]})
+    monkeypatch.setattr(
+        RepoData,
+        "config",
+        Config(channels=[Channel("bioconda"), Channel("conda-forge")]),
+    )
     monkeypatch.setattr(
         conda_recipes,
         "_load_platform_metas",
@@ -1438,7 +1498,9 @@ def test_get_package_paths_reports_channels_per_multi_output(caplog, monkeypatch
 
     caplog.set_level(logging.INFO, logger="bioconda_utils.conda.recipes")
     paths = conda_recipes.get_package_paths(
-        Path("recipes/r-seurat"), ["bioconda", "conda-forge"], force=True
+        Path("recipes/r-seurat"),
+        [Channel("bioconda"), Channel("conda-forge")],
+        force=True,
     )
     assert paths == [
         Path("/tmp/r-seurat-5.0.0-py311_0.conda"),
@@ -1481,7 +1543,9 @@ def test_check_recipe_skippable_queries_requested_target(monkeypatch, config_fix
     monkeypatch.setattr(RepoData, "get_package_data", get_package_data)
 
     assert not conda_recipes.check_recipe_skippable(
-        Path("samtools"), ["bioconda"], target_platform=ContainerPlatform.LINUX_ARM64
+        Path("samtools"),
+        [Channel("bioconda")],
+        target_platform=ContainerPlatform.LINUX_ARM64,
     )
     assert loaded_targets == [(False, ContainerPlatform.LINUX_ARM64)]
     assert queried_platforms == [[PackageSubdir.LINUX_AARCH64, "noarch"]]
@@ -1505,7 +1569,11 @@ def test_check_recipe_skippable_logs_channels_with_build(
         "_load_platform_metas",
         lambda *_a, **_k: (PackageSubdir.LINUX_64, [meta]),
     )
-    monkeypatch.setattr(RepoData, "config", {"channels": ["bioconda", "conda-forge"]})
+    monkeypatch.setattr(
+        RepoData,
+        "config",
+        Config(channels=[Channel("bioconda"), Channel("conda-forge")]),
+    )
     rows = [("conda-forge", "h123_1", PackageSubdir.LINUX_64)]
     if duplicate_channel:
         rows.append(("bioconda", "h123_1", PackageSubdir.LINUX_64))
@@ -1517,7 +1585,9 @@ def test_check_recipe_skippable_logs_channels_with_build(
 
     caplog.set_level(logging.INFO, logger="bioconda_utils.conda.recipes")
     assert conda_recipes.check_recipe_skippable(
-        Path("samtools"), ["bioconda", "conda-forge"], target_platform=None
+        Path("samtools"),
+        [Channel("bioconda"), Channel("conda-forge")],
+        target_platform=None,
     )
     expected_channels = "bioconda, conda-forge" if duplicate_channel else "conda-forge"
     assert f"channel(s) [{expected_channels}]" in caplog.text
@@ -1525,7 +1595,8 @@ def test_check_recipe_skippable_logs_channels_with_build(
     # A second distinct build remains a second variant, even in the same subdir.
     rows.append(("conda-forge", "h456_1", PackageSubdir.LINUX_64))
     assert not conda_recipes.check_recipe_skippable(
-        Path("samtools"), ["bioconda", "conda-forge"]
+        Path("samtools"),
+        [Channel("bioconda"), Channel("conda-forge")],
     )
 
 
@@ -1722,7 +1793,7 @@ def test_cb3_outputs(config_fixture):
     r.recipe_dirs["one"]
 
     recipe_folder: Path = Path(r.basedir)
-    config: dict[str, Any] = config_fixture
+    config: Config = config_fixture
     recipes: list[RecipePath] = [
         RecipePath(path=p, build_system=CONDA) for p in r.recipe_dirnames
     ]
@@ -1764,7 +1835,7 @@ def test_compiler(config_fixture):
     r.write_recipes()
 
     recipe_folder: Path = Path(r.basedir)
-    config: dict[str, Any] = config_fixture
+    config: Config = config_fixture
     recipes: list[RecipePath] = [
         RecipePath(path=p, build_system=CONDA) for p in r.recipe_dirnames
     ]
@@ -1843,7 +1914,7 @@ def test_nested_recipes(config_fixture):
     r.write_recipes()
 
     recipe_folder: Path = Path(r.basedir)
-    config: dict[str, Any] = config_fixture
+    config: Config = config_fixture
     recipes: list[RecipePath] = [
         RecipePath(path=p, build_system=CONDA) for p in r.recipe_dirnames
     ]
@@ -1899,7 +1970,7 @@ def test_conda_build_sysroot(config_fixture):
     r.write_recipes()
 
     recipe_folder: Path = Path(r.basedir)
-    config: dict[str, Any] = config_fixture
+    config: Config = config_fixture
     recipes: list[RecipePath] = [
         RecipePath(path=p, build_system=CONDA) for p in r.recipe_dirnames
     ]
@@ -1954,7 +2025,7 @@ def test_skip_unsatisfiable_pin_compatible(config_fixture):
     r.write_recipes()
 
     recipe_folder: Path = Path(r.basedir)
-    config: dict[str, Any] = config_fixture
+    config: Config = config_fixture
 
     build_result = build.build_recipes(
         recipe_folder,
@@ -2028,7 +2099,7 @@ def test_pkg_test_conda_package_format(
         )
 
     recipe_folder: Path = Path(r.basedir)
-    config: dict[str, Any] = config_fixture
+    config: Config = config_fixture
     recipes: list[RecipePath] = [
         RecipePath(path=p, build_system=CONDA) for p in r.recipe_dirnames
     ]
@@ -2083,7 +2154,7 @@ def test_rattler_recipe(config_fixture):
     docker_builder = None
 
     recipe_folder: Path = Path(r.basedir)
-    config: dict[str, Any] = config_fixture
+    config: Config = config_fixture
     recipes: list[RecipePath] = [
         RecipePath(path=Path(p), build_system=RATTLER) for p in r.recipe_dirnames
     ]
@@ -2141,13 +2212,7 @@ def test_normalize_config_applies_defaults_without_mutating_input():
     assert config == {
         "blacklists": ["blacklists/temporary.txt"],
     }
-    assert normalized == {
-        "blacklists": [Path("blacklists/temporary.txt")],
-        "channels": ["conda-forge", "bioconda"],
-        "requirements": None,
-        "upload_channel": "bioconda",
-        "primary_platforms": [PackageSubdir.LINUX_64, PackageSubdir.OSX_64],
-    }
+    assert normalized == Config(blacklists=[Path("blacklists/temporary.txt")])
 
 
 def test_normalize_config_converts_blacklists_to_paths_without_base_dir():
@@ -2155,7 +2220,7 @@ def test_normalize_config_converts_blacklists_to_paths_without_base_dir():
     even for a raw config dict that has no config file to resolve against."""
     normalized = normalize_config({"blacklists": ["blacklists/temporary.txt"]})
 
-    assert normalized["blacklists"] == [Path("blacklists/temporary.txt")]
+    assert normalized.blacklists == [Path("blacklists/temporary.txt")]
 
 
 def test_normalize_config_resolves_blacklists_against_base_dir(tmp_path):
@@ -2163,12 +2228,11 @@ def test_normalize_config_resolves_blacklists_against_base_dir(tmp_path):
         {"blacklists": ["blacklists/temporary.txt"]}, base_dir=tmp_path
     )
 
-    assert normalized["blacklists"] == [tmp_path / "blacklists/temporary.txt"]
+    assert normalized.blacklists == [tmp_path / "blacklists/temporary.txt"]
 
 
 def test_skiplist_accepts_normalized_config_with_blacklists(tmp_path, monkeypatch):
-    """A raw config dict passed to build_recipes reaches Skiplist after
-    normalize_config; it must not carry str blacklist entries.
+    """Normalization must give Skiplist Path values for blacklist entries.
 
     Blacklist lines are repo-relative and the recipe folder is given relative
     too, matching how bioconda-recipes configures both.
@@ -2192,37 +2256,32 @@ def test_normalize_config_custom_primary_platforms():
 
     normalized = normalize_config(config)
 
-    assert normalized["primary_platforms"] == [PackageSubdir.LINUX_64]
+    assert normalized.primary_platforms == [PackageSubdir.LINUX_64]
 
 
-def test_normalize_config_is_idempotent():
-    normalized = normalize_config({"channels": ["bioconda"]})
-
-    assert normalize_config(normalized) is normalized
-
-
-def test_build_recipes_normalizes_raw_config_at_boundary(monkeypatch):
-    class NormalizationObserved(Exception):
+def test_build_recipes_registers_normalized_config(monkeypatch):
+    class ConfigObserved(Exception):
         pass
 
+    expected_config = normalize_config({"channels": []})
     registered = []
 
     def register_config(config):
         registered.append(config)
 
     def observe_config(config, _recipe_folder):
-        assert isinstance(config, Config)
-        assert config["requirements"] is None
+        assert config is expected_config
+        assert config.requirements is None
         assert registered == [config]
-        raise NormalizationObserved
+        raise ConfigObserved
 
     monkeypatch.setattr(RepoData, "register_config", register_config)
     monkeypatch.setattr(build, "Skiplist", observe_config)
 
-    with pytest.raises(NormalizationObserved):
+    with pytest.raises(ConfigObserved):
         build.build_recipes(
             Path("recipes"),
-            {"channels": []},
+            expected_config,
             [RecipePath(Path("example"), BuildSystem.CONDA)],
         )
 
@@ -2238,14 +2297,14 @@ def test_load_config_registers_config_after_resolving_paths(monkeypatch, tmp_pat
     monkeypatch.setattr(
         RepoData,
         "register_config",
-        lambda config: registered.append(config.copy()),
+        lambda config: registered.append(replace(config)),
     )
 
     config = load_config(config_path)
 
-    assert config["blacklists"] == [tmp_path / "blacklists/temporary.txt"]
-    assert config["channels"] == ["conda-forge", "bioconda"]
-    assert config["primary_platforms"] == [PackageSubdir.LINUX_64, PackageSubdir.OSX_64]
+    assert config.blacklists == [tmp_path / "blacklists/temporary.txt"]
+    assert config.channels == [Channel("conda-forge"), Channel("bioconda")]
+    assert config.primary_platforms == [PackageSubdir.LINUX_64, PackageSubdir.OSX_64]
     assert registered == [config]
 
 
@@ -2296,3 +2355,40 @@ def test_load_meta_fast_allows_duplicate_keys(tmp_path):
     assert meta["package"]["name"] == "test-pkg"
     assert meta["build"]["number"] == 0
     assert loaded_recipe == recipe_dir
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        (" bioconda/ ", "bioconda"),
+        (" https://example.org/channel/// ", "https://example.org/channel"),
+        ("file:///tmp/channel/", "file:///tmp/channel"),
+    ],
+)
+def test_channel_normalizes_names_and_urls(value, expected):
+    assert Channel(value) == expected
+
+
+@pytest.mark.parametrize("value", ["", "  ", " / "])
+def test_channel_rejects_empty_names(value):
+    with pytest.raises(ValueError, match="must not be empty"):
+        Channel(value)
+
+
+def test_normalize_config_normalizes_and_deduplicates_channels():
+    config = {
+        "channels": [" bioconda/ ", "conda-forge", "bioconda"],
+        "upload_channel": " bioconda/ ",
+    }
+    normalized = normalize_config(config)
+
+    assert normalized.channels == ["bioconda", "conda-forge"]
+    assert normalized.upload_channel == "bioconda"
+    assert config["channels"] == [" bioconda/ ", "conda-forge", "bioconda"]
+
+
+@pytest.mark.parametrize("key", ["channels", "upload_channel"])
+def test_normalize_config_rejects_blank_channels(key):
+    value = ["  "] if key == "channels" else "  "
+    with pytest.raises(ValueError, match="must not be empty"):
+        normalize_config({key: value})
