@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.3.0](https://github.com/bioconda/bioconda-utils/compare/v5.2.0...v5.3.0) (2026-11-02)
+
+
+### Features
+
+* use shards, replace deprecated things ([#1135](https://github.com/bioconda/bioconda-utils/issues/1135)) ([6ac78a4](https://github.com/bioconda/bioconda-utils/commit/6ac78a4c135d889bcf6b1c4eef34b6db57dea1dc))
+
 ## [5.2.0](https://github.com/bioconda/bioconda-utils/compare/v5.1.0...v5.2.0) (2026-10-28)
 
 
