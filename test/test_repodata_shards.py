@@ -373,6 +373,11 @@ def test_failed_shard_retry_keeps_successful_siblings(sharded, monkeypatch, capl
     assert len(caplog.records) == 1
     bad_url = next(iter(ShardClient._package_shards_unavailable))
     ShardClient._package_shards_unavailable[bad_url] -= datetime.timedelta(minutes=6)
+    # Fresh full repodata now takes precedence. Remove it to exercise a shard
+    # retry after the cooldown without redownloading the successful sibling.
+    repository._cache_path(
+        repository._make_repodata_url(Channel("high"), "noarch")
+    ).unlink()
     set_shard(repository, bodies, [record(name="other")], shard_hash="bad")
     assert repository.get_package_data(
         "name", channels=Channel("high"), name=["example", "other"]
@@ -503,6 +508,9 @@ def test_negative_index_cache_expires(sharded, monkeypatch, caplog):
     url = index_url(repository, "high")
     assert requests == [url]
     ShardClient._shards_unavailable[url] -= datetime.timedelta(minutes=6)
+    repository._cache_path(
+        repository._make_repodata_url(Channel("high"), "noarch")
+    ).unlink()
     set_index(repository, bodies, example="hash")
     set_shard(repository, bodies, [record(version="sharded")])
     assert repository.get_package_data(
@@ -659,3 +667,89 @@ def test_empty_name_filter_does_not_download(sharded):
     assert repository.get_package_data("name", name=[]) == []
     assert not repository.get_package_data(name=[])
     assert requests == []
+
+
+def test_prefetch_batches_names_and_avoids_later_downloads(sharded, monkeypatch):
+    repository, bodies, requests = sharded
+    for channel in ("high", "low"):
+        set_index(repository, bodies, channel, example="one", other="two")
+        set_shard(repository, bodies, [record()], channel, shard_hash="one")
+        set_shard(repository, bodies, [record(name="other")], channel, shard_hash="two")
+    batches = []
+    download = shards.fetch
+
+    def batch_download(downloads, **kwargs):
+        downloads = list(downloads)
+        batches.append([request.url for request in downloads])
+        return download(downloads, **kwargs)
+
+    monkeypatch.setattr(shards, "fetch", batch_download)
+    repository.prefetch(["example", "other", "example"])
+    assert [len(batch) for batch in batches] == [1, 2, 1, 2]
+    assert len(requests) == 6
+    for name in ("example", "other"):
+        assert repository.get_package_data("name", name=name) == [name, name]
+    assert len(requests) == 6
+
+
+def test_prefetch_threshold_is_per_repository_and_counts_distinct_urls(
+    sharded, monkeypatch, caplog
+):
+    repository, bodies, requests = sharded
+    monkeypatch.setattr(ShardClient, "max_missing_shards", 2)
+    set_index(repository, bodies, "high", example="one", other="two")
+    # Two names share one shard on the second channel, below the threshold.
+    set_index(repository, bodies, "low", example="shared", other="shared")
+    set_shard(repository, bodies, [record(), record(name="other")], "low", "shared")
+    loads = fallback(repository, monkeypatch, [record(), record(name="other")])
+    caplog.set_level(logging.INFO)
+
+    repository.prefetch(["example", "other", "example", "missing"])
+    assert loads == [("high", "noarch")]
+    assert len(requests) == 3  # two indexes and the shared shard
+    assert not any("/high/noarch/shards/" in url for url in requests)
+    assert "2 uncached shards (threshold 2)" in caplog.text
+    assert repository.get_package_data("name", name="other") == ["other", "other"]
+    assert loads == [("high", "noarch")]
+    assert len(requests) == 3
+
+
+@pytest.mark.parametrize("new_shard", [False, True])
+def test_threshold_excludes_persistently_cached_shards(sharded, monkeypatch, new_shard):
+    repository, bodies, requests = sharded
+    monkeypatch.setattr(RepoData, "config", Config(channels=[Channel("high")]))
+    monkeypatch.setattr(ShardClient, "max_missing_shards", 3)
+    set_index(repository, bodies, example="one", other="two", last="three")
+    for name, shard_hash in (("example", "one"), ("other", "two"), ("last", "three")):
+        set_shard(repository, bodies, [record(name=name)], shard_hash=shard_hash)
+    loads = fallback(repository, monkeypatch, [])
+    repository.prefetch(["example", "other"])
+    assert len(requests) == 3
+
+    ShardClient.clear_caches()
+    monkeypatch.setattr(ShardClient, "max_missing_shards", 2)
+    names = ["example", "other", "last"] if new_shard else ["example", "other"]
+    repository.prefetch(names)
+    assert len(requests) == (4 if new_shard else 3)
+    assert not loads
+
+
+def test_fresh_full_repodata_precedes_shards(sharded, monkeypatch):
+    repository, _bodies, requests = sharded
+    monkeypatch.setattr(RepoData, "config", Config(channels=[Channel("high")]))
+    loads = fallback(repository, monkeypatch, [record()])
+    with repository._open_repository(Channel("high"), "noarch"):
+        pass
+    repository.prefetch(["example", "other"])
+    assert repository.get_package_data("version", name="example") == ["1"]
+    assert loads == [("high", "noarch")]
+    assert not requests
+
+
+def test_empty_prefetch_and_local_channels_do_not_download(sharded, monkeypatch):
+    repository, _bodies, requests = sharded
+    monkeypatch.setattr(RepoData, "config", None)
+    repository.prefetch([])
+    monkeypatch.setattr(RepoData, "config", Config(channels=[Channel("file:///local")]))
+    repository.prefetch(["example"])
+    assert not requests

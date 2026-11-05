@@ -99,3 +99,11 @@ downloads, API lookups, and rattler-build use internal subdirectories under
 that shared root.
 `--cache` now takes a directory; the old filename-prefix and pickle cache
 formats and the separate `--repodata-cache` option are no longer supported.
+
+Lint batches metadata requests for the selected recipes before running checks.
+For each channel/platform, fresh cached full repodata is reused first. Otherwise,
+fewer than 128 distinct uncached shards are downloaded concurrently (up to four
+connections per host); larger batches fetch full repodata. Cached shards,
+repeated package names, and packages sharing a shard do not increase this count.
+The cutoff is a heuristic: use `pixi run python scripts/benchmark-repodata.py`
+to compare cold-cache strategies with adjustable repository size and latency.

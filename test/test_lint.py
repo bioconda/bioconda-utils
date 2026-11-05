@@ -165,3 +165,125 @@ def test_lint_rejects_unregistered_dependency(monkeypatch, tmp_path):
         ValueError, match="Unregistered lint dependency.*required by dependent"
     ):
         lint.Linter(Config(), tmp_path)
+
+
+def test_lint_prefetches_selected_names_before_checks(monkeypatch, tmp_path):
+    from bioconda_utils._types import RATTLER
+    from bioconda_utils.conda.repodata import RepoData
+    from bioconda_utils.lint.check_policy import cran_packages_to_conda_forge
+    from bioconda_utils.lint.check_repo import in_other_channels
+
+    monkeypatch.setenv("LINT_SKIP", "")
+    monkeypatch.setattr(
+        lint, "get_checks", lambda: [in_other_channels, cran_packages_to_conda_forge]
+    )
+    events = []
+    selected = []
+    for directory, text in (
+        ("first", "package: {name: real-package, version: 1}\n"),
+        (
+            "second",
+            (
+                "package: {name: real-package, version: 2}\n"
+                "requirements: {run: [R, 'r-dependency >=1']}\n"
+            ),
+        ),
+        (
+            "skipped",
+            (
+                "package: {name: skipped-package, version: 1}\n"
+                "extra: {skip-lints: [in_other_channels, cran_packages_to_conda_forge]}\n"
+            ),
+        ),
+        ("invalid", "package: [\n"),
+    ):
+        path = tmp_path / directory
+        path.mkdir()
+        (path / "meta.yaml").write_text(text)
+        selected.append(RecipePath(path, CONDA))
+    selected.append(RecipePath(tmp_path / "rattler", RATTLER))
+    # An unselected recipe must not participate in metadata planning.
+    (tmp_path / "unselected").mkdir()
+    (tmp_path / "unselected/meta.yaml").write_text(
+        "package: {name: unselected-package, version: 1}\n"
+    )
+    monkeypatch.setattr(
+        RepoData, "prefetch", lambda self, names: events.append(set(names))
+    )
+    monkeypatch.setattr(
+        lint.Linter, "lint_one", lambda *args, **kwargs: events.append("lint") or []
+    )
+    monkeypatch.setattr(lint.Linter, "lint_one_rattler", lambda *args, **kwargs: [])
+
+    assert not lint.Linter(Config(), tmp_path).lint(selected)
+    assert events == [
+        {"real-package", "R", "r-dependency"},
+        "lint",
+        "lint",
+        "lint",
+        "lint",
+    ]
+
+
+@pytest.mark.parametrize("skip", ["global", "recipe", "commit", "prerequisite"])
+def test_metadata_prefetch_respects_disabled_checks(monkeypatch, tmp_path, skip):
+    from bioconda_utils.conda.repodata import RepoData
+
+    monkeypatch.setattr(lint.LintCheck, "registry", [])
+
+    class prerequisite(lint.LintCheck):
+        pass
+
+    class metadata_check(lint.LintCheck):
+        requires: ClassVar = [prerequisite]
+
+        @classmethod
+        def get_repodata_names(cls, recipe):
+            return [recipe.name]
+
+    monkeypatch.setattr(lint, "get_checks", lambda: [prerequisite, metadata_check])
+    path = tmp_path / "example"
+    path.mkdir()
+    (path / "meta.yaml").write_text(
+        "package: {name: example, version: 1}\n"
+        + ("extra: {skip-lints: [metadata_check]}\n" if skip == "recipe" else "")
+    )
+    monkeypatch.setenv(
+        "LINT_SKIP",
+        f"[lint skip metadata_check for {path}]" if skip == "commit" else "",
+    )
+    calls = []
+    monkeypatch.setattr(RepoData, "prefetch", lambda *args: calls.append(args))
+    exclude = {"global": ["metadata_check"], "prerequisite": ["prerequisite"]}.get(skip)
+
+    lint.Linter(Config(), tmp_path, exclude=exclude).prefetch_repodata(
+        [RecipePath(path, CONDA)]
+    )
+
+    assert calls == []
+
+
+def test_failed_prefetch_leaves_normal_lint_checks_running(
+    monkeypatch, tmp_path, caplog
+):
+    from bioconda_utils.conda.repodata import RepoData
+    from bioconda_utils.lint.check_repo import in_other_channels
+
+    monkeypatch.setenv("LINT_SKIP", "")
+    monkeypatch.setattr(lint, "get_checks", lambda: [in_other_channels])
+    path = tmp_path / "example"
+    path.mkdir()
+    (path / "meta.yaml").write_text("package: {name: example, version: 1}\n")
+
+    def fail_prefetch(*args):
+        raise OSError("download failed")
+
+    monkeypatch.setattr(RepoData, "prefetch", fail_prefetch)
+    calls = []
+    monkeypatch.setattr(
+        lint.Linter, "lint_one", lambda *args, **kwargs: calls.append("lint") or []
+    )
+
+    assert not lint.Linter(Config(), tmp_path).lint([RecipePath(path, CONDA)])
+    assert calls == ["lint"]
+    assert "Metadata prefetch failed" in caplog.text

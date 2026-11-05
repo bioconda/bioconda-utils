@@ -95,6 +95,9 @@ class ShardClient:
     #: Shard indexes are mutable; content-addressed package shards are not.
     shard_index_cache_timeout = 60 * 15
     package_shard_cache_max_entries = 4096
+    #: Bound cold HTTP requests per repository; cached and shared shards do not
+    #: count. Large batches use full repodata instead (see the benchmark script).
+    max_missing_shards = 128
     cache_dir: ClassVar[Path | None] = None
     refresh_after: ClassVar[datetime.datetime | None] = None
 
@@ -416,6 +419,15 @@ class ShardClient:
             missing = cls._cached_shards(shard_name_by_url, records_by_url)
             if missing:
                 cls._read_disk_shards(channel, subdir, missing, records_by_url)
+            if len(missing) >= cls.max_missing_shards:
+                logger.info(
+                    "Using full repodata for %s/%s: %s uncached shards (threshold %s)",
+                    channel,
+                    subdir,
+                    len(missing),
+                    cls.max_missing_shards,
+                )
+                return None
             if missing:
                 cls._download_shards(channel, subdir, missing, records_by_url)
             wanted = set(names)

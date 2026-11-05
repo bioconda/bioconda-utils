@@ -267,6 +267,11 @@ class LintCheck(metaclass=LintCheckMeta):
     #: Checks that must have passed for this check to be executed.
     requires: ClassVar[list[type[LintCheck]]] = []
 
+    @classmethod
+    def get_repodata_names(cls, recipe: _recipe.Recipe) -> Iterable[str]:
+        """Package names this check will query, for batched metadata prefetch."""
+        return ()
+
     def __init__(self, _linter: Linter) -> None:
         #: Messages collected running tests
         self.messages: list[LintMessage] = []
@@ -656,6 +661,7 @@ class Linter:
           True if issues with errors were found
 
         """
+        self.prefetch_repodata(recipe_names)
         with progress_display.count_task("Linting", total=len(recipe_names)) as (
             progress,
             task,
@@ -693,6 +699,61 @@ class Linter:
 
         return any(message.get_severity() >= ERROR for message in self._messages)
 
+    def prefetch_repodata(self, recipe_names: list[RecipePath]) -> None:
+        """Plan downloads from enabled checks without retaining every recipe."""
+        from ..conda.repodata import RepoData
+
+        names: set[str] = set()
+        with progress_display.status("Preparing lint metadata"):
+            for path in recipe_names:
+                if path.build_system != BuildSystem.CONDA:
+                    continue
+                recipe = _recipe.Recipe.from_file(
+                    self.recipe_folder, path.path, return_exceptions=True
+                )
+                if isinstance(recipe, Exception):
+                    # The ordinary lint pass reports recipe loading failures.
+                    continue
+                try:
+                    skipped = self._checks_to_skip(recipe, report=False)
+                    for check in get_checks():
+                        if str(check) not in skipped:
+                            names.update(
+                                name
+                                for name in check.get_repodata_names(recipe)
+                                if isinstance(name, str) and name
+                            )
+                except (AttributeError, KeyError, TypeError, ValueError):
+                    # Malformed metadata is diagnosed by the normal lint pass.
+                    continue
+            if names:
+                try:
+                    RepoData().prefetch(names)
+                except Exception:
+                    # Prefetch is optional: leave failures to the normal checks,
+                    # which report them against the individual recipes.
+                    logger.warning(
+                        "Metadata prefetch failed; lint checks will retry on demand",
+                        exc_info=True,
+                    )
+
+    def _checks_to_skip(self, recipe: _recipe.Recipe, *, report: bool) -> set[str]:
+        checks_to_skip = set(self.skip[recipe.dir.as_posix()])
+        checks_to_skip.update(self.exclude)
+        if isinstance(recipe.get("extra/skip-lints", []), list):
+            checks_to_skip.update(recipe.get("extra/skip-lints", []))
+
+        for check in list(checks_to_skip):
+            if check not in self.checks_dag:
+                if report:
+                    logger.error("Skipping unknown check %s", check)
+                continue
+            for check_dep in nx.ancestors(self.checks_dag, check):
+                if report and check_dep not in checks_to_skip:
+                    logger.info("Disabling %s because %s is disabled", check_dep, check)
+                checks_to_skip.add(check_dep)
+        return checks_to_skip
+
     def lint_one(self, recipe_name: Path, fix: bool = False) -> list[LintMessage]:
         """Run the linter on a single recipe
 
@@ -710,23 +771,7 @@ class Linter:
             check_cls = recipe_error_to_lint_check.get(exc.__class__, linter_failure)
             return [check_cls.make_conda_message(recipe=recipe, line=exc.line)]
 
-        # collect checks to skip
-        checks_to_skip = set(self.skip[recipe_name.as_posix()])
-        checks_to_skip.update(self.exclude)
-        if isinstance(recipe.get("extra/skip-lints", []), list):
-            # If they are not, the extra_skip_lints_not_list check
-            # will be found and issued.
-            checks_to_skip.update(recipe.get("extra/skip-lints", []))
-
-        # also skip dependent checks
-        for check in list(checks_to_skip):
-            if check not in self.checks_dag:
-                logger.error("Skipping unknown check %s", check)
-                continue
-            for check_dep in nx.ancestors(self.checks_dag, check):
-                if check_dep not in checks_to_skip:
-                    logger.info("Disabling %s because %s is disabled", check_dep, check)
-                checks_to_skip.add(check_dep)
+        checks_to_skip = self._checks_to_skip(recipe, report=True)
 
         # run checks
         messages: list[LintMessage] = []

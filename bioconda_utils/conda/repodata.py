@@ -310,11 +310,16 @@ class RepoData:
 
     @contextmanager
     def _open_query_repository(self, channel: Channel, subdir: Subdir, names):
+        url = self._make_repodata_url(channel, subdir)
+        if not url.startswith("file://"):
+            connection = self._read_cache(self._cache_path(url))
+            if connection is not None:
+                with closing(connection):
+                    yield connection
+                return
         records = None
         if names is not None:
-            records = ShardClient.get_repository_shards(
-                channel, subdir, names, self._make_repodata_url(channel, subdir)
-            )
+            records = ShardClient.get_repository_shards(channel, subdir, names, url)
         if records is None:
             with self._open_repository(channel, subdir) as connection:
                 yield connection
@@ -329,6 +334,28 @@ class RepoData:
                 fetched_at=datetime.datetime.now(datetime.UTC).timestamp(),
             )
             yield connection
+
+    def prefetch(self, names: Iterable[str]) -> None:
+        """Batch metadata downloads before making per-package queries.
+
+        Choose shards or full repodata separately for each channel/subdir.
+        No SQL result tables are retained; subsequent queries use the caches.
+        """
+        names = sorted(set(names))
+        if not names:
+            return
+        for channel, subdir in self._repositories(self.channels, self.platforms):
+            url = self._make_repodata_url(channel, subdir)
+            # Local channels are read afresh by queries; preloading is pointless.
+            if url.startswith("file://"):
+                continue
+            connection = self._read_cache(self._cache_path(url))
+            if connection is not None:
+                connection.close()
+                continue
+            if ShardClient.get_repository_shards(channel, subdir, names, url) is None:
+                with self._open_repository(channel, subdir):
+                    pass
 
     def _make_repodata_url(self, channel: Channel, subdir: Subdir) -> str:
         if channel.startswith(("http://", "https://", "file://")):
