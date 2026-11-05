@@ -12,6 +12,7 @@ import pytest
 import zstandard
 
 from bioconda_utils._types import Channel, Config
+from bioconda_utils.conda.cache import RepodataCachePolicy
 from bioconda_utils.conda.repodata import RepoData
 from bioconda_utils.conda.shards import ShardClient
 from bioconda_utils.support.parallel import worker_pool
@@ -174,8 +175,8 @@ def test_invalid_records_fail_the_repository_load(repository, monkeypatch):
     assert not list(repository.get_cache_dir().glob("*.sqlite"))
 
 
-@pytest.mark.parametrize("age", [9 * 3600, -3600])
-def test_expired_or_future_entries_are_refreshed(repository, monkeypatch, age):
+@pytest.mark.parametrize("age", [3600, 7 * 3600, 8 * 3600, 9 * 3600, -3600])
+def test_full_repodata_follows_eight_hour_policy(repository, monkeypatch, age):
     path = repository._cache_path(
         repository._make_repodata_url(Channel("bioconda"), "noarch")
     )
@@ -186,7 +187,18 @@ def test_expired_or_future_entries_are_refreshed(repository, monkeypatch, age):
     )
     assert repository.get_package_data(
         "name", channels=Channel("bioconda"), platform="noarch"
-    ) == ["fresh"]
+    ) == ["old" if 0 <= age < 8 * 3600 else "fresh"]
+
+
+def worker_cache_policies():
+    return RepoData.cache_policy, ShardClient.cache_policy
+
+
+def test_workers_share_metadata_freshness_and_refresh_cutoff(repository):
+    policy = RepodataCachePolicy(max_age=3600, refresh_after=time.time())
+    RepoData.configure_cache(repository.get_cache_dir(), policy=policy)
+    with worker_pool(1) as pool:
+        assert pool.submit(worker_cache_policies).result(timeout=30) == (policy, policy)
 
 
 @pytest.mark.parametrize("contents", [b"not a database", None])

@@ -13,6 +13,7 @@ from ruamel.yaml import YAML
 
 from bioconda_utils._types import Channel, Config
 from bioconda_utils.conda import repodata, shards
+from bioconda_utils.conda.cache import RepodataCachePolicy
 
 yaml = YAML(typ="rt")  # pylint: disable=invalid-name
 
@@ -134,13 +135,15 @@ def isolated_repodata_cache(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(caching, "_cache_root", None)
     monkeypatch.setattr(repodata.RepoData, "cache_dir", tmp_path / "repodata")
-    monkeypatch.setattr(repodata.RepoData, "refresh_after", None)
+    policy = RepodataCachePolicy()
+    monkeypatch.setattr(repodata.RepoData, "cache_policy", policy)
     monkeypatch.setattr(shards.ShardClient, "_shard_index_cache", {})
     monkeypatch.setattr(shards.ShardClient, "_package_shard_cache", OrderedDict())
     monkeypatch.setattr(shards.ShardClient, "_shards_unavailable", {})
     monkeypatch.setattr(shards.ShardClient, "_package_shards_unavailable", {})
     monkeypatch.setattr(shards.ShardClient, "cache_dir", None)
-    monkeypatch.setattr(shards.ShardClient, "refresh_after", None)
+    monkeypatch.setattr(shards.ShardClient, "cache_policy", policy)
+    monkeypatch.setattr(shards.ShardClient, "_disk_cache_disabled", False)
 
 
 @pytest.fixture

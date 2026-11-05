@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import datetime
 import logging
+import sqlite3
 from collections import OrderedDict
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
@@ -30,6 +31,7 @@ from .._types import (
     parse_package_record,
 )
 from ..support.caching import get_cache_root
+from .cache import RepodataCachePolicy
 from .fetch import FetchRequest, fetch
 
 logger = logging.getLogger(__name__)
@@ -75,7 +77,7 @@ class _CachedPackageShard:
 class ShardClient:
     """Resolves package records from sharded repodata.
 
-    Shard indexes are cached briefly, as they may change at any time, while
+    Shard indexes share the full repodata freshness policy, while
     content-addressed package shards are immutable. Failed downloads mark
     the index or shard unavailable, skipping retries until the matching
     timeout expires.
@@ -92,23 +94,27 @@ class ShardClient:
     shards_unavailable_timeout = 60 * 5
     package_shards_unavailable_timeout = 60 * 5
 
-    #: Shard indexes are mutable; content-addressed package shards are not.
-    shard_index_cache_timeout = 60 * 15
+    cache_policy: ClassVar[RepodataCachePolicy] = RepodataCachePolicy()
     package_shard_cache_max_entries = 4096
     #: Bound cold HTTP requests per repository; cached and shared shards do not
     #: count. Large batches use full repodata instead (see the benchmark script).
     max_missing_shards = 128
     cache_dir: ClassVar[Path | None] = None
-    refresh_after: ClassVar[datetime.datetime | None] = None
+    _disk_cache_disabled: ClassVar[bool] = False
 
     @classmethod
     def configure_cache(
-        cls, directory: Path | None = None, *, refresh: bool = False
+        cls,
+        directory: Path | None = None,
+        *,
+        refresh: bool = False,
+        policy: RepodataCachePolicy | None = None,
     ) -> None:
         """Refresh mutable indexes while retaining immutable package shards."""
         cls.clear_caches()
+        cls._disk_cache_disabled = False
         cls.cache_dir = directory.resolve() if directory is not None else None
-        cls.refresh_after = datetime.datetime.now(datetime.UTC) if refresh else None
+        cls.cache_policy = policy or RepodataCachePolicy.for_run(refresh=refresh)
 
     @classmethod
     def _disk_cache(cls) -> diskcache.Cache:
@@ -116,6 +122,46 @@ class ShardClient:
         # disk usage (1 GiB by default). Store compressed bytes, not parsed objects.
         directory = (cls.cache_dir or get_cache_root()) / "shards-v1"
         return diskcache.Cache(directory)
+
+    @classmethod
+    def _disk_cache_operation[Result](
+        cls, operation: Callable[[diskcache.Cache], Result], default: Result
+    ) -> Result:
+        """Treat storage failures as cache misses, preserving downloaded data."""
+        if cls._disk_cache_disabled:
+            return default
+        try:
+            with cls._disk_cache() as cache:
+                return operation(cache)
+        except (sqlite3.DatabaseError, OSError, diskcache.Timeout) as exc:
+            # DatabaseError also includes programming and SQL errors. Only
+            # recover from storage failures, using SQLite's primary error code
+            # so extended errors (e.g. SQLITE_IOERR_READ) are handled too.
+            if isinstance(exc, sqlite3.DatabaseError) and (
+                getattr(exc, "sqlite_errorcode", 0) & 0xFF
+            ) not in {
+                sqlite3.SQLITE_CORRUPT,
+                sqlite3.SQLITE_NOTADB,
+                sqlite3.SQLITE_CANTOPEN,
+                sqlite3.SQLITE_PERM,
+                sqlite3.SQLITE_READONLY,
+                sqlite3.SQLITE_FULL,
+                sqlite3.SQLITE_IOERR,
+                sqlite3.SQLITE_BUSY,
+                sqlite3.SQLITE_LOCKED,
+            }:
+                raise
+            cls._disk_cache_disabled = True
+            directory = (cls.cache_dir or get_cache_root()) / "shards-v1"
+            logger.warning(
+                "Disabling shard disk cache %s for this process: %s. "
+                "Continuing with downloads and memory caching. "
+                "Check cache storage and permissions; if corrupt, remove this directory "
+                "only after all processes using it have stopped.",
+                directory,
+                exc,
+            )
+            return default
 
     @classmethod
     def clear_caches(cls) -> None:
@@ -232,32 +278,29 @@ class ShardClient:
             raise ShardsUnavailable("Shard index retry cooldown is active")
         cls._shards_unavailable.pop(index_url, None)
         cached = cls._shard_index_cache.get(index_url)
-        if (
-            cached is not None
-            and 0
-            <= (now - cached.fetched_at).total_seconds()
-            <= cls.shard_index_cache_timeout
+        if cached is not None and cls.cache_policy.is_fresh(
+            cached.fetched_at.timestamp()
         ):
             return cached
         cls._shard_index_cache.pop(index_url, None)
         if cached is None:
-            with cls._disk_cache() as cache:
-                raw, expires_at = cache.get(("index", index_url), expire_time=True)
-            if raw is not None and expires_at is not None:
-                fetched_at = datetime.datetime.fromtimestamp(
-                    expires_at - cls.shard_index_cache_timeout, datetime.UTC
-                )
-                if cls.refresh_after is None or fetched_at >= cls.refresh_after:
-                    try:
+            stored = cls._disk_cache_operation(
+                lambda cache: cache.get(("index-v2", index_url)), None
+            )
+            if stored is not None:
+                try:
+                    # Store the download timestamp explicitly: changing a TTL
+                    # must not change the apparent age of existing metadata.
+                    raw, fetched_at = stored
+                    if cls.cache_policy.is_fresh(fetched_at):
                         index = cls._parse_shard_index(raw, index_url)
-                    except ShardError:
-                        logger.warning(
-                            "Ignoring invalid cached shard index %s", index_url
+                        index.fetched_at = datetime.datetime.fromtimestamp(
+                            fetched_at, datetime.UTC
                         )
-                    else:
-                        index.fetched_at = fetched_at
                         cls._shard_index_cache[index_url] = index
                         return index
+                except (ShardError, TypeError, ValueError, OverflowError):
+                    logger.warning("Ignoring invalid cached shard index %s", index_url)
         try:
             [raw] = fetch(
                 [FetchRequest(index_url, f"{channel}/{subdir} shards index")],
@@ -276,8 +319,14 @@ class ShardClient:
             cls._shards_unavailable[index_url] = datetime.datetime.now(datetime.UTC)
             raise
         cls._shard_index_cache[index_url] = index
-        with cls._disk_cache() as cache:
-            cache.set(("index", index_url), raw, expire=cls.shard_index_cache_timeout)
+        cls._disk_cache_operation(
+            lambda cache: cache.set(
+                ("index-v2", index_url),
+                (raw, index.fetched_at.timestamp()),
+                expire=cls.cache_policy.max_age,
+            ),
+            False,
+        )
         return index
 
     @classmethod
@@ -352,8 +401,9 @@ class ShardClient:
                 continue
             cls._package_shards_unavailable.pop(url, None)
             cls._remember_shard(url, records)
-            with cls._disk_cache() as cache:
-                cache.set(("shard", url), raw)
+            cls._disk_cache_operation(
+                lambda cache, url=url, raw=raw: cache.set(("shard", url), raw), False
+            )
             records_by_url[url] = records
         if failures:
             url, error = failures[0]
@@ -370,7 +420,8 @@ class ShardClient:
         records_by_url: dict[str, tuple[PackageRecord, ...]],
     ) -> None:
         """Remove disk cache hits from ``missing`` before counting requests."""
-        with cls._disk_cache() as cache:
+
+        def read(cache: diskcache.Cache) -> None:
             for url, name in list(missing.items()):
                 raw = cache.get(("shard", url))
                 if raw is None:
@@ -384,6 +435,8 @@ class ShardClient:
                     cls._remember_shard(url, records)
                     records_by_url[url] = records
                     del missing[url]
+
+        cls._disk_cache_operation(read, None)
 
     @classmethod
     def _remember_shard(cls, url: str, records: tuple[PackageRecord, ...]) -> None:

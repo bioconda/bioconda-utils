@@ -4,9 +4,11 @@ import asyncio
 import datetime
 import json
 import logging
+import sqlite3
 import subprocess
 import sys
 
+import diskcache
 import msgpack
 import pytest
 import zstandard
@@ -409,7 +411,7 @@ def test_expired_indexes_and_changed_hashes_refetch(sharded, monkeypatch):
         "version", channels=Channel("high"), name="example"
     ) == ["old"]
     url = index_url(repository, "high")
-    ShardClient._shard_index_cache[url].fetched_at -= datetime.timedelta(minutes=16)
+    ShardClient._shard_index_cache[url].fetched_at -= datetime.timedelta(hours=9)
     set_index(repository, bodies, example="new")
     set_shard(repository, bodies, [record(version="new")], shard_hash="new")
     assert repository.get_package_data(
@@ -421,6 +423,39 @@ def test_expired_indexes_and_changed_hashes_refetch(sharded, monkeypatch):
         "version", channels=Channel("high"), name="example"
     ) == ["new"]
     assert requests.count(url) == 3
+
+
+@pytest.mark.parametrize("cache_layer", ["memory", "disk"])
+@pytest.mark.parametrize("age_hours", [1, 7, 8, 9, -1])
+def test_shard_indexes_follow_eight_hour_policy(sharded, cache_layer, age_hours):
+    repository, bodies, requests = sharded
+    set_index(repository, bodies, example="old")
+    set_shard(repository, bodies, [record(version="old")], shard_hash="old")
+    assert repository.get_package_data(
+        "version", channels=Channel("high"), name="example"
+    ) == ["old"]
+    url = index_url(repository, "high")
+    fetched_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(
+        hours=age_hours
+    )
+    ShardClient._shard_index_cache[url].fetched_at = fetched_at
+    with ShardClient._disk_cache() as cache:
+        cache.set(
+            ("index-v2", url),
+            (bodies[url], fetched_at.timestamp()),
+            expire=ShardClient.cache_policy.max_age,
+        )
+    if cache_layer == "disk":
+        ShardClient.clear_caches()
+    set_index(repository, bodies, example="new")
+    set_shard(repository, bodies, [record(version="new")], shard_hash="new")
+
+    fresh = 0 <= age_hours < 8
+    for _ in range(2):
+        assert repository.get_package_data(
+            "version", channels=Channel("high"), name="example"
+        ) == ["old" if fresh else "new"]
+    assert requests.count(url) == (1 if fresh else 2)
 
 
 def test_shards_persist_across_cache_configuration(sharded, tmp_path):
@@ -448,7 +483,7 @@ def test_disk_index_refresh_reuses_unchanged_shards(sharded, refresh):
     ) == ["1"]
     if not refresh:
         with ShardClient._disk_cache() as cache:
-            cache.touch(("index", index_url(repository, "high")), expire=-1)
+            cache.touch(("index-v2", index_url(repository, "high")), expire=-1)
     RepoData.configure_cache(refresh=refresh)
     # The refreshed index selects a new shard alongside an unchanged one.
     set_index(repository, bodies, example="hash", other="new")
@@ -466,7 +501,7 @@ def test_disk_index_refresh_reuses_unchanged_shards(sharded, refresh):
     assert sum(url.endswith("/new.msgpack.zst") for url in requests) == 1
 
 
-@pytest.mark.parametrize("kind", ["index", "shard"])
+@pytest.mark.parametrize("kind", ["index-v2", "shard"])
 def test_corrupt_disk_entries_are_redownloaded(sharded, kind, caplog):
     repository, bodies, requests = sharded
     set_index(repository, bodies, example="hash")
@@ -474,9 +509,13 @@ def test_corrupt_disk_entries_are_redownloaded(sharded, kind, caplog):
     assert repository.get_package_data(
         "version", channels=Channel("high"), name="example"
     ) == ["1"]
-    url = requests[0 if kind == "index" else 1]
+    url = requests[0 if kind == "index-v2" else 1]
     with ShardClient._disk_cache() as cache:
-        cache.set((kind, url), b"corrupt", expire=900 if kind == "index" else None)
+        cache.set(
+            (kind, url),
+            b"corrupt",
+            expire=ShardClient.cache_policy.max_age if kind == "index-v2" else None,
+        )
     for _ in range(2):
         ShardClient.clear_caches()
         assert repository.get_package_data(
@@ -485,6 +524,129 @@ def test_corrupt_disk_entries_are_redownloaded(sharded, kind, caplog):
     assert requests.count(url) == 2
     assert len(requests) == 3
     assert "Ignoring invalid cached" in caplog.text
+
+
+def test_corrupt_disk_database_disables_cache_without_losing_metadata(
+    sharded, tmp_path, caplog
+):
+    repository, bodies, requests = sharded
+    root = tmp_path / "broken-cache"
+    ShardClient.configure_cache(root)
+    directory = root / "shards-v1"
+    directory.mkdir(parents=True)
+    damaged = directory / "cache.db"
+    damaged.write_bytes(b"broken SQLite cache")
+    set_index(repository, bodies, example="hash")
+    set_shard(repository, bodies, [record()])
+
+    for _ in range(2):
+        assert repository.get_package_data(
+            "version", channels=Channel("high"), name="example"
+        ) == ["1"]
+        # Clearing parsed metadata must not repeatedly reopen the broken cache.
+        ShardClient.clear_caches()
+
+    assert len(requests) == 4
+    assert damaged.read_bytes() == b"broken SQLite cache"
+    warnings = [r for r in caplog.records if "Disabling shard disk cache" in r.message]
+    assert len(warnings) == 1
+    assert str(directory) in warnings[0].message
+    assert "file is not a database" in warnings[0].message
+    assert "after all processes" in warnings[0].message
+
+    # Explicit reconfiguration allows a repaired or different cache to be used.
+    healthy = tmp_path / "healthy-cache"
+    ShardClient.configure_cache(healthy)
+    assert repository.get_package_data(
+        "version", channels=Channel("high"), name="example"
+    ) == ["1"]
+    ShardClient.clear_caches()
+    assert repository.get_package_data(
+        "version", channels=Channel("high"), name="example"
+    ) == ["1"]
+    assert len(requests) == 6
+    assert (healthy / "shards-v1/cache.db").exists()
+
+
+@pytest.mark.parametrize(
+    ("operation", "kind"),
+    [
+        ("get", "index-v2"),
+        ("get", "shard"),
+        ("set", "index-v2"),
+        ("set", "shard"),
+        ("delete", "shard"),
+    ],
+)
+def test_disk_cache_storage_errors_preserve_results(
+    sharded, monkeypatch, caplog, operation, kind
+):
+    repository, bodies, requests = sharded
+    set_index(repository, bodies, example="hash")
+    set_shard(repository, bodies, [record()])
+    if operation == "delete":
+        assert repository.get_package_data(
+            "version", channels=Channel("high"), name="example"
+        ) == ["1"]
+        with ShardClient._disk_cache() as cache:
+            cache.set(("shard", requests[-1]), b"corrupt")
+        ShardClient.clear_caches()
+
+    original = getattr(diskcache.Cache, operation)
+    failures = []
+
+    def fail_storage(self, key, *args, **kwargs):
+        if key[0] == kind:
+            failures.append(key)
+            raise OSError("cache storage unavailable")
+        return original(self, key, *args, **kwargs)
+
+    monkeypatch.setattr(diskcache.Cache, operation, fail_storage)
+    for _ in range(2):
+        assert repository.get_package_data(
+            "version", channels=Channel("high"), name="example"
+        ) == ["1"]
+
+    assert len(failures) == 1
+    assert len(requests) == (3 if operation == "delete" else 2)
+    assert (
+        len([r for r in caplog.records if "Disabling shard disk cache" in r.message])
+        == 1
+    )
+    assert not list(repository.get_cache_dir().glob("*.sqlite"))
+
+
+def test_disabled_disk_cache_does_not_hide_metadata_failure(sharded, monkeypatch):
+    repository, bodies, _requests = sharded
+
+    def fail_cache():
+        raise diskcache.Timeout("cache locked")
+
+    monkeypatch.setattr(ShardClient, "_disk_cache", fail_cache)
+    # Missing shards trigger full repodata, whose failure must still propagate.
+    url = repository._make_repodata_url(Channel("high"), "noarch")
+    bodies[url + ".zst"] = OSError("repository unavailable")
+    with pytest.raises(OSError, match="repository unavailable"):
+        repository.get_package_data("version", channels=Channel("high"), name="example")
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        sqlite3.ProgrammingError("closed database"),
+        sqlite3.OperationalError("no such table: unexpected"),
+        RuntimeError("unexpected bug"),
+    ],
+)
+def test_disk_cache_programming_errors_propagate(sharded, monkeypatch, error):
+    repository, _bodies, _requests = sharded
+
+    def fail_cache():
+        raise error
+
+    monkeypatch.setattr(ShardClient, "_disk_cache", fail_cache)
+    with pytest.raises(type(error), match=str(error)):
+        repository.get_package_data("version", channels=Channel("high"), name="example")
 
 
 def test_explicit_cache_directory_isolated_from_other_caches(sharded, tmp_path):

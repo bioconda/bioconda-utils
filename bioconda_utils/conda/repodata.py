@@ -41,6 +41,7 @@ from .._types import (
 )
 from ..support.caching import file_lock, get_cache_root, memoize
 from ..support.logsetup import progress_display
+from .cache import RepodataCachePolicy
 from .fetch import FetchRequest, fetch
 from .shards import ShardClient
 
@@ -114,10 +115,7 @@ class RepoData:
     config: ClassVar[Config | None] = None
 
     cache_dir: ClassVar[Path | None] = None
-    refresh_after: ClassVar[datetime.datetime | None] = None
-
-    #: Repository lifetime; no full-table in-memory cache is kept.
-    cache_timeout: ClassVar[float] = 60 * 60 * 8
+    cache_policy: ClassVar[RepodataCachePolicy] = RepodataCachePolicy()
 
     @classmethod
     def register_config(cls, config: Config) -> None:
@@ -125,12 +123,16 @@ class RepoData:
 
     @classmethod
     def configure_cache(
-        cls, directory: Path | None = None, *, refresh: bool = False
+        cls,
+        directory: Path | None = None,
+        *,
+        refresh: bool = False,
+        policy: RepodataCachePolicy | None = None,
     ) -> None:
         """Choose a cache directory; None restores the platform/XDG default."""
-        ShardClient.configure_cache(directory, refresh=refresh)
+        cls.cache_policy = policy or RepodataCachePolicy.for_run(refresh=refresh)
+        ShardClient.configure_cache(directory, policy=cls.cache_policy)
         cls.cache_dir = directory.resolve() if directory is not None else None
-        cls.refresh_after = datetime.datetime.now(datetime.UTC) if refresh else None
 
     @classmethod
     def get_cache_dir(cls) -> Path:
@@ -143,12 +145,6 @@ class RepoData:
 
     def _cache_path(self, url: str) -> Path:
         return self.get_cache_dir() / (sha256(url.encode()).hexdigest() + ".sqlite")
-
-    def _is_fresh(self, fetched_at: float) -> bool:
-        now = datetime.datetime.now(datetime.UTC).timestamp()
-        return 0 <= now - fetched_at < self.cache_timeout and (
-            self.refresh_after is None or fetched_at >= self.refresh_after.timestamp()
-        )
 
     def _read_cache(self, path: Path) -> sqlite3.Connection | None:
         """Open a fresh database without deserializing its package records."""
@@ -167,7 +163,7 @@ class RepoData:
             connection.execute(
                 "SELECT name, version, build, build_number, depends FROM packages LIMIT 0"
             )
-            if self._is_fresh(fetched_at):
+            if self.cache_policy.is_fresh(fetched_at):
                 return connection
         except (sqlite3.DatabaseError, TypeError, IndexError):
             logger.warning("Ignoring unreadable repodata cache %s", path)
