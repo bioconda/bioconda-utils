@@ -194,6 +194,45 @@ def worker_cache_policies():
     return RepoData.cache_policy, ShardClient.cache_policy
 
 
+@pytest.mark.parametrize(
+    "cache_state", ["fresh", "missing", "expired", "corrupt", "refresh"]
+)
+def test_prefetch_needed_unless_every_repository_has_fresh_full_metadata(
+    repository, monkeypatch, cache_state
+):
+    repository.get_cache_dir().mkdir(parents=True)
+    for channel, subdir in repository._repositories(
+        repository.channels, repository.platforms
+    ):
+        path = repository._cache_path(repository._make_repodata_url(channel, subdir))
+        repository._write_cache(path, repodata(subdir=subdir))
+    # Damage the last repository to ensure partial coverage never skips prefetch.
+    if cache_state == "missing":
+        path.unlink()
+    elif cache_state == "expired":
+        repository._write_cache(path, repodata(subdir=subdir), fetched_at=0)
+    elif cache_state == "corrupt":
+        path.write_bytes(b"broken SQLite cache")
+    elif cache_state == "refresh":
+        RepoData.configure_cache(repository.get_cache_dir(), refresh=True)
+
+    def forbid_download(*args):
+        pytest.fail("Inspecting cache coverage must not download metadata")
+
+    monkeypatch.setattr(repository, "_download_repository", forbid_download)
+    assert repository.needs_prefetch() == (cache_state != "fresh")
+
+
+def test_local_channels_do_not_need_prefetch(repository, monkeypatch):
+    monkeypatch.setattr(RepoData, "config", Config(channels=[Channel("file:///local")]))
+
+    def forbid_cache_read(*args):
+        pytest.fail("Local channels must not inspect persistent metadata")
+
+    monkeypatch.setattr(repository, "_read_cache", forbid_cache_read)
+    assert not repository.needs_prefetch()
+
+
 def test_workers_share_metadata_freshness_and_refresh_cutoff(repository):
     policy = RepodataCachePolicy(max_age=3600, refresh_after=time.time())
     RepoData.configure_cache(repository.get_cache_dir(), policy=policy)

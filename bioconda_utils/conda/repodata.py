@@ -366,6 +366,22 @@ class RepoData:
             )
             yield connection
 
+    def needs_prefetch(self) -> bool:
+        """Whether any remote repository lacks fresh full repodata.
+
+        Call before collecting package names to avoid recipe parsing when
+        every subsequent query can already use a fresh full repository.
+        """
+        for channel, subdir in self._repositories(self.channels, self.platforms):
+            url = self._make_repodata_url(channel, subdir)
+            if url.startswith("file://"):
+                continue
+            connection = self._read_cache(self._cache_path(url))
+            if connection is None:
+                return True
+            connection.close()
+        return False
+
     def prefetch(self, names: Iterable[str]) -> None:
         """Batch metadata downloads before making per-package queries.
 

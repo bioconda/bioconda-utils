@@ -703,11 +703,42 @@ class Linter:
         """Plan downloads from enabled checks without retaining every recipe."""
         from ..conda.repodata import RepoData
 
+        globally_skipped = self._expand_checks_to_skip(set(self.exclude), report=False)
+        metadata_checks = [
+            check
+            for check in get_checks()
+            if str(check) not in globally_skipped
+            and check.get_repodata_names.__func__
+            is not LintCheck.get_repodata_names.__func__
+        ]
+        if not metadata_checks:
+            return
+
         names: set[str] = set()
+        cache_checked = False
         with progress_display.status("Preparing lint metadata"):
             for path in recipe_names:
                 if path.build_system != BuildSystem.CONDA:
                     continue
+                skipped = self._expand_checks_to_skip(
+                    set(self.skip[path.path.as_posix()]), report=False
+                )
+                enabled = [
+                    check for check in metadata_checks if str(check) not in skipped
+                ]
+                if not enabled:
+                    continue
+                if not cache_checked:
+                    try:
+                        if not RepoData().needs_prefetch():
+                            return
+                    except Exception:
+                        logger.warning(
+                            "Metadata cache inspection failed; lint checks will retry on demand",
+                            exc_info=True,
+                        )
+                        return
+                    cache_checked = True
                 recipe = _recipe.Recipe.from_file(
                     self.recipe_folder, path.path, return_exceptions=True
                 )
@@ -716,7 +747,7 @@ class Linter:
                     continue
                 try:
                     skipped = self._checks_to_skip(recipe, report=False)
-                    for check in get_checks():
+                    for check in enabled:
                         if str(check) not in skipped:
                             names.update(
                                 name
@@ -742,7 +773,12 @@ class Linter:
         checks_to_skip.update(self.exclude)
         if isinstance(recipe.get("extra/skip-lints", []), list):
             checks_to_skip.update(recipe.get("extra/skip-lints", []))
+        return self._expand_checks_to_skip(checks_to_skip, report=report)
 
+    def _expand_checks_to_skip(
+        self, checks_to_skip: set[str], *, report: bool
+    ) -> set[str]:
+        """Disable dependent checks for global, commit, and recipe skips alike."""
         for check in list(checks_to_skip):
             if check not in self.checks_dag:
                 if report:

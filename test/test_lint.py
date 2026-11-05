@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from typing import ClassVar
 
@@ -5,7 +6,7 @@ import pytest
 from ruamel.yaml import YAML
 
 from bioconda_utils import lint
-from bioconda_utils._types import CONDA, Config, RecipePath, ensure_list
+from bioconda_utils._types import CONDA, Channel, Config, RecipePath, ensure_list
 from bioconda_utils.config import load_config
 
 yaml = YAML(typ="rt")  # pylint: disable=invalid-name
@@ -210,6 +211,7 @@ def test_lint_prefetches_selected_names_before_checks(monkeypatch, tmp_path):
     monkeypatch.setattr(
         RepoData, "prefetch", lambda self, names: events.append(set(names))
     )
+    monkeypatch.setattr(RepoData, "needs_prefetch", lambda self: True)
     monkeypatch.setattr(
         lint.Linter, "lint_one", lambda *args, **kwargs: events.append("lint") or []
     )
@@ -225,7 +227,9 @@ def test_lint_prefetches_selected_names_before_checks(monkeypatch, tmp_path):
     ]
 
 
-@pytest.mark.parametrize("skip", ["global", "recipe", "commit", "prerequisite"])
+@pytest.mark.parametrize(
+    "skip", ["global", "recipe", "commit", "prerequisite", "commit-prerequisite"]
+)
 def test_metadata_prefetch_respects_disabled_checks(monkeypatch, tmp_path, skip):
     from bioconda_utils.conda.repodata import RepoData
 
@@ -250,10 +254,26 @@ def test_metadata_prefetch_respects_disabled_checks(monkeypatch, tmp_path, skip)
     )
     monkeypatch.setenv(
         "LINT_SKIP",
-        f"[lint skip metadata_check for {path}]" if skip == "commit" else "",
+        f"[lint skip metadata_check for {path}]"
+        if skip == "commit"
+        else f"[lint skip prerequisite for {path}]"
+        if skip == "commit-prerequisite"
+        else "",
     )
     calls = []
     monkeypatch.setattr(RepoData, "prefetch", lambda *args: calls.append(args))
+    inspected = []
+    monkeypatch.setattr(
+        RepoData, "needs_prefetch", lambda self: inspected.append(True) or True
+    )
+    loads = []
+    load = lint._recipe.Recipe.from_file
+
+    def load_recipe(*args, **kwargs):
+        loads.append(args[1])
+        return load(*args, **kwargs)
+
+    monkeypatch.setattr(lint._recipe.Recipe, "from_file", load_recipe)
     exclude = {"global": ["metadata_check"], "prerequisite": ["prerequisite"]}.get(skip)
 
     lint.Linter(Config(), tmp_path, exclude=exclude).prefetch_repodata(
@@ -261,10 +281,61 @@ def test_metadata_prefetch_respects_disabled_checks(monkeypatch, tmp_path, skip)
     )
 
     assert calls == []
+    assert loads == ([path] if skip == "recipe" else [])
+    assert inspected == ([True] if skip == "recipe" else [])
 
 
+@pytest.mark.parametrize("cache_state", ["warm", "cold", "expired", "refresh"])
+def test_lint_only_parses_recipes_once_when_full_metadata_is_fresh(
+    monkeypatch, tmp_path, cache_state
+):
+    from bioconda_utils.conda.repodata import RepoData
+    from bioconda_utils.conda.shards import ShardClient
+    from bioconda_utils.lint.check_repo import in_other_channels
+
+    monkeypatch.setenv("LINT_SKIP", "")
+    monkeypatch.setattr(lint, "get_checks", lambda: [in_other_channels])
+    config = Config(channels=[Channel("bioconda")])
+    monkeypatch.setattr(RepoData, "config", config)
+    monkeypatch.setattr(RepoData, "platforms", ["noarch"])
+    monkeypatch.setattr(ShardClient, "get_repository_shards", lambda *args: None)
+    path = tmp_path / "example"
+    path.mkdir()
+    (path / "meta.yaml").write_text("package: {name: example, version: 1}\n")
+    raw = json.dumps({"info": {"subdir": "noarch"}, "packages": {}}).encode()
+    repository = RepoData()
+    if cache_state != "cold":
+        cache_path = repository._cache_path(
+            repository._make_repodata_url(Channel("bioconda"), "noarch")
+        )
+        cache_path.parent.mkdir(parents=True)
+        repository._write_cache(
+            cache_path, raw, fetched_at=0 if cache_state == "expired" else None
+        )
+    if cache_state == "refresh":
+        RepoData.configure_cache(repository.get_cache_dir(), refresh=True)
+    downloads = []
+    monkeypatch.setattr(
+        RepoData, "_download_repository", lambda *args: downloads.append(True) or raw
+    )
+    loads = []
+    load = lint._recipe.Recipe.from_file
+
+    def load_recipe(*args, **kwargs):
+        loads.append(kwargs.get("return_exceptions", False))
+        return load(*args, **kwargs)
+
+    monkeypatch.setattr(lint._recipe.Recipe, "from_file", load_recipe)
+    linter = lint.Linter(config, tmp_path)
+    assert not linter.lint([RecipePath(path, CONDA)])
+    assert linter.get_messages() == []
+    assert loads == ([False] if cache_state == "warm" else [True, False])
+    assert downloads == ([] if cache_state == "warm" else [True])
+
+
+@pytest.mark.parametrize("failure", ["inspection", "download"])
 def test_failed_prefetch_leaves_normal_lint_checks_running(
-    monkeypatch, tmp_path, caplog
+    monkeypatch, tmp_path, caplog, failure
 ):
     from bioconda_utils.conda.repodata import RepoData
     from bioconda_utils.lint.check_repo import in_other_channels
@@ -279,6 +350,11 @@ def test_failed_prefetch_leaves_normal_lint_checks_running(
         raise OSError("download failed")
 
     monkeypatch.setattr(RepoData, "prefetch", fail_prefetch)
+    monkeypatch.setattr(
+        RepoData,
+        "needs_prefetch",
+        fail_prefetch if failure == "inspection" else lambda self: True,
+    )
     calls = []
     monkeypatch.setattr(
         lint.Linter, "lint_one", lambda *args, **kwargs: calls.append("lint") or []
@@ -286,4 +362,9 @@ def test_failed_prefetch_leaves_normal_lint_checks_running(
 
     assert not lint.Linter(Config(), tmp_path).lint([RecipePath(path, CONDA)])
     assert calls == ["lint"]
-    assert "Metadata prefetch failed" in caplog.text
+    expected = (
+        "Metadata cache inspection failed"
+        if failure == "inspection"
+        else "Metadata prefetch failed"
+    )
+    assert expected in caplog.text
