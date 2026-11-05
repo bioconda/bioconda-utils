@@ -60,12 +60,14 @@ def _initialize_worker(
     config,
     cache_dir: Path,
     cache_root: Path,
+    shard_cache_dir: Path | None,
     cache_timeout: float,
     refresh_after,
     threads: int,
     loglevel: int,
 ) -> None:
     from ..conda.repodata import RepoData
+    from ..conda.shards import ShardClient
     from .caching import configure_cache_root
 
     threading.Thread(target=_exit_with_parent, daemon=True).start()
@@ -77,6 +79,8 @@ def _initialize_worker(
     RepoData.configure_cache(cache_dir)
     RepoData.cache_timeout = cache_timeout
     RepoData.refresh_after = refresh_after
+    ShardClient.configure_cache(shard_cache_dir)
+    ShardClient.refresh_after = refresh_after
     set_max_threads(threads)
     root = logging.getLogger()
     root.handlers[:] = [QueueHandler(queue)]
@@ -87,6 +91,7 @@ def _initialize_worker(
 def worker_pool(workers: int) -> Generator[ProcessPoolExecutor]:
     """Start independent workers with explicit configuration and parent logging."""
     from ..conda.repodata import RepoData
+    from ..conda.shards import ShardClient
     from .caching import get_cache_root
 
     context = get_context("spawn")
@@ -103,6 +108,7 @@ def worker_pool(workers: int) -> Generator[ProcessPoolExecutor]:
                 RepoData.config,
                 RepoData.get_cache_dir(),
                 get_cache_root(),
+                ShardClient.cache_dir,
                 RepoData.cache_timeout,
                 RepoData.refresh_after,
                 workers,

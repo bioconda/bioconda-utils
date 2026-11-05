@@ -126,7 +126,7 @@ class RepoData:
         cls, directory: Path | None = None, *, refresh: bool = False
     ) -> None:
         """Choose a cache directory; None restores the platform/XDG default."""
-        ShardClient.clear_caches()
+        ShardClient.configure_cache(directory, refresh=refresh)
         cls.cache_dir = directory.resolve() if directory is not None else None
         cls.refresh_after = datetime.datetime.now(datetime.UTC) if refresh else None
 

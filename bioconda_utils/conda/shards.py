@@ -3,7 +3,7 @@
 Repositories may publish sharded repodata next to ``repodata.json``: an
 index (``repodata_shards.msgpack.zst``) maps package names to hashes of
 individual ``<hash>.msgpack.zst`` shard files. :class:`ShardClient` resolves
-package records from shards, caching indexes and shard records in memory,
+package records from shards, caching indexes and shards on disk and in memory,
 and backing off from shards or indexes that failed to download.
 """
 
@@ -14,10 +14,12 @@ import logging
 from collections import OrderedDict
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, ClassVar
 from urllib.parse import urljoin
 
 import aiohttp
+import diskcache
 import msgpack
 import zstandard
 
@@ -27,6 +29,7 @@ from .._types import (
     Subdir,
     parse_package_record,
 )
+from ..support.caching import get_cache_root
 from .fetch import FetchRequest, fetch
 
 logger = logging.getLogger(__name__)
@@ -92,6 +95,24 @@ class ShardClient:
     #: Shard indexes are mutable; content-addressed package shards are not.
     shard_index_cache_timeout = 60 * 15
     package_shard_cache_max_entries = 4096
+    cache_dir: ClassVar[Path | None] = None
+    refresh_after: ClassVar[datetime.datetime | None] = None
+
+    @classmethod
+    def configure_cache(
+        cls, directory: Path | None = None, *, refresh: bool = False
+    ) -> None:
+        """Refresh mutable indexes while retaining immutable package shards."""
+        cls.clear_caches()
+        cls.cache_dir = directory.resolve() if directory is not None else None
+        cls.refresh_after = datetime.datetime.now(datetime.UTC) if refresh else None
+
+    @classmethod
+    def _disk_cache(cls) -> diskcache.Cache:
+        # DiskCache publishes entries atomically across processes and bounds
+        # disk usage (1 GiB by default). Store compressed bytes, not parsed objects.
+        directory = (cls.cache_dir or get_cache_root()) / "shards-v1"
+        return diskcache.Cache(directory)
 
     @classmethod
     def clear_caches(cls) -> None:
@@ -216,6 +237,24 @@ class ShardClient:
         ):
             return cached
         cls._shard_index_cache.pop(index_url, None)
+        if cached is None:
+            with cls._disk_cache() as cache:
+                raw, expires_at = cache.get(("index", index_url), expire_time=True)
+            if raw is not None and expires_at is not None:
+                fetched_at = datetime.datetime.fromtimestamp(
+                    expires_at - cls.shard_index_cache_timeout, datetime.UTC
+                )
+                if cls.refresh_after is None or fetched_at >= cls.refresh_after:
+                    try:
+                        index = cls._parse_shard_index(raw, index_url)
+                    except ShardError:
+                        logger.warning(
+                            "Ignoring invalid cached shard index %s", index_url
+                        )
+                    else:
+                        index.fetched_at = fetched_at
+                        cls._shard_index_cache[index_url] = index
+                        return index
         try:
             [raw] = fetch(
                 [FetchRequest(index_url, f"{channel}/{subdir} shards index")],
@@ -234,6 +273,8 @@ class ShardClient:
             cls._shards_unavailable[index_url] = datetime.datetime.now(datetime.UTC)
             raise
         cls._shard_index_cache[index_url] = index
+        with cls._disk_cache() as cache:
+            cache.set(("index", index_url), raw, expire=cls.shard_index_cache_timeout)
         return index
 
     @classmethod
@@ -275,6 +316,8 @@ class ShardClient:
         records_by_url: dict[str, tuple[PackageRecord, ...]],
     ) -> None:
         """Cache successful downloads; raise ShardError if any shard fails."""
+        if not missing:
+            return
         try:
             results = fetch(
                 [
@@ -305,15 +348,46 @@ class ShardClient:
                 failures.append((url, exc))
                 continue
             cls._package_shards_unavailable.pop(url, None)
-            cls._package_shard_cache[url] = _CachedPackageShard(records)
-            while len(cls._package_shard_cache) > cls.package_shard_cache_max_entries:
-                cls._package_shard_cache.popitem(last=False)
+            cls._remember_shard(url, records)
+            with cls._disk_cache() as cache:
+                cache.set(("shard", url), raw)
             records_by_url[url] = records
         if failures:
             url, error = failures[0]
             raise ShardError(
                 f"{error} (URL: {url}; {len(failures)} package shards failed)"
             ) from error
+
+    @classmethod
+    def _read_disk_shards(
+        cls,
+        channel: Channel,
+        subdir: Subdir,
+        missing: dict[str, str],
+        records_by_url: dict[str, tuple[PackageRecord, ...]],
+    ) -> None:
+        """Remove disk cache hits from ``missing`` before counting requests."""
+        with cls._disk_cache() as cache:
+            for url, name in list(missing.items()):
+                raw = cache.get(("shard", url))
+                if raw is None:
+                    continue
+                try:
+                    records = cls._parse_package_shard(raw, (channel, subdir, name))
+                except ShardError:
+                    logger.warning("Ignoring invalid cached package shard %s", url)
+                    cache.delete(("shard", url))
+                else:
+                    cls._remember_shard(url, records)
+                    records_by_url[url] = records
+                    del missing[url]
+
+    @classmethod
+    def _remember_shard(cls, url: str, records: tuple[PackageRecord, ...]) -> None:
+        cls._package_shard_cache[url] = _CachedPackageShard(records)
+        cls._package_shard_cache.move_to_end(url)
+        while len(cls._package_shard_cache) > cls.package_shard_cache_max_entries:
+            cls._package_shard_cache.popitem(last=False)
 
     @classmethod
     def get_repository_shards(
@@ -340,6 +414,8 @@ class ShardClient:
                 shard_name_by_url.setdefault(cls.shard_url(index, shard_hash), name)
             records_by_url: dict[str, tuple[PackageRecord, ...]] = {}
             missing = cls._cached_shards(shard_name_by_url, records_by_url)
+            if missing:
+                cls._read_disk_shards(channel, subdir, missing, records_by_url)
             if missing:
                 cls._download_shards(channel, subdir, missing, records_by_url)
             wanted = set(names)

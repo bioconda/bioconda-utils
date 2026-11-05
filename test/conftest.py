@@ -139,6 +139,8 @@ def isolated_repodata_cache(monkeypatch, tmp_path):
     monkeypatch.setattr(shards.ShardClient, "_package_shard_cache", OrderedDict())
     monkeypatch.setattr(shards.ShardClient, "_shards_unavailable", {})
     monkeypatch.setattr(shards.ShardClient, "_package_shards_unavailable", {})
+    monkeypatch.setattr(shards.ShardClient, "cache_dir", None)
+    monkeypatch.setattr(shards.ShardClient, "refresh_after", None)
 
 
 @pytest.fixture

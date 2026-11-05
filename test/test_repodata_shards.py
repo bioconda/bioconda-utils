@@ -4,6 +4,8 @@ import asyncio
 import datetime
 import json
 import logging
+import subprocess
+import sys
 
 import msgpack
 import pytest
@@ -14,6 +16,13 @@ from bioconda_utils.conda import fetch, repodata, shards
 from bioconda_utils.conda.fetch import FetchRequest
 from bioconda_utils.conda.repodata import RepoData
 from bioconda_utils.conda.shards import ShardClient
+from bioconda_utils.support.caching import configure_cache_root, get_cache_root
+from bioconda_utils.support.parallel import worker_pool
+
+
+def _worker_versions():
+    RepoData.platforms = ["noarch"]
+    return RepoData().get_package_data("version", name="example")
 
 
 def _pack_shard(data):
@@ -409,6 +418,83 @@ def test_expired_indexes_and_changed_hashes_refetch(sharded, monkeypatch):
     assert requests.count(url) == 3
 
 
+def test_shards_persist_across_cache_configuration(sharded, tmp_path):
+    repository, bodies, requests = sharded
+    root = tmp_path / "custom-cache"
+    configure_cache_root(root)
+    set_index(repository, bodies, example="hash")
+    set_shard(repository, bodies, [record()])
+    for _ in range(2):
+        RepoData.configure_cache()
+        assert repository.get_package_data(
+            "version", channels=Channel("high"), name="example"
+        ) == ["1"]
+    assert len(requests) == 2
+    assert (root / "shards-v1").is_dir()
+
+
+@pytest.mark.parametrize("refresh", [False, True])
+def test_disk_index_refresh_reuses_unchanged_shards(sharded, refresh):
+    repository, bodies, requests = sharded
+    set_index(repository, bodies, example="hash")
+    set_shard(repository, bodies, [record()])
+    assert repository.get_package_data(
+        "version", channels=Channel("high"), name="example"
+    ) == ["1"]
+    if not refresh:
+        with ShardClient._disk_cache() as cache:
+            cache.touch(("index", index_url(repository, "high")), expire=-1)
+    RepoData.configure_cache(refresh=refresh)
+    # The refreshed index selects a new shard alongside an unchanged one.
+    set_index(repository, bodies, example="hash", other="new")
+    set_shard(repository, bodies, [record(name="other", version="2")], shard_hash="new")
+    assert repository.get_package_data(
+        "version", channels=Channel("high"), name=["example", "other"]
+    ) == ["1", "2"]
+    # Refresh must not repeatedly invalidate the newly fetched index.
+    ShardClient.clear_caches()
+    assert repository.get_package_data(
+        "version", channels=Channel("high"), name="example"
+    ) == ["1"]
+    assert requests.count(index_url(repository, "high")) == 2
+    assert sum(url.endswith("/hash.msgpack.zst") for url in requests) == 1
+    assert sum(url.endswith("/new.msgpack.zst") for url in requests) == 1
+
+
+@pytest.mark.parametrize("kind", ["index", "shard"])
+def test_corrupt_disk_entries_are_redownloaded(sharded, kind, caplog):
+    repository, bodies, requests = sharded
+    set_index(repository, bodies, example="hash")
+    set_shard(repository, bodies, [record()])
+    assert repository.get_package_data(
+        "version", channels=Channel("high"), name="example"
+    ) == ["1"]
+    url = requests[0 if kind == "index" else 1]
+    with ShardClient._disk_cache() as cache:
+        cache.set((kind, url), b"corrupt", expire=900 if kind == "index" else None)
+    for _ in range(2):
+        ShardClient.clear_caches()
+        assert repository.get_package_data(
+            "version", channels=Channel("high"), name="example"
+        ) == ["1"]
+    assert requests.count(url) == 2
+    assert len(requests) == 3
+    assert "Ignoring invalid cached" in caplog.text
+
+
+def test_explicit_cache_directory_isolated_from_other_caches(sharded, tmp_path):
+    repository, bodies, requests = sharded
+    set_index(repository, bodies, example="hash")
+    set_shard(repository, bodies, [record()])
+    for directory in (tmp_path / "first", tmp_path / "second", tmp_path / "first"):
+        RepoData.configure_cache(directory)
+        assert repository.get_package_data(
+            "version", channels=Channel("high"), name="example"
+        ) == ["1"]
+        assert (directory / "shards-v1").is_dir()
+    assert len(requests) == 4
+
+
 def test_negative_index_cache_expires(sharded, monkeypatch, caplog):
     repository, bodies, requests = sharded
     loads = fallback(repository, monkeypatch, [record()])
@@ -528,6 +614,40 @@ def test_http_shards_and_missing_index_fallback(monkeypatch):
             "/low/noarch/repodata.json",
         ]
         assert len(list(repository.get_cache_dir().glob("*.sqlite"))) == 1
+        # A new interpreter has no in-memory shard caches. It must reuse the
+        # parent's persistent entries without making another HTTP request.
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import sys\n"
+                    "from pathlib import Path\n"
+                    "from bioconda_utils._types import Channel, Config\n"
+                    "from bioconda_utils.conda.repodata import RepoData\n"
+                    "from bioconda_utils.support.caching import configure_cache_root\n"
+                    "configure_cache_root(Path(sys.argv[2]))\n"
+                    "RepoData.register_config(Config(channels=[Channel(sys.argv[1])]))\n"
+                    "RepoData.platforms = ['noarch']\n"
+                    "assert RepoData().get_package_data('version', name='example') == ['sharded']\n"
+                ),
+                f"http://127.0.0.1:{server.server_port}/high",
+                str(get_cache_root()),
+            ],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=30,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        monkeypatch.setattr(
+            RepoData,
+            "config",
+            Config(channels=[Channel(f"http://127.0.0.1:{server.server_port}/high")]),
+        )
+        with worker_pool(1) as pool:
+            assert pool.submit(_worker_versions).result(timeout=30) == ["sharded"]
+        assert len(requests) == 4
     finally:
         server.shutdown()
         server.server_close()
