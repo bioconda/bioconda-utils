@@ -619,6 +619,7 @@ def test_http_shards_and_missing_index_fallback(monkeypatch):
             "/high/noarch/repodata_shards.msgpack.zst",
             "/high/noarch/shards/hash.msgpack.zst",
             "/low/noarch/repodata_shards.msgpack.zst",
+            "/low/noarch/repodata.json.zst",
             "/low/noarch/repodata.json",
         ]
         assert len(list(repository.get_cache_dir().glob("*.sqlite"))) == 1
@@ -655,7 +656,7 @@ def test_http_shards_and_missing_index_fallback(monkeypatch):
         )
         with worker_pool(1) as pool:
             assert pool.submit(_worker_versions).result(timeout=30) == ["sharded"]
-        assert len(requests) == 4
+        assert len(requests) == 5
     finally:
         server.shutdown()
         server.server_close()

@@ -94,7 +94,10 @@ are always read afresh. `build`, `lint`, `update-pinning`, and `autobump`
 accept `--cache DIRECTORY` to choose a shared root for all application caches and
 `--refresh-repodata` to refresh entries needed by the current run. Targeted
 package queries use shards when available, with indexes refreshed after fifteen
-minutes and SQLite repodata as fallback. Repodata, recipe graphs, upstream
+minutes and SQLite repodata as fallback. Full repodata downloads prefer
+`repodata.json.zst`, with progress measured in compressed bytes, and fall back
+to JSON if the compressed file is unavailable. Decompression and SQLite
+indexing have separate status indicators. Repodata, recipe graphs, upstream
 downloads, API lookups, and rattler-build use internal subdirectories under
 that shared root.
 `--cache` now takes a directory; the old filename-prefix and pickle cache

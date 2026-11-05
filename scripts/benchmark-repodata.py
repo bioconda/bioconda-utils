@@ -65,6 +65,9 @@ def main():
     bodies["/channel/noarch/repodata.json"] = json.dumps(
         {"info": {"subdir": "noarch"}, "packages": packages}
     ).encode()
+    bodies["/channel/noarch/repodata.json.zst"] = zstandard.ZstdCompressor().compress(
+        bodies["/channel/noarch/repodata.json"]
+    )
     bodies["/channel/noarch/repodata_shards.msgpack.zst"] = (
         zstandard.ZstdCompressor().compress(
             msgpack.packb(
@@ -104,11 +107,13 @@ def main():
         )
         RepoData.platforms = ["noarch"]
         size = len(bodies["/channel/noarch/repodata.json"]) / 2**20
+        compressed_size = len(bodies["/channel/noarch/repodata.json.zst"]) / 2**20
         print(
-            f"{args.packages} packages x {args.builds} builds; {size:.1f} MiB full JSON"
+            f"{args.packages} packages x {args.builds} builds; "
+            f"{size:.1f} MiB JSON / {compressed_size:.2f} MiB zstd"
         )
         print(f"{args.latency_ms:g} ms latency; 4 concurrent connections per host")
-        print("missing shards  batched shards (s)  full repodata (s)")
+        print("missing shards  batched shards (s)  full repodata.zst (s)")
         with tempfile.TemporaryDirectory() as directory:
             for count in args.counts:
                 timings = []

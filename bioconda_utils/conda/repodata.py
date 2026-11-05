@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import ClassVar, cast
 
 import requests
+import zstandard
 
 from .._types import (
     ALL_PACKAGE_SUBDIRS,
@@ -39,6 +40,7 @@ from .._types import (
     parse_package_record,
 )
 from ..support.caching import file_lock, get_cache_root, memoize
+from ..support.logsetup import progress_display
 from .fetch import FetchRequest, fetch
 from .shards import ShardClient
 
@@ -260,6 +262,34 @@ class RepoData:
 
     def _download_repository(self, channel: Channel, subdir: Subdir) -> bytes:
         url = self._make_repodata_url(channel, subdir)
+        if not url.startswith("file://"):
+            [raw] = fetch(
+                [
+                    FetchRequest(
+                        url + ".zst",
+                        f"{channel}/{subdir} repodata.json.zst",
+                        "identity",
+                    )
+                ],
+                allow_404=True,
+            )
+            if raw is not None:
+                with progress_display.status(
+                    f"Decompressing repodata for {channel}/{subdir}"
+                ):
+                    # Stream frames without requiring their uncompressed sizes.
+                    # Check EOF explicitly: a truncated frame must not populate
+                    # the cache even if it happens to contain complete JSON.
+                    chunks = []
+                    while raw:
+                        decoder = zstandard.ZstdDecompressor().decompressobj()
+                        chunks.append(decoder.decompress(raw))
+                        if not decoder.eof:
+                            raise zstandard.ZstdError("Incomplete zstd repodata frame")
+                        raw = decoder.unused_data
+                    if not chunks:
+                        raise zstandard.ZstdError("Empty zstd repodata response")
+                    return b"".join(chunks)
         return fetch([FetchRequest(url, f"{channel}/{subdir}")])[0]
 
     def _repositories(
@@ -301,7 +331,12 @@ class RepoData:
                     # temporary files left by SIGKILL without touching other files.
                     for abandoned in path.parent.glob(".repodata-*.tmp*"):
                         abandoned.unlink(missing_ok=True)
-                    self._write_cache(path, self._download_repository(channel, subdir))
+                    raw = self._download_repository(channel, subdir)
+                    with progress_display.status(
+                        f"Indexing repodata for {channel}/{subdir}"
+                    ):
+                        self._write_cache(path, raw)
+                    del raw
                     connection = self._read_cache(path)
                     if connection is None:
                         raise RuntimeError(f"New repodata cache is invalid: {path}")

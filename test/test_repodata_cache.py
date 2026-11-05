@@ -9,6 +9,7 @@ from contextlib import closing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
+import zstandard
 
 from bioconda_utils._types import Channel, Config
 from bioconda_utils.conda.repodata import RepoData
@@ -78,6 +79,8 @@ def test_explicit_http_channel_downloads_and_reuses_cache(repository, monkeypatc
         def do_GET(self):
             requests.append(self.path)
             body = repodata()
+            if self.path.endswith(".zst"):
+                body = zstandard.ZstdCompressor().compress(body)
             self.send_response(200)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
@@ -96,7 +99,7 @@ def test_explicit_http_channel_downloads_and_reuses_cache(repository, monkeypatc
             assert RepoData().get_package_data(
                 "name", channels=channel, platform="noarch"
             ) == ["example"]
-        assert requests == ["/mirror/bioconda/noarch/repodata.json"]
+        assert requests == ["/mirror/bioconda/noarch/repodata.json.zst"]
         assert len(list(repository.get_cache_dir().glob("*.sqlite"))) == 1
     finally:
         server.shutdown()
@@ -306,6 +309,8 @@ def test_concurrent_spawned_workers_download_repository_once(repository):
                     },
                 }
             ).encode()
+            if self.path.endswith(".zst"):
+                body = zstandard.ZstdCompressor().compress(body)
             self.send_response(200)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
@@ -328,7 +333,7 @@ def test_concurrent_spawned_workers_download_repository_once(repository):
         # An independent process pool reuses the persisted entry, too.
         with worker_pool(1) as pool:
             assert pool.submit(query_repository, url).result(timeout=30) == ["example"]
-        assert requests == ["/bioconda/noarch/repodata.json"]
+        assert requests == ["/bioconda/noarch/repodata.json.zst"]
         # A refresh cutoff is shared with workers, and only one worker refreshes
         # the still-fresh disk entry for this run.
         RepoData.configure_cache(repository.get_cache_dir(), refresh=True)
@@ -338,7 +343,7 @@ def test_concurrent_spawned_workers_download_repository_once(repository):
                 ["example"],
                 ["example"],
             ]
-        assert requests == ["/bioconda/noarch/repodata.json"] * 2
+        assert requests == ["/bioconda/noarch/repodata.json.zst"] * 2
     finally:
         server.shutdown()
         server.server_close()
