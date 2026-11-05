@@ -32,6 +32,7 @@ from .._types import (
 )
 from ..support.caching import get_cache_root
 from .cache import RepodataCachePolicy
+from .compression import decompress_zstd
 from .fetch import FetchRequest, fetch
 
 logger = logging.getLogger(__name__)
@@ -51,8 +52,7 @@ class ShardError(ShardsUnavailable):
 
 def _unpack_msgpack_zst(data: bytes) -> Any:
     """Decompress zstandard-compressed msgpack data."""
-    decompressed = zstandard.ZstdDecompressor().stream_reader(data).read()
-    return msgpack.unpackb(decompressed)
+    return msgpack.unpackb(decompress_zstd(data))
 
 
 @dataclass
@@ -283,24 +283,23 @@ class ShardClient:
         ):
             return cached
         cls._shard_index_cache.pop(index_url, None)
-        if cached is None:
-            stored = cls._disk_cache_operation(
-                lambda cache: cache.get(("index-v2", index_url)), None
-            )
-            if stored is not None:
-                try:
-                    # Store the download timestamp explicitly: changing a TTL
-                    # must not change the apparent age of existing metadata.
-                    raw, fetched_at = stored
-                    if cls.cache_policy.is_fresh(fetched_at):
-                        index = cls._parse_shard_index(raw, index_url)
-                        index.fetched_at = datetime.datetime.fromtimestamp(
-                            fetched_at, datetime.UTC
-                        )
-                        cls._shard_index_cache[index_url] = index
-                        return index
-                except (ShardError, TypeError, ValueError, OverflowError):
-                    logger.warning("Ignoring invalid cached shard index %s", index_url)
+        stored = cls._disk_cache_operation(
+            lambda cache: cache.get(("index-v2", index_url)), None
+        )
+        if stored is not None:
+            try:
+                # Store the download timestamp explicitly: changing a TTL
+                # must not change the apparent age of existing metadata.
+                raw, fetched_at = stored
+                if cls.cache_policy.is_fresh(fetched_at):
+                    index = cls._parse_shard_index(raw, index_url)
+                    index.fetched_at = datetime.datetime.fromtimestamp(
+                        fetched_at, datetime.UTC
+                    )
+                    cls._shard_index_cache[index_url] = index
+                    return index
+            except (ShardError, TypeError, ValueError, OverflowError):
+                logger.warning("Ignoring invalid cached shard index %s", index_url)
         try:
             [raw] = fetch(
                 [FetchRequest(index_url, f"{channel}/{subdir} shards index")],

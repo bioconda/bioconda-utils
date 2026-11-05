@@ -412,6 +412,8 @@ def test_expired_indexes_and_changed_hashes_refetch(sharded, monkeypatch):
     ) == ["old"]
     url = index_url(repository, "high")
     ShardClient._shard_index_cache[url].fetched_at -= datetime.timedelta(hours=9)
+    with ShardClient._disk_cache() as cache:
+        cache.touch(("index-v2", url), expire=-1)
     set_index(repository, bodies, example="new")
     set_shard(repository, bodies, [record(version="new")], shard_hash="new")
     assert repository.get_package_data(
@@ -423,6 +425,104 @@ def test_expired_indexes_and_changed_hashes_refetch(sharded, monkeypatch):
         "version", channels=Channel("high"), name="example"
     ) == ["new"]
     assert requests.count(url) == 3
+
+
+@pytest.mark.parametrize("age_hours", [9, -1])
+def test_stale_memory_index_reuses_index_refreshed_on_disk(
+    sharded, monkeypatch, age_hours
+):
+    repository, bodies, requests = sharded
+    set_index(repository, bodies, example="old")
+    url = repository._make_repodata_url(Channel("high"), "noarch")
+    old = ShardClient._get_shard_index(Channel("high"), "noarch", url)
+    old.fetched_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(
+        hours=age_hours
+    )
+    index = index_url(repository, "high")
+    set_index(repository, bodies, example="new")
+    with ShardClient._disk_cache() as cache:
+        cache.set(
+            ("index-v2", index),
+            (bodies[index], datetime.datetime.now(datetime.UTC).timestamp()),
+            expire=ShardClient.cache_policy.max_age,
+        )
+
+    def forbid_download(*args, **kwargs):
+        pytest.fail("A fresh shared index must be reused without network access")
+
+    monkeypatch.setattr(shards, "fetch", forbid_download)
+    for _ in range(2):
+        assert ShardClient._get_shard_index(Channel("high"), "noarch", url).shards == {
+            "example": "new"
+        }
+    assert requests == [index]
+
+
+@pytest.mark.parametrize("kind", ["index", "shard"])
+@pytest.mark.parametrize("framing", ["known-size", "unknown-size", "multiple-frames"])
+def test_sharded_metadata_accepts_complete_zstd_frames(kind, framing):
+    payload = msgpack.packb(
+        {"version": 1, "info": {}, "shards": {"example": "hash"}}
+        if kind == "index"
+        else {"packages": {"example.conda": record()}, "packages.conda": {}}
+    )
+    compressor = zstandard.ZstdCompressor(
+        write_checksum=True, write_content_size=framing != "unknown-size"
+    )
+    compressed = (
+        compressor.compress(payload[:20]) + compressor.compress(payload[20:])
+        if framing == "multiple-frames"
+        else compressor.compress(payload)
+    )
+    if kind == "index":
+        assert ShardClient._parse_shard_index(
+            compressed, "https://example.org/index"
+        ).shards == {"example": "hash"}
+    else:
+        assert [
+            r.name
+            for r in ShardClient._parse_package_shard(
+                compressed, (Channel("high"), "noarch", "example")
+            )
+        ] == ["example"]
+
+
+@pytest.mark.parametrize("kind", ["index", "shard"])
+@pytest.mark.parametrize(
+    "suffix", ["truncated-checksum", "truncated-second-frame", "garbage"]
+)
+def test_incomplete_sharded_metadata_falls_back_without_caching(
+    sharded, monkeypatch, kind, suffix
+):
+    repository, bodies, requests = sharded
+    set_index(repository, bodies, example="hash")
+    set_shard(repository, bodies, [record()])
+    index = index_url(repository, "high")
+    bad_url = (
+        index
+        if kind == "index"
+        else index.rsplit("/", 1)[0] + "/shards/hash.msgpack.zst"
+    )
+    payload = shards._unpack_msgpack_zst(bodies[bad_url])
+    compressor = zstandard.ZstdCompressor(write_checksum=True)
+    compressed = compressor.compress(msgpack.packb(payload))
+    bodies[bad_url] = (
+        compressed[:-1]
+        if suffix == "truncated-checksum"
+        else compressed + compressor.compress(b"")[:-1]
+        if suffix == "truncated-second-frame"
+        else compressed + b"garbage"
+    )
+    loads = fallback(repository, monkeypatch, [record(version="full")])
+    assert repository.get_package_data(
+        "version", channels=Channel("high"), name="example"
+    ) == ["full"]
+    assert loads == [("high", "noarch")]
+    assert bad_url in requests
+    assert bad_url not in ShardClient._shard_index_cache
+    assert bad_url not in ShardClient._package_shard_cache
+    with ShardClient._disk_cache() as cache:
+        assert cache.get(("index-v2" if kind == "index" else "shard", bad_url)) is None
 
 
 @pytest.mark.parametrize("cache_layer", ["memory", "disk"])

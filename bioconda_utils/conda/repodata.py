@@ -26,7 +26,6 @@ from pathlib import Path
 from typing import ClassVar, cast
 
 import requests
-import zstandard
 
 from .._types import (
     ALL_PACKAGE_SUBDIRS,
@@ -42,6 +41,7 @@ from .._types import (
 from ..support.caching import file_lock, get_cache_root, memoize
 from ..support.logsetup import progress_display
 from .cache import RepodataCachePolicy
+from .compression import decompress_zstd
 from .fetch import FetchRequest, fetch
 from .shards import ShardClient
 
@@ -273,19 +273,7 @@ class RepoData:
                 with progress_display.status(
                     f"Decompressing repodata for {channel}/{subdir}"
                 ):
-                    # Stream frames without requiring their uncompressed sizes.
-                    # Check EOF explicitly: a truncated frame must not populate
-                    # the cache even if it happens to contain complete JSON.
-                    chunks = []
-                    while raw:
-                        decoder = zstandard.ZstdDecompressor().decompressobj()
-                        chunks.append(decoder.decompress(raw))
-                        if not decoder.eof:
-                            raise zstandard.ZstdError("Incomplete zstd repodata frame")
-                        raw = decoder.unused_data
-                    if not chunks:
-                        raise zstandard.ZstdError("Empty zstd repodata response")
-                    return b"".join(chunks)
+                    return decompress_zstd(raw)
         return fetch([FetchRequest(url, f"{channel}/{subdir}")])[0]
 
     def _repositories(
