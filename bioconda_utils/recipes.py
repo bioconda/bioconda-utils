@@ -177,3 +177,44 @@ def get_recipes(
                     " If you want to ignore this directory, add it to the blacklist.",
                     new_dir,
                 )
+
+
+def get_recipes_from_paths(
+    recipe_folder: Path,
+    paths: Sequence[Path],
+    package_patterns: Sequence[str] = ("*",),
+) -> Iterator[RecipePath]:
+    """Discover recipes only in the supplied directories, without walking trees.
+
+    Match patterns against each directory and its ancestors within the recipe
+    collection: selecting a package also selects its nested version recipes,
+    just as the recursive discovery in ``get_recipes`` does.
+    """
+    patterns: list[str] = []
+    for pattern in package_patterns:
+        glob_path = Path(pattern)
+        if glob_path.anchor:
+            raise NotImplementedError("Non-relative patterns are unsupported")
+        parts = list(glob_path.parts)
+        if not parts:
+            raise ValueError(f"Unacceptable pattern: {pattern!r}")
+        # Path.glob('alpha/**') includes alpha itself. Descending from the
+        # matched ancestors already covers everything a trailing ** selects.
+        while parts and parts[-1] == "**":
+            parts.pop()
+        patterns.append("/".join(parts))
+
+    for path in paths:
+        if not path.is_relative_to(recipe_folder):
+            continue
+        relative = path.relative_to(recipe_folder)
+        if not any(
+            not pattern or ancestor.full_match(pattern)
+            for pattern in patterns
+            for ancestor in (relative, *relative.parents)
+        ):
+            continue
+        if (path / "meta.yaml").is_file():
+            yield RecipePath(path=path, build_system=CONDA)
+        elif (path / "recipe.yaml").is_file():
+            yield RecipePath(path=path, build_system=RATTLER)
