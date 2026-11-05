@@ -58,7 +58,8 @@ def mock_repodata(case, monkeypatch):
                build_number: 0
     """
     records = {}
-    for channel, packages in case.get("repodata", {}).items():
+    for channel_name, packages in case.get("repodata", {}).items():
+        channel = Channel(channel_name)
         for name, versions in packages.items():
             for item in versions:
                 record = {

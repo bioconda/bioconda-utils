@@ -34,9 +34,7 @@ from .._types import (
     PackageRecord,
     PackageSubdir,
     Subdir,
-    container_platform_to_package_subdir,
     native_container_platform,
-    parse_package_record,
 )
 from ..support.caching import file_lock, get_cache_root, memoize
 from ..support.logsetup import progress_display
@@ -101,9 +99,6 @@ class RepoData:
     removed from the repository.
 
     """
-
-    REPODATA_URL = "https://conda.anaconda.org/{channel}/{subdir}/repodata.json"
-    REPODATA_DEFAULTS_URL = "https://repo.anaconda.com/pkgs/main/{subdir}/repodata.json"
 
     _load_columns: ClassVar = ["build", "build_number", "name", "version", "depends"]
 
@@ -192,7 +187,7 @@ class RepoData:
     ) -> Iterator[PackageRecord]:
         for filename, raw_record in packages.items():
             try:
-                yield parse_package_record(raw_record)
+                yield PackageRecord.from_repodata(raw_record)
             except TypeError as exc:
                 raise ValueError(
                     f"Invalid package record {filename!r} in {subdir} repodata: {exc}"
@@ -257,8 +252,8 @@ class RepoData:
             temporary.with_name(temporary.name + "-journal").unlink(missing_ok=True)
 
     def _download_repository(self, channel: Channel, subdir: Subdir) -> bytes:
-        url = self._make_repodata_url(channel, subdir)
-        if not url.startswith("file://"):
+        url = channel.repodata_url(subdir)
+        if not channel.is_local:
             [raw] = fetch(
                 [
                     FetchRequest(
@@ -289,8 +284,8 @@ class RepoData:
 
     @contextmanager
     def _open_repository(self, channel: Channel, subdir: Subdir):
-        url = self._make_repodata_url(channel, subdir)
-        if url.startswith("file://"):
+        url = channel.repodata_url(subdir)
+        if channel.is_local:
             with closing(sqlite3.connect(":memory:")) as connection:
                 self._populate_database(
                     connection,
@@ -329,8 +324,8 @@ class RepoData:
 
     @contextmanager
     def _open_query_repository(self, channel: Channel, subdir: Subdir, names):
-        url = self._make_repodata_url(channel, subdir)
-        if not url.startswith("file://"):
+        url = channel.repodata_url(subdir)
+        if not channel.is_local:
             connection = self._read_cache(self._cache_path(url))
             if connection is not None:
                 with closing(connection):
@@ -361,8 +356,8 @@ class RepoData:
         every subsequent query can already use a fresh full repository.
         """
         for channel, subdir in self._repositories(self.channels, self.platforms):
-            url = self._make_repodata_url(channel, subdir)
-            if url.startswith("file://"):
+            url = channel.repodata_url(subdir)
+            if channel.is_local:
                 continue
             connection = self._read_cache(self._cache_path(url))
             if connection is None:
@@ -380,9 +375,9 @@ class RepoData:
         if not names:
             return
         for channel, subdir in self._repositories(self.channels, self.platforms):
-            url = self._make_repodata_url(channel, subdir)
+            url = channel.repodata_url(subdir)
             # Local channels are read afresh by queries; preloading is pointless.
-            if url.startswith("file://"):
+            if channel.is_local:
                 continue
             connection = self._read_cache(self._cache_path(url))
             if connection is not None:
@@ -392,21 +387,11 @@ class RepoData:
                 with self._open_repository(channel, subdir):
                     pass
 
-    def _make_repodata_url(self, channel: Channel, subdir: Subdir) -> str:
-        if channel.startswith(("http://", "https://", "file://")):
-            return f"{channel}/{subdir}/repodata.json"
-        if channel == "defaults":
-            # caveat: this only gets defaults main, not 'free', 'r' or 'pro'
-            url_template = self.REPODATA_DEFAULTS_URL
-        else:
-            url_template = self.REPODATA_URL
-        return url_template.format(channel=channel, subdir=subdir)
-
     @staticmethod
     def native_subdir() -> PackageSubdir:
         """Return the conda package subdir notation for this host."""
         if sys.platform.startswith("linux"):
-            return container_platform_to_package_subdir(native_container_platform())
+            return native_container_platform().to_subdir()
         if sys.platform.startswith("darwin"):
             arch = platform.machine().lower()
             return "osx-arm64" if arch == "arm64" else "osx-64"

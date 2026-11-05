@@ -129,7 +129,7 @@ def test_bad_zstd_preserves_old_cache_without_falling_back(
     server_repository, compressed
 ):
     repository, bodies, requests, channel = server_repository
-    path = repository._cache_path(repository._make_repodata_url(channel, "noarch"))
+    path = repository._cache_path(channel.repodata_url("noarch"))
     path.parent.mkdir(parents=True)
     repository._write_cache(path, metadata("old"), fetched_at=0)
     old_cache = path.read_bytes()

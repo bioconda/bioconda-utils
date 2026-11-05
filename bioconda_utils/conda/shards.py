@@ -28,7 +28,6 @@ from .._types import (
     Channel,
     PackageRecord,
     Subdir,
-    parse_package_record,
 )
 from ..support.caching import get_cache_root
 from .cache import RepodataCachePolicy
@@ -67,6 +66,9 @@ class _CachedShardIndex:
     shards: dict[str, str]
     shards_base_url: str
     fetched_at: datetime.datetime
+
+    def shard_url(self, hex_hash: str) -> str:
+        return urljoin(self.shards_base_url, f"{hex_hash}.msgpack.zst")
 
 
 @dataclass
@@ -175,10 +177,6 @@ class ShardClient:
         return repodata_url.rsplit("/", 1)[0] + "/" + SHARDS_INDEX_FILENAME
 
     @staticmethod
-    def shard_url(shard_index: _CachedShardIndex, hex_hash: str) -> str:
-        return urljoin(shard_index.shards_base_url, f"{hex_hash}.msgpack.zst")
-
-    @staticmethod
     def _parse_shard_index(data: bytes, index_url: str) -> _CachedShardIndex:
         try:
             raw = _unpack_msgpack_zst(data)
@@ -245,7 +243,7 @@ class ShardClient:
             packages.update(raw_conda_packages)
 
             records = tuple(
-                parse_package_record(raw_record, default_name=package_name)
+                PackageRecord.from_repodata(raw_record, default_name=package_name)
                 for raw_record in packages.values()
             )
         except (
@@ -455,7 +453,7 @@ class ShardClient:
         """
         if not names:
             return []
-        if channel.startswith("file://"):
+        if channel.is_local:
             return None
         try:
             index = cls._get_shard_index(channel, subdir, repodata_url)
@@ -466,7 +464,7 @@ class ShardClient:
                     # A missing name in a valid index is authoritative.
                     continue
                 # Repeated names and names sharing a shard need only one URL.
-                shard_name_by_url.setdefault(cls.shard_url(index, shard_hash), name)
+                shard_name_by_url.setdefault(index.shard_url(shard_hash), name)
             records_by_url: dict[str, tuple[PackageRecord, ...]] = {}
             missing = cls._cached_shards(shard_name_by_url, records_by_url)
             if missing:

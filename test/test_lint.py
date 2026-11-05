@@ -305,9 +305,7 @@ def test_lint_only_parses_recipes_once_when_full_metadata_is_fresh(
     raw = json.dumps({"info": {"subdir": "noarch"}, "packages": {}}).encode()
     repository = RepoData()
     if cache_state != "cold":
-        cache_path = repository._cache_path(
-            repository._make_repodata_url(Channel("bioconda"), "noarch")
-        )
+        cache_path = repository._cache_path(Channel("bioconda").repodata_url("noarch"))
         cache_path.parent.mkdir(parents=True)
         repository._write_cache(
             cache_path, raw, fetched_at=0 if cache_state == "expired" else None

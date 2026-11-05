@@ -32,9 +32,7 @@ def _pack_shard(data):
 
 
 def index_url(repository, channel, subdir="noarch"):
-    return ShardClient.shards_index_url(
-        repository._make_repodata_url(Channel(channel), subdir)
-    )
+    return ShardClient.shards_index_url(Channel(channel).repodata_url(subdir))
 
 
 @pytest.mark.parametrize(
@@ -124,7 +122,7 @@ def test_repodata_resolves_shards_base_url(shards_base_url, expected):
         ),
         index_url(repository, "bioconda", PackageSubdir.LINUX_64),
     )
-    assert ShardClient.shard_url(index, "hash") == expected
+    assert index.shard_url("hash") == expected
 
 
 @pytest.fixture
@@ -377,9 +375,7 @@ def test_failed_shard_retry_keeps_successful_siblings(sharded, monkeypatch, capl
     ShardClient._package_shards_unavailable[bad_url] -= datetime.timedelta(minutes=6)
     # Fresh full repodata now takes precedence. Remove it to exercise a shard
     # retry after the cooldown without redownloading the successful sibling.
-    repository._cache_path(
-        repository._make_repodata_url(Channel("high"), "noarch")
-    ).unlink()
+    repository._cache_path(Channel("high").repodata_url("noarch")).unlink()
     set_shard(repository, bodies, [record(name="other")], shard_hash="bad")
     assert repository.get_package_data(
         "name", channels=Channel("high"), name=["example", "other"]
@@ -433,7 +429,7 @@ def test_stale_memory_index_reuses_index_refreshed_on_disk(
 ):
     repository, bodies, requests = sharded
     set_index(repository, bodies, example="old")
-    url = repository._make_repodata_url(Channel("high"), "noarch")
+    url = Channel("high").repodata_url("noarch")
     old = ShardClient._get_shard_index(Channel("high"), "noarch", url)
     old.fetched_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(
         hours=age_hours
@@ -724,7 +720,7 @@ def test_disabled_disk_cache_does_not_hide_metadata_failure(sharded, monkeypatch
 
     monkeypatch.setattr(ShardClient, "_disk_cache", fail_cache)
     # Missing shards trigger full repodata, whose failure must still propagate.
-    url = repository._make_repodata_url(Channel("high"), "noarch")
+    url = Channel("high").repodata_url("noarch")
     bodies[url + ".zst"] = OSError("repository unavailable")
     with pytest.raises(OSError, match="repository unavailable"):
         repository.get_package_data("version", channels=Channel("high"), name="example")
@@ -770,9 +766,7 @@ def test_negative_index_cache_expires(sharded, monkeypatch, caplog):
     url = index_url(repository, "high")
     assert requests == [url]
     ShardClient._shards_unavailable[url] -= datetime.timedelta(minutes=6)
-    repository._cache_path(
-        repository._make_repodata_url(Channel("high"), "noarch")
-    ).unlink()
+    repository._cache_path(Channel("high").repodata_url("noarch")).unlink()
     set_index(repository, bodies, example="hash")
     set_shard(repository, bodies, [record(version="sharded")])
     assert repository.get_package_data(
@@ -783,19 +777,20 @@ def test_negative_index_cache_expires(sharded, monkeypatch, caplog):
     assert not caplog.records
 
 
-def test_shard_cache_identity_includes_repository_url(sharded):
+def test_shard_cache_identity_includes_repository_url(sharded, monkeypatch):
     repository, bodies, _ = sharded
     set_index(repository, bodies, example="hash")
     set_shard(repository, bodies, [record(version="first")])
     assert repository.get_package_data(
         "version", channels=Channel("high"), name="example"
     ) == ["first"]
-    repository.REPODATA_URL = "https://other.example/{channel}/{subdir}/repodata.json"
-    set_index(repository, bodies, example="hash")
-    set_shard(repository, bodies, [record(version="second")])
-    assert repository.get_package_data(
-        "version", channels=Channel("high"), name="example"
-    ) == ["second"]
+    mirror = Channel("https://other.example/high")
+    monkeypatch.setattr(RepoData, "config", Config(channels=[mirror]))
+    set_index(repository, bodies, mirror, example="hash")
+    set_shard(repository, bodies, [record(version="second")], mirror)
+    assert repository.get_package_data("version", channels=mirror, name="example") == [
+        "second"
+    ]
 
 
 def test_async_downloads_preserve_input_order_and_isolate_errors(monkeypatch):
@@ -864,11 +859,13 @@ def test_http_shards_and_missing_index_fallback(monkeypatch):
     try:
         monkeypatch.setattr(
             RepoData,
-            "REPODATA_URL",
-            f"http://127.0.0.1:{server.server_port}/{{channel}}/{{subdir}}/repodata.json",
-        )
-        monkeypatch.setattr(
-            RepoData, "config", Config(channels=[Channel("high"), Channel("low")])
+            "config",
+            Config(
+                channels=[
+                    Channel(f"http://127.0.0.1:{server.server_port}/high"),
+                    Channel(f"http://127.0.0.1:{server.server_port}/low"),
+                ]
+            ),
         )
         monkeypatch.setattr(RepoData, "platforms", ["noarch"])
         repository = RepoData()
