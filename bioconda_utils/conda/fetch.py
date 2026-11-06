@@ -37,10 +37,13 @@ class FetchRequest:
       url: The URL (or ``file://`` path) to download.
       description: Label for the progress display. Falls back to **url**
           when left empty.
+      accept_encoding: Override HTTP content negotiation, e.g. ``identity``
+          when downloading a precompressed file with a known byte count.
     """
 
     url: str
     description: str = ""
+    accept_encoding: str | None = None
 
 
 def fetch(
@@ -107,6 +110,7 @@ async def async_fetch(
                     request.url,
                     request.description or request.url,
                     allow_404=allow_404,
+                    accept_encoding=request.accept_encoding,
                 )
             except Exception as exc:
                 if not return_exceptions:
@@ -144,6 +148,7 @@ async def _async_fetch_one(
     description: str,
     *,
     allow_404: bool = False,
+    accept_encoding: str | None = None,
 ) -> bytes | None:
     if url.startswith("file://"):
         local_path = Path(url[7:])
@@ -163,7 +168,8 @@ async def _async_fetch_one(
             }
             raw = json.dumps(d).encode("UTF-8")
     else:
-        async with session.get(url) as resp:
+        headers = {"Accept-Encoding": accept_encoding} if accept_encoding else None
+        async with session.get(url, headers=headers) as resp:
             if allow_404 and resp.status == 404:
                 return None
             resp.raise_for_status()

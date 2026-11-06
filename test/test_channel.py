@@ -6,8 +6,34 @@ import sqlite3
 
 import pytest
 
-from bioconda_utils._types import Channel, Config
+from bioconda_utils._types import Channel, Config, PackageSubdir
 from bioconda_utils.config import normalize_config
+
+
+@pytest.mark.parametrize(
+    "value, expected_base, is_local",
+    [
+        ("bioconda", "https://conda.anaconda.org/bioconda", False),
+        (
+            "conda-forge/label/dev",
+            "https://conda.anaconda.org/conda-forge/label/dev",
+            False,
+        ),
+        ("defaults", "https://repo.anaconda.com/pkgs/main", False),
+        ("http://example.org/channel/", "http://example.org/channel", False),
+        (
+            "https://example.org/channel/label/dev",
+            "https://example.org/channel/label/dev",
+            False,
+        ),
+        ("file:///tmp/channel/", "file:///tmp/channel", True),
+    ],
+)
+@pytest.mark.parametrize("subdir", ["noarch", PackageSubdir.LINUX_64])
+def test_channel_metadata_location(value, expected_base, is_local, subdir):
+    channel = Channel(value)
+    assert channel.is_local is is_local
+    assert channel.repodata_url(subdir) == f"{expected_base}/{subdir}/repodata.json"
 
 
 @pytest.mark.parametrize("value", [None, 42, b"bioconda", ["bioconda"]])

@@ -34,11 +34,12 @@ from .._types import (
     PackageRecord,
     PackageSubdir,
     Subdir,
-    container_platform_to_package_subdir,
     native_container_platform,
-    parse_package_record,
 )
 from ..support.caching import file_lock, get_cache_root, memoize
+from ..support.logsetup import progress_display
+from .cache import RepodataCachePolicy
+from .compression import decompress_zstd
 from .fetch import FetchRequest, fetch
 from .shards import ShardClient
 
@@ -99,9 +100,6 @@ class RepoData:
 
     """
 
-    REPODATA_URL = "https://conda.anaconda.org/{channel}/{subdir}/repodata.json"
-    REPODATA_DEFAULTS_URL = "https://repo.anaconda.com/pkgs/main/{subdir}/repodata.json"
-
     _load_columns: ClassVar = ["build", "build_number", "name", "version", "depends"]
 
     #: Columns available to package queries
@@ -112,10 +110,7 @@ class RepoData:
     config: ClassVar[Config | None] = None
 
     cache_dir: ClassVar[Path | None] = None
-    refresh_after: ClassVar[datetime.datetime | None] = None
-
-    #: Repository lifetime; no full-table in-memory cache is kept.
-    cache_timeout: ClassVar[float] = 60 * 60 * 8
+    cache_policy: ClassVar[RepodataCachePolicy] = RepodataCachePolicy()
 
     @classmethod
     def register_config(cls, config: Config) -> None:
@@ -123,12 +118,16 @@ class RepoData:
 
     @classmethod
     def configure_cache(
-        cls, directory: Path | None = None, *, refresh: bool = False
+        cls,
+        directory: Path | None = None,
+        *,
+        refresh: bool = False,
+        policy: RepodataCachePolicy | None = None,
     ) -> None:
         """Choose a cache directory; None restores the platform/XDG default."""
-        ShardClient.clear_caches()
+        cls.cache_policy = policy or RepodataCachePolicy.for_run(refresh=refresh)
+        ShardClient.configure_cache(directory, policy=cls.cache_policy)
         cls.cache_dir = directory.resolve() if directory is not None else None
-        cls.refresh_after = datetime.datetime.now(datetime.UTC) if refresh else None
 
     @classmethod
     def get_cache_dir(cls) -> Path:
@@ -141,12 +140,6 @@ class RepoData:
 
     def _cache_path(self, url: str) -> Path:
         return self.get_cache_dir() / (sha256(url.encode()).hexdigest() + ".sqlite")
-
-    def _is_fresh(self, fetched_at: float) -> bool:
-        now = datetime.datetime.now(datetime.UTC).timestamp()
-        return 0 <= now - fetched_at < self.cache_timeout and (
-            self.refresh_after is None or fetched_at >= self.refresh_after.timestamp()
-        )
 
     def _read_cache(self, path: Path) -> sqlite3.Connection | None:
         """Open a fresh database without deserializing its package records."""
@@ -165,7 +158,7 @@ class RepoData:
             connection.execute(
                 "SELECT name, version, build, build_number, depends FROM packages LIMIT 0"
             )
-            if self._is_fresh(fetched_at):
+            if self.cache_policy.is_fresh(fetched_at):
                 return connection
         except (sqlite3.DatabaseError, TypeError, IndexError):
             logger.warning("Ignoring unreadable repodata cache %s", path)
@@ -194,7 +187,7 @@ class RepoData:
     ) -> Iterator[PackageRecord]:
         for filename, raw_record in packages.items():
             try:
-                yield parse_package_record(raw_record)
+                yield PackageRecord.from_repodata(raw_record)
             except TypeError as exc:
                 raise ValueError(
                     f"Invalid package record {filename!r} in {subdir} repodata: {exc}"
@@ -259,7 +252,23 @@ class RepoData:
             temporary.with_name(temporary.name + "-journal").unlink(missing_ok=True)
 
     def _download_repository(self, channel: Channel, subdir: Subdir) -> bytes:
-        url = self._make_repodata_url(channel, subdir)
+        url = channel.repodata_url(subdir)
+        if not channel.is_local:
+            [raw] = fetch(
+                [
+                    FetchRequest(
+                        url + ".zst",
+                        f"{channel}/{subdir} repodata.json.zst",
+                        "identity",
+                    )
+                ],
+                allow_404=True,
+            )
+            if raw is not None:
+                with progress_display.status(
+                    f"Decompressing repodata for {channel}/{subdir}"
+                ):
+                    return decompress_zstd(raw)
         return fetch([FetchRequest(url, f"{channel}/{subdir}")])[0]
 
     def _repositories(
@@ -275,8 +284,8 @@ class RepoData:
 
     @contextmanager
     def _open_repository(self, channel: Channel, subdir: Subdir):
-        url = self._make_repodata_url(channel, subdir)
-        if url.startswith("file://"):
+        url = channel.repodata_url(subdir)
+        if channel.is_local:
             with closing(sqlite3.connect(":memory:")) as connection:
                 self._populate_database(
                     connection,
@@ -301,7 +310,12 @@ class RepoData:
                     # temporary files left by SIGKILL without touching other files.
                     for abandoned in path.parent.glob(".repodata-*.tmp*"):
                         abandoned.unlink(missing_ok=True)
-                    self._write_cache(path, self._download_repository(channel, subdir))
+                    raw = self._download_repository(channel, subdir)
+                    with progress_display.status(
+                        f"Indexing repodata for {channel}/{subdir}"
+                    ):
+                        self._write_cache(path, raw)
+                    del raw
                     connection = self._read_cache(path)
                     if connection is None:
                         raise RuntimeError(f"New repodata cache is invalid: {path}")
@@ -310,11 +324,16 @@ class RepoData:
 
     @contextmanager
     def _open_query_repository(self, channel: Channel, subdir: Subdir, names):
+        url = channel.repodata_url(subdir)
+        if not channel.is_local:
+            connection = self._read_cache(self._cache_path(url))
+            if connection is not None:
+                with closing(connection):
+                    yield connection
+                return
         records = None
         if names is not None:
-            records = ShardClient.get_repository_shards(
-                channel, subdir, names, self._make_repodata_url(channel, subdir)
-            )
+            records = ShardClient.get_repository_shards(channel, subdir, names, url)
         if records is None:
             with self._open_repository(channel, subdir) as connection:
                 yield connection
@@ -330,21 +349,49 @@ class RepoData:
             )
             yield connection
 
-    def _make_repodata_url(self, channel: Channel, subdir: Subdir) -> str:
-        if channel.startswith(("http://", "https://", "file://")):
-            return f"{channel}/{subdir}/repodata.json"
-        if channel == "defaults":
-            # caveat: this only gets defaults main, not 'free', 'r' or 'pro'
-            url_template = self.REPODATA_DEFAULTS_URL
-        else:
-            url_template = self.REPODATA_URL
-        return url_template.format(channel=channel, subdir=subdir)
+    def has_fresh_full_repodata(self) -> bool:
+        """Whether all configured remote repositories have fresh full repodata.
+
+        Call before collecting package names to avoid recipe parsing when
+        every subsequent query can already use a fresh full repository.
+        """
+        for channel, subdir in self._repositories(self.channels, self.platforms):
+            url = channel.repodata_url(subdir)
+            if channel.is_local:
+                continue
+            connection = self._read_cache(self._cache_path(url))
+            if connection is None:
+                return False
+            connection.close()
+        return True
+
+    def prefetch(self, names: Iterable[str]) -> None:
+        """Batch metadata downloads before making per-package queries.
+
+        Choose shards or full repodata separately for each channel/subdir.
+        No SQL result tables are retained; subsequent queries use the caches.
+        """
+        names = sorted(set(names))
+        if not names:
+            return
+        for channel, subdir in self._repositories(self.channels, self.platforms):
+            url = channel.repodata_url(subdir)
+            # Local channels are read afresh by queries; preloading is pointless.
+            if channel.is_local:
+                continue
+            connection = self._read_cache(self._cache_path(url))
+            if connection is not None:
+                connection.close()
+                continue
+            if ShardClient.get_repository_shards(channel, subdir, names, url) is None:
+                with self._open_repository(channel, subdir):
+                    pass
 
     @staticmethod
     def native_subdir() -> PackageSubdir:
         """Return the conda package subdir notation for this host."""
         if sys.platform.startswith("linux"):
-            return container_platform_to_package_subdir(native_container_platform())
+            return native_container_platform().to_subdir()
         if sys.platform.startswith("darwin"):
             arch = platform.machine().lower()
             return "osx-arm64" if arch == "arm64" else "osx-64"

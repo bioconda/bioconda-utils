@@ -9,8 +9,10 @@ from contextlib import closing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
+import zstandard
 
 from bioconda_utils._types import Channel, Config
+from bioconda_utils.conda.cache import RepodataCachePolicy
 from bioconda_utils.conda.repodata import RepoData
 from bioconda_utils.conda.shards import ShardClient
 from bioconda_utils.support.parallel import worker_pool
@@ -51,26 +53,6 @@ def repository(monkeypatch):
     return RepoData()
 
 
-@pytest.mark.parametrize(
-    "channel, expected_base",
-    [
-        ("bioconda", "https://conda.anaconda.org/bioconda"),
-        ("conda-forge/label/dev", "https://conda.anaconda.org/conda-forge/label/dev"),
-        ("defaults", "https://repo.anaconda.com/pkgs/main"),
-        ("http://example.org/channel/", "http://example.org/channel"),
-        (
-            "https://example.org/channel/label/dev",
-            "https://example.org/channel/label/dev",
-        ),
-        ("file:///tmp/channel/", "file:///tmp/channel"),
-    ],
-)
-def test_channel_repodata_urls(channel, expected_base):
-    assert RepoData()._make_repodata_url(Channel(channel), "noarch") == (
-        f"{expected_base}/noarch/repodata.json"
-    )
-
-
 def test_explicit_http_channel_downloads_and_reuses_cache(repository, monkeypatch):
     requests = []
 
@@ -78,6 +60,8 @@ def test_explicit_http_channel_downloads_and_reuses_cache(repository, monkeypatc
         def do_GET(self):
             requests.append(self.path)
             body = repodata()
+            if self.path.endswith(".zst"):
+                body = zstandard.ZstdCompressor().compress(body)
             self.send_response(200)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
@@ -96,7 +80,7 @@ def test_explicit_http_channel_downloads_and_reuses_cache(repository, monkeypatc
             assert RepoData().get_package_data(
                 "name", channels=channel, platform="noarch"
             ) == ["example"]
-        assert requests == ["/mirror/bioconda/noarch/repodata.json"]
+        assert requests == ["/mirror/bioconda/noarch/repodata.json.zst"]
         assert len(list(repository.get_cache_dir().glob("*.sqlite"))) == 1
     finally:
         server.shutdown()
@@ -171,11 +155,9 @@ def test_invalid_records_fail_the_repository_load(repository, monkeypatch):
     assert not list(repository.get_cache_dir().glob("*.sqlite"))
 
 
-@pytest.mark.parametrize("age", [9 * 3600, -3600])
-def test_expired_or_future_entries_are_refreshed(repository, monkeypatch, age):
-    path = repository._cache_path(
-        repository._make_repodata_url(Channel("bioconda"), "noarch")
-    )
+@pytest.mark.parametrize("age", [3600, 7 * 3600, 8 * 3600, 9 * 3600, -3600])
+def test_full_repodata_follows_eight_hour_policy(repository, monkeypatch, age):
+    path = repository._cache_path(Channel("bioconda").repodata_url("noarch"))
     path.parent.mkdir()
     repository._write_cache(path, repodata(name="old"), fetched_at=time.time() - age)
     monkeypatch.setattr(
@@ -183,14 +165,64 @@ def test_expired_or_future_entries_are_refreshed(repository, monkeypatch, age):
     )
     assert repository.get_package_data(
         "name", channels=Channel("bioconda"), platform="noarch"
-    ) == ["fresh"]
+    ) == ["old" if 0 <= age < 8 * 3600 else "fresh"]
+
+
+def worker_cache_policies():
+    return RepoData.cache_policy, ShardClient.cache_policy
+
+
+@pytest.mark.parametrize(
+    "cache_state", ["fresh", "missing", "expired", "corrupt", "refresh"]
+)
+def test_fresh_full_repodata_requires_coverage_of_every_remote_repository(
+    repository, monkeypatch, cache_state
+):
+    repository.get_cache_dir().mkdir(parents=True)
+    for channel, subdir in repository._repositories(
+        repository.channels, repository.platforms
+    ):
+        path = repository._cache_path(channel.repodata_url(subdir))
+        repository._write_cache(path, repodata(subdir=subdir))
+    # Damage the last repository to ensure partial coverage never skips prefetch.
+    if cache_state == "missing":
+        path.unlink()
+    elif cache_state == "expired":
+        repository._write_cache(path, repodata(subdir=subdir), fetched_at=0)
+    elif cache_state == "corrupt":
+        path.write_bytes(b"broken SQLite cache")
+    elif cache_state == "refresh":
+        RepoData.configure_cache(repository.get_cache_dir(), refresh=True)
+
+    def forbid_download(*args):
+        pytest.fail("Inspecting cache coverage must not download metadata")
+
+    monkeypatch.setattr(repository, "_download_repository", forbid_download)
+    assert repository.has_fresh_full_repodata() == (cache_state == "fresh")
+
+
+def test_full_repodata_coverage_does_not_require_local_channels(
+    repository, monkeypatch
+):
+    monkeypatch.setattr(RepoData, "config", Config(channels=[Channel("file:///local")]))
+
+    def forbid_cache_read(*args):
+        pytest.fail("Local channels must not inspect persistent metadata")
+
+    monkeypatch.setattr(repository, "_read_cache", forbid_cache_read)
+    assert repository.has_fresh_full_repodata()
+
+
+def test_workers_share_metadata_freshness_and_refresh_cutoff(repository):
+    policy = RepodataCachePolicy(max_age=3600, refresh_after=time.time())
+    RepoData.configure_cache(repository.get_cache_dir(), policy=policy)
+    with worker_pool(1) as pool:
+        assert pool.submit(worker_cache_policies).result(timeout=30) == (policy, policy)
 
 
 @pytest.mark.parametrize("contents", [b"not a database", None])
 def test_corrupt_disk_entry_is_replaced(repository, monkeypatch, caplog, contents):
-    path = repository._cache_path(
-        repository._make_repodata_url(Channel("bioconda"), "noarch")
-    )
+    path = repository._cache_path(Channel("bioconda").repodata_url("noarch"))
     path.parent.mkdir()
     if contents is None:
         with closing(sqlite3.connect(path)) as connection:
@@ -227,17 +259,14 @@ def test_cache_identity_includes_repository_url(repository, monkeypatch):
     assert repository.get_package_data(
         "name", channels=Channel("bioconda"), platform="noarch"
     ) == ["first"]
-    monkeypatch.setattr(
-        repository,
-        "REPODATA_URL",
-        "https://other.example/{channel}/{subdir}/repodata.json",
-    )
+    mirror = Channel("https://other.example/bioconda")
+    monkeypatch.setattr(RepoData, "config", Config(channels=[mirror]))
     monkeypatch.setattr(
         repository, "_download_repository", lambda *_args: repodata(name="second")
     )
-    assert repository.get_package_data(
-        "name", channels=Channel("bioconda"), platform="noarch"
-    ) == ["second"]
+    assert repository.get_package_data("name", channels=mirror, platform="noarch") == [
+        "second"
+    ]
 
 
 def test_default_cache_respects_xdg(monkeypatch, tmp_path):
@@ -279,10 +308,9 @@ def test_local_channels_are_always_read_fresh(repository, monkeypatch, tmp_path)
 
 def query_repository(base_url):
     """Spawn-picklable worker using the real HTTP downloader and disk cache."""
-    RepoData.REPODATA_URL = base_url + "/{channel}/{subdir}/repodata.json"
-    return RepoData().get_package_data(
-        "name", channels=Channel("bioconda"), platform="noarch"
-    )
+    channel = Channel(f"{base_url}/bioconda")
+    RepoData.register_config(Config(channels=[channel]))
+    return RepoData().get_package_data("name", channels=channel, platform="noarch")
 
 
 def test_concurrent_spawned_workers_download_repository_once(repository):
@@ -306,6 +334,8 @@ def test_concurrent_spawned_workers_download_repository_once(repository):
                     },
                 }
             ).encode()
+            if self.path.endswith(".zst"):
+                body = zstandard.ZstdCompressor().compress(body)
             self.send_response(200)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
@@ -328,7 +358,7 @@ def test_concurrent_spawned_workers_download_repository_once(repository):
         # An independent process pool reuses the persisted entry, too.
         with worker_pool(1) as pool:
             assert pool.submit(query_repository, url).result(timeout=30) == ["example"]
-        assert requests == ["/bioconda/noarch/repodata.json"]
+        assert requests == ["/bioconda/noarch/repodata.json.zst"]
         # A refresh cutoff is shared with workers, and only one worker refreshes
         # the still-fresh disk entry for this run.
         RepoData.configure_cache(repository.get_cache_dir(), refresh=True)
@@ -338,7 +368,7 @@ def test_concurrent_spawned_workers_download_repository_once(repository):
                 ["example"],
                 ["example"],
             ]
-        assert requests == ["/bioconda/noarch/repodata.json"] * 2
+        assert requests == ["/bioconda/noarch/repodata.json.zst"] * 2
     finally:
         server.shutdown()
         server.server_close()
@@ -386,9 +416,7 @@ def test_cache_lock_is_released_when_worker_dies(tmp_path):
 
 
 def test_failed_refresh_preserves_previous_cache(repository, monkeypatch):
-    path = repository._cache_path(
-        repository._make_repodata_url(Channel("bioconda"), "noarch")
-    )
+    path = repository._cache_path(Channel("bioconda").repodata_url("noarch"))
     path.parent.mkdir()
     repository._write_cache(path, repodata(name="previous"))
 
@@ -409,9 +437,7 @@ def test_failed_refresh_preserves_previous_cache(repository, monkeypatch):
 
 
 def test_refresh_keeps_active_readers_consistent(repository):
-    path = repository._cache_path(
-        repository._make_repodata_url(Channel("bioconda"), "noarch")
-    )
+    path = repository._cache_path(Channel("bioconda").repodata_url("noarch"))
     path.parent.mkdir()
     repository._write_cache(path, repodata(name="old"))
     with closing(repository._read_cache(path)) as old:

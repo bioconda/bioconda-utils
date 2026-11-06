@@ -13,30 +13,12 @@ instructions at https://bioconda.github.io/contributor/index.html. This will
 ensure that your local setup matches that used to build recipes in GitHub
 Actions as closely as possible.
 
-However, if you would like to test in a standalone manner or help develop
-bioconda-utils, you can use the respective Pixi tasks defined in
-[`pixi.toml`](pixi.toml). You will need
-[an installation of `pixi`](https://pixi.prefix.dev/latest/installation/).
-Then, you can install the current `bioconda-utils` version in your local folder
-into the `dev` environment, by
-[running](https://pixi.prefix.dev/latest/reference/cli/pixi/run/) the `install`
-task:
+For standalone use or development, install
+[Pixi](https://pixi.prefix.dev/latest/installation/), then run from this checkout:
 
 ```bash
 pixi run install
-```
-
-To then run `bioconda-utils` from anywhere, start a
-[`pixi` shell](https://pixi.prefix.dev/latest/reference/cli/pixi/shell/) with
-that environment activated:
-
-```bash
-pixi shell -e dev
-```
-
-See the help for the `bioconda-utils` command-line interface for details:
-
-```bash
+pixi shell
 bioconda-utils -h
 ```
 
@@ -84,18 +66,10 @@ changes require rebuilding. Historical version subdirectories are excluded by
 default; pass `--exclude-subrecipes never` to include them, or enable an
 individual subrecipe with `extra.autobump.enable: true`.
 
-Downloads and metadata are cached under the platform's user cache directory
-(`$XDG_CACHE_HOME/bioconda-utils`, falling back to
-`~/.cache/bioconda-utils` on Linux, `~/Library/Caches/bioconda-utils` on
-macOS). Repodata is refreshed after eight hours; upstream HTTP responses are
-revalidated against the server and pruned after seven days. Caches are shared
-between concurrent commands, are safe to delete, and local `file://` channels
-are always read afresh. `build`, `lint`, `update-pinning`, and `autobump`
-accept `--cache DIRECTORY` to choose a shared root for all application caches and
-`--refresh-repodata` to refresh entries needed by the current run. Targeted
-package queries use shards when available, with indexes refreshed after fifteen
-minutes and SQLite repodata as fallback. Repodata, recipe graphs, upstream
-downloads, API lookups, and rattler-build use internal subdirectories under
-that shared root.
-`--cache` now takes a directory; the old filename-prefix and pickle cache
-formats and the separate `--repodata-cache` option are no longer supported.
+Downloads and metadata are cached between commands in the platform's user cache
+directory. Package metadata is reused for up to eight hours.
+`build`, `lint`, `update-pinning`, and `autobump` accept
+`--cache DIRECTORY` to choose another location and `--refresh-repodata` to
+refresh package metadata needed by the current run. Local `file://` channels
+are always read afresh. To clear a cache, stop all commands using it before
+removing the directory; it will be recreated as needed.
