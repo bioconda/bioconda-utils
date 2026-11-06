@@ -346,6 +346,16 @@ class AutoBumpConfigMixin:
     #: Name of key under `EXTRA_CONFIG` to enable/disable autobump
     ENABLE = "enable"
 
+    async def ensure_loaded(self, recipe: Recipe) -> None:
+        """Loads ``meta.yaml`` if the recipe was queued without its metadata
+
+        `RecipeSource` queues empty recipes that are only loaded later by
+        `LoadRecipe` / `GitLoadRecipe`, so the config would read as unset.
+        """
+        if not recipe.meta:
+            async with aiofiles.open(recipe.path, encoding="utf-8") as fdes:
+                recipe.load_from_string(await fdes.read())
+
     def get_config(self, recipe: Recipe) -> dict[str, Any]:
         """Returns the configuration dict from the recipe"""
         return recipe.get("extra", {}).get(self.EXTRA_CONFIG, {})
@@ -383,8 +393,12 @@ class ExcludeSubrecipe(Filter, AutoBumpConfigMixin):
 
     async def apply(self, recipe: Recipe) -> None:
         is_subrecipe = recipe.reldir.as_posix().strip("/").count("/") > 0
+        if not is_subrecipe:
+            return
+        if not self.always_exclude:
+            await self.ensure_loaded(recipe)
         enabled = self.is_enabled(recipe)
-        if is_subrecipe and not (enabled and not self.always_exclude):
+        if not (enabled and not self.always_exclude):
             raise self.IsSubRecipe(recipe)
 
 
@@ -397,6 +411,7 @@ class ExcludeDisabled(Filter, AutoBumpConfigMixin):
         template = "is disabled for autobump"
 
     async def apply(self, recipe: Recipe) -> None:
+        await self.ensure_loaded(recipe)
         enabled = self.is_enabled(recipe)
         if not enabled and enabled is not None:
             raise self.IsDisabled(recipe)
