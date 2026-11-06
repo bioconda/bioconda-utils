@@ -175,7 +175,7 @@ def worker_cache_policies():
 @pytest.mark.parametrize(
     "cache_state", ["fresh", "missing", "expired", "corrupt", "refresh"]
 )
-def test_prefetch_needed_unless_every_repository_has_fresh_full_metadata(
+def test_fresh_full_repodata_requires_coverage_of_every_remote_repository(
     repository, monkeypatch, cache_state
 ):
     repository.get_cache_dir().mkdir(parents=True)
@@ -198,17 +198,19 @@ def test_prefetch_needed_unless_every_repository_has_fresh_full_metadata(
         pytest.fail("Inspecting cache coverage must not download metadata")
 
     monkeypatch.setattr(repository, "_download_repository", forbid_download)
-    assert repository.needs_prefetch() == (cache_state != "fresh")
+    assert repository.has_fresh_full_repodata() == (cache_state == "fresh")
 
 
-def test_local_channels_do_not_need_prefetch(repository, monkeypatch):
+def test_full_repodata_coverage_does_not_require_local_channels(
+    repository, monkeypatch
+):
     monkeypatch.setattr(RepoData, "config", Config(channels=[Channel("file:///local")]))
 
     def forbid_cache_read(*args):
         pytest.fail("Local channels must not inspect persistent metadata")
 
     monkeypatch.setattr(repository, "_read_cache", forbid_cache_read)
-    assert not repository.needs_prefetch()
+    assert repository.has_fresh_full_repodata()
 
 
 def test_workers_share_metadata_freshness_and_refresh_cutoff(repository):

@@ -211,7 +211,7 @@ def test_lint_prefetches_selected_names_before_checks(monkeypatch, tmp_path):
     monkeypatch.setattr(
         RepoData, "prefetch", lambda self, names: events.append(set(names))
     )
-    monkeypatch.setattr(RepoData, "needs_prefetch", lambda self: True)
+    monkeypatch.setattr(RepoData, "has_fresh_full_repodata", lambda self: False)
     monkeypatch.setattr(
         lint.Linter, "lint_one", lambda *args, **kwargs: events.append("lint") or []
     )
@@ -264,7 +264,9 @@ def test_metadata_prefetch_respects_disabled_checks(monkeypatch, tmp_path, skip)
     monkeypatch.setattr(RepoData, "prefetch", lambda *args: calls.append(args))
     inspected = []
     monkeypatch.setattr(
-        RepoData, "needs_prefetch", lambda self: inspected.append(True) or True
+        RepoData,
+        "has_fresh_full_repodata",
+        lambda self: inspected.append(True) or False,
     )
     loads = []
     load = lint._recipe.Recipe.from_file
@@ -350,8 +352,8 @@ def test_failed_prefetch_leaves_normal_lint_checks_running(
     monkeypatch.setattr(RepoData, "prefetch", fail_prefetch)
     monkeypatch.setattr(
         RepoData,
-        "needs_prefetch",
-        fail_prefetch if failure == "inspection" else lambda self: True,
+        "has_fresh_full_repodata",
+        fail_prefetch if failure == "inspection" else lambda self: False,
     )
     calls = []
     monkeypatch.setattr(

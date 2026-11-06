@@ -730,7 +730,7 @@ class Linter:
                     continue
                 if not cache_checked:
                     try:
-                        if not RepoData().needs_prefetch():
+                        if RepoData().has_fresh_full_repodata():
                             return
                     except Exception:
                         logger.warning(
