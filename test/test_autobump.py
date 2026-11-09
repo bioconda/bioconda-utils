@@ -5,6 +5,8 @@ import asyncio
 import pytest
 
 from bioconda_utils.autobump import (
+    ExcludeDisabled,
+    ExcludeSubrecipe,
     RecipeSource,
     Scanner,
     UpdateChecksums,
@@ -76,3 +78,48 @@ def test_no_update_does_not_require_current_release_upstream(
     assert recipe.dump() == original
     assert recipe.version_data == upstream.get(current, {})
     assert recipe.orig.version_data == upstream.get(current, {})
+
+
+def _write_recipe(path, enable=None):
+    path.mkdir(parents=True)
+    extra = "" if enable is None else f"extra:\n  autobump:\n    enable: {enable}\n"
+    (path / "meta.yaml").write_text(
+        "package:\n  name: example\n  version: '1.0'\n" + extra
+    )
+
+
+@pytest.mark.parametrize(
+    "enable,excluded", [(None, False), (True, False), (False, True)]
+)
+def test_exclude_disabled_loads_unloaded_recipe(tmp_path, enable, excluded):
+    _write_recipe(tmp_path / "example", enable)
+    # RecipeSource queues recipes without metadata
+    recipe = Recipe(tmp_path / "example", tmp_path)
+    scanner = Scanner(RecipeSource(tmp_path, ["*"], [], False))
+    operation = ExcludeDisabled(scanner).apply(recipe)
+    if excluded:
+        with pytest.raises(ExcludeDisabled.IsDisabled):
+            asyncio.run(operation)
+    else:
+        asyncio.run(operation)
+
+
+@pytest.mark.parametrize(
+    "enable,always,excluded",
+    [
+        (None, False, True),
+        (True, False, False),
+        (True, True, True),
+        (False, False, True),
+    ],
+)
+def test_exclude_subrecipe_loads_unloaded_recipe(tmp_path, enable, always, excluded):
+    _write_recipe(tmp_path / "example" / "0.9", enable)
+    recipe = Recipe(tmp_path / "example" / "0.9", tmp_path)
+    scanner = Scanner(RecipeSource(tmp_path, ["*"], [], False))
+    operation = ExcludeSubrecipe(scanner, always=always).apply(recipe)
+    if excluded:
+        with pytest.raises(ExcludeSubrecipe.IsSubRecipe):
+            asyncio.run(operation)
+    else:
+        asyncio.run(operation)
