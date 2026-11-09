@@ -2,13 +2,14 @@ on:
   push:
     branches:
       - master
+      - v4_backports
   workflow_dispatch:
 
 name: release-please
 
 jobs:
   release_please:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
@@ -17,6 +18,7 @@ jobs:
         id: release
         with:
           release-type: python
+          target-branch: ${{ github.ref_name }}
           package-name: bioconda-utils
 
   publish_containers:
@@ -48,7 +50,7 @@ jobs:
           build-args: |
             BASE_IMAGE=quay.io/condaforge/linux-anvil-cos7-x86_64
           tags: >-
-            latest
+            ${{ github.ref_name == 'master' && 'latest' || '' }}
             ${{ steps.get-tag.outputs.tag }}
           dockerfiles: |
             ./Dockerfile
@@ -71,7 +73,7 @@ jobs:
           build-args: |
             BASE_IMAGE=quay.io/condaforge/linux-anvil-aarch64
           tags: >-
-            latest
+            ${{ github.ref_name == 'master' && 'latest' || '' }}
             ${{ steps.get-tag.outputs.tag }}
           dockerfiles: |
             ./Dockerfile
@@ -99,7 +101,7 @@ jobs:
               --username "${QUAY_BIOCONDA_USERNAME}" \
               --password-stdin
 
-          for tag in latest '${{ steps.get-tag.outputs.tag }}' ; do
+          for tag in ${{ github.ref_name == 'master' && 'latest' || '' }} '${{ steps.get-tag.outputs.tag }}' ; do
             docker manifest create \
               "${QUAY_BIOCONDA_REPO}/bioconda-utils-build-env-cos7:${tag}" \
               "${QUAY_BIOCONDA_REPO}/bioconda-utils-build-env-cos7-x86_64:${tag}" \
