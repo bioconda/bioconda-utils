@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.5.2](https://github.com/bioconda/bioconda-utils/compare/v4.5.1...v4.5.2) (2026-11-09)
+
+
+### Bug Fixes
+
+* use 24.04 runner ([17ebb63](https://github.com/bioconda/bioconda-utils/commit/17ebb63cac745906bd8f0a48278d30b9f609680b))
+
 ## [4.5.1](https://github.com/bioconda/bioconda-utils/compare/v4.5.0...v4.5.1) (2026-11-09)
 
 
