@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.5.1](https://github.com/bioconda/bioconda-utils/compare/v4.5.0...v4.5.1) (2026-11-09)
+
+
+### Bug Fixes
+
+* bump conda and mamba to recent releases (backport of [#1145](https://github.com/bioconda/bioconda-utils/issues/1145)) ([#1150](https://github.com/bioconda/bioconda-utils/issues/1150)) ([e120470](https://github.com/bioconda/bioconda-utils/commit/e1204701d45d41f194764063623e19867d99cce6))
+
 ## [4.5.0](https://github.com/bioconda/bioconda-utils/compare/v4.4.1...v4.5.0) (2026-05-28)
 
 
