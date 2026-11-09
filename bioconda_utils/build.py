@@ -42,7 +42,6 @@ from ._types import (
     QuayUploadTarget,
     RecipePath,
     container_platform_is_native,
-    container_platform_to_package_subdir,
     native_container_platform,
 )
 from .conda.conda_build_bridge import (
@@ -762,7 +761,7 @@ def build_recipes(
 
     for recipe, name in recipe_jobs:
         platform = (
-            container_platform_to_package_subdir(target_platform)
+            target_platform.to_subdir()
             if target_platform is not None
             else RepoData().native_subdir()
         )

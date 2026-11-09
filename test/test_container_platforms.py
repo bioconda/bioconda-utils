@@ -22,18 +22,9 @@ BIOCONTAINERS = _types.QuayUploadTarget("biocontainers")
 
 
 def test_container_platform_maps_to_package_subdir():
-    assert (
-        _types.container_platform_to_package_subdir(ContainerPlatform.LINUX_AMD64)
-        == PackageSubdir.LINUX_64
-    )
-    assert (
-        _types.container_platform_to_package_subdir(ContainerPlatform.LINUX_ARM64)
-        == PackageSubdir.LINUX_AARCH64
-    )
-    assert (
-        _types.container_platform_to_package_subdir(ContainerPlatform.LINUX_RISCV64)
-        == PackageSubdir.LINUX_RISCV64
-    )
+    assert ContainerPlatform.LINUX_AMD64.to_subdir() == PackageSubdir.LINUX_64
+    assert ContainerPlatform.LINUX_ARM64.to_subdir() == PackageSubdir.LINUX_AARCH64
+    assert ContainerPlatform.LINUX_RISCV64.to_subdir() == PackageSubdir.LINUX_RISCV64
 
 
 def test_osx_package_subdir_has_no_container_platform():

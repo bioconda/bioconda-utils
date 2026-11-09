@@ -63,7 +63,6 @@ from .._types import (
     ContainerPlatform,
     PkgBuildRef,
     Subdir,
-    container_platform_to_package_subdir,
     local_mulled_image_ref,
     native_container_platform,
 )
@@ -433,7 +432,7 @@ class RecipeBuilder:
         if noarch:
             return "noarch"
         target_platform = self.target_platform or native_container_platform()
-        return container_platform_to_package_subdir(target_platform)
+        return target_platform.to_subdir()
 
     def __del__(self) -> None:
         self.cleanup()

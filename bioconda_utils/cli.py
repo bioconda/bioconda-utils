@@ -407,19 +407,14 @@ def get_recipes(
 ) -> list[RecipePath]:
     """Gets list of paths to recipe folders to be built
 
-    Considers all recipes matching globs in packages, constrains to
-    recipes modified or unblacklisted in the git_range if given, then
-    removes blacklisted recipes (unless include_blacklisted=True).
+    If git_range is given, discovers only modified or unblacklisted recipe
+    directories. Applies package globs and removes blacklisted recipes
+    (unless include_blacklisted=True).
 
     """
     from .recipes import get_recipes as find_recipes
+    from .recipes import get_recipes_from_paths
 
-    recipes: list[RecipePath] = list(find_recipes(recipe_folder, packages))
-    logger.info(
-        "Considering total of %s recipes%s.",
-        len(recipes),
-        ellipsize_recipes(recipes, recipe_folder),
-    )
     if git_range:
         changed_recipes: set[Path] = set(get_recipes_to_build(git_range, recipe_folder))
         logger.info(
@@ -427,13 +422,22 @@ def get_recipes(
             len(changed_recipes),
             ellipsize_recipes(changed_recipes, recipe_folder),
         )
-        recipes = [recipe for recipe in recipes if recipe.path in changed_recipes]
+        recipes = list(
+            get_recipes_from_paths(recipe_folder, sorted(changed_recipes), packages)
+        )
         if len(recipes) != len(changed_recipes):
             logger.info(
                 "Overlap was %s recipes%s.",
                 len(recipes),
                 ellipsize_recipes(recipes, recipe_folder),
             )
+    else:
+        recipes = list(find_recipes(recipe_folder, packages))
+        logger.info(
+            "Considering total of %s recipes%s.",
+            len(recipes),
+            ellipsize_recipes(recipes, recipe_folder),
+        )
     if not include_blacklisted:
         from .skiplist import Skiplist
 

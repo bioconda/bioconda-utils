@@ -132,6 +132,13 @@ class cran_packages_to_conda_forge(LintCheck):
 
     """
 
+    @classmethod
+    def get_repodata_names(cls, recipe: Recipe) -> list[str]:
+        deps = recipe.get_deps_dict()
+        if "R" in deps and any("run" in location for location in deps["R"]):
+            return list(deps)
+        return []
+
     def check_deps(self, deps: dict[str, list[str]], package_location: str) -> None:
         # must have R in run a run dep
         if (

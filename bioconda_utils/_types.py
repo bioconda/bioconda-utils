@@ -184,6 +184,22 @@ class Channel(str):
             raise ValueError("Channel names must not be empty")
         return super().__new__(cls, channel)
 
+    @property
+    def is_local(self) -> bool:
+        """Whether this channel reads packages from the local filesystem."""
+        return self.startswith("file://")
+
+    def repodata_url(self, subdir: Subdir) -> str:
+        """Resolve a channel name or URL to its full repodata location."""
+        if self.startswith(("http://", "https://", "file://")):
+            base_url = self
+        elif self == "defaults":
+            # Historical behavior: only defaults/main, not free, r, or pro.
+            base_url = "https://repo.anaconda.com/pkgs/main"
+        else:
+            base_url = f"https://conda.anaconda.org/{self}"
+        return f"{base_url}/{subdir}/repodata.json"
+
 
 @dataclass(slots=True, kw_only=True)
 class Config:
@@ -229,45 +245,43 @@ class PackageRecord(NamedTuple):
     build_number: int
     depends: tuple[str, ...] | None
 
+    @classmethod
+    def from_repodata(cls, raw: object, *, default_name: str | None = None) -> Self:
+        """Validate and normalize one repodata package record.
 
-def parse_package_record(
-    raw: object, *, default_name: str | None = None
-) -> PackageRecord:
-    """Validate and normalize one repodata package record.
-
-    Raises :class:`TypeError` for malformed records, allowing shard downloads
-    to fall back to full repodata instead of caching corrupt dependency data.
-    """
-    if not isinstance(raw, Mapping):
-        raise TypeError("package record is not a mapping")
-    name = raw.get("name", default_name)
-    if not isinstance(name, str):
-        raise TypeError("package record has no valid name")
-    version = raw.get("version")
-    if not isinstance(version, (str, int, float)):
-        raise TypeError("package record has no valid version")
-    build = raw.get("build", "")
-    if not isinstance(build, str):
-        raise TypeError("package record has no valid build string")
-    build_number = raw.get("build_number", 0)
-    if not isinstance(build_number, int):
-        raise TypeError("package record has no valid build number")
-    depends = raw.get("depends", ())
-    if depends is None:
-        normalized_depends = None
-    elif isinstance(depends, (list, tuple)) and all(
-        isinstance(depend, str) for depend in depends
-    ):
-        normalized_depends = tuple(depends)
-    else:
-        raise TypeError("package record has no valid depends list")
-    return PackageRecord(
-        name=name,
-        version=str(version),
-        build=build,
-        build_number=build_number,
-        depends=normalized_depends,
-    )
+        Raises :class:`TypeError` for malformed records, allowing shard downloads
+        to fall back to full repodata instead of caching corrupt dependency data.
+        """
+        if not isinstance(raw, Mapping):
+            raise TypeError("package record is not a mapping")
+        name = raw.get("name", default_name)
+        if not isinstance(name, str):
+            raise TypeError("package record has no valid name")
+        version = raw.get("version")
+        if not isinstance(version, (str, int, float)):
+            raise TypeError("package record has no valid version")
+        build = raw.get("build", "")
+        if not isinstance(build, str):
+            raise TypeError("package record has no valid build string")
+        build_number = raw.get("build_number", 0)
+        if not isinstance(build_number, int):
+            raise TypeError("package record has no valid build number")
+        depends = raw.get("depends", ())
+        if depends is None:
+            normalized_depends = None
+        elif isinstance(depends, (list, tuple)) and all(
+            isinstance(depend, str) for depend in depends
+        ):
+            normalized_depends = tuple(depends)
+        else:
+            raise TypeError("package record has no valid depends list")
+        return cls(
+            name=name,
+            version=str(version),
+            build=build,
+            build_number=build_number,
+            depends=normalized_depends,
+        )
 
 
 #: A two-part OS label -- the form conda-build's ``config.platform`` and its
@@ -304,13 +318,6 @@ def package_subdir_to_container_platform(
         raise ValueError(
             f"{package_subdir} packages cannot be installed in Linux mulled containers"
         ) from exc
-
-
-def container_platform_to_package_subdir(
-    container_platform: ContainerPlatform,
-) -> PackageSubdir:
-    """Return the conda package subdir matching a Linux container platform."""
-    return CONTAINER_PLATFORM_TO_PACKAGE_SUBDIR[container_platform]
 
 
 def normalize_container_platform(
