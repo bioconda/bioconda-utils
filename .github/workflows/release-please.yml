@@ -7,6 +7,9 @@ on:
 
 name: release-please
 
+permissions:
+  contents: read
+
 jobs:
   release_please:
     runs-on: ubuntu-24.04
@@ -56,7 +59,7 @@ jobs:
             ./Dockerfile
 
       - name: Push To Quay
-        uses: redhat-actions/push-to-registry@v2
+        uses: redhat-actions/push-to-registry@v3
         with:
           image: ${{ steps.buildah-build.outputs.image }}
           tags: ${{ steps.buildah-build.outputs.tags }}
@@ -79,7 +82,7 @@ jobs:
             ./Dockerfile
 
       - name: Push To Quay
-        uses: redhat-actions/push-to-registry@v2
+        uses: redhat-actions/push-to-registry@v3
         with:
           image: ${{ steps.buildah-build-arm.outputs.image }}
           tags: ${{ steps.buildah-build-arm.outputs.tags }}
