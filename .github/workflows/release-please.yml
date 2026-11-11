@@ -7,12 +7,13 @@ on:
 
 name: release-please
 
-permissions:
-  contents: read
-
 jobs:
   release_please:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
@@ -27,6 +28,8 @@ jobs:
   publish_containers:
     runs-on: ubuntu-24.04
     needs: release_please
+    permissions:
+      contents: read
     if: needs.release_please.outputs.release_created
     steps:
       - uses: actions/checkout@v6
