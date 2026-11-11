@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.5.3](https://github.com/bioconda/bioconda-utils/compare/v4.5.2...v4.5.3) (2026-11-11)
+
+
+### Bug Fixes
+
+* set permissions and bump to latest push-to-quay action ([56778c8](https://github.com/bioconda/bioconda-utils/commit/56778c80e9183c29146c656fd003a95a3e3b8dde))
+
 ## [4.5.2](https://github.com/bioconda/bioconda-utils/compare/v4.5.1...v4.5.2) (2026-11-09)
 
 
