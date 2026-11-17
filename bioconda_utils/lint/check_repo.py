@@ -30,6 +30,10 @@ class in_other_channels(LintCheck):
 
     """
 
+    @classmethod
+    def get_repodata_names(cls, recipe: Recipe) -> tuple[str, ...]:
+        return (recipe.name,)
+
     def check_recipe(self, recipe: Recipe) -> None:
         channels = RepoData().get_package_data(key="channel", name=recipe.name)
         if set(channels) - {"bioconda"}:
@@ -50,6 +54,10 @@ class build_number_needs_bump(LintCheck):
     """
 
     requires: ClassVar = [missing_build_number]
+
+    @classmethod
+    def get_repodata_names(cls, recipe: Recipe) -> tuple[str, ...]:
+        return (recipe.name,)
 
     def check_recipe(self, recipe: Recipe) -> None:
         bldnos = RepoData().get_package_data(
@@ -76,6 +84,10 @@ class build_number_needs_reset(LintCheck):
     """
 
     requires: ClassVar = [missing_build_number]
+
+    @classmethod
+    def get_repodata_names(cls, recipe: Recipe) -> tuple[str, ...]:
+        return (recipe.name,)
 
     def check_recipe(self, recipe: Recipe) -> None:
         bldnos = RepoData().get_package_data(

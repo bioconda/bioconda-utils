@@ -16,11 +16,7 @@ from pathlib import Path
 
 from conda_build import api
 
-from .._types import (
-    Channel,
-    ContainerPlatform,
-    container_platform_to_package_subdir,
-)
+from .._types import Channel, ContainerPlatform
 from .conda_build_bridge import load_all_meta, load_conda_build_config
 from .repodata import RepoData
 
@@ -129,7 +125,7 @@ def recipe_requires_finalized_render(recipe: Path) -> bool:
 
 def _load_platform_metas(recipe: Path, finalize: bool = True, target_platform=None):
     if target_platform is not None:
-        subdir = container_platform_to_package_subdir(target_platform)
+        subdir = target_platform.to_subdir()
     else:
         subdir = RepoData.native_subdir()
     config = load_conda_build_config(subdir=subdir)

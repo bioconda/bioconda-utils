@@ -9,6 +9,10 @@ class repodata_patches_no_version_bump(LintCheck):
     Please set the version to the current date in the format ``YYYYMMDD``.
     """
 
+    @classmethod
+    def get_repodata_names(cls, recipe: Recipe) -> tuple[str, ...]:
+        return (recipe.name,) if recipe.name == "bioconda-repodata-patches" else ()
+
     def check_recipe(self, recipe: Recipe) -> None:
         if recipe.get("package/name") != "bioconda-repodata-patches":
             return
