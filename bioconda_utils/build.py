@@ -46,6 +46,7 @@ from ._types import (
     native_container_platform,
 )
 from .conda.conda_build_bridge import (
+    RecipeRenderError,
     get_conda_build_config_files,
     load_conda_build_config,
     load_first_metadata,
@@ -825,23 +826,24 @@ def build_recipes(
                 global_variants=global_variants,
                 target_platform=target_platform,
             )
-        except DivergentBuildsError as exc:
-            logger.error(
-                "BUILD ERROR: packages with divergent build strings in repository "
-                "for recipe %s. A build number bump is likely needed: %s",
-                recipe,
-                exc,
-            )
-            failed.append(recipe)
-            for pkg in nx.algorithms.descendants(subdag, name):
-                skip_dependent[pkg].append(recipe)
-            continue
-        except (UnsatisfiableError, DependencyNeedsBuildingError) as exc:
-            logger.error(
-                "BUILD ERROR: could not determine dependencies for recipe %s: %s",
-                recipe,
-                exc,
-            )
+        except (
+            DivergentBuildsError,
+            RecipeRenderError,
+            UnsatisfiableError,
+            DependencyNeedsBuildingError,
+        ) as exc:
+            if isinstance(exc, DivergentBuildsError):
+                message = (
+                    "BUILD ERROR: packages with divergent build strings in repository "
+                    "for recipe %s. A build number bump is likely needed: %s"
+                )
+            elif isinstance(exc, RecipeRenderError):
+                message = "BUILD ERROR: could not render recipe %s: %s"
+            else:
+                message = (
+                    "BUILD ERROR: could not determine dependencies for recipe %s: %s"
+                )
+            logger.error(message, recipe, exc)
             failed.append(recipe)
             for pkg in nx.algorithms.descendants(subdag, name):
                 skip_dependent[pkg].append(recipe)
