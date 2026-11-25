@@ -21,6 +21,7 @@ from typing import Any, Literal, NamedTuple, cast
 import conda.gateways.logging
 import jinja2
 from conda_build import api
+from conda_build.exceptions import CondaBuildUserError, RecipeError
 from jinja2 import Environment
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
@@ -66,6 +67,35 @@ class JinjaSilentUndefined(jinja2.Undefined):
 jinja_silent_undef = Environment(undefined=JinjaSilentUndefined)
 
 
+class RecipeRenderError(Exception):
+    """Conda-build could not render the recipe's metadata."""
+
+
+def _render_recipe(
+    recipe: Path,
+    *,
+    config: api.Config,
+    finalize: bool,
+    variants: dict[str, Any] | None = None,
+) -> list[api.MetaDataTuple]:
+    try:
+        return api.render(
+            recipe,
+            config=config,
+            variants=variants,
+            finalize=finalize,
+            bypass_env_check=not finalize,
+        )
+    except (CondaBuildUserError, RecipeError, jinja2.TemplateError) as exc:
+        raise RecipeRenderError(str(exc)) from exc
+    except ValueError as exc:
+        # conda-build's pin_subpackage uses ValueError for both an unknown
+        # output and an internal metadata error. Only the former is a recipe error.
+        if str(exc).startswith("Didn't find subpackage version info for "):
+            raise RecipeRenderError(str(exc)) from exc
+        raise
+
+
 def load_all_meta(recipe: Path, config=None, finalize=True):
     """
     For each environment, yield the rendered meta.yaml.
@@ -86,11 +116,10 @@ def load_all_meta(recipe: Path, config=None, finalize=True):
     # parameter, just assume we do not want to bypass if `finalize is True`.
     metas = [
         meta
-        for (meta, _, _) in api.render(
+        for (meta, _, _) in _render_recipe(
             recipe,
             config=config,
             finalize=False,
-            bypass_env_check=True,
         )
     ]
     # Render again if we want the finalized version.
@@ -103,12 +132,11 @@ def load_all_meta(recipe: Path, config=None, finalize=True):
         metas = [
             meta
             for non_finalized_meta in metas
-            for (meta, _, _) in api.render(
+            for (meta, _, _) in _render_recipe(
                 recipe,
                 config=config,
                 variants=non_finalized_meta.config.variant,
                 finalize=True,
-                bypass_env_check=False,
             )
         ]
     return metas

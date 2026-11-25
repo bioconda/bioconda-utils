@@ -1090,6 +1090,40 @@ def test_skip_dependencies(config_fixture):
             ensure_missing(pkg)
 
 
+def test_build_continues_after_recipe_render_error(monkeypatch, tmp_path, caplog):
+    recipe_contents = {
+        "broken": 'build:\n  run_exports:\n    - {{ pin_subpackage("missing") }}\n',
+        "dependent": "requirements:\n  run:\n    - broken\n",
+        "independent": "",
+    }
+    recipes = []
+    for name, extra_sections in recipe_contents.items():
+        recipe_dir = tmp_path / name
+        recipe_dir.mkdir()
+        (recipe_dir / "meta.yaml").write_text(
+            f'package:\n  name: {name}\n  version: "1.0"\n{extra_sections}'
+        )
+        recipes.append(RecipePath(recipe_dir, CONDA))
+
+    build_package = Mock(return_value=build.BuildResult(True, None))
+    monkeypatch.setattr(build, "build", build_package)
+    monkeypatch.setattr(
+        build.graph, "parallel_iter", lambda func, items, _description: map(func, items)
+    )
+    monkeypatch.setattr(RepoData, "get_package_data", Mock(return_value=[]))
+    caplog.set_level(logging.INFO, logger=build.__name__)
+
+    assert not build.build_recipes(
+        tmp_path, Config(channels=[]), recipes, keep_old_work=True
+    )
+    build_package.assert_called_once()
+    assert build_package.call_args.kwargs["recipe"].path == tmp_path / "independent"
+    assert f"could not render recipe {tmp_path / 'broken'}" in caplog.text
+    assert "Didn't find subpackage version info for 'missing'" in caplog.text
+    assert f"BUILD SKIP: skipping {tmp_path / 'dependent'}" in caplog.text
+    assert f"BUILD SUMMARY: FAILED recipe {tmp_path / 'broken'}" in caplog.text
+
+
 class TestSubdags:
     def _build(self, recipes_fixture, config_fixture, n_workers, worker_offset):
         recipe_folder: Path = Path(recipes_fixture.basedir)

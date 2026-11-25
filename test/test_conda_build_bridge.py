@@ -42,3 +42,13 @@ def test_load_first_metadata_returns_first_variant(monkeypatch, tmp_path):
         lambda *_args, **_kwargs: [(first, False, False), (second, False, False)],
     )
     assert bridge.load_first_metadata(tmp_path, config=Mock(), finalize=False) is first
+
+
+def test_render_preserves_unexpected_value_error(monkeypatch, tmp_path):
+    error = ValueError("Bug in conda-build: missing output metadata")
+    monkeypatch.setattr(bridge.api, "render", Mock(side_effect=error))
+
+    with pytest.raises(ValueError) as caught:
+        bridge.load_all_meta(tmp_path, config=Mock())
+
+    assert caught.value is error
