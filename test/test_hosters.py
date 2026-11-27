@@ -199,3 +199,61 @@ def test_pypi_get_deps_skips_unsupported_python(tmp_path, caplog, requires_pytho
     pipeline.run_sp.assert_not_called()
     assert "depends" not in release
     assert "Skipping depends" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("url", "tags", "expected_versions"),
+    [
+        (
+            "https://github.com/org/repo/releases/download/release-1.0.0/pkg-1.0.0.tar.gz",
+            ["release-1.1.0", "release-1.0.0", "release-0.9.0"],
+            ["1.1.0", "1.0.0"],
+        ),
+        (
+            "https://github.com/org/repo/releases/download/kodoja-v0.0.9/pkg-0.0.9.tar.gz",
+            ["kodoja-v0.1.9", "kodoja-v0.0.9", "kodoja-v0.0.8"],
+            ["0.1.9", "0.0.9"],
+        ),
+        (
+            "https://github.com/org/repo/releases/download/v1.2.0/pkg-1.2.0.tar.gz",
+            ["v1.4.0", "v1.2.0", "v1.1.0"],
+            ["1.4.0", "1.2.0"],
+        ),
+        (
+            "https://github.com/org/repo/releases/download/1.2.0/pkg-1.2.0.tar.gz",
+            ["1.4.0", "1.2.0", "1.1.0"],
+            ["1.4.0", "1.2.0"],
+        ),
+    ],
+)
+def test_github_release_expanded_assets_matches_tag_prefixes(
+    url, tags, expected_versions
+):
+    hoster = Hoster.select_hoster(url, {})
+    assert hoster is not None
+
+    releases_html = "\n".join(
+        f'<include-fragment src="https://github.com/org/repo/releases/expanded_assets/{tag}"></include-fragment>'
+        for tag in tags
+    )
+    pages = {"https://github.com/org/repo/releases": releases_html}
+    for tag in tags:
+        pages[f"https://github.com/org/repo/releases/expanded_assets/{tag}"] = (
+            f'<a href="/org/repo/releases/download/{tag}/pkg-{tag}.tar.gz">pkg</a>'
+        )
+
+    fetched = []
+
+    class FakeRequester:
+        async def get_text_from_url(self, req_url: str) -> str:
+            fetched.append(req_url)
+            return pages[req_url]
+
+    matches = asyncio.run(hoster.get_versions(FakeRequester(), hoster.vals["version"]))
+    assert [m["version"] for m in matches] == expected_versions
+    # Early exit stops after current version and never falls back to the GitHub API
+    assert not any("api.github.com" in u for u in fetched)
+    assert (
+        f"https://github.com/org/repo/releases/expanded_assets/{tags[-1]}"
+        not in fetched
+    )

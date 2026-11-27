@@ -375,7 +375,7 @@ class GithubRelease(GithubBase):
 
     link_pattern = r"/{account}/{project}/releases/download/{tag}/{fname}{ext}?"
     expanded_assets_pattern = (
-        r"https://github.com/{account}/{project}/releases/expanded_assets/{version}"
+        r"https://github.com/{account}/{project}/releases/expanded_assets/{tag}"
     )
     alt_releases_formats: ClassVar = [
         "https://api.github.com/repos/{account}/{project}/releases"
